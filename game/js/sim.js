@@ -1,53 +1,11 @@
-// Reiner Simulationsschritt, Bewegung, Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
+// Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
-import { MISSIONS, TERRAIN, CELL, HASH_CELL } from './data.js';
-import { spawn, setCell, cellIndex, rebuildHash } from './world.js';
-import { think, hurt, stepProjectiles } from './combat.js';
+import { MISSIONS, TERRAIN, CELL } from './data.js';
+import { spawn, setCell, rebuildHash } from './world.js';
+import { think, stepProjectiles } from './combat.js';
+import { integrate, collide, collideWalls } from './physics.js';
 
-const HC = HASH_CELL;
-const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (world, a, b) => a + world.rng() * (b - a);
-
-/* ---------- Bewegung ---------- */
-export function move(world, u, dt) {
-  const T = u.T, terr = world.terr;
-  let sp = 1; const tt = T.fly ? 0 : terr[cellIndex(world, u.x, u.y)];
-  if (tt === 1) sp = .4;
-  else if (tt === 2) {
-    sp = .8; hurt(world, u, 10 * dt, 'fire', null);
-    // etwa 6 Flammen pro Sekunde, ohne den Spielzufall zu verbrauchen
-    if (u.alive && ((world.time * 60 | 0) + u.id) % 10 === 0) world.events.push({ type: 'burn', x: u.x, y: u.y });
-  } else if (tt === 3) sp = .85;
-  if (!u.alive) return;
-  // u.vx/u.vy = Rückstoß, klingt ab
-  const vx = u.mx * sp + u.vx, vy = u.my * sp + u.vy; u.vx *= .88; u.vy *= .88;
-  let nx = u.x + vx * dt, ny = u.y + vy * dt, blocked = false;
-  if (!T.fly && tt !== 4) {
-    const a = cellIndex(world, nx + Math.sign(vx) * T.r * .6, u.y);
-    if (terr[a] === 4) { nx = u.x; blocked = true; u.bcell = a; u.vx = 0; }
-    const b = cellIndex(world, nx, ny + Math.sign(vy) * T.r * .6);
-    if (terr[b] === 4) { ny = u.y; blocked = true; u.bcell = b; u.vy = 0; }
-  }
-  u.blk = blocked ? u.blk + dt : Math.max(0, u.blk - dt * 2);
-  u.x = clamp(nx, 6, world.W - 6); u.y = clamp(ny, 6, world.H - 6);
-  u.moving = Math.abs(vx) + Math.abs(vy) > 6;
-}
-
-export function separate(world) {
-  const { units, hash, HW, HH } = world;
-  for (const u of units) {
-    if (!u.alive) continue; const ru = u.T.r, fu = !!u.T.fly;
-    const gx = clamp(u.x / HC | 0, 0, HW - 1), gy = clamp(u.y / HC | 0, 0, HH - 1);
-    for (let yy = Math.max(0, gy - 1); yy <= Math.min(HH - 1, gy + 1); yy++) for (let xx = Math.max(0, gx - 1); xx <= Math.min(HW - 1, gx + 1); xx++) {
-      const cell = hash[yy * HW + xx];
-      for (let i = 0; i < cell.length; i++) {
-        const v = cell[i]; if (v === u || !v.alive || !!v.T.fly !== fu) continue;
-        const rr = (ru + v.T.r) * .92, dx = u.x - v.x, dy = u.y - v.y, d2 = dx * dx + dy * dy;
-        if (d2 < rr * rr) { const d = Math.sqrt(d2) || .01, ov = (rr - d) / d, w = v.T.r / (ru + v.T.r); u.x += dx * ov * .5 * w; u.y += dy * ov * .5 * w; }
-      }
-    }
-  }
-}
 
 /* ---------- Schritt ---------- */
 export function step(world, dt) {
@@ -57,9 +15,11 @@ export function step(world, dt) {
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
-  for (const u of units) if (u.alive) move(world, u, dt);
-  separate(world);
+  integrate(world, dt);
+  collide(world);
+  for (const u of units) if (u.alive) collideWalls(world, u, dt);
   stepProjectiles(world, dt);
+  // stepCorpses (Task 9) und stepDebris (Task 10) kommen hier hinzu
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
 }
 

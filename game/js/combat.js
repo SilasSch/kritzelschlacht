@@ -3,6 +3,7 @@
 // werden als Ereignisse in world.events geschrieben.
 import { CELL } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
+import { applyImpulse } from './physics.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -53,12 +54,9 @@ function die(world, v, src) {
   sound(world, 'die');
 }
 
-// Rückstoß: wird in u.vx/u.vy gesammelt und in move() abgebaut
-function knock(v, nx, ny, f) {
-  if (v.type === 'drache' || v.type === 'panzer') f *= .15;
-  else if (v.type === 'baer' || v.type === 'ritter') f *= .5;
-  v.vx += nx * f; v.vy += ny * f;
-}
+// Rückstoß: waagrechter Impuls f · massRef (massRef 1), die Masse skaliert ihn (physics.js).
+// Normale Treffer schubsen nur (iz = 0), betäuben also nicht.
+function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   query(world, x, y, R + 16, v => {
@@ -150,6 +148,8 @@ export function think(world, u, dt) {
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
+  // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter)
+  if (u.state !== 'ok') return;
   if (u.gt <= 0) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }

@@ -123,3 +123,24 @@ test('Bildwechsel: Bodentruppen im Stand Bild 0, Flieger flattern immer', () => 
   assert.deepEqual([...seen].sort(), [0, 1]);
   assert.deepEqual([...walk].sort(), [0, 1]);
 });
+
+test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', async () => {
+  const { rigLayout } = await import('../game/js/render/rig.js');
+  const { TINT } = await import('../game/js/data.js');
+  for (const t of Object.keys(UNITS)) {
+    const L = rigLayout(t);
+    assert.deepEqual(Object.keys(L), RIG_PARTS, t);
+    assert.ok(L.body && L.shadow, `${t}: Körper und Schatten`);
+    assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
+    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' ? 5 : 1, `${t}: Teamfarbe`);
+    assert.equal(!!L.pupilL, !!L.pupilR, t);
+  }
+  const L = rigLayout;
+  assert.equal(L('ritter').pupilL, null); assert.equal(L('ritter').lid, null);   // Visier
+  assert.equal(L('biene').pupilL, null);
+  assert.ok(L('geist').pupilL && L('geist').lid);
+  assert.equal(L('heli').headgear.frames, 2);      // Hauptrotor
+  assert.ok(L('panzer').weapon && L('reiter').weapon && L('baer').weapon);
+  assert.equal(L('wolf').weapon, null); assert.equal(L('sani').weapon, null); assert.equal(L('wolf').headgear, null);
+  assert.equal(L('drache').body.frames, 2); assert.equal(L('biene').body.frames, 2);   // Flügelschlag
+});

@@ -4,7 +4,7 @@
 /* global PIXI */
 import { UNITS, TEAMS, CELL } from '../data.js';
 import { query, factionOf } from '../world.js';
-import { bakeUnitTextures, spriteSize, shade, E } from './rig.js';
+import { bakeRigTextures, poseUnit, TEAM_INDEX, shade, E } from './rig.js';
 
 const O = '#2a2a33';
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -61,7 +61,7 @@ export function createRenderer(canvasHost) {
   const terrSprite = new PIXI.Sprite();
   L.terrain.addChild(zoneG, zoneText, terrSprite);   // Zone liegt wie früher unter dem Gelände
 
-  let tex = null;            // gebackene Einheiten-Texturen (rig.js)
+  let rigs = null;           // gebackene Rig-Teile pro Typ (rig.js)
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
   // Neu zu zeichnende Gitterbereiche, einzeln (zwei Treffer weit auseinander ergeben kein Riesenrechteck).
   // CPU-Neuzeichnen sofort; GPU-Upload für Kampf-Änderungen höchstens alle TERR_UPLOAD s,
@@ -144,38 +144,67 @@ export function createRenderer(canvasHost) {
     decalDirty = false; decalForce = false;
     dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
-    if (!tex || tex.resolution !== ur) { if (tex) tex.destroy(); tex = bakeUnitTextures(app.renderer, ur); }
+    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); }
   }
 
-  /* ---------- Einheiten ---------- */
+  /* ---------- Einheiten ----------
+     Jede sichtbare Einheit bekommt pro Bild einen Container aus dem Pool (Reihenfolge = y-Sortierung)
+     mit den Rig-Teilen body, pupilL, pupilR, lid, headgear, weapon. Der Schatten (mit Teamring) liegt
+     in einer eigenen Ebene unter allen Körpern. Pro Bild werden nur Texturen, Anker, Lage, Drehung,
+     Sichtbarkeit und tint gesetzt; die Pose kommt aus poseUnit() in ein wiederverwendetes Objekt. */
   const shadowSprites = new PIXI.Container(), links = new PIXI.Graphics();
   L.shadows.addChild(shadowSprites, links);
-  const groundSprites = new PIXI.Container(), groundBars = new PIXI.Graphics();
-  L.ground.addChild(groundSprites, groundBars);
-  const airSprites = new PIXI.Container(), airBars = new PIXI.Graphics();
-  L.air.addChild(airSprites, airBars);
-  const shadowPool = makePool(shadowSprites), groundPool = makePool(groundSprites), airPool = makePool(airSprites);
+  const groundUnits = new PIXI.Container(), groundBars = new PIXI.Graphics();
+  L.ground.addChild(groundUnits, groundBars);
+  const airUnits = new PIXI.Container(), airBars = new PIXI.Graphics();
+  L.air.addChild(airUnits, airBars);
+  const shadowPool = makePool(shadowSprites), groundPool = makeRigPool(groundUnits), airPool = makeRigPool(airUnits);
   const projG = new PIXI.Graphics();
   L.projectiles.addChild(projG);
 
+  // Pool von Einheiten-Containern; Kinder in Zeichenreihenfolge der Rig-Teile (Schatten liegt woanders)
+  function makeRigPool(container) {
+    const arr = [];
+    let n = 0;
+    return {
+      next() {
+        let r = arr[n];
+        if (!r) {
+          const c = new PIXI.Container();
+          r = { c };
+          for (const k of ['body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon']) { const s = new PIXI.Sprite(); r[k] = s; c.addChild(s); }
+          container.addChild(c); arr.push(r);
+        }
+        r.c.visible = true; n++;
+        return r;
+      },
+      finish() { for (let i = n; i < arr.length; i++) arr[i].c.visible = false; n = 0; },
+      get size() { return arr.length; },
+    };
+  }
+
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
+  const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
+  const stats = { drawn: 0, culled: 0 };
 
-  function drawUnits(world, t) {
+  function drawUnits(world, cam, t) {
     const tm = world.teamMode;
+    // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
+    const vx0 = cam.x - 80, vy0 = cam.y - 80, vx1 = cam.x + cam.viewW / cam.zoom + 80, vy1 = cam.y + cam.viewH / cam.zoom + 120;
     groundList.length = 0; airList.length = 0;
-    let top = null;
+    let top = null, culled = 0;
     for (const u of world.units) {
       if (!u.alive) continue;
-      (u.T.fly ? airList : groundList).push(u);
       if (u.kills >= 3 && (!top || u.kills > top.kills)) top = u;
+      if (u.x < vx0 || u.x > vx1 || u.y < vy0 || u.y > vy1) { culled++; continue; }
+      (u.T.fly ? airList : groundList).push(u);
     }
     groundList.sort(byY); airList.sort(byY);
+    stats.drawn = groundList.length + airList.length; stats.culled = culled;
+    const inv = 1 / rigs.resolution;
     // Schatten und Teamringe liegen unter allen Körpern
-    for (const list of [groundList, airList]) for (const u of list) {
-      const tx = tex.shadow(u.type, tm ? u.team : null), s = shadowPool.next();
-      s.texture = tx; s.position.set(u.x, u.y); s.scale.set(spriteSize(u.T.r) / tx.width); s.alpha = 1;
-    }
+    shadows(groundList, tm, inv); shadows(airList, tm, inv);
     shadowPool.finish();
     // Schildwall: verbundene Schilde sichtbar machen
     links.clear();
@@ -191,18 +220,52 @@ export function createRenderer(canvasHost) {
         links.moveTo(u.x + u.face * u.T.r * .8, u.y); links.lineTo(b.x + b.face * b.T.r * .8, b.y);
       }
     }
-    bodies(groundList, groundPool, groundBars, t, tm);
-    bodies(airList, airPool, airBars, t, tm);
+    bodies(groundList, groundPool, groundBars, t, tm, inv);
+    bodies(airList, airPool, airBars, t, tm, inv);
     drawCrown(top);
   }
 
-  function bodies(list, pool, bars, t, tm) {
+  function shadows(list, tm, inv) {
+    for (const u of list) {
+      const rig = rigs.get(u.type), a = rig.anchors.shadow, s = shadowPool.next();
+      s.texture = rig.tex.shadow[tm ? TEAM_INDEX[u.team] || 0 : 0][0];
+      s.anchor.set(a.ax, a.ay); s.position.set(u.x, u.y); s.scale.set(inv); s.alpha = 1;
+    }
+  }
+
+  function part(s, tex, a, x, y, inv) {
+    s.visible = true; s.texture = tex; s.anchor.set(a.ax, a.ay); s.position.set(x, y); s.scale.set(inv);
+  }
+
+  // Container-Transform: Drehpunkt an den Füßen (Flieger: Körpermitte), damit Quetschen und Neigen
+  // die Figur am Boden lassen; scale.x < 0 spiegelt nach links, die Neigung wirkt danach in Weltrichtung.
+  function bodies(list, pool, bars, t, tm, inv) {
     bars.clear();
     for (const u of list) {
-      const T = u.T, frame = u.moving || T.fly ? ((t * (T.fly ? 10 : 7) + u.seed) | 0) % 2 : 0;
-      const tx = tex.get(u.type, tm ? u.team : null, u.face < 0, frame), s = pool.next();
-      s.texture = tx; s.position.set(u.x, u.y); s.scale.set(spriteSize(T.r) / tx.width);
-      s.alpha = u.hitT > 0 ? .55 : 1;
+      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose), slot = pool.next();
+      const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
+      const c = slot.c, A = rig.anchors, X = rig.tex;
+      c.position.set(u.x, u.y + rig.offY + rig.pivotY + p.bob);
+      c.pivot.set(0, rig.pivotY);
+      c.scale.set(p.sx * face, p.sy);
+      c.rotation = p.tilt;
+      let f = X.body[vi]; part(slot.body, f[fr] || f[0], A.body, 0, 0, inv);
+      if (rig.pupilL) {
+        // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
+        const e = rig.eyes, ox = p.lookX * face * rig.eyeR, oy = p.lookY * rig.eyeR;
+        part(slot.pupilL, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
+        part(slot.pupilR, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+      } else { slot.pupilL.visible = false; slot.pupilR.visible = false; }
+      if (rig.lid && p.blink) { part(slot.lid, rig.lid, A.lid, 0, 0, inv); slot.lid.tint = rig.lidTint[tm ? TEAM_INDEX[u.team] || 0 : 0]; }
+      else slot.lid.visible = false;
+      if (rig.headgear) { f = X.headgear[vi]; part(slot.headgear, f[fr] || f[0], A.headgear, 0, 0, inv); }
+      else slot.headgear.visible = false;
+      if (rig.weapon) {
+        // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
+        const w = slot.weapon, a = A.weapon, k = p.recoil;
+        part(w, X.weapon[vi][0], a, a.x - Math.cos(rig.axis) * k, a.y - Math.sin(rig.axis) * k, inv);
+        w.rotation = p.weaponRot * rig.swing;
+      } else slot.weapon.visible = false;
       if (u.hp < T.hp && T.hp > 10) {
         const w = Math.max(12, T.r * 1.6), y = u.y - T.r * (T.fly ? 2.1 : 1.6) - 4;
         bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
@@ -413,7 +476,7 @@ export function createRenderer(canvasHost) {
       decalTex.update(); decalUpT = t; decalDirty = false; decalForce = false;
     }
     drawOverlay(world);
-    drawUnits(world, t);
+    drawUnits(world, cam, t);
     drawProjectiles(world);
     drawFx();
     shake *= .85;
@@ -425,5 +488,11 @@ export function createRenderer(canvasHost) {
 
   function resize(viewW, viewH) { app.renderer.resize(viewW, viewH); }
 
-  return { app, canvas: view, layers: L, resize, markTerrainDirty, draw, setOverlay, event, stepFx, clearFx };
+  // Für Prüfungen (?debug: window.__kritzel.renderer.debugRig()): Atlas, Pool, gezeichnet/ausgelassen
+  function debugRig() {
+    return { resolution: rigs && rigs.resolution, atlasPages: rigs && rigs.pages, drawn: stats.drawn, culled: stats.culled,
+      groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [] };
+  }
+
+  return { app, canvas: view, layers: L, resize, markTerrainDirty, draw, setOverlay, event, stepFx, clearFx, debugRig };
 }

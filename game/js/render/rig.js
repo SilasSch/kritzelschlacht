@@ -373,8 +373,9 @@ function createAtlas() {
   const pages = [];
   let cur = null, cx = 0, cy = 0, rowH = 0;
   const newPage = () => {
+    // CPU-Canvas wie das Schmierblatt: Kopieren bleibt im Speicher, PIXI lädt die Seite einmal hoch
     const cv = document.createElement('canvas'); cv.width = cv.height = PAGE;
-    cur = { cv, ctx: cv.getContext('2d'), base: new PIXI.BaseTexture(cv, { mipmap: PIXI.MIPMAP_MODES.OFF }) };
+    cur = { cv, ctx: cv.getContext('2d', { willReadFrequently: true }), base: new PIXI.BaseTexture(cv, { mipmap: PIXI.MIPMAP_MODES.OFF }) };
     pages.push(cur); cx = PAD; cy = PAD; rowH = 0;
   };
   return {
@@ -402,7 +403,7 @@ const hexNum = s => parseInt(s.slice(1), 16);
    Die Map trägt zusätzlich resolution und destroy(). renderer bleibt für die Schnittstelle erhalten. */
 // eslint-disable-next-line no-unused-vars
 export function bakeRigTextures(renderer, resolution) {
-  const res = resolution, atlas = createAtlas();
+  const t0 = performance.now(), res = resolution, atlas = createAtlas();
   let maxPx = 0;
   for (const t in U) maxPx = Math.max(maxPx, Math.ceil(spriteSize(U[t].r) * res));
   const scv = document.createElement('canvas'); scv.width = scv.height = maxPx;
@@ -465,6 +466,7 @@ export function bakeRigTextures(renderer, resolution) {
   for (const p of atlas.pages) p.base.update();
   rigs.resolution = res;
   rigs.pages = atlas.pages.length;
+  rigs.bakeMs = Math.round(performance.now() - t0);
   rigs.destroy = () => { for (const p of atlas.pages) p.base.destroy(); rigs.clear(); };
   return rigs;
 }

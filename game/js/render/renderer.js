@@ -490,7 +490,7 @@ export function createRenderer(canvasHost) {
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugRig()): Atlas, Pool, gezeichnet/ausgelassen
   function debugRig() {
-    return { resolution: rigs && rigs.resolution, atlasPages: rigs && rigs.pages, drawn: stats.drawn, culled: stats.culled,
+    return { resolution: rigs && rigs.resolution, atlasPages: rigs && rigs.pages, bakeMs: rigs && rigs.bakeMs, drawn: stats.drawn, culled: stats.culled,
       groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [] };
   }
 

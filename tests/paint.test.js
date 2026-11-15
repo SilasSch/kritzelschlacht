@@ -138,3 +138,23 @@ test('undo: stellt Einheiten, Felder und Ausgaben wieder her', () => {
   assert.equal(back.length, 1);
   assert.equal(back[0].type, 'ritter'); assert.equal(back[0].x, 150); assert.equal(back[0].team, 'blau');
 });
+
+test('paintTerrain: eigenes Gelände ersetzen am Budgetlimit erstattet nicht doppelt', () => {
+  const run = (budget) => {
+    const w = createWorld(400, 400, 3);
+    const cells = [cellIndex(w, 105, 105), cellIndex(w, 115, 105), cellIndex(w, 105, 115), cellIndex(w, 115, 115)];
+    for (const i of cells) setCell(w, i, 1, 1); // 4 eigene Wasserfelder
+    const m = { budget, spent: 4 * TERRAIN.wasser.cost };
+    const s = createStroke(m.spent);
+    for (let k = 0; k < 5; k++) paintTerrain(w, s, 110, 110, 12, 'mauer', m, 'plan');
+    const walls = cells.filter(i => w.terr[i] === 4).length, water = cells.filter(i => w.terr[i] === 1).length;
+    assert.equal(walls + water, 4);
+    assert.ok(Math.abs(m.spent - (walls * TERRAIN.mauer.cost + water * TERRAIN.wasser.cost)) < 1e-9, `spent ${m.spent} walls ${walls}`);
+    assert.ok(m.spent <= budget + 1e-6);
+    return { walls, water, spent: m.spent };
+  };
+  const a = run(0.16);
+  assert.equal(a.walls, 0); assert.ok(Math.abs(a.spent - 0.16) < 1e-9);
+  const b = run(0.22);
+  assert.equal(b.walls, 1); assert.equal(b.water, 3);
+});

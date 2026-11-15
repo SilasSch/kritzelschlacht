@@ -77,7 +77,7 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
       const i = gy * GW + gx; if (terr[i] !== 4) continue;
       const cx = gx * CELL + 5, cy = gy * CELL + 5;
       if ((cx - x) ** 2 + (cy - y) ** 2 > R * R) continue;
-      hitWall(world, i, dmg * wallMul, x, y, false); any = true;
+      if (hitWall(world, i, dmg * wallMul, x, y, false)) any = true;
     }
     if (any) emit(world, { type: 'terrain', gx0: Math.max(0, g0x - 1), gy0: Math.max(0, g0y - 1), gx1: Math.min(GW - 1, g1x + 1), gy1: Math.min(GH - 1, g1y + 1) });
   }
@@ -85,15 +85,23 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   sound(world, kind === 'fire' ? 'fire' : 'boom');
 }
 
-// fromX/fromY: Herkunft des Treffers (Flugrichtung der Trümmer)
+// Ab hier zeigt die Mauer Risse (Darstellung im Renderer)
+export const WALL_CRACK_HP = 70;
+
+// fromX/fromY: Herkunft des Treffers (Flugrichtung der Trümmer).
+// Liefert true, wenn sich das Aussehen geändert hat (Risse ab WALL_CRACK_HP oder zerbrochen);
+// nur dann gibt es ein terrain-Ereignis.
 export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   const { GW, GH } = world;
+  const before = world.whp[i];
   world.whp[i] -= d;
   const gx = i % GW, gy = i / GW | 0;
   let broken = false;
   if (world.whp[i] <= 0) { world.terr[i] = 0; world.towner[i] = 0; broken = true; }
   emit(world, { type: 'wallHit', i, x: gx * CELL + 5, y: gy * CELL + 5, fromX, fromY, broken });
-  if (emitTerrain) emit(world, { type: 'terrain', gx0: Math.max(0, gx - 1), gy0: Math.max(0, gy - 1), gx1: Math.min(GW - 1, gx + 1), gy1: Math.min(GH - 1, gy + 1) });
+  const changed = broken || (before >= WALL_CRACK_HP && world.whp[i] < WALL_CRACK_HP);
+  if (changed && emitTerrain) emit(world, { type: 'terrain', gx0: Math.max(0, gx - 1), gy0: Math.max(0, gy - 1), gx1: Math.min(GW - 1, gx + 1), gy1: Math.min(GH - 1, gy + 1) });
+  return changed;
 }
 
 /* ---------- Waffen ---------- */

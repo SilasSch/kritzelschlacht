@@ -107,3 +107,21 @@ test('Typ-Sets: RANGED in data.js, KITE und LINE in combat.js', () => {
   assert.deepEqual([...KITE].sort(), ['schuetze', 'sniper', 'soldat']);
   assert.deepEqual([...LINE].sort(), ['krieger', 'ritter', 'soldat']);
 });
+
+test('hitWall: terrain-Ereignis nur beim Unterschreiten von 70 LP oder beim Zerbrechen', () => {
+  const w = createWorld(1400, 800, 5); const i = cellIndex(w, 205, 205); setCell(w, i, 4); // 140 LP
+  const terr = () => w.events.filter(e => e.type === 'terrain').length;
+  hitWall(w, i, 30, 190, 205); assert.equal(terr(), 0, '140 -> 110');
+  assert.ok(w.events.some(e => e.type === 'wallHit'));
+  hitWall(w, i, 30, 190, 205); assert.equal(terr(), 0, '110 -> 80');
+  hitWall(w, i, 30, 190, 205); assert.equal(terr(), 1, '80 -> 50: Risse sichtbar');
+  hitWall(w, i, 30, 190, 205); assert.equal(terr(), 1, '50 -> 20');
+  hitWall(w, i, 30, 190, 205); assert.equal(terr(), 2, 'zerbrochen');
+  assert.equal(w.terr[i], 0);
+  // blast meldet terrain nur, wenn eine Mauer sichtbar wechselt
+  const w2 = createWorld(1400, 800, 5); const j = cellIndex(w2, 405, 405); setCell(w2, j, 4); rebuildHash(w2);
+  blast(w2, 405, 405, 20, 5, 'x', null, 'blast', 1); // 5 Schaden
+  assert.equal(w2.events.filter(e => e.type === 'terrain').length, 0);
+  blast(w2, 405, 405, 20, 100, 'x', null, 'blast', 1); // 135 -> 35
+  assert.equal(w2.events.filter(e => e.type === 'terrain').length, 1);
+});

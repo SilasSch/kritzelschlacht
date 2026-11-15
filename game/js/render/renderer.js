@@ -63,8 +63,12 @@ export function createRenderer(canvasHost) {
 
   let tex = null;            // gebackene Einheiten-Texturen (rig.js)
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
-  let dirty = null;           // {x0,y0,x1,y1} Gitterbereich, der neu gezeichnet werden muss
-  let terrChanged = false;
+  // Neu zu zeichnende Gitterbereiche, einzeln (zwei Treffer weit auseinander ergeben kein Riesenrechteck).
+  // CPU-Neuzeichnen sofort; GPU-Upload für Kampf-Änderungen höchstens alle TERR_UPLOAD s,
+  // für Malen / komplettes Neuzeichnen sofort.
+  const TERR_UPLOAD = .1, MAX_RECTS = 48;
+  const dirtyRects = [];
+  let terrChanged = false, terrForce = false, terrUpT = -1;
 
   function drawTerrain(world, x0, y0, x1, y1) {
     const { terr, whp } = world;
@@ -95,9 +99,15 @@ export function createRenderer(canvasHost) {
     terrChanged = true;
   }
 
-  function markTerrainDirty(gx0, gy0, gx1, gy1) {
-    if (!dirty) dirty = { x0: gx0, y0: gy0, x1: gx1, y1: gy1 };
-    else { dirty.x0 = Math.min(dirty.x0, gx0); dirty.y0 = Math.min(dirty.y0, gy0); dirty.x1 = Math.max(dirty.x1, gx1); dirty.y1 = Math.max(dirty.y1, gy1); }
+  // immediate=false: Änderung aus dem Kampf (world.events), Upload darf gedrosselt werden
+  function markTerrainDirty(gx0, gy0, gx1, gy1, immediate = true) {
+    if (immediate) terrForce = true;
+    for (const r of dirtyRects) if (r.x0 <= gx0 && r.y0 <= gy0 && r.x1 >= gx1 && r.y1 >= gy1) return;
+    if (dirtyRects.length >= MAX_RECTS) {
+      const b = { x0: gx0, y0: gy0, x1: gx1, y1: gy1 };
+      for (const r of dirtyRects) { b.x0 = Math.min(b.x0, r.x0); b.y0 = Math.min(b.y0, r.y0); b.x1 = Math.max(b.x1, r.x1); b.y1 = Math.max(b.y1, r.y1); }
+      dirtyRects.length = 0; dirtyRects.push(b);
+    } else dirtyRects.push({ x0: gx0, y0: gy0, x1: gx1, y1: gy1 });
   }
 
   /* ---------- Decals (Offscreen-Canvas wie im alten Spiel: Flecken und Brandspuren) ----------
@@ -132,7 +142,7 @@ export function createRenderer(canvasHost) {
     decalTex = PIXI.Texture.from(dcv);
     decalSprite.texture = decalTex; decalSprite.scale.set(1 / res);
     decalDirty = false; decalForce = false;
-    dirty = { x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 };
+    dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
     if (!tex || tex.resolution !== ur) { if (tex) tex.destroy(); tex = bakeUnitTextures(app.renderer, ur); }
   }
@@ -264,7 +274,7 @@ export function createRenderer(canvasHost) {
 
   function event(e) {
     switch (e.type) {
-      case 'terrain': markTerrainDirty(e.gx0, e.gy0, e.gx1, e.gy1); break;
+      case 'terrain': markTerrainDirty(e.gx0, e.gy0, e.gx1, e.gy1, false); break;
       case 'death': {
         const T = UNITS[e.unitType]; if (!T) break;
         decal(e.x, e.y + T.r * .7, T.r * 1.1, shade(T.col, -.25), .13);
@@ -394,8 +404,11 @@ export function createRenderer(canvasHost) {
   /* ---------- Bild ---------- */
   function draw(world, cam, t) {
     ensureWorld(world, cam);
-    if (dirty) { drawTerrain(world, dirty.x0, dirty.y0, dirty.x1, dirty.y1); dirty = null; }
-    if (terrChanged) { terrTex.update(); terrChanged = false; }
+    for (const r of dirtyRects) drawTerrain(world, r.x0, r.y0, r.x1, r.y1);
+    dirtyRects.length = 0;
+    if (terrChanged && (terrForce || t - terrUpT >= TERR_UPLOAD || t < terrUpT)) {
+      terrTex.update(); terrUpT = t; terrChanged = false; terrForce = false;
+    }
     if (decalDirty && (decalForce || t - decalUpT >= DECAL_UPLOAD || t < decalUpT)) {
       decalTex.update(); decalUpT = t; decalDirty = false; decalForce = false;
     }

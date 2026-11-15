@@ -79,11 +79,11 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
     if (mission) {
       if (old && !towner[i]) continue;   // Gelände der Mission ist geschützt
       if (old === id) continue;
-      if (old) mission.spent = Math.max(0, mission.spent - TERRAIN[terrKeyById(old)].cost);
-      if (id) {
-        if (mission.spent + cost > mission.budget + EPS) { broke = true; continue; }
-        mission.spent += cost;
-      }
+      // Erst prüfen, dann buchen: ein abgelehntes Feld darf keine Erstattung behalten
+      const refund = old ? TERRAIN[terrKeyById(old)].cost : 0;
+      const next = Math.max(0, mission.spent - refund) + (id ? cost : 0);
+      if (id && next > mission.budget + EPS) { broke = true; continue; }
+      mission.spent = next;
     }
     if (old === id && id !== 4) continue;
     if (stroke && !stroke.cells.has(i)) stroke.cells.set(i, [old, towner[i], whp[i]]);

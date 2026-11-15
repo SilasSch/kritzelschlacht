@@ -253,3 +253,80 @@ test('Gerade Schüsse: Renderer-Felder bleiben stimmig (Position aus t/dur = phy
   assert.ok(Math.abs(p.y0 + (p.y1 - p.y0) * q - (p.y + oy)) < 1e-6);
   assert.equal(p.h, 0);
 });
+
+/* ---------- Fix-Runde 1: echte Schussbahn (Vorhalt + Streuung), Flieger als Schützen ---------- */
+// Soldat schießt einmal (falls frei) auf einen schnell laufenden Reiter; das Geschoss fliegt zu Ende,
+// das Ziel bewegt sich weiter. Liefert {fired, ally}.
+const movingTargetTrial = (seed, allyY) => {
+  const w = createWorld(1400, 800, seed); w.teamMode = true;
+  const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0;
+  const t = spawn(w, 'reiter', 450, 300, 'rot'); t.mx = 0; t.my = 150;   // Vorhalt ≈ 16 px nach unten
+  const ally = spawn(w, 'krieger', 420, allyY, 'blau');
+  rebuildHash(w);
+  // think setzt nur bei s die Wunschbewegung zurück; das Ziel behält my = 150
+  think(w, s, DT);
+  const fired = w.proj.length > 0;
+  for (let k = 0; k < 60 && w.proj.length; k++) { t.y += t.my * DT; rebuildHash(w); stepProjectiles(w, DT); }
+  return { fired, ally };
+};
+
+test('Bewegtes Ziel: Verbündeter neben dem Vorhaltepunkt wird nie getroffen (Schusslinie prüft die echte Bahn)', () => {
+  // Verbündeter 16 px neben der Mittellinie zum Ziel, aber genau auf der Bahn zum Vorhaltepunkt
+  for (let seed = 1; seed <= 12; seed++) {
+    const { ally } = movingTargetTrial(seed, 316);
+    assert.ok(full(ally), `Seed ${seed}: Verbündeter getroffen`);
+  }
+});
+
+test('Bewegtes Ziel: Verbündeter auf der anderen Seite blockiert nicht, der Schütze feuert', () => {
+  let fired = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const r = movingTargetTrial(seed, 284);
+    if (r.fired) fired++;
+    assert.ok(full(r.ally), `Seed ${seed}`);
+  }
+  assert.equal(fired, 12);
+});
+
+test('Geschoss fliegt genau zum geprüften Zielpunkt (fire mit vorgegebenem Zielpunkt)', () => {
+  const w = mkWorld();
+  const s = spawn(w, 'soldat', 300, 300, 'blau'); const t = spawn(w, 'krieger', 450, 300, 'rot');
+  rebuildHash(w);
+  fire(w, s, t, 'rocket', 455, 320);
+  const p = w.proj[0], d = Math.hypot(155, 20);
+  assert.ok(Math.abs(p.nx - 155 / d) < 1e-9 && Math.abs(p.ny - 20 / d) < 1e-9);
+  assert.ok(Math.abs(p.len - d) < 1e-9, 'Rakete endet am Zielpunkt');
+});
+
+test('Heli über einer Mauerzelle trifft sein Bodenziel; die Mauer unter ihm bleibt heil', () => {
+  const w = mkWorld();
+  const h = spawn(w, 'heli', 300, 300, 'blau'); h.cd = 0;
+  const i = cellIndex(w, 300, 300); setCell(w, i, 4);
+  const t = spawn(w, 'krieger', 450, 300, 'rot');
+  rebuildHash(w);
+  assert.equal(hasLineOfFire(w, h, t), true);
+  think(w, h, DT);
+  assert.equal(w.proj.length, 1, 'Heli feuert');
+  assert.ok(w.proj[0].z > 40, `Schuss startet in Heli-Höhe (${w.proj[0].z})`);
+  flyAll(w);
+  assert.ok(t.hp < t.T.hp, 'Bodenziel getroffen');
+  assert.equal(w.whp[i], 140, 'Mauer unter dem Heli unberührt');
+});
+
+test('Heli über der eigenen Armee feuert weiter auf den Gegner', () => {
+  const w = mkWorld();
+  const h = spawn(w, 'heli', 300, 300, 'blau'); h.cd = 0;
+  const allies = [[300, 300], [290, 312], [312, 290], [320, 305], [285, 290]].map(([x, y]) => spawn(w, 'krieger', x, y, 'blau'));
+  const t = spawn(w, 'krieger', 460, 300, 'rot');
+  rebuildHash(w);
+  assert.equal(hasLineOfFire(w, h, t), true, 'eigene Leute unter dem Heli blockieren nicht');
+  let shots = 0;
+  for (let k = 0; k < 90; k++) {
+    rebuildHash(w); think(w, h, DT); stepProjectiles(w, DT);
+    shots += w.events.filter(e => e.type === 'shot').length; w.events.length = 0;
+    h.x = 300; h.y = 300;   // bleibt über der Armee
+  }
+  assert.ok(shots >= 5, `feuert (${shots} Schüsse)`);
+  assert.ok(t.hp < t.T.hp);
+  for (const a of allies) assert.ok(full(a), 'Armee darunter unversehrt');
+});

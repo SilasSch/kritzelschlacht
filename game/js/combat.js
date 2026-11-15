@@ -10,6 +10,7 @@ export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
+const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (world, a, b) => a + world.rng() * (b - a);
@@ -130,31 +131,40 @@ export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
 // Ergebnis des internen Strahls (wiederverwendet, keine Allokation im Geschossschritt)
 const RAY = { unit: null, cell: -1, t: 1 };
 
-// Erste Mauerzelle auf dem Segment (Gitterlauf über CELL-Zellen). Liefert t in [0,1] oder 2.
-function wallHit(world, x0, y0, x1, y1) {
-  const { GW, GH, terr } = world, dx = x1 - x0, dy = y1 - y0;
+// Erste Mauerzelle auf dem Segment (Gitterlauf über CELL-Zellen), in der die Bahnhöhe unter
+// WALL_CLEAR_Z liegt. Die Höhe läuft linear von za (t=0) nach zb (t=1). Liefert t in [0,1] oder 2.
+function wallHit(world, x0, y0, x1, y1, za, zb) {
+  if (za >= WALL_CLEAR_Z && zb >= WALL_CLEAR_Z) return 2;
+  const { GW, GH, terr } = world, dx = x1 - x0, dy = y1 - y0, dz = zb - za;
   let gx = clamp(x0 / CELL | 0, 0, GW - 1), gy = clamp(y0 / CELL | 0, 0, GH - 1);
-  if (terr[gy * GW + gx] === WALL) { RAY.cell = gy * GW + gx; return 0; }
   const sx = dx > 0 ? 1 : dx < 0 ? -1 : 0, sy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
   const tdx = sx ? CELL / Math.abs(dx) : Infinity, tdy = sy ? CELL / Math.abs(dy) : Infinity;
   let tx = sx > 0 ? ((gx + 1) * CELL - x0) / dx : sx < 0 ? (gx * CELL - x0) / dx : Infinity;
   let ty = sy > 0 ? ((gy + 1) * CELL - y0) / dy : sy < 0 ? (gy * CELL - y0) / dy : Infinity;
+  let t = 0;
   for (;;) {
-    let t;
+    if (terr[gy * GW + gx] === WALL) {
+      // Bahn in dieser Zelle von t bis zum nächsten Zellrand: Treffer, sobald sie unter WALL_CLEAR_Z ist
+      const tOut = Math.min(tx, ty, 1);
+      if (za + dz * t < WALL_CLEAR_Z) { RAY.cell = gy * GW + gx; return t; }
+      if (za + dz * tOut < WALL_CLEAR_Z) { RAY.cell = gy * GW + gx; return (WALL_CLEAR_Z - za) / dz; }
+    }
     if (tx < ty) { t = tx; tx += tdx; gx += sx; } else { t = ty; ty += tdy; gy += sy; }
     if (t > 1 || gx < 0 || gy < 0 || gx >= GW || gy >= GH) return 2;
-    if (terr[gy * GW + gx] === WALL) { RAY.cell = gy * GW + gx; return t; }
   }
 }
 
-// Erster Körper oder erste Mauerzelle auf dem Segment in Höhe z, über den Spatial Hash
-// (nur Hash-Zellen in MAX_R-Nähe des Segments, jede einmal). Mauern zählen nur unter WALL_CLEAR_Z.
+// Erster Körper oder erste Mauerzelle auf dem Segment, über den Spatial Hash (nur Hash-Zellen in
+// MAX_R-Nähe des Segments, jede einmal). Die Bahnhöhe läuft linear von za nach zb (Flieger schießen
+// schräg nach unten); ein Körper zählt, wenn |body.z − z| < r + 10 an der Stelle seiner größten
+// Annäherung. Mauern zählen nur, wo z < WALL_CLEAR_Z.
 // skip: ein Körper, skipSet: Set oder null; pad macht alle Körper dicker (Schusslinie).
 // Ergebnis in RAY: unit (oder null), cell (Mauerzelle oder −1), t (Anteil am Segment, 1 ohne Treffer).
-function cast(world, x0, y0, x1, y1, z, skip, skipSet, pad) {
+function cast(world, x0, y0, x1, y1, za, zb, skip, skipSet, pad) {
   RAY.unit = null; RAY.cell = -1; RAY.t = 1;
-  let best = z < WALL_CLEAR_Z ? wallHit(world, x0, y0, x1, y1) : 2;   // setzt RAY.cell bei Treffer
-  const { HW, HH, hash } = world, dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy;
+  let best = wallHit(world, x0, y0, x1, y1, za, zb);   // setzt RAY.cell bei Treffer
+  const { HW, HH, hash } = world, dx = x1 - x0, dy = y1 - y0, dz = zb - za, L2 = dx * dx + dy * dy;
+  const zlo = za < zb ? za : zb, zhi = za < zb ? zb : za;
   const P = MAX_R + pad + 4;   // +4: Hash ist vom Anfang des Schritts, Körper haben sich seitdem bewegt
   const gy0 = clamp((Math.min(y0, y1) - P) / HC | 0, 0, HH - 1), gy1 = clamp((Math.max(y0, y1) + P) / HC | 0, 0, HH - 1);
   let bu = null;
@@ -173,19 +183,21 @@ function cast(world, x0, y0, x1, y1, z, skip, skipSet, pad) {
       for (let i = 0; i < cell.length; i++) {
         const v = cell[i];
         if (!v.alive || v === skip || (skipSet !== null && skipSet.has(v))) continue;
-        const r = v.T.r;
-        if (Math.abs(v.z - z) >= r + BODY_Z_PAD) continue;
-        const rr = r + pad, cx = v.x - x0, cy = v.y - y0, c2 = cx * cx + cy * cy;
+        const band = v.T.r + BODY_Z_PAD;
+        if (v.z <= zlo - band || v.z >= zhi + band) continue;
+        const rr = v.T.r + pad, cx = v.x - x0, cy = v.y - y0, c2 = cx * cx + cy * cy;
+        const sc = L2 > 0 ? (cx * dx + cy * dy) / L2 : 0;
         let s;
         if (c2 <= rr * rr) s = 0;          // Start liegt im Körper
         else {
-          if (L2 === 0) continue;
-          const sc = (cx * dx + cy * dy) / L2; if (sc < 0) continue;
+          if (L2 === 0 || sc < 0) continue;
           const h2 = c2 - sc * sc * L2; if (h2 > rr * rr) continue;
           s = sc - Math.sqrt((rr * rr - h2) / L2);
           if (s > 1) continue;
         }
-        if (s < best) { best = s; bu = v; }
+        if (s >= best) continue;
+        if (dz !== 0) { const sz = sc < s ? s : sc > 1 ? 1 : sc; if (Math.abs(v.z - (za + dz * sz)) >= band) continue; }
+        best = s; bu = v;
       }
     }
   }
@@ -193,17 +205,54 @@ function cast(world, x0, y0, x1, y1, z, skip, skipSet, pad) {
   return RAY;
 }
 
-// Öffentliche Variante: frisches Ergebnisobjekt, ignore als Set<Unit>.
+// Öffentliche Variante in fester Höhe z: frisches Ergebnisobjekt, ignore als Set<Unit>.
 export function raycast(world, x0, y0, x1, y1, z, ignore) {
-  const r = cast(world, x0, y0, x1, y1, z, null, ignore || null, 0);
+  const r = cast(world, x0, y0, x1, y1, z, z, null, ignore || null, 0);
   return { unit: r.unit, cell: r.cell, t: r.t };
 }
 
-// Falsch, wenn der erste Treffer auf dem Weg zum Ziel zur eigenen Fraktion gehört
-// (Mauern und andere Gegner sind kein Hindernis für die Entscheidung).
-export function hasLineOfFire(world, u, target) {
-  const r = cast(world, u.x, u.y, target.x, target.y, shotZ(target), u, null, LOF_PAD);
+// Bahn eines geraden Schusses von u zum Zielpunkt (ax, ay), in GEO: Richtung, Abstand el, Fluglänge
+// (Kugeln fliegen BULLET_OVERSHOOT weiter), Starthöhe z0 und Zielhöhe zt (am Zielpunkt erreicht).
+// zt: Flieger-Ziel in dessen Höhe, sonst MUZZLE_Z. z0: Flieger-Schütze aus eigener Höhe, sonst zt.
+const GEO = { nx: 1, ny: 0, el: 1, len: 1, z0: 0, zt: 0 };
+function shotGeo(u, t, kind, ax, ay) {
+  const ex = ax - u.x, ey = ay - u.y, el = Math.hypot(ex, ey) || 1;
+  GEO.nx = ex / el; GEO.ny = ey / el; GEO.el = el;
+  GEO.len = kind === 'bullet' ? el + BULLET_OVERSHOOT : el;
+  GEO.zt = shotZ(t); GEO.z0 = u.T.fly ? u.z : GEO.zt;
+  return GEO;
+}
+// Bahnhöhe nach s px (linear durch den Zielpunkt, nicht unter den Boden)
+const zAlong = (z0, zt, el, s) => { const z = z0 + (zt - z0) * s / el; return z > 0 ? z : 0; };
+
+// Ist der Weg u → (x1, y1) frei von eigenen Leuten? Erster Treffer aus der eigenen Fraktion → falsch.
+function clearPath(world, u, x1, y1, z0, z1) {
+  const r = cast(world, u.x, u.y, x1, y1, z0, z1, u, null, LOF_PAD);
   return !(r.unit && factionOf(world, r.unit) === factionOf(world, u));
+}
+
+// Falsch, wenn der erste Treffer auf dem Weg zur Zielmitte zur eigenen Fraktion gehört
+// (Mauern und andere Gegner sind kein Hindernis). Dient der Zielwahl; vor dem Schuss prüft think
+// die echte Bahn zum gezogenen Zielpunkt (aimLine).
+export function hasLineOfFire(world, u, target) {
+  const g = shotGeo(u, target, 'rocket', target.x, target.y);
+  return clearPath(world, u, target.x, target.y, g.z0, g.zt);
+}
+
+// Zielpunkt eines Schusses: Vorhalt (Zielbewegung über die Flugzeit · 0.8) plus Streuung aus world.rng().
+const AIM = { x: 0, y: 0 };
+function aimPoint(world, u, t, kind) {
+  const K = SHOT[kind], d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
+  const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2];
+  AIM.x = t.x + t.mx * lead * .8 + rnd(world, -sp, sp);
+  AIM.y = t.y + t.my * lead * .8 + rnd(world, -sp, sp);
+  return AIM;
+}
+
+// Echte Schussbahn (ganze Fluglänge inkl. Überflug, mit Höhenverlauf) frei von eigenen Leuten?
+function aimLine(world, u, t, kind, ax, ay) {
+  const g = shotGeo(u, t, kind, ax, ay);
+  return clearPath(world, u, u.x + g.nx * g.len, u.y + g.ny * g.len, g.z0, zAlong(g.z0, g.zt, g.el, g.len));
 }
 
 // Unter den 8 nächsten Gegnern (im Umkreis von 1.5 · Reichweite) der nächste mit freier Linie.
@@ -225,32 +274,30 @@ function clearTarget(world, u) {
 }
 
 /* ---------- Waffen ---------- */
-export function fire(world, u, t, kind) {
+// ax/ay: Zielpunkt, den think schon gezogen und auf freie Bahn geprüft hat; fehlt er, wird er hier gezogen.
+// Das Geschoss fliegt genau dorthin.
+export function fire(world, u, t, kind, ax, ay) {
   const T = u.T, P = PROJECTILES[kind], K = SHOT[kind];
+  if (ax === undefined) { aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y; }
   const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
-  const lead = K[0] + d / P.speed, sp = K[2];
-  const px = t.x + t.mx * lead * .8, py = t.y + t.my * lead * .8;
   // Mündung (Darstellung): vor dem Körper, etwas erhöht
   const mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
-  const x1 = px + rnd(world, -sp, sp), y1 = py + rnd(world, -sp, sp);
   u.fireT = 0;   // Rückstoß (rig.js)
   const f = factionOf(world, u), dmg = T.dmg, R = T.splash || 0;
   if (P.arc) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
-    world.proj.push({ kind, arc: true, x0: mx, y0: my, x1, y1, t: 0, dur: lead, h: d * K[1],
+    world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
       x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R });
   } else {
-    // Gerade: fliegt vom Körper des Schützen (Boden-x/y) in Höhe z und prüft jeden Schritt das Segment.
-    // x0/y0/x1/y1 sind die Darstellungspunkte (um den Mündungsversatz verschoben), dur = len / speed,
-    // damit der Renderer die aktuelle Position wie bisher aus t/dur interpolieren kann.
-    const ex = x1 - u.x, ey = y1 - u.y, el = Math.hypot(ex, ey) || 1;
-    const len = kind === 'bullet' ? el + BULLET_OVERSHOOT : el, nx = ex / el, ny = ey / el;
-    const ox = mx - u.x, oy = my - u.y;
-    world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + nx * len + ox, y1: u.y + ny * len + oy,
-      t: 0, dur: len / P.speed, h: 0, x: u.x, y: u.y, z: shotZ(t), sx: u.x, sy: u.y, nx, ny, len,
-      sp: P.speed, f, src: u, dmg, R });
+    // Gerade: fliegt vom Körper des Schützen (Boden-x/y) zum Zielpunkt und prüft jeden Schritt das Segment;
+    // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
+    // Mündungsversatz verschoben), dur = len / speed: der Renderer interpoliert die Position wie bisher.
+    const g = shotGeo(u, t, kind, ax, ay), ox = mx - u.x, oy = my - u.y;
+    world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + g.nx * g.len + ox, y1: u.y + g.ny * g.len + oy,
+      t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
+      sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R });
   }
-  emit(world, { type: 'shot', kind, x: mx, y: my, face: u.face, tx: x1, ty: y1, shake: kind === 'shell' ? 2 : 0 });
+  emit(world, { type: 'shot', kind, x: mx, y: my, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
   sound(world, K[3]);
 }
 
@@ -304,12 +351,16 @@ export function think(world, u, dt) {
   // Mörser halten Mindestabstand
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
   if (d <= reach) {
-    // Gerade Schüsse: steht ein Verbündeter in der Schusslinie, nicht feuern, sondern seitlich ausweichen
+    // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
+    // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
+    let ax, ay;
     if (STRAIGHT.has(u.type) && u.cd <= 0) {
-      if (!hasLineOfFire(world, u, t)) { lineBlocked(world, u, nx, ny, dt); return; }
+      const kind = STRAIGHT_KIND[u.type];
+      aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y;
+      if (!aimLine(world, u, t, kind, ax, ay)) { lineBlocked(world, u, nx, ny, dt); return; }
       u.blockedT = 0;
     }
-    attack(world, u, t, d, dx, dy);
+    attack(world, u, t, d, dx, dy, ax, ay);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
     else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
@@ -374,15 +425,15 @@ function lineBlocked(world, u, nx, ny, dt) {
   u.mx = mx; u.my = my;
 }
 
-export function attack(world, u, t, d, dx, dy) {
+// ax/ay (optional): geprüfter Zielpunkt für gerade Schüsse (siehe think)
+export function attack(world, u, t, d, dx, dy, ax, ay) {
   const T = u.T; if (u.cd > 0) return;
   u.cd = T.cd * (.85 + world.rng() * .3);
   switch (u.type) {
     case 'schuetze': fire(world, u, t, 'arrow'); break;
     case 'grenadier': fire(world, u, t, 'bomb'); break;
-    case 'magier': fire(world, u, t, 'fire'); break;
-    case 'soldat': case 'mg': case 'sniper': case 'heli': fire(world, u, t, 'bullet'); break;
-    case 'panzerfaust': fire(world, u, t, 'rocket'); break;
+    case 'magier': case 'soldat': case 'mg': case 'sniper': case 'heli': case 'panzerfaust':
+      fire(world, u, t, STRAIGHT_KIND[u.type], ax, ay); break;
     case 'panzer': fire(world, u, t, 'shell'); break;
     case 'moerser': fire(world, u, t, 'mortar'); break;
     case 'drache': breath(world, u, dx / d, dy / d); break;
@@ -482,14 +533,15 @@ export function stepProjectiles(world, dt) {
       continue;
     }
     const s1 = Math.min(p.len, p.t * p.sp), x1 = p.sx + p.nx * s1, y1 = p.sy + p.ny * s1;
-    const r = cast(world, p.x, p.y, x1, y1, p.z, p.src, null, 0);
+    const z1 = zAlong(p.z0, p.zt, p.el, s1);
+    const r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, null, 0);
     if (r.unit || r.cell >= 0) {
       proj.splice(i, 1);
       const hx = p.x + (x1 - p.x) * r.t, hy = p.y + (y1 - p.y) * r.t;
       impact(world, p, r.unit, r.cell, hx, hy, p.src.alive ? p.src : null);
       continue;
     }
-    p.x = x1; p.y = y1;
+    p.x = x1; p.y = y1; p.z = z1;
     if (s1 >= p.len) { proj.splice(i, 1); impact(world, p, null, -1, x1, y1, p.src.alive ? p.src : null); }
   }
 }

@@ -1,29 +1,51 @@
 // Reiner Kampf: KI, Waffen, Geschosse, Schaden/Rüstung, Explosionen, Mauertreffer.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
-import { CELL } from './data.js';
+import { CELL, HASH_CELL, UNITS } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
-import { applyImpulse } from './physics.js';
+import { applyImpulse, WALL_CLEAR_Z } from './physics.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
+// Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
+export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 const emit = (world, e) => { world.events.push(e); };
 const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 
-// Geschossarten: [Grundflugzeit, Tempo, Bogenhöhe je Distanz, Streuung, Ton]
-const SHOT = {
-  arrow: [.25, 520, .16, 8, 'twang'],
-  bomb: [.55, 450, .35, 14, 'throw'],
-  fire: [0, 330, 0, 14, 'fire'],
-  bullet: [0, 1100, 0, 5, 'shot'],
-  rocket: [0, 520, 0, 6, 'whoosh'],
-  shell: [0, 850, 0, 6, 'cannon'],
-  mortar: [.9, 500, .55, 18, 'thump'],
+// Bögen (arc) fliegen über Köpfe und treffen nur am Zielpunkt; gerade Schüsse treffen das Erste im Weg.
+export const PROJECTILES = {
+  arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
+  shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
+  fire: { arc: false, speed: 330 },
 };
+// Je Art: [Grundflugzeit (nur Bögen), Bogenhöhe je Distanz, Streuung, Ton]
+const SHOT = {
+  arrow: [.25, .16, 8, 'twang'],
+  bomb: [.55, .35, 14, 'throw'],
+  mortar: [.9, .55, 18, 'thump'],
+  shell: [0, .08, 6, 'cannon'],
+  fire: [0, 0, 14, 'fire'],
+  bullet: [0, 0, 5, 'shot'],
+  rocket: [0, 0, 6, 'whoosh'],
+};
+
+// Höhen der geraden Schüsse: am Boden in Laufhöhe (unter WALL_CLEAR_Z, Mauern blocken),
+// auf Flieger in deren Höhe (über WALL_CLEAR_Z, also über Mauern und meist über Bodentruppen).
+export const MUZZLE_Z = 6;
+const BODY_Z_PAD = 10;        // Körper wird getroffen, wenn |body.z − shot.z| < r + 10
+const BULLET_OVERSHOOT = 60;  // Kugeln fliegen so weit über den Zielpunkt hinaus
+const BULLET_WALL = 1;        // Mauerschaden einer Kugel je Schadenspunkt
+const LOF_PAD = 6;            // Schusslinie: Körper zählen um so viel dicker (Streuung)
+const LOF_RETARGET = 2;       // s verdeckt, dann neues Ziel unter den 8 nächsten Gegnern
+const LOF_HOLD = 2.5;         // so lange bleibt das Ausweichziel gesetzt
+const LOF_SIDE = .7;          // Tempo beim seitlichen Ausweichen
+const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
+const HC = HASH_CELL, WALL = 4;
+export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 
 /* ---------- Schaden ---------- */
 export function hurt(world, v, a, kind, src) {
@@ -40,7 +62,8 @@ export function hurt(world, v, a, kind, src) {
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
   const d = a * m; v.hp -= d; v.hitT = .15;   // Treffer-Quetschen (rig.js)
-  if (v.hp <= 0) { if (src) src.kills++; die(world, v, src); }
+  // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
+  if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src); }
   return d;
 }
 
@@ -58,12 +81,13 @@ function die(world, v, src) {
 // Normale Treffer schubsen nur (iz = 0), betäuben also nicht.
 function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 
+// Friendly Fire: trifft alle Fraktionen; der Schütze src selbst bekommt ×0.5.
+// f (Fraktion des Schützen) bleibt in der Signatur, wird aber nicht mehr ausgenommen.
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   query(world, x, y, R + 16, v => {
-    if (factionOf(world, v) === f) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
-    hurt(world, v, dmg * (1 - .5 * Math.min(1, d / R)), kind, src);
+    hurt(world, v, dmg * (1 - .5 * Math.min(1, d / R)) * (v === src ? .5 : 1), kind, src);
     knock(v, dx / (d || 1), dy / (d || 1), 180);
   });
   if (wallMul) {
@@ -102,18 +126,132 @@ export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   return changed;
 }
 
+/* ---------- Schusslinie ---------- */
+// Ergebnis des internen Strahls (wiederverwendet, keine Allokation im Geschossschritt)
+const RAY = { unit: null, cell: -1, t: 1 };
+
+// Erste Mauerzelle auf dem Segment (Gitterlauf über CELL-Zellen). Liefert t in [0,1] oder 2.
+function wallHit(world, x0, y0, x1, y1) {
+  const { GW, GH, terr } = world, dx = x1 - x0, dy = y1 - y0;
+  let gx = clamp(x0 / CELL | 0, 0, GW - 1), gy = clamp(y0 / CELL | 0, 0, GH - 1);
+  if (terr[gy * GW + gx] === WALL) { RAY.cell = gy * GW + gx; return 0; }
+  const sx = dx > 0 ? 1 : dx < 0 ? -1 : 0, sy = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+  const tdx = sx ? CELL / Math.abs(dx) : Infinity, tdy = sy ? CELL / Math.abs(dy) : Infinity;
+  let tx = sx > 0 ? ((gx + 1) * CELL - x0) / dx : sx < 0 ? (gx * CELL - x0) / dx : Infinity;
+  let ty = sy > 0 ? ((gy + 1) * CELL - y0) / dy : sy < 0 ? (gy * CELL - y0) / dy : Infinity;
+  for (;;) {
+    let t;
+    if (tx < ty) { t = tx; tx += tdx; gx += sx; } else { t = ty; ty += tdy; gy += sy; }
+    if (t > 1 || gx < 0 || gy < 0 || gx >= GW || gy >= GH) return 2;
+    if (terr[gy * GW + gx] === WALL) { RAY.cell = gy * GW + gx; return t; }
+  }
+}
+
+// Erster Körper oder erste Mauerzelle auf dem Segment in Höhe z, über den Spatial Hash
+// (nur Hash-Zellen in MAX_R-Nähe des Segments, jede einmal). Mauern zählen nur unter WALL_CLEAR_Z.
+// skip: ein Körper, skipSet: Set oder null; pad macht alle Körper dicker (Schusslinie).
+// Ergebnis in RAY: unit (oder null), cell (Mauerzelle oder −1), t (Anteil am Segment, 1 ohne Treffer).
+function cast(world, x0, y0, x1, y1, z, skip, skipSet, pad) {
+  RAY.unit = null; RAY.cell = -1; RAY.t = 1;
+  let best = z < WALL_CLEAR_Z ? wallHit(world, x0, y0, x1, y1) : 2;   // setzt RAY.cell bei Treffer
+  const { HW, HH, hash } = world, dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy;
+  const P = MAX_R + pad + 4;   // +4: Hash ist vom Anfang des Schritts, Körper haben sich seitdem bewegt
+  const gy0 = clamp((Math.min(y0, y1) - P) / HC | 0, 0, HH - 1), gy1 = clamp((Math.max(y0, y1) + P) / HC | 0, 0, HH - 1);
+  let bu = null;
+  for (let gy = gy0; gy <= gy1; gy++) {
+    // Teil des Segments, dessen y in [Zeile − P, Zeile + HC + P] liegt
+    let sA = 0, sB = 1;
+    if (dy !== 0) {
+      sA = (gy * HC - P - y0) / dy; sB = ((gy + 1) * HC + P - y0) / dy;
+      if (sA > sB) { const q = sA; sA = sB; sB = q; }
+      if (sA < 0) sA = 0; if (sB > 1) sB = 1; if (sA > sB) continue;
+    }
+    const xa = x0 + dx * sA, xb = x0 + dx * sB;
+    const gx0 = clamp((Math.min(xa, xb) - P) / HC | 0, 0, HW - 1), gx1 = clamp((Math.max(xa, xb) + P) / HC | 0, 0, HW - 1);
+    for (let gx = gx0; gx <= gx1; gx++) {
+      const cell = hash[gy * HW + gx];
+      for (let i = 0; i < cell.length; i++) {
+        const v = cell[i];
+        if (!v.alive || v === skip || (skipSet !== null && skipSet.has(v))) continue;
+        const r = v.T.r;
+        if (Math.abs(v.z - z) >= r + BODY_Z_PAD) continue;
+        const rr = r + pad, cx = v.x - x0, cy = v.y - y0, c2 = cx * cx + cy * cy;
+        let s;
+        if (c2 <= rr * rr) s = 0;          // Start liegt im Körper
+        else {
+          if (L2 === 0) continue;
+          const sc = (cx * dx + cy * dy) / L2; if (sc < 0) continue;
+          const h2 = c2 - sc * sc * L2; if (h2 > rr * rr) continue;
+          s = sc - Math.sqrt((rr * rr - h2) / L2);
+          if (s > 1) continue;
+        }
+        if (s < best) { best = s; bu = v; }
+      }
+    }
+  }
+  if (bu) { RAY.unit = bu; RAY.cell = -1; RAY.t = best; } else if (best <= 1) RAY.t = best;
+  return RAY;
+}
+
+// Öffentliche Variante: frisches Ergebnisobjekt, ignore als Set<Unit>.
+export function raycast(world, x0, y0, x1, y1, z, ignore) {
+  const r = cast(world, x0, y0, x1, y1, z, null, ignore || null, 0);
+  return { unit: r.unit, cell: r.cell, t: r.t };
+}
+
+// Falsch, wenn der erste Treffer auf dem Weg zum Ziel zur eigenen Fraktion gehört
+// (Mauern und andere Gegner sind kein Hindernis für die Entscheidung).
+export function hasLineOfFire(world, u, target) {
+  const r = cast(world, u.x, u.y, target.x, target.y, shotZ(target), u, null, LOF_PAD);
+  return !(r.unit && factionOf(world, r.unit) === factionOf(world, u));
+}
+
+// Unter den 8 nächsten Gegnern (im Umkreis von 1.5 · Reichweite) der nächste mit freier Linie.
+const NEAR_U = new Array(8).fill(null), NEAR_D = new Float64Array(8);
+function clearTarget(world, u) {
+  const f = factionOf(world, u), skip = u.tg; let n = 0;
+  query(world, u.x, u.y, u.T.range * 1.5 + 40, v => {
+    if (v === skip || factionOf(world, v) === f) return;
+    const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2;
+    if (n === 8 && d >= NEAR_D[7]) return;
+    let k = n < 8 ? n++ : 7;
+    while (k > 0 && NEAR_D[k - 1] > d) { NEAR_D[k] = NEAR_D[k - 1]; NEAR_U[k] = NEAR_U[k - 1]; k--; }
+    NEAR_D[k] = d; NEAR_U[k] = v;
+  });
+  let found = null;
+  for (let k = 0; k < n && !found; k++) if (hasLineOfFire(world, u, NEAR_U[k])) found = NEAR_U[k];
+  NEAR_U.fill(null);   // keine Verweise auf Einheiten festhalten
+  return found;
+}
+
 /* ---------- Waffen ---------- */
 export function fire(world, u, t, kind) {
-  const T = u.T, K = SHOT[kind];
+  const T = u.T, P = PROJECTILES[kind], K = SHOT[kind];
   const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
-  const dur = K[0] + d / K[1], h = d * K[2];
-  const px = t.x + t.mx * dur * .8, py = t.y + t.my * dur * .8, sp = K[3];
+  const lead = K[0] + d / P.speed, sp = K[2];
+  const px = t.x + t.mx * lead * .8, py = t.y + t.my * lead * .8;
+  // Mündung (Darstellung): vor dem Körper, etwas erhöht
   const mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
   const x1 = px + rnd(world, -sp, sp), y1 = py + rnd(world, -sp, sp);
   u.fireT = 0;   // Rückstoß (rig.js)
-  world.proj.push({ kind, x0: mx, y0: my, x1, y1, t: 0, dur, h, f: factionOf(world, u), src: u, dmg: T.dmg, R: T.splash || 0 });
+  const f = factionOf(world, u), dmg = T.dmg, R = T.splash || 0;
+  if (P.arc) {
+    // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
+    world.proj.push({ kind, arc: true, x0: mx, y0: my, x1, y1, t: 0, dur: lead, h: d * K[1],
+      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R });
+  } else {
+    // Gerade: fliegt vom Körper des Schützen (Boden-x/y) in Höhe z und prüft jeden Schritt das Segment.
+    // x0/y0/x1/y1 sind die Darstellungspunkte (um den Mündungsversatz verschoben), dur = len / speed,
+    // damit der Renderer die aktuelle Position wie bisher aus t/dur interpolieren kann.
+    const ex = x1 - u.x, ey = y1 - u.y, el = Math.hypot(ex, ey) || 1;
+    const len = kind === 'bullet' ? el + BULLET_OVERSHOOT : el, nx = ex / el, ny = ey / el;
+    const ox = mx - u.x, oy = my - u.y;
+    world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + nx * len + ox, y1: u.y + ny * len + oy,
+      t: 0, dur: len / P.speed, h: 0, x: u.x, y: u.y, z: shotZ(t), sx: u.x, sy: u.y, nx, ny, len,
+      sp: P.speed, f, src: u, dmg, R });
+  }
   emit(world, { type: 'shot', kind, x: mx, y: my, face: u.face, tx: x1, ty: y1, shake: kind === 'shell' ? 2 : 0 });
-  sound(world, K[4]);
+  sound(world, K[3]);
 }
 
 // Drachenfeuer: Kegel vor dem Drachen
@@ -166,6 +304,11 @@ export function think(world, u, dt) {
   // Mörser halten Mindestabstand
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
   if (d <= reach) {
+    // Gerade Schüsse: steht ein Verbündeter in der Schusslinie, nicht feuern, sondern seitlich ausweichen
+    if (STRAIGHT.has(u.type) && u.cd <= 0) {
+      if (!hasLineOfFire(world, u, t)) { lineBlocked(world, u, nx, ny, dt); return; }
+      u.blockedT = 0;
+    }
     attack(world, u, t, d, dx, dy);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
     else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
@@ -208,6 +351,27 @@ export function think(world, u, dt) {
   if (LINE.has(u.type) && u.gn >= 3 && d > reach + 20) { const depth = (u.x - u.gx) * nx + (u.y - u.gy) * ny; sp *= clamp(1 - depth / 45, .35, 1.3); }
   u.mx = a[0] * sp; u.my = a[1] * sp;
   u.run += dt;
+}
+
+// Verdeckter Schütze: weicht senkrecht zur Zielrichtung aus (Seite über id % 2, Tempo ×0.7) und zählt
+// blockedT. Ab 2 s: neues Ziel mit freier Linie unter den 8 nächsten Gegnern; ohne Treffer hält er
+// das Feuer weiter. blockedT beginnt in beiden Fällen neu. Läuft er dabei gegen eine Mauer oder den
+// Kartenrand, wechselt er die Seite (u.lofFlip, an Mauern höchstens alle 0.5 s), damit er nie einfriert.
+function lineBlocked(world, u, nx, ny, dt) {
+  u.blockedT += dt;
+  if (u.blockedT >= LOF_RETARGET) {
+    u.blockedT = 0;
+    const alt = clearTarget(world, u);
+    if (alt) { u.tg = alt; u.rt = LOF_HOLD; }
+  }
+  const sp = u.T.speed * LOF_SIDE;
+  const s = (u.id % 2 ? 1 : -1) * (u.lofFlip ? -1 : 1);
+  let mx = -ny * s * sp, my = nx * s * sp;
+  const { W, H } = world;
+  const stuck = (u.blk > .3 && world.time - u.lofT > .5) ||
+    (mx < 0 && u.x <= 7) || (mx > 0 && u.x >= W - 7) || (my < 0 && u.y <= 7) || (my > 0 && u.y >= H - 7);
+  if (stuck) { u.lofFlip = !u.lofFlip; u.lofT = world.time; mx = -mx; my = -my; }
+  u.mx = mx; u.my = my;
 }
 
 export function attack(world, u, t, d, dx, dy) {
@@ -300,27 +464,64 @@ function healer(world, u, dt) {
 }
 
 /* ---------- Geschosse ---------- */
+// Bögen landen nach dur am Zielpunkt: Pfeil trifft den nächsten Körper (jede Fraktion außer dem
+// Schützen) bis 8 px vom Landepunkt in Zielhöhe, Bomben/Mörser/Granaten explodieren.
+// Gerade Schüsse bewegen sich je Schritt um speed·dt und treffen das Erste auf dem Segment:
+// Kugeln enden dort (Mauer nimmt Schaden), Raketen und Feuerbälle explodieren dort.
+// Ohne Treffer: Kugeln enden BULLET_OVERSHOOT px hinter dem Zielpunkt, Raketen/Feuer explodieren am Zielpunkt.
 export function stepProjectiles(world, dt) {
   const proj = world.proj;
   for (let i = proj.length - 1; i >= 0; i--) {
     const p = proj[i]; p.t += dt;
-    if (p.t < p.dur) continue;
-    proj.splice(i, 1);
-    const src = p.src.alive ? p.src : null;
-    if (p.kind === 'arrow' || p.kind === 'bullet') {
-      let best = null, bd = Infinity;
-      query(world, p.x1, p.y1, 26, v => {
-        if (factionOf(world, v) === p.f) return;
-        const d = Math.hypot(v.x - p.x1, v.y - p.y1) - v.T.r; if (d < 8 && d < bd) { bd = d; best = v; }
-      });
-      if (best) {
-        hurt(world, best, p.dmg * (.85 + world.rng() * .3), p.kind, src);
-        emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: p.kind });
-        sound(world, 'hit');
-      } else emit(world, { type: 'miss', kind: p.kind, x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });
-    } else {
-      const kind = p.kind === 'fire' ? 'fire' : p.kind === 'rocket' ? 'rocket' : 'blast';
-      blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, kind, p.kind === 'fire' ? 1.5 : p.kind === 'rocket' ? 2 : 3);
+    if (p.arc) {
+      const q = p.t < p.dur ? p.t / p.dur : 1;
+      p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = Math.sin(q * Math.PI) * p.h;
+      if (p.t < p.dur) continue;
+      proj.splice(i, 1);
+      landArc(world, p, p.src.alive ? p.src : null);
+      continue;
     }
+    const s1 = Math.min(p.len, p.t * p.sp), x1 = p.sx + p.nx * s1, y1 = p.sy + p.ny * s1;
+    const r = cast(world, p.x, p.y, x1, y1, p.z, p.src, null, 0);
+    if (r.unit || r.cell >= 0) {
+      proj.splice(i, 1);
+      const hx = p.x + (x1 - p.x) * r.t, hy = p.y + (y1 - p.y) * r.t;
+      impact(world, p, r.unit, r.cell, hx, hy, p.src.alive ? p.src : null);
+      continue;
+    }
+    p.x = x1; p.y = y1;
+    if (s1 >= p.len) { proj.splice(i, 1); impact(world, p, null, -1, x1, y1, p.src.alive ? p.src : null); }
   }
+}
+
+function landArc(world, p, src) {
+  if (p.kind !== 'arrow') { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
+  let best = null, bd = Infinity;
+  query(world, p.x1, p.y1, 26 + MAX_R, v => {
+    if (v === p.src || Math.abs(v.z - p.tz) >= v.T.r + BODY_Z_PAD) return;
+    const d = Math.hypot(v.x - p.x1, v.y - p.y1) - v.T.r; if (d < 8 && d < bd) { bd = d; best = v; }
+  });
+  if (best) {
+    hurt(world, best, p.dmg * (.85 + world.rng() * .3), 'arrow', src);
+    emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: 'arrow' });
+    sound(world, 'hit');
+  } else emit(world, { type: 'miss', kind: 'arrow', x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });
+}
+
+// Gerader Schuss am Ende: v = getroffener Körper, cell = Mauerzelle (−1), (x, y) = Trefferpunkt am Boden
+function impact(world, p, v, cell, x, y, src) {
+  if (p.kind === 'bullet') {
+    if (v) {
+      hurt(world, v, p.dmg * (.85 + world.rng() * .3), 'bullet', src);
+      emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'bullet' });
+      sound(world, 'hit');
+    } else {
+      if (cell >= 0) hitWall(world, cell, p.dmg * BULLET_WALL, p.sx, p.sy);
+      emit(world, { type: 'miss', kind: 'bullet', x, y, a: Math.atan2(p.ny, p.nx) });
+    }
+    return;
+  }
+  // Rakete/Feuerball: Volltreffer explodiert am Körper, sonst am Trefferpunkt
+  const bx = v ? v.x : x, by = v ? v.y : y, kind = p.kind === 'fire' ? 'fire' : 'rocket';
+  blast(world, bx, by, p.R, p.dmg, p.f, src, kind, p.kind === 'fire' ? 1.5 : 2);
 }

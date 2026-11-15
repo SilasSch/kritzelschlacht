@@ -69,7 +69,7 @@ test('death-Ereignis trägt Angaben zum Sieger (oder null)', () => {
   assert.equal(e2.killerId, null); assert.equal(e2.killerType, null); assert.equal(e2.killerTeam, null); assert.equal(e2.killerKills, null);
 });
 
-test('blast: Abfall auf 50 % am Rand, eigene Fraktion verschont', () => {
+test('blast: Abfall auf 50 % am Rand, Friendly Fire trifft auch die eigene Fraktion', () => {
   const w = createWorld(1400, 800, 5); w.teamMode = true;
   const c = spawn(w, 'krieger', 500, 300, 'rot');
   const e = spawn(w, 'krieger', 540, 300, 'rot');
@@ -78,7 +78,7 @@ test('blast: Abfall auf 50 % am Rand, eigene Fraktion verschont', () => {
   blast(w, 500, 300, 40, 20, 'blau', null, 'blast', 0);
   near(c.T.hp - c.hp, 20);
   near(e.T.hp - e.hp, 10);
-  assert.equal(own.hp, own.T.hp);
+  near(own.T.hp - own.hp, 15);
   assert.ok(w.events.some(ev => ev.type === 'blast' && ev.R === 40 && ev.shake > 0));
 });
 

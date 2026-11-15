@@ -39,13 +39,17 @@ export function hurt(world, v, a, kind, src) {
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
   const d = a * m; v.hp -= d; v.hitT = .12;
-  if (v.hp <= 0) { die(world, v); if (src) src.kills++; }
+  if (v.hp <= 0) { if (src) src.kills++; die(world, v, src); }
   return d;
 }
 
-function die(world, v) {
+function die(world, v, src) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
-  emit(world, { type: 'death', x: v.x, y: v.y, unitType: v.type, team: v.team });
+  emit(world, {
+    type: 'death', x: v.x, y: v.y, unitType: v.type, team: v.team,
+    killerId: src ? src.id : null, killerType: src ? src.type : null,
+    killerTeam: src ? src.team : null, killerKills: src ? src.kills : null,
+  });
   sound(world, 'die');
 }
 

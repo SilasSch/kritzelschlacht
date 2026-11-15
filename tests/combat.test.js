@@ -57,6 +57,18 @@ test('hurt: Tod setzt alive=false, zählt Kill und meldet death-Ereignis', () =>
   assert.equal(hurt(w, v, 10, 'melee', src), 0);
 });
 
+test('death-Ereignis trägt Angaben zum Sieger (oder null)', () => {
+  const { w, v } = mk('krieger'); const src = spawn(w, 'reiter', 280, 300, 'blau'); src.kills = 2;
+  hurt(w, v, 1000, 'melee', src);
+  const e = w.events.find(e => e.type === 'death');
+  assert.equal(e.killerId, src.id); assert.equal(e.killerType, 'reiter');
+  assert.equal(e.killerTeam, 'blau'); assert.equal(e.killerKills, 3);
+  const o = spawn(w, 'wolf', 320, 300, 'rot'); w.events.length = 0;
+  hurt(w, o, 1000, 'fire', null);
+  const e2 = w.events.find(e => e.type === 'death');
+  assert.equal(e2.killerId, null); assert.equal(e2.killerType, null); assert.equal(e2.killerTeam, null); assert.equal(e2.killerKills, null);
+});
+
 test('blast: Abfall auf 50 % am Rand, eigene Fraktion verschont', () => {
   const w = createWorld(1400, 800, 5); w.teamMode = true;
   const c = spawn(w, 'krieger', 500, 300, 'rot');

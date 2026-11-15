@@ -214,3 +214,11 @@ test('Physik ist deterministisch und nutzt kein Math.random', () => {
     assert.equal(run(), run());
   } finally { Math.random = orig; }
 });
+
+test('land-Ereignis hat immer eine Aufprallgeschwindigkeit, auch ohne applyImpulse', () => {
+  const w = mkWorld(); const u = spawn(w, 'krieger', 300, 300, 'blau');
+  u.state = 'air'; u.z = 20; u.vz = -50; u.peakZ = 20;
+  flyUntilLanded(w, u);
+  const e = w.events.find(e => e.type === 'land');
+  assert.ok(e && Number.isFinite(e.impact) && e.impact > 50, `impact ${e && e.impact}`);
+});

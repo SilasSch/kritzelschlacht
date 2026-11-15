@@ -73,7 +73,7 @@ export function integrate(world, dt) {
 function land(world, u) {
   const impact = -u.vz;
   u.z = 0;
-  if (impact > u.impact) u.impact = impact;
+  u.impact = Math.max(u.impact || 0, impact);
   if (impact > BOUNCE_V && !u.bounced) { u.vz = impact * BOUNCE; u.bounced = true; return; }
   u.vz = 0; u.state = 'stun';
   u.stunT = clamp(STUN_MIN + STUN_PER_PX * u.peakZ, STUN_MIN, STUN_MAX);

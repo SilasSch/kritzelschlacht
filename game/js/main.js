@@ -368,6 +368,8 @@ window.addEventListener('resize', queueResize);
 if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observe(host);
 
 /* ---------- Start ---------- */
+// Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.)
+if (new URLSearchParams(location.search).has('debug')) window.__kritzel = { world, cam, renderer, game, ui, audio, actions };
 seedDemo();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);

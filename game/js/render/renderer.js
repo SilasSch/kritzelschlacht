@@ -100,18 +100,21 @@ export function createRenderer(canvasHost) {
     else { dirty.x0 = Math.min(dirty.x0, gx0); dirty.y0 = Math.min(dirty.y0, gy0); dirty.x1 = Math.max(dirty.x1, gx1); dirty.y1 = Math.max(dirty.y1, gy1); }
   }
 
-  /* ---------- Decals (RenderTexture, sammelt Flecken und Brandspuren) ---------- */
-  let decalRT = null;
+  /* ---------- Decals (Offscreen-Canvas wie im alten Spiel: Flecken und Brandspuren) ----------
+     Gleicher Zeichencode wie decal() der alten Datei (source-over auf 2D-Canvas), Upload wie beim Gelände,
+     höchstens alle DECAL_UPLOAD s. */
+  const DECAL_UPLOAD = .1;
+  const dcv = document.createElement('canvas'), dctx = dcv.getContext('2d');
+  let decalTex = null, decalDirty = false, decalForce = false, decalUpT = -1;
   const decalSprite = new PIXI.Sprite();
   L.decals.addChild(decalSprite);
-  const decalG = new PIXI.Graphics();
-  let decalPending = false, decalClear = false;
 
   function decal(x, y, r, col, a) {
-    decalG.beginFill(C(col), a);
-    for (let i = 0; i < 3; i++) decalG.drawEllipse(x + rnd(-r, r) * .5, y + rnd(-r, r) * .3, r * rnd(.4, .8), r * rnd(.22, .42));
-    decalG.endFill();
-    decalPending = true;
+    if (!res) return;
+    const c = dctx; c.setTransform(res, 0, 0, res, 0, 0); c.globalAlpha = a; c.fillStyle = col;
+    for (let i = 0; i < 3; i++) { c.beginPath(); c.ellipse(x + rnd(-r, r) * .5, y + rnd(-r, r) * .3, r * rnd(.4, .8), r * rnd(.22, .42), 0, 0, 7); c.fill(); }
+    c.globalAlpha = 1;
+    decalDirty = true;
   }
 
   // Größe von Welt oder Auflösung geändert: Gelände-Canvas und Decals neu anlegen
@@ -124,10 +127,11 @@ export function createRenderer(canvasHost) {
     if (terrTex) terrTex.destroy(true);
     terrTex = PIXI.Texture.from(tcv);
     terrSprite.texture = terrTex; terrSprite.scale.set(1 / res);
-    if (decalRT) decalRT.destroy(true);
-    decalRT = PIXI.RenderTexture.create({ width: Math.ceil(worldW), height: Math.ceil(worldH), resolution: res });
-    decalSprite.texture = decalRT;
-    decalG.clear(); decalPending = false; decalClear = false;
+    dcv.width = tcv.width; dcv.height = tcv.height;   // leert die Decals
+    if (decalTex) decalTex.destroy(true);
+    decalTex = PIXI.Texture.from(dcv);
+    decalSprite.texture = decalTex; decalSprite.scale.set(1 / res);
+    decalDirty = false; decalForce = false;
     dirty = { x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 };
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
     if (!tex || tex.resolution !== ur) { if (tex) tex.destroy(); tex = bakeUnitTextures(app.renderer, ur); }
@@ -356,7 +360,8 @@ export function createRenderer(canvasHost) {
 
   function clearFx() {
     parts = []; shake = 0;
-    decalG.clear(); decalPending = false; decalClear = true;
+    dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.clearRect(0, 0, dcv.width, dcv.height);
+    decalDirty = true; decalForce = true;
   }
   /* ======================== Ende FX ======================== */
 
@@ -391,8 +396,9 @@ export function createRenderer(canvasHost) {
     ensureWorld(world, cam);
     if (dirty) { drawTerrain(world, dirty.x0, dirty.y0, dirty.x1, dirty.y1); dirty = null; }
     if (terrChanged) { terrTex.update(); terrChanged = false; }
-    if (decalClear) { app.renderer.render(new PIXI.Container(), { renderTexture: decalRT, clear: true }); decalClear = false; }
-    if (decalPending) { app.renderer.render(decalG, { renderTexture: decalRT, clear: false }); decalG.clear(); decalPending = false; }
+    if (decalDirty && (decalForce || t - decalUpT >= DECAL_UPLOAD || t < decalUpT)) {
+      decalTex.update(); decalUpT = t; decalDirty = false; decalForce = false;
+    }
     drawOverlay(world);
     drawUnits(world, t);
     drawProjectiles(world);

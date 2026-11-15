@@ -38,7 +38,7 @@ export function hurt(world, v, a, kind, src) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
-  const d = a * m; v.hp -= d; v.hitT = .12;
+  const d = a * m; v.hp -= d; v.hitT = .15;   // Treffer-Quetschen (rig.js)
   if (v.hp <= 0) { if (src) src.kills++; die(world, v, src); }
   return d;
 }
@@ -112,6 +112,7 @@ export function fire(world, u, t, kind) {
   const px = t.x + t.mx * dur * .8, py = t.y + t.my * dur * .8, sp = K[3];
   const mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
   const x1 = px + rnd(world, -sp, sp), y1 = py + rnd(world, -sp, sp);
+  u.fireT = 0;   // Rückstoß (rig.js)
   world.proj.push({ kind, x0: mx, y0: my, x1, y1, t: 0, dur, h, f: factionOf(world, u), src: u, dmg: T.dmg, R: T.splash || 0 });
   emit(world, { type: 'shot', kind, x: mx, y: my, face: u.face, tx: x1, ty: y1, shake: kind === 'shell' ? 2 : 0 });
   sound(world, K[4]);
@@ -120,6 +121,7 @@ export function fire(world, u, t, kind) {
 // Drachenfeuer: Kegel vor dem Drachen
 function breath(world, u, nx, ny) {
   const T = u.T, f = factionOf(world, u);
+  u.fireT = 0;
   query(world, u.x, u.y, T.range + 30, v => {
     if (factionOf(world, v) === f) return;
     const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy);
@@ -143,7 +145,11 @@ function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x,
 
 export function think(world, u, dt) {
   const T = u.T;
-  u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.hitT > 0) u.hitT -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
+  u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
+  // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
+  if (u.fireT < 1) u.fireT += dt;
+  u.swingT = u.swingT > dt ? u.swingT - dt : 0;
+  u.hitT = u.hitT > dt ? u.hitT - dt : 0;
   if (u.gt <= 0) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
@@ -167,7 +173,7 @@ export function think(world, u, dt) {
   }
   // Vor einer Mauer festgesteckt: draufhauen
   if (!T.fly && u.blk > .45 && world.terr[u.bcell] === 4) {
-    if (u.cd <= 0) { u.cd = T.cd; hitWall(world, u.bcell, (T.dmg || 8) * (T.splash ? 2.5 : 1.3), u.x, u.y); sound(world, 'hit'); }
+    if (u.cd <= 0) { u.cd = T.cd; u.swingT = .25; hitWall(world, u.bcell, (T.dmg || 8) * (T.splash ? 2.5 : 1.3), u.x, u.y); sound(world, 'hit'); }
     return;
   }
   let a = [nx, ny], sp = T.speed;
@@ -225,10 +231,12 @@ export function attack(world, u, t, d, dx, dy) {
         if (ex * ex + ey * ey > (T.splash + v.T.r) ** 2) return;
         hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u); knock(v, dx / d, dy / d, 140);
       });
+      u.swingT = .25;
       emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
       sound(world, 'thud'); break;
     }
     default: {
+      u.swingT = .25;
       let a = T.dmg * (.85 + world.rng() * .3);
       // Treffer von hinten
       const flank = t.fx !== undefined && ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;

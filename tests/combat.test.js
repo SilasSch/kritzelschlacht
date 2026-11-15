@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
-import { hurt, blast, fire, hitWall, stepProjectiles, KITE, LINE } from '../game/js/combat.js';
+import { hurt, blast, fire, hitWall, stepProjectiles, attack, think, KITE, LINE } from '../game/js/combat.js';
 import { RANGED } from '../game/js/data.js';
 
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
@@ -124,4 +124,53 @@ test('hitWall: terrain-Ereignis nur beim Unterschreiten von 70 LP oder beim Zerb
   assert.equal(w2.events.filter(e => e.type === 'terrain').length, 0);
   blast(w2, 405, 405, 20, 100, 'x', null, 'blast', 1); // 135 -> 35
   assert.equal(w2.events.filter(e => e.type === 'terrain').length, 1);
+});
+
+/* ---------- Animations-Timer für die Rigs (Task 5) ---------- */
+test('Timer: Schuss setzt fireT=0 (alle Fernkampfarten, auch Drachenfeuer)', () => {
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const t = spawn(w, 'krieger', 450, 300, 'rot');
+  for (const type of ['schuetze', 'grenadier', 'magier', 'soldat', 'mg', 'sniper', 'panzerfaust', 'panzer', 'moerser', 'heli', 'drache']) {
+    const s = spawn(w, type, 400, 300, 'blau'); rebuildHash(w);
+    assert.ok(s.fireT >= .12, `${type}: kein Rückstoß im Ruhezustand`);
+    s.cd = 0; attack(w, s, t, 50, 50, 0);
+    assert.equal(s.fireT, 0, type);
+  }
+});
+
+test('Timer: Treffer setzt hitT=0.15', () => {
+  const { w, v } = mk('krieger');
+  hurt(w, v, 1, 'melee', null);
+  assert.equal(v.hitT, .15);
+});
+
+test('Timer: Nahkampfschlag setzt swingT=0.25 (Schwert, Bärenhieb, Mauer)', () => {
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const t = spawn(w, 'ritter', 310, 300, 'rot');
+  for (const type of ['krieger', 'baer', 'wolf', 'reiter']) {
+    const u = spawn(w, type, 300, 300, 'blau'); rebuildHash(w);
+    assert.equal(u.swingT, 0);
+    u.cd = 0; attack(w, u, t, 10, 10, 0);
+    assert.equal(u.swingT, .25, type);
+  }
+  // festgesteckt vor einer Mauer: draufhauen
+  const w2 = createWorld(1400, 800, 5); w2.teamMode = true;
+  const u = spawn(w2, 'krieger', 300, 300, 'blau'); spawn(w2, 'krieger', 1200, 300, 'rot');
+  const i = cellIndex(w2, 312, 300); setCell(w2, i, 4); rebuildHash(w2);
+  u.blk = 1; u.bcell = i; u.cd = 0;
+  think(w2, u, 1 / 60);
+  assert.ok(w2.whp[i] < 140, 'Mauer getroffen');
+  assert.equal(u.swingT, .25);
+});
+
+test('Timer: think lässt fireT wachsen, swingT und hitT sinken bis 0', () => {
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const u = spawn(w, 'soldat', 300, 300, 'blau'); rebuildHash(w);   // kein Gegner: think kehrt früh zurück
+  u.fireT = 0; u.swingT = .25; u.hitT = .15;
+  think(w, u, .1);
+  near(u.fireT, .1); near(u.swingT, .15); near(u.hitT, .05);
+  think(w, u, .1);
+  near(u.fireT, .2); near(u.swingT, .05); assert.equal(u.hitT, 0);
+  think(w, u, .1);
+  assert.equal(u.swingT, 0); assert.equal(u.hitT, 0);
 });

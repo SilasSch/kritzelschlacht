@@ -44,7 +44,7 @@ export function spawn(world, type, x, y, team) {
     id: world.nextId++, type, T, team, x, y, z: T.flyZ || 0, vx: 0, vy: 0, vz: 0, mx: 0, my: 0,
     hp: T.hp, alive: true, state: 'ok', stunT: 0, peakZ: 0, face: team === 'rot' ? -1 : 1,
     aimX: 0, aimY: 0, tg: null, cd: world.rng() * T.cd, rt: world.rng() * 0.3, kills: 0,
-    hitT: 0, fireT: 0, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
+    hitT: 0, fireT: 1, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
     cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0,
   };
   world.units.push(u);

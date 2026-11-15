@@ -2,6 +2,7 @@
 // Wird in Task 5 durch ein echtes Rig ersetzt. Zeichencode unverändert aus kritzelschlacht.html.
 /* global PIXI */
 import { UNITS, TEAMS, TINT } from '../data.js';
+export { poseUnit, RIG_PARTS } from './pose.js';
 
 const U = UNITS;
 const O = '#2a2a33';

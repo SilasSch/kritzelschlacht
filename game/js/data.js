@@ -41,6 +41,9 @@ export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:
 // Typen, deren Körper die Teamfarbe trägt
 export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','soldat','mg','sniper','panzerfaust','moerser','panzer','heli']);
 
+// Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
+export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
+
 // Placement: ['rect',type,n,x0,y0,x1,y1] | ['circle',type,n,cx,cy,rr] | ['unit',type,x,y]
 //          | ['tRect',terKey,x0,y0,x1,y1] | ['tCircle',terKey,cx,cy,rr,inner?]
 // Koordinaten in Anteilen von W/H, Radien in Anteilen von H. Einheiten gehören dem Team 'rot'.

@@ -1,10 +1,9 @@
 // Reine Welt: Einheiten, Gelände-Gitter, Spatial Hash, Zielsuche. Zufall nur über world.rng().
-import { UNITS, CELL, HASH_CELL } from './data.js';
+import { UNITS, CELL, HASH_CELL, RANGED } from './data.js';
 import { createRng } from './rng.js';
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
 
 function makeHash(world) {
   world.HW = Math.ceil(world.W / HC) + 1;

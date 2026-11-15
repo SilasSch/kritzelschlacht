@@ -83,7 +83,9 @@ export function bindInput(canvas, cam, actions) {
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const dir = e.deltaY < 0 ? 1 : -1;
+    const d = e.deltaY || e.deltaX; // Shift+Rad liefert in Chrome/Firefox (Win/Linux) deltaX
+    if (!d) return;
+    const dir = d < 0 ? 1 : -1;
     if (e.shiftKey) { actions.brushDelta(dir * BRUSH_STEP); return; }
     const s = local(e);
     zoomAt(cam, s.x, s.y, dir > 0 ? WHEEL_ZOOM : 1 / WHEEL_ZOOM);

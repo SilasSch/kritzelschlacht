@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { hitWall } from '../game/js/combat.js';
-import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA } from '../game/js/pathing.js';
+import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA, PATH_REFRESH } from '../game/js/pathing.js';
 import { CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -91,7 +91,9 @@ test('updateFlow: Puffer bleiben bei wiederholter Aktualisierung dieselben', () 
   const cost = fl.cost, fb = fl.fields.get('blau'), db = fb.dist, dr = fl.fields.get('rot').dist;
   const r0 = fl.stats.recomputes;
   for (let i = 0; i < 200; i++) updateFlow(w, fl, .05);   // 10 s: viele gestaffelte Neuberechnungen
-  assert.ok(fl.stats.recomputes >= r0 + 30, `neu berechnet: ${fl.stats.recomputes - r0}`);
+  // 2 Fraktionen, je eine Auffrischung alle PATH_REFRESH s (Task 13: aus der Konstante statt fest 30 bei 0,5 s)
+  const want = Math.floor(.75 * 2 * 10 / PATH_REFRESH);
+  assert.ok(fl.stats.recomputes >= r0 + want, `neu berechnet: ${fl.stats.recomputes - r0} (erwartet ≥ ${want})`);
   assert.equal(fl.cost, cost); assert.equal(fl.fields.get('blau'), fb);
   assert.equal(fl.fields.get('blau').dist, db); assert.equal(fl.fields.get('rot').dist, dr);
   // Geländeänderung ohne Größenänderung: auch dann dieselben Puffer

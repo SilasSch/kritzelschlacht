@@ -65,6 +65,8 @@ export const LOF_RECHECK = .1, LOF_STAGGER = .02;
 // Fluchtrichtung der Sanitäter alle FLEE_RECHECK s, Zielsuche ohne Gegner im Umkreis RETARGET_FAR px seltener
 // (Abstand ×RETARGET_FAR_MUL).
 export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET_FAR_MUL = 2;
+// Takt der Zielsuche (s, Grundwert + Zufall) und der Gruppenmitte (groupInfo), gestreckt in Task 13
+export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5, .3];
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -528,7 +530,7 @@ function groupInfo(world, u) {
   const R = u.type === 'wolf' ? 170 : u.type === 'biene' ? 60 : 70, f = factionOf(world, u);
   let cx = 0, cy = 0, n = 0;
   query(world, u.x, u.y, R, v => { if (v.type === u.type && factionOf(world, v) === f) { cx += v.x; cy += v.y; n++; } });
-  u.gx = n ? cx / n : u.x; u.gy = n ? cy / n : u.y; u.gn = n; u.gt = .25 + world.rng() * .1;
+  u.gx = n ? cx / n : u.x; u.gy = n ? cy / n : u.y; u.gn = n; u.gt = GROUP_T[0] + world.rng() * GROUP_T[1];
 }
 
 function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; return [x / l, y / l]; }
@@ -552,7 +554,7 @@ export function think(world, u, dt) {
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {
-    const nt = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
+    const nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
     // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)
     if (nt && (nt.x - u.x) ** 2 + (nt.y - u.y) ** 2 > RETARGET_FAR * RETARGET_FAR) u.rt *= RETARGET_FAR_MUL;
     if (nt !== u.tg) { u.pathT = 0; u.lofWait = 0; }   // neues Ziel: Wege- und Schusslinie gleich neu prüfen
@@ -820,7 +822,7 @@ function healer(world, u, dt) {
       });
       u.follow = true;
     } else u.follow = false;
-    u.tg = best; u.rt = .4 + world.rng() * .2;
+    u.tg = best; u.rt = HEAL_RETARGET_T[0] + world.rng() * HEAL_RETARGET_T[1];
   }
   // Sanitäter halten sich aus dem Getümmel heraus (Fluchtrichtung alle FLEE_RECHECK s neu, gestaffelt)
   if (!(u.fleeT > 0)) {

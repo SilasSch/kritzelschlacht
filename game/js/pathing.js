@@ -16,7 +16,7 @@ import { factionOf } from './world.js';
 
 export const PATH_CELL = 20;
 export const PATH_COST = { free: 10, forest: 13, water: 25, lava: 120 };   // ×10 (1 / 1,3 / 2,5 / 12)
-export const PATH_REFRESH = .5;          // s je Fraktion
+export const PATH_REFRESH = .8;          // s je Fraktion (Task 13: .5 → .8)
 export const PATH_MAX_PER_STEP = 2;      // Felder je Schritt höchstens
 export const PATH_BASH_DETOUR = 2.5;     // think: einschlagen erst, wenn der Flussweg länger ist als 2,5× Luftlinie
 export const PATH_BASH_MIN = 80;         // think: … und mindestens so viele px länger (kurze Wege um eine Ecke)

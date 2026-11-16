@@ -147,7 +147,7 @@ export function createRenderer(canvasHost) {
   // Task 13: alle Teile, Schatten und HP-Leisten liegen als flache Vierecke in QuadBatches (quads.js), die
   // Lage jedes Teils rechnet bodies() selbst nach (Matrizen wie die früheren Container und Sprites), in derselben
   // Zeichenreihenfolge wie vorher (Einheiten nach y, je Einheit die Teile in Rig-Reihenfolge).
-  const shadowQ = createQuadBatch('shadowQuads'), links = new PIXI.Graphics();
+  const shadowQ = createQuadBatch('shadowQuads'), links = createQuadBatch('shieldLinks');
   L.shadows.addChild(shadowQ, links);
   const groundQ = createQuadBatch('groundQuads'), groundBars = createQuadBatch('groundBars');
   L.ground.addChild(groundQ, groundBars);
@@ -217,6 +217,13 @@ export function createRenderer(canvasHost) {
     debris: 0, debrisFlying: 0, projShadows: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
+  // Nächster verbundener Ritter (Schildwall) ohne Closure je Ritter und Bild
+  let LK_W = null, LK_U = null, LK_F = null, LK_B = null, LK_D = 0;
+  function linkTest(v) {
+    const u = LK_U;
+    if (v.id <= u.id || !v.wall || v.state !== 'ok' || !v.alive || factionOf(LK_W, v) !== LK_F) return;
+    const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < LK_D) { LK_D = e; LK_B = v; }
+  }
   function drawUnits(world, cam, t) {
     const tm = world.teamMode;
     // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
@@ -241,18 +248,14 @@ export function createRenderer(canvasHost) {
     stats.shadowLevels[0] = stats.shadowLevels[1] = stats.shadowLevels[2] = 0;
     shadows(groundList, tm, inv); shadows(airList, tm, inv);
     // Schildwall: verbundene Schilde sichtbar machen (nur stehende Ritter; geschleuderte und betäubte nicht)
+    // (Striche als Vierecke mit geraden Enden, Breite 3, Deckkraft 0,5; vorher Graphics mit runden Enden)
     links.clear();
     for (const u of groundList) {
       if (!u.wall || u.state !== 'ok') continue;
-      const f = factionOf(world, u); let b = null, bd = 42 * 42;
-      query(world, u.x, u.y, 42, v => {
-        if (v.id <= u.id || !v.wall || v.state !== 'ok' || !v.alive || factionOf(world, v) !== f) return;
-        const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < bd) { bd = e; b = v; }
-      });
-      if (b) {
-        links.lineStyle({ width: 3, color: tm ? C(TEAMS[u.team].c) : 0x6f7a8c, alpha: .5, cap: PIXI.LINE_CAP.ROUND });
-        links.moveTo(u.x + u.face * u.T.r * .8, u.y - u.z); links.lineTo(b.x + b.face * b.T.r * .8, b.y - b.z);
-      }
+      LK_W = world; LK_U = u; LK_F = factionOf(world, u); LK_B = null; LK_D = 42 * 42;
+      query(world, u.x, u.y, 42, linkTest);
+      const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
+      if (b) links.line(u.x + u.face * u.T.r * .8, u.y - u.z, b.x + b.face * b.T.r * .8, b.y - b.z, 3, tm ? C(TEAMS[u.team].c) : 0x6f7a8c, .5);
     }
     nBoss = 0;
     bodies(groundList, groundQ, groundBars, t, tm, inv);

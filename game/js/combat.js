@@ -753,7 +753,7 @@ function lineBlocked(world, u, nx, ny, dt) {
   if (u.blockedT >= LOF_RETARGET) {
     u.blockedT = 0;
     const alt = clearTarget(world, u);
-    if (alt) { u.tg = alt; u.rt = LOF_HOLD; }
+    if (alt) { u.tg = alt; u.rt = LOF_HOLD; u.lofWait = 0; }   // neues Ziel: Schusslinie gleich prüfen (wie think)
   }
   const sp = u.T.speed * LOF_SIDE;
   const s = (u.id % 2 ? 1 : -1) * (u.lofFlip ? -1 : 1);

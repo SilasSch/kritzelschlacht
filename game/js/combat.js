@@ -79,14 +79,27 @@ export const PARTS = {
 };
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
+const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
 
-// Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete fliegen
-// weiter. Dazu die Teile laut PARTS mit Zufallsimpuls. Das Seelchen zeichnet der Renderer zum death-Ereignis.
+// Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete (auch von
+// einer Explosion geschleuderte) fliegen weiter. Alle anderen (Kugel, Nahkampf, Pfeil, Lava, Feuer,
+// Explosion unter der Abhebeschwelle) bekommen einen Hüpfer: vz 140–200 und 60–110 px/s vom Mörder weg
+// (ohne Mörder in Zufallsrichtung). Dazu die Teile laut PARTS mit Zufallsimpuls. Das Seelchen zeichnet
+// der Renderer zum death-Ereignis.
 function die(world, v, src) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
-  const T = v.T, vx = v.vx + v.mx, vy = v.vy + v.my, sgn = () => (world.rng() < .5 ? -1 : 1);
+  const T = v.T, sgn = () => (world.rng() < .5 ? -1 : 1);
+  let vx = v.vx + v.mx, vy = v.vy + v.my, vz = v.vz;
   const vrot = sgn() * rnd(world, VROT_MIN, VROT_MAX);
-  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, v.vz, 0, vrot));
+  if (v.state !== 'air') {
+    vz = Math.max(0, vz) + rnd(world, HOP_VZ[0], HOP_VZ[1]);
+    const sp = rnd(world, HOP_V[0], HOP_V[1]);
+    let dx = src && src !== v ? v.x - src.x : 0, dy = src && src !== v ? v.y - src.y : 0;
+    const l = Math.hypot(dx, dy);
+    if (l > 1e-6) { dx /= l; dy /= l; } else { const a = world.rng() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); }
+    vx += dx * sp; vy += dy * sp;
+  }
+  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot));
   const parts = PARTS[v.type];
   for (let i = 0; i < parts.length; i++) {
     const a = world.rng() * Math.PI * 2, sp = rnd(world, PART_V[0], PART_V[1]);

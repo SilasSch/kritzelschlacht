@@ -111,6 +111,30 @@ test('In der Luft getötete Einheit fliegt als Leiche weiter (z, vz, Geschwindig
   assert.equal(c.state, 'fly');
 });
 
+test('Tod ohne Explosion (Nahkampf): Leiche hüpft vom Mörder weg und kommt binnen 3 s zur Ruhe', () => {
+  const w = mkWorld();
+  const k = spawn(w, 'krieger', 280, 300, 'rot'), u = spawn(w, 'krieger', 300, 300, 'blau');
+  hurt(w, u, 1e9, 'melee', k);
+  const c = w.corpses.find(e => e.kind === 'body');
+  assert.equal(c.state, 'fly');
+  assert.ok(c.vz >= 140 && c.vz <= 200, `vz ${c.vz}`);
+  assert.ok(c.vx >= 60 && c.vx <= 110 && Math.abs(c.vy) < 1e-9, `weg vom Mörder: ${c.vx} ${c.vy}`);
+  assert.ok(Math.abs(c.vrot) >= 4 && Math.abs(c.vrot) <= 10);
+  let maxZ = 0, t = 0;
+  while (c.state === 'fly' && t < 3) { phys(w); maxZ = Math.max(maxZ, c.z); t += DT; }
+  assert.ok(maxZ > 0, 'hebt ab'); assert.equal(c.state, 'rest', `nach ${t} s`); assert.equal(c.z, 0);
+  assert.ok(c.x > 300);
+  // ohne Mörder (Lava, Feuer): Zufallsrichtung, gleiche Beträge
+  const w2 = mkWorld(); const v = spawn(w2, 'soldat', 500, 300, 'blau'); hurt(w2, v, 1e9, 'fire', null);
+  const c2 = w2.corpses[0], h = Math.hypot(c2.vx, c2.vy);
+  assert.ok(c2.vz >= 140 && c2.vz <= 200 && h >= 60 - 1e-9 && h <= 110 + 1e-9, `${c2.vz} ${h}`);
+  // geschleudert getötet: kein zusätzlicher Hüpfer
+  const w3 = mkWorld(); const s3 = spawn(w3, 'soldat', 520, 300, 'blau'); s3.hp = 1; rebuildHash(w3);
+  blast(w3, 500, 300, 40, 40, 'rot', null, 'blast', 0);
+  const c3 = w3.corpses.find(e => e.kind === 'body');
+  assert.ok(Math.abs(c3.vz - .6 * 40 * 9 * .75) < 1e-9 && Math.abs(c3.vx - 40 * 9 * .75) < 1e-9);
+});
+
 test('Teile fliegen getrennt und kommen ebenfalls zur Ruhe', () => {
   for (const [type, parts] of [['krieger', ['headgear', 'weapon']], ['ritter', ['headgear', 'shield']], ['panzer', ['turret']]]) {
     const w = mkWorld(); const u = spawn(w, type, 600, 400, 'rot');
@@ -168,7 +192,7 @@ test('Leiche in Wasser schwimmt oder sinkt, in Lava wird sie zu Asche', () => {
   for (const u of [a, b, l]) hurt(w, u, 1e9, 'melee', null);
   const ca = w.corpses.find(c => c.type === 'wolf' && c.x < 400), cb = w.corpses.find(c => c.type === 'panzer' && c.kind === 'body');
   const cl = w.corpses.find(c => c.type === 'wolf' && c.x > 400);
-  run(w, .5);
+  run(w, 1.5);
   assert.equal(ca.state, 'float'); assert.equal(cb.state, 'sink'); assert.equal(cl.state, 'ash');
   run(w, 3);
   assert.ok(w.corpses.includes(ca) && w.corpses.includes(cl)); assert.ok(!w.corpses.includes(cb), 'gesunken und entfernt');

@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FX_CAP, FRAME_LIMITS, SMOKE, DUST, LIGHT_T, LIGHT_ALPHA, SHAKE_MAX, GLOW_KINDS, CRASH_SMOKE_MUL,
+  WARM_KINDS, WARM_TINT, WARM_ALPHA, HALO_ALPHA, groundWarm,
   createParticles, createFxCore, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
 } from '../game/js/render/fxcore.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R } from '../game/js/combat.js';
@@ -229,6 +230,39 @@ test('Aussehen: Glühen (additiv) nur bei Feuer, Explosion, Mündungsblitz und B
     if (p.k === 'light') { assert.equal(o.alpha, 0); assert.ok(o.gLight); }
   }
   for (const k of ['light', 'ember', 'fire', 'smoke', 'flash', 'core', 'drop', 'ring', 'dust', 'plus', 'soul', 'arrow', 'dot']) assert.ok(seen.has(k), k);
+});
+
+// Ruling: das Bodenlicht muss auch auf Weiß sichtbar sein: warme Scheibe (normal) unter dem additiven Licht
+test('Warmes Bodenlicht (normal): #ffb347, Deckkraft 0,35 → 0 in 0,25 s, Radius 3·R; danach nichts', () => {
+  assert.equal(WARM_TINT, 0xffb347); assert.equal(WARM_ALPHA, .35);
+  near(groundWarm(0), .35); near(groundWarm(.125), .175); near(groundWarm(LIGHT_T), 0); near(groundWarm(3), 0);
+  let prev = 1;
+  for (let t = 0; t <= .3; t += .01) { const a = groundWarm(t); assert.ok(a <= prev + 1e-12 && a >= 0); prev = a; }
+  const { core } = mkCore();
+  core.consume([{ type: 'blast', x: 0, y: 0, R: 50, kind: 'blast' }]);
+  const o = {}, l = core.store.live.find(p => p.k === 'light');
+  look(l, o);
+  assert.ok(o.wGround); assert.equal(o.wTint, WARM_TINT); near(o.wR, 150); near(o.wAlpha, .35);
+  l.age = LIGHT_T * .999; look(l, o); assert.ok(o.wAlpha < .01, 'klingt ganz ab');
+});
+
+test('Warmer Halo (normal) nur bei Mündungsblitz und Feuer: 2–3× so groß, Deckkraft ≤ 0,25, kurz', () => {
+  assert.deepEqual([...WARM_KINDS].sort(), ['fire', 'flash', 'light']);
+  assert.equal(HALO_ALPHA, .25);
+  const { core } = mkCore();
+  core.consume([{ type: 'shot', kind: 'bullet', x: 0, y: 0, face: 1 }, { type: 'burn', x: 0, y: 0 },
+    { type: 'blast', x: 0, y: 0, R: 40, kind: 'blast' }, { type: 'splash', x: 0, y: 0 }, { type: 'death', x: 0, y: 0, unitType: 'krieger' }]);
+  const o = {};
+  for (const p of core.store.live) {
+    look(p, o);
+    if (!WARM_KINDS.has(p.k)) { assert.equal(o.wAlpha, 0, p.k); continue; }
+    if (p.k === 'light') continue;
+    assert.ok(!o.wGround);
+    const core0 = p.k === 'flash' ? p.r : o.r;
+    assert.ok(o.wR >= 2 * core0 - 1e-9 && o.wR <= 3 * p.r + 1e-9, `${p.k} ${o.wR}`);
+    assert.ok(o.wAlpha > 0 && o.wAlpha <= HALO_ALPHA + 1e-12);
+    p.age = p.life; look(p, o); near(o.wAlpha, 0);
+  }
 });
 
 test('clear setzt alles zurück', () => {

@@ -41,6 +41,11 @@ export function puffLook(age, life, grow, alpha, out) {
 // Bodenlicht einer Explosion: additiver Radialverlauf, Radius 3·R, Deckkraft 0.5 → 0 in 0.25 s
 export const LIGHT_T = .25, LIGHT_ALPHA = .5, LIGHT_RMUL = 3, LIGHT_LIVE_MAX = 12;
 export const groundLight = age => (age >= LIGHT_T ? 0 : LIGHT_ALPHA * (1 - (age > 0 ? age : 0) / LIGHT_T));
+// Warmes Licht (normal gemischt), damit Explosionen den Boden auch auf dem weißen Feld kurz beleuchten:
+// Scheibe #ffb347 mit Verlauf zum Rand, Radius 3·R, Deckkraft 0.35 → 0 in LIGHT_T (danach bleibt Weiß weiß).
+// Mündungsblitz und Feuer: kleiner warmer Halo, 2.5× so groß, Deckkraft HALO_ALPHA, so kurz wie das Partikel.
+export const WARM_TINT = 0xffb347, WARM_ALPHA = .35, HALO_ALPHA = .25, HALO_RMUL = 2.5;
+export const groundWarm = age => (age >= LIGHT_T ? 0 : WARM_ALPHA * (1 - (age > 0 ? age : 0) / LIGHT_T));
 
 // Staub nach einer Landung: Anzahl und Größe nach Aufprallgeschwindigkeit (px/s), sanfte Landungen ohne
 export const DUST_MIN_IMPACT = 60;
@@ -93,16 +98,19 @@ export function createParticles(cap = FX_CAP) {
 
 /* ---------- Aussehen ---------- */
 // Bildteile des Atlas in fx.js
-export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6 };
+export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7 };
 export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light']);
+export const WARM_KINDS = new Set(['light', 'flash', 'fire']);
 const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
-// ax = Anker x) und das additive Glühen (gR, gTint, gAlpha; gLight: im Bodenlicht-Layer unter den Figuren).
-// alpha 0 bzw. gAlpha 0: kein Sprite.
+// ax = Anker x), das additive Glühen (gR, gTint, gAlpha; gLight: im Bodenlicht-Layer unter den Figuren) und
+// das warme Licht, normal gemischt unter dem Glühen (wR, wTint, wAlpha; wGround: am Boden unter den Figuren).
+// alpha, gAlpha bzw. wAlpha 0: kein Sprite.
 export function look(p, o) {
   const q = p.age / p.life, a = 1 - q;
   o.frame = F.disc; o.x = p.x; o.y = p.y; o.r = p.r; o.rot = p.rot; o.tint = p.col; o.alpha = a; o.ax = .5;
   o.gR = 0; o.gTint = 0xffffff; o.gAlpha = 0; o.gLight = false;
+  o.wR = 0; o.wTint = WARM_TINT; o.wAlpha = 0; o.wGround = false;
   switch (p.k) {
     case 'ember':
       o.r = p.r * (1.6 - a * .6); o.tint = a > .55 ? 0xffd84d : a > .3 ? 0xff8a3d : 0x9aa0aa;
@@ -111,9 +119,11 @@ export function look(p, o) {
     case 'fire':
       o.r = p.r * (.6 + a * .6); o.tint = a > .6 ? 0xffe066 : a > .3 ? 0xff8a3d : 0xe5574f;
       o.gR = p.r * 2.6; o.gTint = 0xff7a2a; o.gAlpha = a * .5;
+      o.wR = p.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a;
       break;
     case 'flash':
       o.tint = 0xffe066; o.gR = p.r * 3.5; o.gTint = 0xffcf66; o.gAlpha = a * .9;
+      o.wR = p.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a;
       break;
     case 'core':
       o.r = p.r * (1 + q * .5); o.tint = 0xffe27a; o.alpha = a * .9;
@@ -121,6 +131,7 @@ export function look(p, o) {
       break;
     case 'light':
       o.alpha = 0; o.gR = p.r; o.gTint = 0xffcf8a; o.gAlpha = groundLight(p.age); o.gLight = true;
+      o.wR = p.r; o.wAlpha = groundWarm(p.age); o.wGround = true;
       break;
     case 'smoke': case 'dust': {
       const P = p.k === 'smoke' ? SMOKE : DUST;

@@ -7,10 +7,12 @@
 //   resize(W, H, res)  Weltgröße / Auflösung der Decal-Leinwand (leert sie)
 //   clear(), debug(), shake (Zahl)
 // Partikel liegen in PIXI.ParticleContainern, alle aus einem Atlas (eine BaseTexture):
-//   light (Ebene 'light', unter Schatten und Figuren, additiv): Bodenlicht der Explosionen
+//   warm  (Ebene 'light', normal): warme Scheibe #ffb347 der Explosionen, auch auf Weiß sichtbar (0.35 → 0)
+//   light (Ebene 'light', additiv): Bodenlicht der Explosionen (auf farbigem Boden)
+//   halo  (Ebene 'fx', normal): kleiner warmer Halo um Mündungsblitze und Feuer
 //   glow  (Ebene 'fx', additiv): weiches Glühen von Feuer, Explosion, Mündungsblitz
 //   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile
-// Keine Filter, kein Dauerglühen: additives Licht auf Weiß bleibt Weiß.
+// Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, look, F, FX_CAP } from './fxcore.js';
 
@@ -18,7 +20,7 @@ const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-moti
 const TAU = Math.PI * 2;
 const O = '#2a2a33';
 const CELL = 64, STRIDE = 68;                       // Atlas: 64-px-Felder mit 4 px Abstand
-const FRAME_R = [30, 32, 26, 26, 30, 24, 58];       // Einheitsradius je Bildteil (F) in Atlas-px
+const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32];   // Einheitsradius je Bildteil (F) in Atlas-px
 const N_FRAMES = FRAME_R.length;
 const DECAL_UPLOAD = .1;                            // Decal-Upload höchstens alle 0,1 s
 const PC_PROPS = { vertices: true, position: true, rotation: true, uvs: true, tint: true };
@@ -32,6 +34,10 @@ function paintAtlas(c) {
   let x = cx(F.soft), g = c.createRadialGradient(x, cy, 0, x, cy, 32);
   g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.3, 'rgba(255,255,255,.6)');
   g.addColorStop(.65, 'rgba(255,255,255,.18)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  c.fillStyle = g; c.fillRect(x - 32, cy - 32, 64, 64);
+  // warm: warmes Licht, einmal gebacken; weiß (tint #ffb347), gleichmäßig bis zum Rand auf 0
+  x = cx(F.warm); g = c.createRadialGradient(x, cy, 0, x, cy, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.45, 'rgba(255,255,255,.6)'); g.addColorStop(1, 'rgba(255,255,255,0)');
   c.fillStyle = g; c.fillRect(x - 32, cy - 32, 64, 64);
   // puff: Rauchwolke aus vier weichen Knubbeln
   x = cx(F.puff);
@@ -76,7 +82,9 @@ export function createFx(renderer) {
     layer.addChild(pc);
     return { pc, arr: [], n: 0, blend };
   }
+  const warm = makePC(L.light, PIXI.BLEND_MODES.NORMAL, 'fxWarm');   // warmes Licht unter dem additiven
   const light = makePC(L.light, PIXI.BLEND_MODES.ADD, 'fxLight');
+  const halo = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxHalo');
   const glow = makePC(L.fx, PIXI.BLEND_MODES.ADD, 'fxGlow');        // unter den Kernen: Kerne behalten ihre Farbe
   const main = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxMain');
 
@@ -140,7 +148,8 @@ export function createFx(renderer) {
 
   /* ---------- Bild ---------- */
   const LK = {}, off = { x: 0, y: 0 };
-  let lastT = -1, nMain = 0, nGlow = 0, nLight = 0;
+  let maxWarm = 0;
+  let lastT = -1, nMain = 0, nGlow = 0, nLight = 0, nWarm = 0, nHalo = 0;
   function frame(t) {
     const dt = lastT < 0 || t < lastT ? 0 : Math.min(.1, t - lastT);
     lastT = t;
@@ -149,12 +158,15 @@ export function createFx(renderer) {
       decalTex.update(); decalUpT = t; decalDirty = false; decalForce = false; decalUploads++;
     }
     const live = core.store.live;
+    maxWarm = 0;
     for (let i = 0; i < live.length; i++) {
       look(live[i], LK);
+      if (LK.wAlpha > maxWarm) maxWarm = LK.wAlpha;
+      if (LK.wAlpha > .004) put(LK.wGround ? warm : halo, tex[F.warm], LK.x, LK.y, LK.wR / FRAME_R[F.warm], 0, LK.wTint, LK.wAlpha, .5);
       if (LK.alpha > .004) put(main, tex[LK.frame], LK.x, LK.y, Math.max(.001, LK.r) / FRAME_R[LK.frame], LK.rot, LK.tint, LK.alpha, LK.ax);
       if (LK.gAlpha > .004) put(LK.gLight ? light : glow, tex[F.soft], LK.x, LK.y, LK.gR / FRAME_R[F.soft], 0, LK.gTint, LK.gAlpha, .5);
     }
-    nMain = finish(main); nGlow = finish(glow); nLight = finish(light);
+    nMain = finish(main); nGlow = finish(glow); nLight = finish(light); nWarm = finish(warm); nHalo = finish(halo);
     const s = RM ? 0 : core.shake;
     off.x = s ? (Math.random() - .5) * s : 0; off.y = s ? (Math.random() - .5) * s : 0;
     return off;
@@ -167,7 +179,7 @@ export function createFx(renderer) {
   }
 
   // Für Prüfungen (?debug: window.__kritzel.fx.debug()): lebende Partikel je Art, Sprites des letzten
-  // Bilds je Container (main normal, glow/light additiv), Deckel, Budget-Auslassungen, Wackeln, Decals,
+  // Bilds je Container (main/warm/halo normal, glow/light additiv), Deckel, Budget-Auslassungen, Wackeln, Decals,
   // mittlere Rauchdrift seit Entstehung (dx ≈ +12·age, dy ≈ −20·age), Filter auf der Bühne (soll 0 sein).
   function debug() {
     const byKind = core.store.countByKind(), st = core.stats();
@@ -179,8 +191,10 @@ export function createFx(renderer) {
     const r2 = v => Math.round(v * 100) / 100;
     return {
       particles: core.store.count, cap: FX_CAP, byKind,
-      sprites: { main: nMain, glow: nGlow, light: nLight },
-      blend: { main: main.pc.blendMode, glow: glow.pc.blendMode, light: light.pc.blendMode },
+      sprites: { main: nMain, glow: nGlow, light: nLight, warm: nWarm, halo: nHalo },
+      blend: { main: main.pc.blendMode, glow: glow.pc.blendMode, light: light.pc.blendMode, warm: warm.pc.blendMode, halo: halo.pc.blendMode },
+      // warme Lichter des letzten Bilds: Bodenlicht-Scheiben (warm) und Halos (halo) mit ihrer größten Deckkraft
+      warmLights: { ground: nWarm, halos: nHalo, maxAlpha: r2(maxWarm) },
       dropped: st.dropped, skipped: st.skipped, lights: st.lights,
       shake: r2(core.shake), decals: decalCount, decalUploads,
       smoke: n ? { n, dx: r2(dx / n), dy: r2(dy / n), age: r2(age / n) } : { n: 0 },

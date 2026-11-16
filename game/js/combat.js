@@ -58,6 +58,9 @@ const LOF_PAD = 6;            // Schusslinie: Körper zählen um so viel dicker 
 const LOF_RETARGET = 2;       // s verdeckt, dann neues Ziel unter den 8 nächsten Gegnern
 const LOF_HOLD = 2.5;         // so lange bleibt das Ausweichziel gesetzt
 const LOF_SIDE = .7;          // Tempo beim seitlichen Ausweichen
+// Verdeckte Schusslinie: neuer Zielcheck (Zielpunkt + Bahn) erst nach LOF_RECHECK s (+ id % 4 · LOF_STAGGER,
+// gestaffelt); dazwischen gilt die Linie weiter als verdeckt (Ausweichen bzw. Feuer halten laufen weiter). Task 13.
+export const LOF_RECHECK = .1, LOF_STAGGER = .02;
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -372,6 +375,17 @@ function aimLine(world, u, t, kind, ax, ay) {
   return clearPath(world, u, u.x + g.nx * g.len, u.y + g.ny * g.len, g.z0, zAlong(g.z0, g.zt, g.el, g.len));
 }
 
+// Zielcheck vor einem geraden Schuss mit Drossel: zieht den Zielpunkt (AIM) und prüft die echte Bahn; ist sie
+// verdeckt, wartet die Einheit LOF_RECHECK (gestaffelt) bis zum nächsten Check und gilt so lange als verdeckt
+// (u.lofWait, läuft in think ab). Liefert true bei freier Bahn (Zielpunkt in AIM).
+function lofCheck(world, u, t, kind) {
+  if (u.lofWait > 0) return false;
+  aimPoint(world, u, t, kind);
+  if (aimLine(world, u, t, kind, AIM.x, AIM.y)) return true;
+  u.lofWait = LOF_RECHECK + (u.id % 4) * LOF_STAGGER;
+  return false;
+}
+
 // Unter den 8 nächsten Gegnern (im Umkreis von 1.5 · Reichweite) der nächste mit freier Linie.
 const NEAR_U = new Array(8).fill(null), NEAR_D = new Float64Array(8);
 function clearTarget(world, u) {
@@ -518,6 +532,7 @@ function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x,
 export function think(world, u, dt) {
   const T = u.T;
   u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
+  if (u.lofWait > 0) u.lofWait -= dt;
   // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
@@ -532,7 +547,7 @@ export function think(world, u, dt) {
   if (T.heal) { healer(world, u, dt); return; }
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {
     const nt = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
-    if (nt !== u.tg) u.pathT = 0;   // neues Ziel: Linie gleich neu prüfen
+    if (nt !== u.tg) { u.pathT = 0; u.lofWait = 0; }   // neues Ziel: Wege- und Schusslinie gleich neu prüfen
     u.tg = nt;
   }
   const t = u.tg;
@@ -554,8 +569,8 @@ export function think(world, u, dt) {
     let ax, ay;
     if (STRAIGHT.has(u.type) && u.cd <= 0) {
       const kind = STRAIGHT_KIND[u.type];
-      aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y;
-      if (!aimLine(world, u, t, kind, ax, ay)) { u.aimOk = false; lineBlocked(world, u, nx, ny, dt); return; }
+      if (!lofCheck(world, u, t, kind)) { u.aimOk = false; lineBlocked(world, u, nx, ny, dt); return; }
+      ax = AIM.x; ay = AIM.y;
       u.blockedT = 0; u.aimOk = true;
     }
     attack(world, u, t, d, dx, dy, ax, ay);
@@ -682,15 +697,13 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u)) { standUp(u); return true; }
       if (u.cd > 0) return true;
       const kind = STRAIGHT_KIND[u.type];
-      aimPoint(world, u, t, kind);
-      const ax = AIM.x, ay = AIM.y;
-      if (!aimLine(world, u, t, kind, ax, ay)) {
+      if (!lofCheck(world, u, t, kind)) {
         u.aimOk = false; u.blockedT += dt;
         if (u.blockedT >= PRONE_BLOCK_T) { u.blockedT = 0; u.proneCd = PRONE_UP_T + PRONE_BLOCK_T; standUp(u); }
         return true;
       }
       u.blockedT = 0; u.aimOk = true;
-      attack(world, u, t, d, dx, dy, ax, ay);
+      attack(world, u, t, d, dx, dy, AIM.x, AIM.y);
       return true;
     }
     default: {
@@ -698,8 +711,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
       // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
       const kind = STRAIGHT_KIND[u.type];
-      aimPoint(world, u, t, kind);
-      u.aimOk = aimLine(world, u, t, kind, AIM.x, AIM.y);
+      u.aimOk = lofCheck(world, u, t, kind);
       if (!u.aimOk) return false;
       u.stance = 'down'; u.stanceT = PRONE_DOWN_T;
       return true;

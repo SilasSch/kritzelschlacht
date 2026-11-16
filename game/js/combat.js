@@ -3,7 +3,7 @@
 // werden als Ereignisse in world.events geschrieben.
 import { CELL, HASH_CELL, UNITS } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
-import { applyImpulse, WALL_CLEAR_Z } from './physics.js';
+import { applyImpulse, makeCorpse, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -68,8 +68,32 @@ export function hurt(world, v, a, kind, src) {
   return d;
 }
 
+// Teile, die beim Sterben als eigene Leichenteile wegfliegen (Rig-Teil headgear/weapon; beim Ritter ist
+// die "Waffe" der Schild, beim Panzer der Turm, beim Hubschrauber die Kopfbedeckung der Rotor)
+export const PARTS = {
+  krieger: ['headgear', 'weapon'], schuetze: ['headgear', 'weapon'], ritter: ['headgear', 'shield'],
+  grenadier: ['headgear', 'weapon'], reiter: ['weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
+  magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
+  sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
+  panzer: ['turret'], heli: ['headgear', 'weapon'],
+};
+const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
+const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
+
+// Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete fliegen
+// weiter. Dazu die Teile laut PARTS mit Zufallsimpuls. Das Seelchen zeichnet der Renderer zum death-Ereignis.
 function die(world, v, src) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
+  const T = v.T, vx = v.vx + v.mx, vy = v.vy + v.my, sgn = () => (world.rng() < .5 ? -1 : 1);
+  const vrot = sgn() * rnd(world, VROT_MIN, VROT_MAX);
+  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, v.vz, 0, vrot));
+  const parts = PARTS[v.type];
+  for (let i = 0; i < parts.length; i++) {
+    const a = world.rng() * Math.PI * 2, sp = rnd(world, PART_V[0], PART_V[1]);
+    const vz = rnd(world, PART_VZ[0], PART_VZ[1]), pr = sgn() * rnd(world, PART_VROT[0], PART_VROT[1]);
+    world.corpses.push(makeCorpse('part', parts[i], v.type, v.team, v.face, v.x, v.y, v.z + T.r,
+      vx + Math.cos(a) * sp, vy + Math.sin(a) * sp, Math.max(0, v.vz) + vz, 0, pr));
+  }
   emit(world, {
     type: 'death', x: v.x, y: v.y, unitType: v.type, team: v.team,
     killerId: src ? src.id : null, killerType: src ? src.type : null,
@@ -82,14 +106,23 @@ function die(world, v, src) {
 // Normale Treffer schubsen nur (iz = 0), betäuben also nicht.
 function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 
-// Friendly Fire: trifft alle Fraktionen; der Schütze src selbst bekommt ×0.5.
+// Friendly Fire: trifft alle Fraktionen; der Schütze src selbst bekommt ×0.5 Schaden.
 // f (Fraktion des Schützen) bleibt in der Signatur, wird aber nicht mehr ausgenommen.
+// Schleudern: waagrechter Impuls I = dmg · 9 · falloff vom Zentrum weg, senkrecht iz = 0.6 · I. Der
+// senkrechte Anteil wirkt nur, wenn er die Einheit mit mindestens LAUNCH_VZ abheben lässt (sonst nur
+// Schubs, keine Betäubung). Leichte Körper werden auf MAX_FLING gedeckelt. Der Impuls wirkt vor dem
+// Schaden, damit die Leiche einer getöteten Einheit mitfliegt.
+const BLAST_PUSH = 9, BLAST_LIFT = .6;
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   query(world, x, y, R + 16, v => {
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
-    hurt(world, v, dmg * (1 - .5 * Math.min(1, d / R)) * (v === src ? .5 : 1), kind, src);
-    knock(v, dx / (d || 1), dy / (d || 1), 180);
+    const fall = 1 - .5 * Math.min(1, d / R), m = v.T.mass || 1;
+    let I = dmg * BLAST_PUSH * fall;
+    if (I > MAX_FLING * m) I = MAX_FLING * m;
+    const iz = BLAST_LIFT * I;
+    applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
+    hurt(world, v, dmg * fall * (v === src ? .5 : 1), kind, src);
   });
   if (wallMul) {
     const { GW, GH, terr } = world;
@@ -444,7 +477,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         if (factionOf(world, v) === f) return;
         const ex = v.x - t.x, ey = v.y - t.y;
         if (ex * ex + ey * ey > (T.splash + v.T.r) ** 2) return;
-        hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u); knock(v, dx / d, dy / d, 140);
+        knock(v, dx / d, dy / d, 140); hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u);
       });
       u.swingT = .25;
       emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });

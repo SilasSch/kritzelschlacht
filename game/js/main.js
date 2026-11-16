@@ -1,7 +1,7 @@
 // Start, Spielzustand und Schleife. Fester Simulationsschritt 1/60 s, Tempo 1/2/4×, Zeitlupe 0,3×, Pause.
 // Leert world.events jedes Bild und reicht sie an Renderer (Fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
-import { createWorld, spawn, rebuildHash, resizeWorld } from './world.js';
+import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
@@ -113,8 +113,8 @@ const ui = createUI(game);
 
 /* ---------- Szenen ---------- */
 function clearWorld() {
-  world.units = []; world.proj = []; world.corpses = []; world.debris = []; world.events.length = 0;
-  world.dead = 0; world.contested = false;
+  clearBattle(world);
+  world.contested = false;
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0);
   undoStack.length = 0;
   renderer.clearFx(); markAll(); rebuildHash(world);

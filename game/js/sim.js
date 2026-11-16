@@ -1,9 +1,9 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
 import { MISSIONS, TERRAIN, CELL } from './data.js';
-import { spawn, setCell, rebuildHash } from './world.js';
+import { spawn, setCell, rebuildHash, clearBattle } from './world.js';
 import { think, stepProjectiles } from './combat.js';
-import { integrate, collide, collideWalls } from './physics.js';
+import { integrate, collide, collideWalls, stepCorpses } from './physics.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -19,7 +19,8 @@ export function step(world, dt) {
   collide(world);
   for (const u of units) if (u.alive) collideWalls(world, u, dt);
   stepProjectiles(world, dt);
-  // stepCorpses (Task 9) und stepDebris (Task 10) kommen hier hinzu
+  stepCorpses(world, dt);
+  // stepDebris (Task 10) kommt hier hinzu
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
 }
 
@@ -83,12 +84,12 @@ export function tCircle(world, key, cx, cy, rr, inner = 0) {
   }
 }
 
-// Baut Mission i auf (leert vorher Einheiten, Geschosse und Gelände). Gegner gehören 'rot'.
+// Baut Mission i auf (leert vorher die Schlacht per clearBattle und das Gelände). Gegner gehören 'rot'.
 export function buildMission(world, i) {
   const m = MISSIONS[i];
-  world.units = []; world.proj = []; world.corpses = []; world.debris = [];
+  clearBattle(world);
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0);
-  world.dead = 0; world.contested = false; world.teamMode = true;
+  world.contested = false; world.teamMode = true;
   const { W, H } = world;
   for (const p of m.place) {
     switch (p[0]) {

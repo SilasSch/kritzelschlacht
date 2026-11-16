@@ -116,5 +116,14 @@ export function resizeWorld(world, W, H) {
   world.W = W; world.H = H; world.GW = nGW; world.GH = nGH; world.terr = t; world.towner = o; world.whp = h;
   makeHash(world);
   for (const u of world.units) { u.x = clamp(u.x, 6, W - 6); u.y = clamp(u.y, 6, H - 6); }
+  for (const c of world.corpses) { c.x = clamp(c.x, 6, W - 6); c.y = clamp(c.y, 6, H - 6); c.px = c.x; c.py = c.y; }
+  for (const d of world.debris) { d.x = clamp(d.x, 6, W - 6); d.y = clamp(d.y, 6, H - 6); }
   rebuildHash(world);
+}
+
+// Leert alles, was zu einer Schlacht gehört (Wiederholen, Mission laden, Leeren, Zufallsschlacht).
+// Gelände und Einstellungen bleiben.
+export function clearBattle(world) {
+  world.units = []; world.proj = []; world.corpses = []; world.debris = [];
+  world.events.length = 0; world.dead = 0;
 }

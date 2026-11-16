@@ -1,7 +1,7 @@
 // Flache Vierecke (Task 13): Matrizen wie PIXI.Transform, Ecken wie Sprite.calculateVertices.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newMat, mat, mul, corners, bgr } from '../game/js/render/quads.js';
+import { newMat, mat, mul, corners, bgr, premul } from '../game/js/render/quads.js';
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
 // Bezugsrechnung ohne Matrix: Punkt (x, y) im Kind → Elternraum (erst Drehpunkt, Skalierung, Drehung, Lage)
@@ -45,4 +45,17 @@ test('bgr: Farbe in der Reihenfolge von Sprite._tintRGB', () => {
   assert.equal(bgr(0x123456), 0x563412);
   assert.equal(bgr(0xffffff), 0xffffff);
   assert.equal(bgr(0xff0000), 0x0000ff);
+});
+
+test('premul: wie Color.toPremultiplied von PIXI 7.4 (Bezug nachgerechnet)', () => {
+  const ref = (c, a, rgb) => {
+    if (a === 1) return (255 << 24) + c;
+    if (a === 0) return rgb ? 0 : c;
+    let r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+    if (rgb) { r = Math.floor(r * a + .5); g = Math.floor(g * a + .5); b = Math.floor(b * a + .5); }
+    return (Math.floor(a * 255) << 24) + (r << 16) + (g << 8) + b;
+  };
+  for (const c of [0xffffff, 0x123456, 0x2a2a33, 0]) for (const a of [1, 0, .5, .13, .999]) for (const rgb of [true, false]) {
+    assert.equal(premul(c, a, rgb) >>> 0, ref(c, a, rgb) >>> 0, `${c.toString(16)} ${a} ${rgb}`);
+  }
 });

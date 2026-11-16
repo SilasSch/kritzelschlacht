@@ -46,6 +46,34 @@ export const bgr = c => ((c & 0xff) << 16) | (c & 0xff00) | ((c >> 16) & 0xff);
 
 const IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
+// Farbe mit Deckkraft wie Color.toPremultiplied (PIXI 7.4) für c in _tintRGB-Reihenfolge: bei rgb (Textur mit
+// vormultipliziertem Alpha) werden auch die Farbanteile mit alpha multipliziert
+export function premul(c, alpha, rgb) {
+  if (alpha === 1) return (255 << 24) + c;
+  if (alpha === 0) return rgb ? 0 : c;
+  let r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+  if (rgb) { r = r * alpha + .5 | 0; g = g * alpha + .5 | 0; b = b * alpha + .5 | 0; }
+  return (alpha * 255 << 24) + (r << 16) + (g << 8) + b;
+}
+
+// Schnellerer Packweg im Batch-Renderer für Vierecke der QuadBatch (Farbe schon in e._argb, 4 Ecken, feste
+// Indizes); alle anderen Elemente (Sprites, Graphics, Text) gehen den Weg von PIXI. Einmal je Renderer.
+function fastPack(plugin) {
+  const orig = plugin.packInterleavedGeometry;
+  plugin.packInterleavedGeometry = function (el, ab, ib, aIndex, iIndex) {
+    const argb = el._argb;
+    if (argb === undefined) return orig.call(this, el, ab, ib, aIndex, iIndex);
+    const f = ab.float32View, u32 = ab.uint32View, p = aIndex / this.vertexSize;
+    const uvs = el.uvs, v = el.vertexData, tid = el._texture.baseTexture._batchLocation;
+    for (let i = 0; i < 8; i += 2) {
+      f[aIndex++] = v[i]; f[aIndex++] = v[i + 1]; f[aIndex++] = uvs[i]; f[aIndex++] = uvs[i + 1];
+      u32[aIndex++] = argb; f[aIndex++] = tid;
+    }
+    ib[iIndex++] = p; ib[iIndex++] = p + 1; ib[iIndex++] = p + 2; ib[iIndex++] = p; ib[iIndex++] = p + 2; ib[iIndex] = p + 3;
+  };
+  plugin._quadFast = true;
+}
+
 // QuadBatch: add(tex, M, ax, ay, tint, alpha) mit Matrix M in Weltkoordinaten (Textur-Pixel werden über M
 // skaliert, wie bei einem Sprite mit dieser Welt-Transformation); rect(x, y, w, h, tint, alpha) für
 // einfarbige Rechtecke; clear() vor jedem Bild. blendMode gilt für alle Vierecke der Liste.
@@ -62,7 +90,7 @@ export function createQuadBatch(name, blendMode = 0) {
     slot(tex, tint, alpha) {
       let e = this.q[this.n];
       if (!e) {
-        e = { _texture: null, uvs: null, indices: IDX, loc: new Float32Array(8), vertexData: new Float32Array(8), worldAlpha: 1, alpha: 1, _tintRGB: 0xffffff, blendMode: this.blend };
+        e = { _texture: null, uvs: null, indices: IDX, loc: new Float32Array(8), vertexData: new Float32Array(8), worldAlpha: 1, alpha: 1, _tintRGB: 0xffffff, _argb: 0, blendMode: this.blend };
         this.q.push(e);
       }
       this.n++;
@@ -92,12 +120,15 @@ export function createQuadBatch(name, blendMode = 0) {
     render(renderer) {
       if (!this.visible || this.worldAlpha <= 0 || !this.renderable || !this.n) return;
       const plugin = renderer.plugins.batch, W = this.worldTransform, wa = this.worldAlpha;
+      if (!plugin._quadFast) fastPack(plugin);
       const a = W.a, b = W.b, c = W.c, d = W.d, tx = W.tx, ty = W.ty;
       renderer.batch.setObjectRenderer(plugin);
       for (let i = 0; i < this.n; i++) {
         const e = this.q[i], l = e.loc, v = e.vertexData;
         for (let k = 0; k < 8; k += 2) { const x = l[k], y = l[k + 1]; v[k] = a * x + c * y + tx; v[k + 1] = b * x + d * y + ty; }
-        e.worldAlpha = e.alpha * wa;
+        const al = e.alpha * wa;
+        e.worldAlpha = al;
+        e._argb = premul(e._tintRGB, al > 1 ? 1 : al, e._texture.baseTexture.alphaMode > 0);
         plugin.render(e);
       }
     }

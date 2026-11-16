@@ -1,5 +1,6 @@
 // Headless-Messung im echten Renderer: node tools/browser-bench.mjs [units=2000] [--chrome=PFAD] [--warm=240]
-//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--eval=AUSDRUCK] [--swiftshader]
+//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--eval=AUSDRUCK] [--chain] [--swiftshader]
+//   --chain: nur der erste Lauf baut die Szene neu, die weiteren messen im selben Kampf weiter (früh, mitte, spät)
 // Startet einen kleinen statischen Server für das Repo, einen kopflosen Chrome/Chromium (CDP über den in
 // Node eingebauten WebSocket), öffnet game/index.html?bench=N&debug und ruft dort
 // __bench.restart(); __bench.measure(frames, { warm }) auf (siehe main.js). Ausgabe: JSON je Lauf.
@@ -80,10 +81,15 @@ try {
   };
   const tg = await cdp('Target.createTarget', { url: 'about:blank' });
   session = (await cdp('Target.attachToTarget', { targetId: tg.result.targetId, flatten: true })).result.sessionId;
-  await cdp('Runtime.enable'); log('connected'); connected = true;
+  // Erst laden, dann Runtime.enable (auf about:blank blieb es manchmal ohne Antwort); Seitenfehler danach
   await cdp('Emulation.setDeviceMetricsOverride', { width: VW, height: VH, deviceScaleFactor: 1, mobile: false });
   await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/game/index.html?bench=${N}&debug&seed=${flag('seed', '1')}` });
-  for (let i = 0; i < 200; i++) { await sleep(100); if (await evaluate('!!(window.__bench && window.__kritzel)')) break; }
+  log('connected'); connected = true;
+  cdp('Runtime.enable').catch(() => log('Runtime.enable ohne Antwort (Seitenfehler werden nicht gemeldet)'));
+  let ready = false;
+  for (let i = 0; i < 200 && !ready; i++) { await sleep(100); ready = await evaluate('!!(window.__bench && window.__kritzel)'); }
+  // Seite nicht bereit: Ladefehler von main.js holen (zweiter Import nur zur Diagnose)
+  if (!ready) throw new Error('Seite nicht bereit: ' + await evaluate(`import('/game/js/main.js?diag=' + Date.now()).then(() => 'main.js lädt ohne Fehler', e => String(e && e.stack || e))`));
   const gl = await evaluate(`(() => { const gl = __kritzel.renderer.app.renderer.gl, e = gl.getExtension('WEBGL_debug_renderer_info');
     return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); })()`);
   console.log(`chrome headless ${VW}x${VH}  gl: ${gl}`);
@@ -94,7 +100,7 @@ try {
     const profOut = flag('profile', null);
     // Profil nur über die gemessenen Bilder: warm vorweg ohne Profil, dann measure ohne eigenes Aufwärmen
     if (profOut) { await evaluate(`(() => { __bench.restart(); __bench.measure(1, { warm: ${WARM} }); return 1; })()`); await cdp('Profiler.enable'); await cdp('Profiler.start'); }
-    const out = await evaluate(profOut ? `__bench.measure(${FRAMES}, { warm: 0 })` : `(() => { __bench.restart(); return __bench.measure(${FRAMES}, { warm: ${WARM} }); })()`);
+    const out = await evaluate(profOut ? `__bench.measure(${FRAMES}, { warm: 0 })` : `(() => { ${k > 0 && argv.includes('--chain') ? '' : '__bench.restart();'} return __bench.measure(${FRAMES}, { warm: ${WARM} }); })()`);
     if (profOut) { const pr = await cdp('Profiler.stop'); fs.writeFileSync(profOut, JSON.stringify(pr.result.profile)); log('profile ' + profOut); }
     console.log(JSON.stringify(out));
   }

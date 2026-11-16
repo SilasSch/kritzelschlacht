@@ -9,23 +9,37 @@ import { createFlow, updateFlow } from './pathing.js';
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
 /* ---------- Schritt ---------- */
+// world.prof (optional, Messungen: tools/bench.mjs --profile, __bench.measure): ms je Teil, aufsummiert
+export const SIM_PHASES = ['hash', 'flow', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
+const pnow = () => (globalThis.performance ? globalThis.performance.now() : 0);
 export function step(world, dt) {
+  const P = world.prof || null;
+  let t0 = P ? pnow() : 0;
+  const lap = P ? k => { const t1 = pnow(); P[k] = (P[k] || 0) + t1 - t0; t0 = t1; } : null;
   world.time += dt;
   rebuildHash(world);
+  if (P) lap('hash');
   // Flussfelder der Wegfindung (gestaffelt, sofort nach Geländeänderungen), vor den Entscheidungen
   if (!world.flow) world.flow = createFlow(world);
   updateFlow(world, world.flow, dt);
+  if (P) lap('flow');
   const units = world.units;
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
+  if (P) lap('think');
   integrate(world, dt);
+  if (P) lap('integrate');
   collide(world);
+  if (P) lap('collide');
   for (const u of units) if (u.alive) collideWalls(world, u, dt);
+  if (P) lap('walls');
   stepProjectiles(world, dt);
+  if (P) lap('proj');
   stepCorpses(world, dt);
   stepDebris(world, dt);
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
+  if (P) { lap('corpses'); P.steps = (P.steps || 0) + 1; }
 }
 
 /* ---------- Sieger ---------- */

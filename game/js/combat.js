@@ -541,8 +541,8 @@ export function think(world, u, dt) {
     if (STRAIGHT.has(u.type) && u.cd <= 0) {
       const kind = STRAIGHT_KIND[u.type];
       aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y;
-      if (!aimLine(world, u, t, kind, ax, ay)) { lineBlocked(world, u, nx, ny, dt); return; }
-      u.blockedT = 0;
+      if (!aimLine(world, u, t, kind, ax, ay)) { u.aimOk = false; lineBlocked(world, u, nx, ny, dt); return; }
+      u.blockedT = 0; u.aimOk = true;
     }
     attack(world, u, t, d, dx, dy, ax, ay);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
@@ -628,8 +628,8 @@ function transit(world, u, dt) {
 // Haltung von MG und Scharfschütze (Spez. #22) für einen Denkschritt mit Ziel t im Abstand d (reach:
 // normale Reichweite), stehend oder liegend (Übergänge: transit). Liefert true, wenn der Schritt damit
 // erledigt ist, false, wenn die Einheit stehend wie sonst weitermacht. Hinlegen nur, wenn das Ziel in
-// normaler Reichweite ist, kein Nahkämpfer nahe ist, der letzte Zielcheck frei war (blockedT 0) und keine
-// Sperre läuft (proneCd). Liegend: Nahkämpfer nahe oder Ziel jenseits von PRONE_RANGE · Reichweite →
+// normaler Reichweite ist, kein Nahkämpfer nahe ist, keine Sperre läuft (proneCd) und ein frischer
+// Zielcheck frei ist (u.aimOk: Ergebnis des letzten Zielchecks, stehend wie liegend). Liegend: Nahkämpfer nahe oder Ziel jenseits von PRONE_RANGE · Reichweite →
 // aufstehen; sonst ohne Bewegung schießen. Verdeckte Linie: Feuer halten, nach PRONE_BLOCK_T s aufstehen
 // und bis PRONE_BLOCK_T s nach dem Aufstehen nicht wieder hinlegen (Zeit zum Ausweichen bzw. Umsehen).
 function stance(world, u, t, d, dx, dy, reach, dt) {
@@ -642,18 +642,25 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       aimPoint(world, u, t, kind);
       const ax = AIM.x, ay = AIM.y;
       if (!aimLine(world, u, t, kind, ax, ay)) {
-        u.blockedT += dt;
+        u.aimOk = false; u.blockedT += dt;
         if (u.blockedT >= PRONE_BLOCK_T) { u.blockedT = 0; u.proneCd = PRONE_UP_T + PRONE_BLOCK_T; standUp(u); }
         return true;
       }
-      u.blockedT = 0;
+      u.blockedT = 0; u.aimOk = true;
       attack(world, u, t, d, dx, dy, ax, ay);
       return true;
     }
-    default:
-      if (u.proneCd > 0 || u.blockedT > 0 || d > reach || meleeNear(world, u)) return false;
+    default: {
+      if (u.proneCd > 0 || d > reach || meleeNear(world, u)) return false;
+      // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
+      // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
+      const kind = STRAIGHT_KIND[u.type];
+      aimPoint(world, u, t, kind);
+      u.aimOk = aimLine(world, u, t, kind, AIM.x, AIM.y);
+      if (!u.aimOk) return false;
       u.stance = 'down'; u.stanceT = PRONE_DOWN_T;
       return true;
+    }
   }
 }
 

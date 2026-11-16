@@ -210,6 +210,22 @@ test('liegend mit verdeckter Schusslinie: hält das Feuer ohne Ausweichen, steht
   assert.equal(u.stance, 'stand'); assert.ok(side > 0, 'weicht aus');
 });
 
+test('stehend mit von Anfang an verdeckter Linie: legt sich nie hin, auch nicht nach dem Zurücksetzen von blockedT', () => {
+  // Verbündeter (stehend) direkt in der Linie, kein anderes Ziel: lineBlocked setzt blockedT nach 2 s auf 0
+  const w = mkWorld(), u = spawn(w, 'mg', 300, 400, 'blau');
+  spawn(w, 'krieger', 350, 400, 'blau').hp = 1e9;
+  spawn(w, 'schuetze', 450, 400, 'rot').hp = 1e9;
+  rebuildHash(w); u.cd = 0;
+  let resets = 0, prev = 0;
+  thinkFor(w, u, 4.5, () => {
+    assert.equal(u.stance, 'stand', `t=${w.time.toFixed(2)}`);
+    if (u.blockedT < prev) resets++; prev = u.blockedT;
+  });
+  assert.ok(resets >= 2, `blockedT zurückgesetzt (${resets})`);
+  assert.equal(u.aimOk, false);
+  assert.equal(bullets(w), 0);
+});
+
 test('Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (kein Einfrieren halb hingelegt)', () => {
   for (const [st, T, end] of [['down', PRONE_DOWN_T, 'prone'], ['up', PRONE_UP_T, 'stand']]) {
     const w = mkWorld(), u = spawn(w, 'mg', 300, 400, 'blau');

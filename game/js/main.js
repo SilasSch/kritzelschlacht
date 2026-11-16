@@ -11,6 +11,7 @@ import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
 import { buildBench } from './bench.js';
+import { createRng } from './rng.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const SKEY = 'kritzelschlacht-v1';
@@ -338,6 +339,9 @@ function startBench(n = benchN || 2000, scenario = benchScen) {
   if (!benchBox) { benchBox = document.createElement('div'); benchBox.className = 'fps'; benchBox.textContent = 'bench …'; host.append(benchBox); }
   if (game.mission) game.enterSandbox();
   clearWorld();
+  // &seed=N: feste Saat, damit Szene und Verlauf (die Simulation) bei jedem Lauf gleich sind
+  const seed = parseInt(params.get('seed'), 10);
+  if (Number.isFinite(seed)) world.rng = createRng(seed);
   const tick = buildBench(world, scenario, n);
   markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
   const hist = bench ? bench.out.history : [];

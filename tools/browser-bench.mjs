@@ -1,5 +1,5 @@
 // Headless-Messung im echten Renderer: node tools/browser-bench.mjs [units=2000] [--chrome=PFAD] [--warm=240]
-//   [--frames=60] [--size=1280x800] [--runs=1] [--swiftshader]
+//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--profile=out.cpuprofile] [--swiftshader]
 // Startet einen kleinen statischen Server für das Repo, einen kopflosen Chrome/Chromium (CDP über den in
 // Node eingebauten WebSocket), öffnet game/index.html?bench=N&debug und ruft dort
 // __bench.restart(); __bench.measure(frames, { warm }) auf (siehe main.js). Ausgabe: JSON je Lauf.
@@ -53,7 +53,7 @@ let ok = false;
 try {
   let list = null;
   for (let i = 0; i < 100 && !list; i++) { await sleep(100); try { list = await (await fetch(`http://127.0.0.1:${dport}/json/list`)).json(); } catch { /* startet noch */ } }
-  const page = list.find(t => t.type === 'page');
+  const page = list.find(t => t.type === 'page' && t.url === 'about:blank') || list.find(t => t.type === 'page');
   const log = s => process.stderr.write(s + '\n');
   log('cdp ' + page.webSocketDebuggerUrl);
   const ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -66,7 +66,11 @@ try {
     if (d.method === 'Runtime.exceptionThrown') log('page exception: ' + JSON.stringify(d.params.exceptionDetails).slice(0, 600));
     else if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') log('console.error: ' + JSON.stringify(d.params.args.map(a => a.value ?? a.description)).slice(0, 600));
   };
-  const cdp = (method, params = {}) => new Promise(r => { const i = ++id; wait.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+  // CDP-Aufruf; ohne Antwort nach 10 min (lange Messungen) Abbruch mit Meldung statt Hängen
+  const cdp = (method, params = {}) => new Promise((r, j) => {
+    const i = ++id, to = setTimeout(() => { wait.delete(i); j(new Error('CDP timeout: ' + method)); }, method === 'Runtime.evaluate' ? 600000 : 15000);
+    wait.set(i, d => { clearTimeout(to); r(d); }); ws.send(JSON.stringify({ id: i, method, params }));
+  });
   const evaluate = async expr => {
     const r = await cdp('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true, timeout: 600000 });
     if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 800));
@@ -74,14 +78,24 @@ try {
   };
   await cdp('Runtime.enable'); log('connected');
   await cdp('Emulation.setDeviceMetricsOverride', { width: VW, height: VH, deviceScaleFactor: 1, mobile: false });
-  await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/game/index.html?bench=${N}&debug` });
+  await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/game/index.html?bench=${N}&debug&seed=${flag('seed', '1')}` });
   for (let i = 0; i < 200; i++) { await sleep(100); if (await evaluate('!!(window.__bench && window.__kritzel)')) break; }
   const gl = await evaluate(`(() => { const gl = __kritzel.renderer.app.renderer.gl, e = gl.getExtension('WEBGL_debug_renderer_info');
     return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); })()`);
   console.log(`chrome headless ${VW}x${VH}  gl: ${gl}`);
   for (let k = 0; k < RUNS; k++) {
-    const out = await evaluate(`(() => { __bench.restart(); return __bench.measure(${FRAMES}, { warm: ${WARM} }); })()`);
+    const profOut = flag('profile', null);
+    // Profil nur über die gemessenen Bilder: warm vorweg ohne Profil, dann measure ohne eigenes Aufwärmen
+    if (profOut) { await evaluate(`(() => { __bench.restart(); __bench.measure(1, { warm: ${WARM} }); return 1; })()`); await cdp('Profiler.enable'); await cdp('Profiler.start'); }
+    const out = await evaluate(profOut ? `__bench.measure(${FRAMES}, { warm: 0 })` : `(() => { __bench.restart(); return __bench.measure(${FRAMES}, { warm: ${WARM} }); })()`);
+    if (profOut) { const pr = await cdp('Profiler.stop'); fs.writeFileSync(profOut, JSON.stringify(pr.result.profile)); log('profile ' + profOut); }
     console.log(JSON.stringify(out));
+  }
+  const shot = flag('shot', null);
+  if (shot) {
+    // Bild der zuletzt gezeichneten Szene (die angehaltene Schleife zeichnet sie weiter)
+    const r = await cdp('Page.captureScreenshot', { format: 'png' });
+    fs.writeFileSync(shot, Buffer.from(r.result.data, 'base64')); log('shot ' + shot);
   }
   ok = true;
 } catch (e) { console.error(e); }

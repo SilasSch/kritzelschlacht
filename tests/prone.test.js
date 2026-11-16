@@ -10,7 +10,7 @@ import {
   PRONE_DMG, PRONE_DODGE, PRONE_SPREAD, PRONE_RANGE,
 } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
-import { poseUnit } from '../game/js/render/pose.js';
+import { poseUnit, PRONE_SX, PRONE_SY, PRONE_TILT } from '../game/js/render/pose.js';
 import { UNITS } from '../game/js/data.js';
 
 const DT = 1 / 60;
@@ -277,20 +277,26 @@ const mk = (type, o = {}) => ({
   hitT: 0, fireT: 1, swingT: 0, seed: 0, tg: null, state: 'ok', ...o,
 });
 
-test('Pose: prone 0 stehend (auch ohne stance), 1 liegend; lie = Blickrichtung · π/2, Waffe −π/2 nach vorn', () => {
+test('Pose: prone 0 stehend (auch ohne stance), 1 liegend: platt (sx 1,25, sy 0,6), 0,25 rad vorgekippt, Waffe flach', () => {
   for (const o of [{}, { stance: 'stand' }]) {
     const p = poseUnit(mk('mg', o), 1);
     assert.equal(p.prone, 0); assert.equal(p.lie, 0); assert.equal(p.weaponLie, 0);
+    assert.equal(p.sx, 1); assert.equal(p.sy, 1);
   }
+  assert.equal(PRONE_SX, 1.25); assert.equal(PRONE_SY, .6); assert.equal(PRONE_TILT, .25);
   const p = poseUnit(mk('mg', { stance: 'prone' }), 1);
-  assert.equal(p.prone, 1); near(p.lie, Math.PI / 2); near(p.weaponLie, -Math.PI / 2);
+  assert.equal(p.prone, 1); near(p.sx, 1.25); near(p.sy, .6);
+  // kleine Neigung in Blickrichtung (Gesicht bleibt oben sichtbar), die Waffe dreht sie zurück: flach am Boden
+  near(p.lie, .25); near(p.weaponLie, -.25);
   const q = poseUnit(mk('sniper', { stance: 'prone', face: -1 }), 1);
-  near(q.lie, -Math.PI / 2); near(q.weaponLie, -Math.PI / 2);
+  near(q.lie, -.25); near(q.weaponLie, -.25);
   assert.equal(q.tilt, 0);
-  assert.ok(p.sy > 0 && p.sx > 0 && p.sx < 1, 'liegend etwas flacher');
-  // Blick zum Ziel rechts: lokal (vor der Drehung um π/2) zeigt er zum Kopf (−y), in der Welt also nach vorn
+  // Blick zum Ziel rechts: in der Welt nach rechts, lokal um −lie zurückgedreht
   const r = poseUnit(mk('mg', { stance: 'prone', tg: { x: 200, y: 100 } }), 1);
-  near(r.lookX, 0); near(r.lookY, -.35);
+  near(r.lookX, .35 * Math.cos(.25)); near(r.lookY, -.35 * Math.sin(.25));
+  // halb hingelegt: halb platt
+  const h = poseUnit(mk('mg', { stance: 'down', stanceT: PRONE_DOWN_T / 2 }), 1);
+  near(h.sx, 1 + .25 * h.prone); near(h.sy, 1 - .4 * h.prone); near(h.lie, .25 * h.prone);
   // gerade geschleudert (stance wird erst im nächsten Denkschritt zurückgesetzt): kein Liegen in der Luft
   for (const state of ['air', 'stun']) assert.equal(poseUnit(mk('mg', { stance: 'prone', state }), 1).prone, 0, state);
 });

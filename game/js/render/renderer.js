@@ -308,9 +308,9 @@ export function createRenderer(canvasHost) {
   // die Figur am Boden lassen; scale.x < 0 spiegelt nach links, die Neigung wirkt danach in Weltrichtung.
   // Höhe: gezeichnet bei y − z (Flieger in Flughöhe statt des alten Versatzes rig.offY). In der Luft dreht
   // sich die Figur um ihre Mitte (p.spin), betäubt taumelt sie um die Füße und zwei Sternchen kreisen.
-  // Liegen (p.prone 0..1): der Drehpunkt wandert von den Füßen zur Körpermitte, die um r · PRONE_DROP
-  // sinkt, und die Figur kippt um p.lie (Kopf in Blickrichtung); die Waffe dreht um p.weaponLie zurück
-  // (zeigt nach vorn) und rückt zum Kopf (PRONE_GUN), der Rückstoß folgt ihrer Achse.
+  // Liegen (p.prone 0..1): platt um die Füße gestaucht (p.sx, p.sy), r · PRONE_DROP tiefer, um p.lie
+  // vorgeneigt; die Waffe dreht um p.weaponLie zurück (flach nach vorn) und rückt nach vorn unten
+  // (PRONE_GUN), der Rückstoß folgt ihrer Achse.
   function bodies(list, pool, bars, t, tm, inv) {
     bars.clear();
     for (const u of list) {
@@ -319,10 +319,7 @@ export function createRenderer(canvasHost) {
       const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
       const pr = p.prone;
       if (p.air) { c.position.set(u.x, sy); c.pivot.set(0, 0); stats.airUnits++; }
-      else if (pr > 0) {
-        const py = rig.pivotY * (1 - pr);
-        c.position.set(u.x, sy + py + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(0, py);
-      } else { c.position.set(u.x, sy + rig.pivotY + p.bob); c.pivot.set(0, rig.pivotY); }
+      else { c.position.set(u.x, sy + rig.pivotY + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(0, rig.pivotY); }
       c.scale.set(p.sx * face, p.sy);
       // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
       c.rotation = p.tilt + p.spin + p.lie;
@@ -355,7 +352,7 @@ export function createRenderer(canvasHost) {
         w.rotation = p.weaponRot * rig.swing + p.weaponLie;
       } else { slot.weapon.visible = false; slot.weaponB.visible = false; }
       if (u.hp < T.hp && T.hp > 10) {
-        const w = Math.max(12, T.r * 1.6), y = sy - T.r * (1.6 - .9 * pr) - 4;
+        const w = Math.max(12, T.r * 1.6), y = sy - T.r * (1.6 - .6 * pr) - 4;
         bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
         bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
       }

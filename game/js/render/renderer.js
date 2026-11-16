@@ -9,7 +9,8 @@ import { TEAMS, CELL } from '../data.js';
 import { query, factionOf } from '../world.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E } from './rig.js';
-import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA } from './pose.js';
+import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN } from './pose.js';
+import { PRONE } from '../combat.js';
 import { createFx } from './fx.js';
 
 const O = '#2a2a33';
@@ -232,7 +233,7 @@ export function createRenderer(canvasHost) {
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
-  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
+  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
     debris: 0, debrisFlying: 0, projShadows: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
@@ -244,8 +245,10 @@ export function createRenderer(canvasHost) {
     viewR.x0 = vx0; viewR.y0 = vy0; viewR.x1 = vx1; viewR.y1 = vy1;
     groundList.length = 0; airList.length = 0;
     let top = null, culled = 0;
+    const SC = stats.stances; SC.stand = SC.down = SC.prone = SC.up = 0;
     for (const u of world.units) {
       if (!u.alive) continue;
+      if (PRONE.has(u.type)) SC[u.stance]++;
       if (u.kills >= 3 && (!top || u.kills > top.kills)) top = u;
       if (u.x < vx0 || u.x > vx1 || u.y < vy0 || u.y > vy1) { culled++; continue; }
       (u.T.fly ? airList : groundList).push(u);
@@ -305,17 +308,24 @@ export function createRenderer(canvasHost) {
   // die Figur am Boden lassen; scale.x < 0 spiegelt nach links, die Neigung wirkt danach in Weltrichtung.
   // Höhe: gezeichnet bei y − z (Flieger in Flughöhe statt des alten Versatzes rig.offY). In der Luft dreht
   // sich die Figur um ihre Mitte (p.spin), betäubt taumelt sie um die Füße und zwei Sternchen kreisen.
+  // Liegen (p.prone 0..1): der Drehpunkt wandert von den Füßen zur Körpermitte, die um r · PRONE_DROP
+  // sinkt, und die Figur kippt um p.lie (Kopf in Blickrichtung); die Waffe dreht um p.weaponLie zurück
+  // (zeigt nach vorn) und rückt zum Kopf (PRONE_GUN), der Rückstoß folgt ihrer Achse.
   function bodies(list, pool, bars, t, tm, inv) {
     bars.clear();
     for (const u of list) {
       const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose), slot = pool.next();
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
       const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
+      const pr = p.prone;
       if (p.air) { c.position.set(u.x, sy); c.pivot.set(0, 0); stats.airUnits++; }
-      else { c.position.set(u.x, sy + rig.pivotY + p.bob); c.pivot.set(0, rig.pivotY); }
+      else if (pr > 0) {
+        const py = rig.pivotY * (1 - pr);
+        c.position.set(u.x, sy + py + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(0, py);
+      } else { c.position.set(u.x, sy + rig.pivotY + p.bob); c.pivot.set(0, rig.pivotY); }
       c.scale.set(p.sx * face, p.sy);
       // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
-      c.rotation = p.tilt + p.spin;
+      c.rotation = p.tilt + p.spin + p.lie;
       if (p.dizzy && u.stunT > .05) {
         stats.stunned++;
         for (let i = 0; i < 2; i++) {
@@ -340,11 +350,12 @@ export function createRenderer(canvasHost) {
         // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
         const back = BACK_WEAPON.has(u.type), w = back ? slot.weaponB : slot.weapon, a = A.weapon, k = p.recoil;
         (back ? slot.weapon : slot.weaponB).visible = false;
-        part(w, X.weapon[vi][0], a, a.x - Math.cos(rig.axis) * k, a.y - Math.sin(rig.axis) * k, inv);
-        w.rotation = p.weaponRot * rig.swing;
+        const ax = rig.axis + p.weaponLie, gx = pr * PRONE_GUN[0] * rig.r, gy = pr * PRONE_GUN[1] * rig.r;
+        part(w, X.weapon[vi][0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv);
+        w.rotation = p.weaponRot * rig.swing + p.weaponLie;
       } else { slot.weapon.visible = false; slot.weaponB.visible = false; }
       if (u.hp < T.hp && T.hp > 10) {
-        const w = Math.max(12, T.r * 1.6), y = sy - T.r * 1.6 - 4;
+        const w = Math.max(12, T.r * 1.6), y = sy - T.r * (1.6 - .9 * pr) - 4;
         bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
         bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
       }
@@ -560,12 +571,14 @@ export function createRenderer(canvasHost) {
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen
-  // (liegend im ParticleContainer / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe
+  // (liegend im ParticleContainer / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
+  // Haltung der lebenden MG-Schützen und Scharfschützen (stances: stand/down/prone/up, Spez. #22)
   function debugPhysics() {
     let pcSprites = 0, pcUsed = 0;
     pcs.forEach(g => { pcSprites += g.arr.length; for (const sp of g.arr) if (sp.alpha > 0) pcUsed++; });
     return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
       debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
+      stances: { ...stats.stances },
       projShadows: stats.projShadows, shadowLevels: stats.shadowLevels.slice(), particleContainers: pcs.size, pcSprites, pcUsed };
   }
 

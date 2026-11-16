@@ -371,9 +371,9 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon', 'prone';
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
-// Zähler des letzten Bilds: renderer.debugPhysics(); Effekte: fx.debug() (Partikel je Art, Sprites je
+// Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
 // Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
 const scenes = {
   grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
@@ -392,6 +392,17 @@ const scenes = {
     spawn(world, 'drache', world.W * .62, world.H * .5, 'rot');
     placeCircle(world, 'biene', 60, .4, .3, 40 / world.H, 'blau');
     for (let i = 0; i < 9; i++) spawn(world, 'krieger', world.W * .4, Math.min(world.H - 8, world.H * .72 - 160 + i * 40), 'blau');
+  },
+  // Liegen (Spez. #22): 4 MG-Schützen und 3 Scharfschützen gegen Schützen 260 px vor den MGs (die MGs
+  // gehen etwas vor und legen sich hin, die Scharfschützen sofort). Von weit rechts stürmen 10 Krieger
+  // heran (gut 10 s): wer sie näher als 140 px hat, steht erst auf (0,8 s ohne Schuss).
+  prone() {
+    world.teamMode = true;
+    const x0 = world.W * .22, cy = world.H * .5;
+    for (let i = 0; i < 4; i++) spawn(world, 'mg', x0, cy - 90 + i * 60, 'blau');
+    for (let i = 0; i < 3; i++) spawn(world, 'sniper', x0 - 70, cy - 70 + i * 70, 'blau');
+    placeRect(world, 'schuetze', 8, (x0 + 260) / world.W, .4, (x0 + 290) / world.W, .6, 'rot');
+    placeRect(world, 'krieger', 10, Math.min(.95, (x0 + 700) / world.W), .35, Math.min(.98, (x0 + 740) / world.W), .65, 'rot');
   },
 };
 if (new URLSearchParams(location.search).has('debug')) {

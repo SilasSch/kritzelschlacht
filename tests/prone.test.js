@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, rebuildHash } from '../game/js/world.js';
 import {
   think, hurt, fire, stepProjectiles, PRONE, PRONE_DOWN_T, PRONE_UP_T, PRONE_MELEE_R, PRONE_BLOCK_T,
-  PRONE_DMG, PRONE_DODGE, PRONE_SPREAD, PRONE_RANGE,
+  PRONE_DMG, PRONE_DODGE, PRONE_SPREAD, PRONE_RANGE, MELEE_RECHECK,
 } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
 import { poseUnit, PRONE_SX, PRONE_SY, PRONE_TILT } from '../game/js/render/pose.js';
@@ -157,7 +157,12 @@ test('steht auf, wenn ein Krieger näher als 140 px kommt: up 0,8 s ohne Schuss,
   assert.ok(bullets(w) > 0, 'und schießt');
   w.proj.length = 0;
   k.x = 300 + 130; rebuildHash(w);
-  u.cd = 0; think(w, u, DT);
+  // Der Nahkämpfer-Check ist gedrosselt (Task 13: MELEE_RECHECK s, je id um bis zu 0,04 s gestaffelt): spätestens
+  // dann steht er auf; bis dahin darf er liegend weiterschießen (Schüsse vor dem Aufstehen zählen hier nicht)
+  const maxSteps = Math.ceil((MELEE_RECHECK + .04) / DT) + 1;
+  let n = 0;
+  while (u.stance === 'prone' && n < maxSteps) { u.cd = 0; w.proj.length = 0; w.time += DT; think(w, u, DT); n++; }
+  assert.ok(n <= maxSteps, `steht nach ${n} Schritten auf`);
   assert.equal(u.stance, 'up'); near(u.stanceT, PRONE_UP_T);
   thinkFor(w, u, PRONE_UP_T - DT * 2, () => { u.cd = 0; assert.equal(u.mx, 0); assert.equal(u.my, 0); });
   assert.equal(bullets(w), 0, 'beim Aufstehen kein Schuss');

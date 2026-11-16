@@ -61,6 +61,10 @@ const LOF_SIDE = .7;          // Tempo beim seitlichen Ausweichen
 // Verdeckte Schusslinie: neuer Zielcheck (Zielpunkt + Bahn) erst nach LOF_RECHECK s (+ id % 4 · LOF_STAGGER,
 // gestaffelt); dazwischen gilt die Linie weiter als verdeckt (Ausweichen bzw. Feuer halten laufen weiter). Task 13.
 export const LOF_RECHECK = .1, LOF_STAGGER = .02;
+// Weitere Drosseln (Task 13): Nahkämpfer-Check der MG-Schützen/Scharfschützen alle MELEE_RECHECK s (gestaffelt),
+// Fluchtrichtung der Sanitäter alle FLEE_RECHECK s, Zielsuche ohne Gegner im Umkreis RETARGET_FAR px seltener
+// (Abstand ×RETARGET_FAR_MUL).
+export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET_FAR_MUL = 2;
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -533,6 +537,8 @@ export function think(world, u, dt) {
   const T = u.T;
   u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
   if (u.lofWait > 0) u.lofWait -= dt;
+  if (u.meleeT > 0) u.meleeT -= dt;
+  if (u.fleeT > 0) u.fleeT -= dt;
   // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
@@ -547,6 +553,8 @@ export function think(world, u, dt) {
   if (T.heal) { healer(world, u, dt); return; }
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {
     const nt = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
+    // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)
+    if (nt && (nt.x - u.x) ** 2 + (nt.y - u.y) ** 2 > RETARGET_FAR * RETARGET_FAR) u.rt *= RETARGET_FAR_MUL;
     if (nt !== u.tg) { u.pathT = 0; u.lofWait = 0; }   // neues Ziel: Wege- und Schusslinie gleich neu prüfen
     u.tg = nt;
   }
@@ -646,7 +654,13 @@ export function think(world, u, dt) {
 // oder liegenden MG-Schützen und Scharfschützen in Reichweite in jedem Schritt; Task 13), bricht beim
 // ersten Treffer ab.
 const MELEE_R2 = PRONE_MELEE_R * PRONE_MELEE_R;
+// Gedrosselt: Ergebnis gilt MELEE_RECHECK s (+ id % 3 · 0,02 s, gestaffelt)
 function meleeNear(world, u) {
+  if (u.meleeT > 0) return u.meleeHit;
+  u.meleeT = MELEE_RECHECK + (u.id % 3) * .02;
+  return (u.meleeHit = meleeScan(world, u));
+}
+function meleeScan(world, u) {
   const { HW, HH, hash } = world, f = factionOf(world, u), R = PRONE_MELEE_R, ux = u.x, uy = u.y;
   const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
   const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
@@ -808,12 +822,16 @@ function healer(world, u, dt) {
     } else u.follow = false;
     u.tg = best; u.rt = .4 + world.rng() * .2;
   }
-  // Sanitäter halten sich aus dem Getümmel heraus
-  let ex = 0, ey = 0;
-  query(world, u.x, u.y, 110, v => {
-    if (factionOf(world, v) === f) return;
-    const qx = u.x - v.x, qy = u.y - v.y, q = Math.hypot(qx, qy) || 1; ex += qx / q; ey += qy / q;
-  });
+  // Sanitäter halten sich aus dem Getümmel heraus (Fluchtrichtung alle FLEE_RECHECK s neu, gestaffelt)
+  if (!(u.fleeT > 0)) {
+    let sx = 0, sy = 0;
+    query(world, u.x, u.y, 110, v => {
+      if (factionOf(world, v) === f) return;
+      const qx = u.x - v.x, qy = u.y - v.y, q = Math.hypot(qx, qy) || 1; sx += qx / q; sy += qy / q;
+    });
+    u.fleeX = sx; u.fleeY = sy; u.fleeT = FLEE_RECHECK + (u.id % 3) * .02;
+  }
+  const ex = u.fleeX, ey = u.fleeY;
   if (ex || ey) { const l = Math.hypot(ex, ey); u.mx = ex / l * T.speed; u.my = ey / l * T.speed; u.face = ex < 0 ? -1 : 1; return; }
   const t = u.tg; if (!t) return;
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1; u.face = dx < 0 ? -1 : 1;

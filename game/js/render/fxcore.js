@@ -10,7 +10,7 @@
 import { UNITS } from '../data.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R, MUZZLE_Z } from '../combat.js';
 import { shade } from './rig.js';
-import { projScreen } from './pose.js';
+import { projScreen, BOSS, BOSS_VIS } from './pose.js';
 
 export const FX_CAP = 3000;
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48 };
@@ -65,6 +65,14 @@ export const JET_N = 20, JET_SPARKS = 5, JET_HAZE = 2, JET_SPREAD = .42, JET_DRA
 // ('flame') mit FLAME_RATE + FLAME_RATE_R · r je s auf dem Körper und ein Rauchfaden ('wisp', WISP_RATE je s).
 export const BURN_FX_UNITS = 160, FLAME_RATE = 9, FLAME_RATE_R = .9, WISP_RATE = 3.5;
 export const WISP = { life: 1.2, rise: 26, wind: 10, grow: 2.2, alpha: .28 };
+/* ---------- Boss-Effekte (Task 12c, Spez. #23) ---------- */
+// Je Bild höchstens BOSS_FX_UNITS Bosse (reihum): Panzer stoßen beim Anfahren EXHAUST_T s lang Abgas am
+// Heck aus (EXHAUST_RATE je s), Hubschrauber unter WASH_Z Flughöhe werfen Rotorwind-Staub am Boden unter
+// sich (WASH_RATE je s, ringförmig nach außen), Drachen gelegentliche Flügelböen (GUST_RATE je s). Zart:
+// Staub 'wash' höchstens WASH.alpha, Abgas 'exhaust' grau und kurz.
+export const BOSS_FX_UNITS = 24, EXHAUST_T = .5, EXHAUST_RATE = 14, WASH_RATE = 7, WASH_Z = 60, GUST_RATE = 2.5;
+export const WASH = { life: .9, grow: 2.2, alpha: .22 };
+export const EXHAUST = { life: .9, grow: 2.6, alpha: .34 };
 
 // Glut je Explosion: 14 bis 22, mit dem Radius mehr
 export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10));
@@ -153,6 +161,12 @@ export function look(p, o) {
       o.gR = p.r * 2.4; o.gTint = 0xff7a2a; o.gAlpha = a * .5;
       o.wR = p.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a * .6;
       break;
+    case 'wash': case 'exhaust': {
+      const P = p.k === 'wash' ? WASH : EXHAUST;
+      puffLook(p.age, p.life, P.grow, P.alpha, PL);
+      o.frame = F.puff; o.r = p.r * PL.scale; o.alpha = PL.alpha;
+      break;
+    }
     case 'wisp':
       puffLook(p.age, p.life, WISP.grow, WISP.alpha, PL);
       o.frame = F.puff; o.r = p.r * PL.scale; o.alpha = PL.alpha;
@@ -199,6 +213,10 @@ export function createFxCore(hooks = {}, opt = {}) {
   const used = {}, skipped = {};
   const crashPts = [];
   let shake = 0, lightLive = 0, burnCursor = 0, burning = 0, burningAll = 0;
+  let bossCursor = 0, bossDone = 0, bossAll = 0;
+  const bossList = [];
+  // Panzer: −1 = stand zuletzt, ≥ 0 = fährt (Rest der Abgaszeit in s)
+  const drive = new WeakMap();
   const rnd = (a, b) => a + rand() * (b - a);
 
   const take = k => {
@@ -232,9 +250,13 @@ export function createFxCore(hooks = {}, opt = {}) {
     p.vx = WISP.wind + rnd(-4, 4); p.vy = -WISP.rise * rnd(.8, 1.2); p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);
   }
 
-  // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z) → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden
+  // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z) → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden.
+  // hooks.mouth(e, out): Bildschirmlage des Mauls (Boss-Drache, pose.breathMouth) statt der Mündung.
+  const MOUTH = {};
   function jet(e) {
-    const z = e.z || 0, sx = e.x, sy = e.y - z, face = e.face < 0 ? -1 : 1;
+    const z = e.z || 0, face = e.face < 0 ? -1 : 1;
+    let sx = e.x, sy = e.y - z;
+    if (hooks.mouth) { hooks.mouth(e, MOUTH); sx = MOUTH.x; sy = MOUTH.y; }
     const hasT = Number.isFinite(e.tx) && Number.isFinite(e.ty);
     const gx = hasT ? e.tx : e.x + (e.nx ?? face) * 90, gy = hasT ? e.ty : e.y + (e.ny || 0) * 90;
     const ex = gx, ey = gy - (hasT ? e.tz || 0 : 0);
@@ -270,6 +292,34 @@ export function createFxCore(hooks = {}, opt = {}) {
       p.vx = vx + rnd(-8, 8); p.vy = vy - rnd(28, 50); p.drag = 1;
     }
     if (rand() < dt * WISP_RATE) wisp(bx + rnd(-.3, .3) * r, by - r * .9, rnd(1.6, 2.6) * (r > 9 ? r / 9 : 1), SMOKE_COLS[(rand() * 3) | 0]);
+  }
+
+  // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
+  const count = (rate, dt) => { const n = rate * dt, k = n | 0; return k + (rand() < n - k ? 1 : 0); };
+  function bossFx(u, dt) {
+    const r = u.T.r * (BOSS_VIS[u.type] || 1), face = u.face < 0 ? -1 : 1;
+    if (u.type === 'panzer') {
+      const moving = Math.abs(u.mx || 0) + Math.abs(u.my || 0) > 1;
+      let st = drive.get(u);
+      if (st === undefined) st = -1;   // zuerst gesehen (Aufstellen): gilt als stehend, das erste Losfahren pufft
+      st = !moving ? -1 : st < 0 ? EXHAUST_T : Math.max(0, st - dt);
+      drive.set(u, st);
+      if (st > 0) for (let n = count(EXHAUST_RATE, dt); n > 0; n--) {
+        const p = add('exhaust', u.x - face * r * 1.42 + rnd(-2, 2), u.y - u.z - r * .14 + rnd(-1.5, 1.5), EXHAUST.life * rnd(.8, 1.2), rnd(2.2, 3.4), SMOKE_COLS[(rand() * 3) | 0] - 0x1a1a1a);
+        if (!p) return;
+        p.vx = -face * rnd(18, 32); p.vy = -rnd(10, 22); p.drag = 1.5; p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);
+      }
+      return;
+    }
+    const heli = u.type === 'heli';
+    if (!(u.z > 1) || (heli && u.z >= WASH_Z) || (!heli && u.z >= WASH_Z * 1.5)) return;
+    const gy = u.y + r * 1.05;
+    for (let n = count(heli ? WASH_RATE : GUST_RATE, dt); n > 0; n--) {
+      const a = rand() * TAU, d = r * rnd(.55, 1.05), s = rnd(28, 50);
+      const p = add('wash', u.x + Math.cos(a) * d, gy + Math.sin(a) * d * .35, WASH.life * rnd(.8, 1.2), rnd(2.5, 4), 0xd8d0bc);
+      if (!p) return;
+      p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .35; p.drag = 2.2; p.rot = rand() * TAU; p.vrot = rnd(-.5, .5);
+    }
   }
 
   // Explosion: Bodenlicht, heller Kern, Glut (Feuer: Flammen), Rauch, Krater, Wackeln
@@ -409,13 +459,22 @@ export function createFxCore(hooks = {}, opt = {}) {
       const i0 = n ? burnCursor % n : 0;
       for (let j = 0; j < n; j++) {
         const i = i0 + j < n ? i0 + j : i0 + j - n, u = us[i];
-        if (!u.alive || !(u.burnT > 0)) continue;
+        if (!u.alive) continue;
+        if (BOSS.has(u.type)) bossList.push(u);
+        if (!(u.burnT > 0)) continue;
         all++;
         if (done >= BURN_FX_UNITS) continue;
         burnFx(u, dt); done++; next = i + 1;
       }
       burnCursor = all > done ? next : 0;
       burning = done; burningAll = all;
+      // Bosse reihum, höchstens BOSS_FX_UNITS je Bild
+      const nb = bossList.length, b0 = nb ? bossCursor % nb : 0;
+      let bd = 0;
+      for (let j = 0; j < nb && bd < BOSS_FX_UNITS; j++) { bossFx(bossList[b0 + j < nb ? b0 + j : b0 + j - nb], dt); bd++; }
+      bossCursor = nb > bd ? b0 + bd : 0;
+      bossDone = bd; bossAll = nb;
+      bossList.length = 0;   // keine Verweise auf Einheiten festhalten
     }
     if (dt > 0) store.step(dt);
     let nl = 0;
@@ -424,14 +483,14 @@ export function createFxCore(hooks = {}, opt = {}) {
     lightLive = nl;
   }
 
-  function clear() { store.clear(); shake = 0; lightLive = 0; burnCursor = 0; burning = 0; burningAll = 0; for (const k in skipped) delete skipped[k]; }
+  function clear() { store.clear(); shake = 0; lightLive = 0; burnCursor = 0; burning = 0; burningAll = 0; bossCursor = 0; bossDone = 0; bossAll = 0; for (const k in skipped) delete skipped[k]; }
 
   return {
     store, consume, update, clear,
     get shake() { return shake; },
     set shake(v) { shake = v; },
     decay(dt) { shake = decayShake(shake, dt); },
-    stats() { return { skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive, burning, burningAll }; },
+    stats() { return { skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive, burning, burningAll, bosses: bossDone, bossesAll: bossAll }; },
   };
 }
 

@@ -272,3 +272,50 @@ test('clear setzt alles zurück', () => {
   core.clear();
   assert.equal(core.store.count, 0); assert.equal(core.shake, 0);
 });
+
+/* ---------- Boss-Effekte (Task 12c): Abgas beim Anfahren, Rotorwind, Flügelböen ---------- */
+test('Boss-Effekte: Panzer stößt nur beim Anfahren Abgas aus, Heli wirft Rotorwind-Staub, gedeckelt je Bild', async () => {
+  const F = await import('../game/js/render/fxcore.js');
+  const { UNITS } = await import('../game/js/data.js');
+  const unit = (type, o = {}) => ({ type, T: UNITS[type], alive: true, state: 'ok', x: 300, y: 300, z: 0, mx: 0, my: 0, vx: 0, vy: 0, face: 1, burnT: 0, ...o });
+  const run = (core, world, n) => { for (let i = 0; i < n; i++) core.update(DT, world); };
+  // steht → fährt an: Abgaswölkchen am Heck (hinter dem Panzer), nach EXHAUST_T keine neuen mehr
+  const { core } = mkCore();
+  const tank = unit('panzer'), world = { proj: [], units: [tank] };
+  run(core, world, 30);
+  assert.equal(kinds(core).exhaust, undefined, 'im Stand kein Abgas');
+  tank.mx = UNITS.panzer.speed;
+  run(core, world, Math.round(F.EXHAUST_T / DT));
+  const ex = core.store.live.filter(p => p.k === 'exhaust');
+  assert.ok(ex.length >= 3, `Abgas ${ex.length}`);
+  for (const p of ex) assert.ok(p.x0 < tank.x - UNITS.panzer.r, 'am Heck');
+  run(core, world, 20);
+  assert.equal(core.store.live.filter(p => p.k === 'exhaust' && p.age < 20 * DT - 1e-9).length, 0, 'nur beim Anfahren');
+  // anhalten und wieder anfahren: wieder ein Stoß
+  tank.mx = 0; run(core, world, 5); tank.mx = -UNITS.panzer.speed; tank.face = -1; run(core, world, 10);
+  const ex2 = core.store.live.filter(p => p.k === 'exhaust' && p.age < 10 * DT);
+  assert.ok(ex2.length >= 1, 'erneut');
+  for (const p of ex2) assert.ok(p.x0 > tank.x + UNITS.panzer.r, 'Heck rechts bei Blick nach links');
+  // gleich nach dem Aufstellen losfahren (zuerst gesehen schon fahrend) pufft auch: Abgas genau EXHAUST_T lang
+  const c2 = mkCore().core, t2 = unit('panzer', { mx: 30 });
+  run(c2, { proj: [], units: [t2] }, 60);
+  const ages = c2.store.live.filter(p => p.k === 'exhaust').map(p => p.age);
+  assert.ok(ages.length >= 3 && Math.min(...ages) >= 60 * DT - F.EXHAUST_T - DT - 1e-9, `nur am Anfang ${ages.length}`);
+  // Heli: Staubring am Boden unter ihm (nicht in Flughöhe), zart
+  const c3 = mkCore().core, h = unit('heli', { z: UNITS.heli.flyZ });
+  run(c3, { proj: [], units: [h] }, 60);
+  const wash = c3.store.live.filter(p => p.k === 'wash');
+  assert.ok(wash.length >= 3, `Rotorwind ${wash.length}`);
+  for (const p of wash) assert.ok(p.y0 > h.y, 'am Boden');
+  const o = {};
+  for (const p of wash) { look(p, o); assert.ok(o.alpha <= F.WASH.alpha + 1e-9); }
+  // Budget: höchstens BOSS_FX_UNITS Bosse je Bild, reihum
+  const c4 = mkCore().core, many = [];
+  for (let i = 0; i < F.BOSS_FX_UNITS * 3; i++) many.push(unit('heli', { z: 46, x: 10 * i }));
+  c4.update(DT, { proj: [], units: many });
+  assert.equal(c4.stats().bosses, F.BOSS_FX_UNITS); assert.equal(c4.stats().bossesAll, F.BOSS_FX_UNITS * 3);
+  // Drache: gelegentliche Flügelböen am Boden
+  const c5 = mkCore().core, d = unit('drache', { z: UNITS.drache.flyZ });
+  run(c5, { proj: [], units: [d] }, 240);
+  assert.ok((kinds(c5).wash || 0) >= 1, 'Flügelböen');
+});

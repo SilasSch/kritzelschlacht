@@ -15,6 +15,7 @@
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, look, F, FX_CAP } from './fxcore.js';
+import { breathMouth } from './pose.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
@@ -144,7 +145,8 @@ export function createFx(renderer) {
     decalDirty = true; decalCount++;
   }
 
-  const core = createFxCore({ decal, crater });
+  // Drachenfeuer beginnt am Maul des Boss-Drachen (Task 12c), die Atem-Logik bleibt
+  const core = createFxCore({ decal, crater, mouth: breathMouth });
 
   /* ---------- Bild ---------- */
   const LK = {}, off = { x: 0, y: 0 };
@@ -206,6 +208,9 @@ export function createFx(renderer) {
         flames: byKind.flame || 0, wisps: byKind.wisp || 0,
         burning: st.burning, burningAll: st.burningAll, skippedJet: st.skipped.jet || 0,
       },
+      // Boss-Effekte (Task 12c): Abgas beim Anfahren, Rotorwind- und Flügelböen-Staub; bosses = im letzten
+      // Bild bediente Bosse (≤ BOSS_FX_UNITS), bossesAll = alle lebenden
+      boss: { exhaust: byKind.exhaust || 0, wash: byKind.wash || 0, bosses: st.bosses, bossesAll: st.bossesAll },
       filters,
     };
   }

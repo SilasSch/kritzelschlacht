@@ -371,9 +371,10 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon', 'prone';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon', 'prone', 'bosses';
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
-// Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
+// Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem Boss),
+// fx.debug().boss (Abgas, Rotorwind-Staub). Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
 // Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
 const scenes = {
   grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
@@ -403,6 +404,19 @@ const scenes = {
     for (let i = 0; i < 3; i++) spawn(world, 'sniper', x0 - 70, cy - 70 + i * 70, 'blau');
     placeRect(world, 'schuetze', 8, (x0 + 260) / world.W, .4, (x0 + 290) / world.W, .6, 'rot');
     placeRect(world, 'krieger', 10, Math.min(.95, (x0 + 700) / world.W), .35, Math.min(.98, (x0 + 740) / world.W), .65, 'rot');
+  },
+  // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
+  // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)
+  bosses() {
+    world.teamMode = true;
+    for (const [team, x, s] of [['blau', .16, 1], ['rot', .84, -1]]) {
+      spawn(world, 'panzer', world.W * x, world.H * .32, team); spawn(world, 'panzer', world.W * x, world.H * .68, team);
+      spawn(world, 'heli', world.W * (x + s * .06), world.H * .4, team); spawn(world, 'heli', world.W * (x + s * .06), world.H * .6, team);
+      spawn(world, 'drache', world.W * (x - s * .05), world.H * .5, team);
+      const a = x + s * .1, b = x + s * .13, c = x + s * .02, d = x + s * .04;
+      placeRect(world, 'soldat', 8, Math.min(a, b), .42, Math.max(a, b), .58, team);
+      placeRect(world, 'panzerfaust', 3, Math.min(c, d), .45, Math.max(c, d), .55, team);
+    }
   },
 };
 if (new URLSearchParams(location.search).has('debug')) {

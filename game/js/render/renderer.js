@@ -8,8 +8,8 @@
 import { TEAMS, CELL } from '../data.js';
 import { query, factionOf } from '../world.js';
 import { DEBRIS_FADE } from '../physics.js';
-import { bakeRigTextures, poseUnit, TEAM_INDEX, E } from './rig.js';
-import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN } from './pose.js';
+import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
+import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, localAim, dragonHead } from './pose.js';
 import { PRONE } from '../combat.js';
 import { createFx } from './fx.js';
 
@@ -217,7 +217,7 @@ export function createRenderer(canvasHost) {
         let r = arr[n];
         if (!r) {
           const c = new PIXI.Container();
-          r = { c };
+          r = { c, bosses: null, shown: null };   // Boss-Teile: je Typ einmal angelegt (makeBoss), shown = sichtbare
           // weaponB: Waffe hinter dem Körper (BACK_WEAPON), weapon: davor
           for (const k of ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon']) { const s = new PIXI.Sprite(); r[k] = s; c.addChild(s); }
           container.addChild(c); arr.push(r);
@@ -241,7 +241,8 @@ export function createRenderer(canvasHost) {
     const tm = world.teamMode;
     // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
     // (unten mehr Rand: Körper werden bis gut 200 px über ihrem Bodenpunkt gezeichnet)
-    const vx0 = cam.x - 80, vy0 = cam.y - 80, vx1 = cam.x + cam.viewW / cam.zoom + 80, vy1 = cam.y + cam.viewH / cam.zoom + 220;
+    // (seitlich 100: der Boss-Drache reicht mit Schweif und Flügeln gut 75 px über seinen Mittelpunkt hinaus)
+    const vx0 = cam.x - 100, vy0 = cam.y - 80, vx1 = cam.x + cam.viewW / cam.zoom + 100, vy1 = cam.y + cam.viewH / cam.zoom + 220;
     viewR.x0 = vx0; viewR.y0 = vy0; viewR.x1 = vx1; viewR.y1 = vy1;
     groundList.length = 0; airList.length = 0;
     let top = null, culled = 0;
@@ -273,6 +274,7 @@ export function createRenderer(canvasHost) {
         links.moveTo(u.x + u.face * u.T.r * .8, u.y - u.z); links.lineTo(b.x + b.face * b.T.r * .8, b.y - b.z);
       }
     }
+    nBoss = 0;
     bodies(groundList, groundPool, groundBars, t, tm, inv);
     bodies(airList, airPool, airBars, t, tm, inv);
     starPool.finish();
@@ -314,7 +316,7 @@ export function createRenderer(canvasHost) {
   function bodies(list, pool, bars, t, tm, inv) {
     bars.clear();
     for (const u of list) {
-      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose), slot = pool.next();
+      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined), slot = pool.next();
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
       const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
       const pr = p.prone;
@@ -332,6 +334,14 @@ export function createRenderer(canvasHost) {
           s.rotation = 0; s.scale.set(1.5 / 31); s.tint = 0xffd84d; s.alpha = .95;
         }
       }
+      if (rig.boss) {
+        // Boss-Sticker: eigene Teile statt der normalen Rig-Sprites
+        for (let i = 0; i < MAIN_PARTS.length; i++) slot[MAIN_PARTS[i]].visible = false;
+        drawBoss(slot, u, p, rig, vi, tm ? TEAM_INDEX[u.team] || 0 : 0, face, inv);
+        bar(bars, u, T, rig, sy, 0);
+        continue;
+      }
+      if (slot.shown) { slot.shown.root.visible = false; slot.shown = null; }
       let f = X.body[vi]; part(slot.body, f[fr] || f[0], A.body, 0, 0, inv);
       if (rig.pupilL) {
         // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
@@ -351,13 +361,121 @@ export function createRenderer(canvasHost) {
         part(w, X.weapon[vi][0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv);
         w.rotation = p.weaponRot * rig.swing + p.weaponLie;
       } else { slot.weapon.visible = false; slot.weaponB.visible = false; }
-      if (u.hp < T.hp && T.hp > 10) {
-        const w = Math.max(12, T.r * 1.6), y = sy - T.r * (1.6 - .6 * pr) - 4;
-        bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
-        bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
-      }
+      bar(bars, u, T, rig, sy, pr);
     }
     pool.finish();
+  }
+
+  // HP-Leiste über der Figur (rig.barTop: Oberkante der Zeichnung, Bosse höher und breiter); liegend tiefer
+  function bar(bars, u, T, rig, sy, pr) {
+    if (!(u.hp < T.hp && T.hp > 10)) return;
+    const w = Math.max(12, rig.r * 1.6), y = sy + rig.barTop * (1 - .375 * pr) - 4;
+    bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
+    bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
+  }
+
+  /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
+     Panzer, Hubschrauber, Drache: je Pool-Container einmal pro Typ ein eigener Teilebaum (makeBoss), der
+     im Einheiten-Container liegt (gleiche y-Sortierung wie alle). Pro Bild nur Texturen, Lage, Drehung,
+     Sichtbarkeit. Die Pose kommt aus poseUnit mit einem Gedächtnis je Einheit (memOf: Turm weich, Ketten-
+     weg, Flügelphase, Heli-Neigung, Schweif); die Einheit selbst bleibt unberührt.
+       Panzer: Wanne, Ketten (Bild = Kettenphase), Turmgruppe (lokaler Winkel aus turretRot; nach hinten
+               senkrecht gespiegelt, damit die Kuppel oben bleibt) mit Rohr (Rückstoß), Turm, Augen
+       Heli:   Rumpf, Kanone, Heckrotor (tailRotor), Augen, Rotorgruppe am Mast (senkrecht gestaucht) mit
+               Unschärfe-Scheibe, Nachzieh-Blatt und Blättern (rotorRot)
+       Drache: hinterer Flügel (dunkler), Schweif (tailSwing), Rumpf, Hals, Kopfgruppe (headRot) mit Augen,
+               vorderer Flügel; Flügelschlag aus wing = sin(2π·wingPhase) */
+  const MAIN_PARTS = ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
+  const mems = new WeakMap();
+  function memOf(u) { let m = mems.get(u); if (!m) { m = bossMemory(); mems.set(u, m); } return m; }
+  const HD = {};   // dragonHead, wiederverwendet
+  const WING_ROT = .55, WING_SQUASH = .18, FAR_WING = 0xa9b8b3, GHOST = .35, TURRET_PERSP = .55;
+  // Prüfwerte der zuletzt gezeichneten Bosse (debugRig().bosses), feste Objekte
+  const BOSS_DBG = 24, bossDbg = [];
+  for (let i = 0; i < BOSS_DBG; i++) bossDbg.push({ id: 0, type: '', turretRot: 0, rotorRot: 0, tailRotor: 0, wingPhase: 0, tailSwing: 0, headRot: 0, track: 0, tilt: 0, recoil: 0, frame: 0 });
+  let nBoss = 0;
+
+  function makeBoss(type) {
+    const root = new PIXI.Container(), b = { root };
+    const sp = (parent, k) => { const s = new PIXI.Sprite(); parent.addChild(s); b[k] = s; return s; };
+    const ctr = (parent, k) => { const c = new PIXI.Container(); parent.addChild(c); b[k] = c; return c; };
+    if (type === 'panzer') {
+      sp(root, 'body'); sp(root, 'treads'); const g = ctr(root, 'g');
+      sp(g, 'weapon'); sp(g, 'turret'); sp(g, 'pupilL'); sp(g, 'pupilR'); sp(g, 'lid');
+    } else if (type === 'heli') {
+      sp(root, 'body'); sp(root, 'weapon'); sp(root, 'tailRotor'); b.g = root;
+      sp(root, 'pupilL'); sp(root, 'pupilR'); sp(root, 'lid');
+      const rc = ctr(root, 'rotor'); sp(rc, 'disc'); sp(rc, 'ghost'); sp(rc, 'blades');
+    } else {
+      sp(root, 'wingB'); sp(root, 'tail'); sp(root, 'body'); sp(root, 'neck');
+      const g = ctr(root, 'g'); sp(g, 'head'); sp(g, 'pupilL'); sp(g, 'pupilR'); sp(g, 'lid');
+      sp(root, 'wingF');
+    }
+    return b;
+  }
+  // Boss-Teil name aus dem Atlas (Teamvariante nur bei Team-Teilen), Bild f, an (x, y), gedreht um rot
+  function bp(s, rig, name, vi, f, x, y, rot, inv) {
+    const set = rig.tex[name], v = set[vi] || set[0];
+    part(s, v[f] || v[0], rig.anchors[name], x, y, inv); s.rotation = rot; s.tint = 0xffffff; s.alpha = 1;
+  }
+  // Augen in einer Gruppe, die lokal um rot gedreht und senkrecht um flip gespiegelt ist: der Blick
+  // (Weltrichtung lookX/lookY) wird in die Gruppe zurückgerechnet
+  function bossEyes(b, rig, p, face, rot, flip, ti, inv) {
+    const lx = p.lookX * face, ly = p.lookY, c = Math.cos(rot), s = Math.sin(rot), e = rig.eyes, A = rig.anchors;
+    const ox = (lx * c + ly * s) * rig.eyeR, oy = (-lx * s + ly * c) * flip * rig.eyeR;
+    part(b.pupilL, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
+    part(b.pupilR, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+    if (p.blink) { part(b.lid, rig.lid, A.lid, 0, 0, inv); b.lid.tint = rig.lidTint[ti]; } else b.lid.visible = false;
+  }
+  function drawBoss(slot, u, p, rig, vi, ti, face, inv) {
+    const type = u.type, R = rig.r;
+    if (!slot.bosses) slot.bosses = {};
+    let b = slot.bosses[type];
+    if (!b) { b = slot.bosses[type] = makeBoss(type); slot.c.addChild(b.root); }
+    if (slot.shown !== b) { if (slot.shown) slot.shown.root.visible = false; b.root.visible = true; slot.shown = b; }
+    if (type === 'panzer') {
+      const G = BOSS_GEO.panzer.turret;
+      bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
+      bp(b.treads, rig, 'treads', 0, p.frame, 0, 0, 0, inv);
+      // Turm: Weltwinkel nach lokal (Spiegelung und Wannenneigung heraus). Der Turm dreht sich auf dem
+      // Boden: die Tiefenrichtung (sin) wird um TURRET_PERSP gestaucht, das Rohr dabei verkürzt (L);
+      // nach hinten gerichtet wird die Gruppe senkrecht gespiegelt, damit die Kuppel oben bleibt
+      const a = localAim(p.turretRot - slot.c.rotation, face), ca = Math.cos(a), sa = Math.sin(a) * TURRET_PERSP;
+      const flip = ca < 0 ? -1 : 1, L = Math.sqrt(ca * ca + sa * sa);
+      b.g.position.set(G[0] * R, G[1] * R); b.g.rotation = Math.atan2(sa, ca); b.g.scale.set(1, flip);
+      bp(b.weapon, rig, 'weapon', vi, 0, -p.recoil * L, 0, 0, inv); b.weapon.scale.x = inv * L;
+      bp(b.turret, rig, 'turret', vi, 0, 0, 0, 0, inv);
+      bossEyes(b, rig, p, face, b.g.rotation, flip, ti, inv);
+    } else if (type === 'heli') {
+      const G = BOSS_GEO.heli;
+      bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
+      bp(b.weapon, rig, 'weapon', vi, 0, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv);
+      bp(b.tailRotor, rig, 'tailRotor', 0, 0, G.tailRotor[0] * R, G.tailRotor[1] * R, p.tailRotor, inv);
+      bossEyes(b, rig, p, face, 0, 1, ti, inv);
+      b.rotor.position.set(G.mast[0] * R, G.mast[1] * R); b.rotor.scale.set(1, G.rotorFlat);
+      bp(b.disc, rig, 'rotorDisc', 0, 0, 0, 0, 0, inv);
+      bp(b.ghost, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot - GHOST, inv); b.ghost.alpha = .3;
+      bp(b.blades, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot, inv);
+    } else {
+      const G = BOSS_GEO.drache, w = p.wing;
+      bp(b.wingB, rig, 'wing', 0, 0, G.wingB[0] * R, G.wingB[1] * R, WING_ROT * w + .08, inv);
+      b.wingB.scale.set(inv * .9, inv * .9 * (1 - WING_SQUASH * w)); b.wingB.tint = FAR_WING;
+      bp(b.tail, rig, 'tail', 0, 0, G.tail[0] * R, G.tail[1] * R, p.tailSwing, inv);
+      bp(b.body, rig, 'body', 0, 0, 0, 0, 0, inv);
+      dragonHead(p.headRot, HD);
+      bp(b.neck, rig, 'neck', 0, 0, G.neck[0] * R, G.neck[1] * R, HD.na, inv);
+      b.g.position.set(HD.jx * R, HD.jy * R); b.g.rotation = p.headRot;
+      bp(b.head, rig, 'head', 0, 0, 0, 0, 0, inv);
+      bossEyes(b, rig, p, face, p.headRot, 1, ti, inv);
+      bp(b.wingF, rig, 'wing', 0, 0, G.wingF[0] * R, G.wingF[1] * R, WING_ROT * w - .1, inv);
+      b.wingF.scale.set(inv, inv * (1 - WING_SQUASH * w));
+    }
+    if (nBoss < BOSS_DBG) {
+      const d = bossDbg[nBoss++];
+      d.id = u.id; d.type = type; d.turretRot = p.turretRot; d.rotorRot = p.rotorRot; d.tailRotor = p.tailRotor;
+      d.wingPhase = p.wingPhase; d.tailSwing = p.tailSwing; d.headRot = p.headRot; d.track = p.track;
+      d.tilt = p.tilt; d.recoil = p.recoil; d.frame = p.frame;
+    }
   }
 
   // Heldenkrone über der lebenden Einheit mit den meisten Siegen (ab 3)
@@ -368,7 +486,7 @@ export function createRenderer(canvasHost) {
     crownG.clear();
     crownT.visible = !!top;
     if (!top) return;
-    const x = top.x, y = top.y - top.z - top.T.r * 1.75 - 14;
+    const x = top.x, y = top.y - top.z + rigs.get(top.type).crownTop - 14;
     crownG.lineStyle({ width: 1.3, color: C(O), join: PIXI.LINE_JOIN.ROUND }).beginFill(0xffc533);
     crownG.drawPolygon([x - 7, y + 5, x - 8.5, y - 4, x - 3.5, y, x, y - 6, x + 3.5, y, x + 8.5, y - 4, x + 7, y + 5]);
     crownG.endFill();
@@ -418,8 +536,10 @@ export function createRenderer(canvasHost) {
       if (c.x < V.x0 || c.x > V.x1 || c.y < V.y0 || c.y > V.y1) continue;
       const rig = rigs.get(c.type); if (!rig) continue;
       const body = c.kind === 'body';
-      // Teile: Kopfbedeckung bzw. Waffen-Teil des Rigs (Schild des Ritters, Rohr des Panzers)
-      const set = body ? rig.tex.body : c.part === 'headgear' ? rig.tex.headgear : rig.tex.weapon;
+      // Teile: Kopfbedeckung bzw. Waffen-Teil des Rigs (Schild des Ritters); Bosse über rig.partMap
+      // (Panzerturm mit Rohr, Heli-Rotor), die liegende Leiche aus rig.corpseBody (Drache: ganze Figur)
+      const name = body ? rig.corpseBody : (rig.partMap && rig.partMap[c.part]) || (c.part === 'headgear' ? 'headgear' : 'weapon');
+      const set = rig.tex[name];
       if (!set) continue;
       const vi = tm && rig.teamed ? TEAM_INDEX[c.team] || 0 : 0, tex = (set[vi] || set[0])[0];
       corpseLook(c, t, LK);
@@ -427,7 +547,7 @@ export function createRenderer(canvasHost) {
       const flying = c.state === 'fly' && (c.z > .5 || c.vz > 0);
       const sp = flying ? flyPool.next() : pcSprite(tex);
       if (!sp) continue;
-      const a = body ? rig.anchors.body : HALF;
+      const a = body ? rig.anchors[name] : HALF;
       sp.texture = tex; sp.anchor.set(a.ax, a.ay);
       sp.position.set(c.x, c.y - c.z + LK.dy); sp.rotation = LK.rot;
       sp.scale.set(c.face < 0 ? -inv : inv, inv * LK.sy); sp.tint = LK.tint; sp.alpha = LK.alpha;
@@ -564,7 +684,10 @@ export function createRenderer(canvasHost) {
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugRig()): Atlas, Pool, gezeichnet/ausgelassen
   function debugRig() {
     return { resolution: rigs && rigs.resolution, atlasPages: rigs && rigs.pages, bakeMs: rigs && rigs.bakeMs, drawn: stats.drawn, culled: stats.culled,
-      groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [] };
+      groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [],
+      // Boss-Sticker (Task 12c): Pose der im letzten Bild gezeichneten Bosse (turretRot, rotorRot, wingPhase,
+      // tailSwing, headRot, track, tilt, recoil, frame), um zu prüfen, dass sie sich mit der Zeit ändern
+      bosses: bossDbg.slice(0, nBoss).map(d => ({ ...d })) };
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen

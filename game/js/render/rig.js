@@ -1,13 +1,14 @@
 // Figuren aus Teilen: die Zeichnungen der alten Datei (paint() aus kritzelschlacht.html) pro Typ
 // aufgeteilt in Körper (mit Augenweiß), Pupillen, Lid, Kopfbedeckung und Waffe. bakeRigTextures backt
 // alle Teile in gemeinsame Atlas-Seiten (ein Draw-Call für viele Einheiten); die reine Pose kommt aus
-// pose.js (poseUnit, RIG_PARTS) und wird hier nur weitergereicht.
+// pose.js (poseUnit, RIG_PARTS) und wird hier nur weitergereicht. Panzer, Hubschrauber und Drache sind
+// Boss-Sticker (Task 12c, BOSS_DEF): größer gezeichnet, mit eigenen Teilen und Bewegungen.
 //
 // Koordinaten der Teile: Welt-Einheiten relativ zum Einheiten-Ursprung (u.x, u.y), nicht gespiegelt
 // (Blick nach rechts). Spiegeln, Neigen und Quetschen macht der Renderer am Container.
 /* global PIXI */
 import { UNITS, TEAMS, TINT } from '../data.js';
-import { RIG_PARTS } from './pose.js';
+import { RIG_PARTS, BOSS_VIS, DRAGON_GEO, TRACK_PITCH, TRACK_FRAMES, dragonHead } from './pose.js';
 export { poseUnit, RIG_PARTS } from './pose.js';
 
 const U = UNITS;
@@ -24,14 +25,247 @@ function helmet(c,r,col){c.beginPath();c.ellipse(0,-r*.42,r*1.02,r*.66,0,Math.PI
 const eyePair = (x, y, s) => ({ L: [x - s, y], R: [x + s, y], s, prx: s * .48, pry: s * .55, whites: true });
 // Augenweiß (die Pupillen sind eigene Sprites)
 function whites(c, r, e) { for (const p of [e.L, e.R]) E(c, p[0] * r, p[1] * r, e.s * r * .95, e.s * r * 1.1, '#fff', 1.1); }
+function poly(c, r, pts, fill, lw = 1.4) {
+  c.beginPath(); pts.forEach((p, i) => (i ? c.lineTo(p[0] * r, p[1] * r) : c.moveTo(p[0] * r, p[1] * r))); c.closePath();
+  if (fill) { c.fillStyle = fill; c.fill(); } if (lw) { c.lineWidth = lw; c.strokeStyle = O; c.stroke(); }
+}
+
+/* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
+   Panzer, Hubschrauber und Drache bestehen aus mehr Teilen. Jedes Teil ist um seinen eigenen Drehpunkt
+   gezeichnet (Ursprung = Drehpunkt), in r = U.r · BOSS_VIS (größer gezeichnet, Logik-Radius bleibt).
+   BOSS_GEO: Lage der Drehpunkte im Rig (r-Einheiten; der Renderer setzt die Teile dorthin).
+   eyes liegen in der Gruppe eyeGroup (Panzer: Turm, Drache: Kopf, Heli: Rumpf), Pupillen und Lid wie sonst.
+   parts[name] = { draw(c, r, k, f), team (Teamfarbe je Team gebacken), frames }.
+   partMap: Leichenteil (combat.PARTS) → Rig-Teil; corpseBody: Teil der liegenden Leiche.
+   compose(c, r, k, pupils): ganze Figur in Ruhepose (Symbolbild, Drachenleiche). */
+export const BOSS_GEO = {
+  panzer: { turret: [-.12, -.38] },
+  heli: { mast: [0, -.95], tailRotor: [-1.76, -.38], gun: [.55, .4], rotorFlat: .26 },
+  drache: DRAGON_GEO,
+};
+const pupil = (c, r, e, p) => E(c, (p[0] + e.s * .35) * r, (p[1] + e.s * .15) * r, e.prx * r, e.pry * r, O, 0);
+const BOSS_DEF = {
+  panzer: {
+    boss: true, eyeGroup: 'turret', eyes: eyePair(.14, -.06, .13),
+    shadow: [1.3, .3, .76], ring: [1.45, .4, .72], pivotY: .74, top: -1.2, crown: -1.3, iconFit: [2.9, 0, -.22],
+    partMap: { turret: 'turretWreck' },
+    parts: {
+      // Wanne mit Kettenband, Laufrollen, Kotflügel, Werkzeugkiste, Scheinwerfer und Auspuff (hinten)
+      body: {
+        team: true,
+        draw(c, r, k) {
+          RR(c, -r * 1.32, r * .12, r * 2.64, r * .62, r * .3, '#3a3d45');
+          for (let i = -2; i <= 2; i++) E(c, i * r * .44, r * .45, r * .17, r * .17, '#7b808a', 1.1);
+          E(c, r * 1.07, r * .38, r * .13, r * .13, '#8d929c', 1.1); E(c, -r * 1.07, r * .38, r * .13, r * .13, '#8d929c', 1.1);
+          RR(c, -r * 1.42, -r * .2, r * .2, r * .13, r * .04, '#5b5f69');
+          poly(c, r, [[-1.25, .17], [1.3, .17], [1.12, -.21], [-1.2, -.21]], k.col);
+          Ln(c, [[-r * 1.3, r * .15], [r * 1.3, r * .15]], k.dk, 2.4);
+          RR(c, -r * .9, -r * .14, r * .5, r * .19, r * .05, k.dk);
+          for (const x of [-.25, .12, .5, .85]) E(c, r * x, r * .02, r * .04, r * .04, k.dk, 0);
+          E(c, r * 1.13, -r * .1, r * .08, r * .07, '#ffe9a8', 1);
+        },
+      },
+      // Kettenglieder (untere Lauffläche, wandern beim Vorwärtsfahren nach hinten) und Radspeichen, f = Bild
+      treads: {
+        frames: TRACK_FRAMES,
+        draw(c, r, k, f) {
+          const L = TRACK_PITCH, off = f / TRACK_FRAMES * L;
+          c.strokeStyle = '#1f2126'; c.lineWidth = 1.3;
+          c.beginPath();
+          for (let x = -r * 1.08 + L - off; x < r * 1.08; x += L) { c.moveTo(x, r * .65); c.lineTo(x - 1, r * .73); }
+          c.stroke();
+          const a0 = f / TRACK_FRAMES * Math.PI / 2;
+          c.strokeStyle = '#4a4e57'; c.lineWidth = 1.2; c.beginPath();
+          for (let i = -2; i <= 2; i++) for (let j = 0; j < 2; j++) {
+            const a = a0 + j * Math.PI / 2, x = i * r * .44, y = r * .45, d = r * .12;
+            c.moveTo(x - Math.cos(a) * d, y - Math.sin(a) * d); c.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
+          }
+          c.stroke();
+          for (let i = -2; i <= 2; i++) E(c, i * r * .44, r * .45, r * .045, r * .045, '#5b5f69', .8);
+        },
+      },
+      // Turm (Drehpunkt auf der Rohrachse): Kuppel, Luke, Antenne, Blende, Augenweiß
+      turret: {
+        team: true,
+        draw(c, r, k) { this.base(c, r, k); whites(c, r, BOSS_DEF.panzer.eyes); },
+        base(c, r, k) {
+          Ln(c, [[-r * .36, -r * .2], [-r * .5, -r * .98]], '#3a3f4a', 1, false); E(c, -r * .5, -r * 1.0, r * .045, r * .045, '#e5574f', .8);
+          c.beginPath(); c.moveTo(-r * .56, r * .17); c.quadraticCurveTo(-r * .64, -r * .34, -r * .05, -r * .35);
+          c.quadraticCurveTo(r * .5, -r * .35, r * .52, r * .17); c.closePath();
+          c.fillStyle = k.col; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+          E(c, -r * .2, -r * .31, r * .2, r * .07, k.dk, 1);
+          RR(c, r * .36, -r * .13, r * .2, r * .26, r * .06, k.dk);
+        },
+      },
+      // Kanonenrohr mit Mündungsbremse; Rückstoß schiebt es in den Turm
+      weapon: {
+        team: true,
+        draw(c, r, k) { Ln(c, [[r * .3, 0], [r * 1.02, 0]], k.dk, 4.2); RR(c, r * .98, -r * .085, r * .15, r * .17, r * .03, k.dk); },
+      },
+      // wegfliegender Turm (Leichenteil 'turret'): mit Rohr
+      turretWreck: {
+        team: true,
+        draw(c, r, k) { BOSS_DEF.panzer.parts.weapon.draw(c, r, k); BOSS_DEF.panzer.parts.turret.base(c, r, k); },
+      },
+    },
+    compose(c, r, k, pupils) {
+      const P = this.parts, g = BOSS_GEO.panzer.turret;
+      P.body.draw(c, r, k); P.treads.draw(c, r, k, 0);
+      c.save(); c.translate(g[0] * r, g[1] * r); P.weapon.draw(c, r, k); P.turret.draw(c, r, k);
+      if (pupils) for (const p of [this.eyes.L, this.eyes.R]) pupil(c, r, this.eyes, p);
+      c.restore();
+    },
+  },
+  heli: {
+    boss: true, eyeGroup: 'body', eyes: eyePair(.52, -.06, .12), lidCol: '#bfe3f2',
+    top: -1.5, crown: -1.55, iconFit: [4, 0, -.1],
+    partMap: { headgear: 'rotorBlades' },
+    parts: {
+      // Rumpf mit Heckausleger, Leitwerk, Kufen, Triebwerk, Mast und Kanzel (mit Augenweiß)
+      body: {
+        team: true,
+        draw(c, r, k) {
+          poly(c, r, [[-.5, -.24], [-1.76, -.44], [-1.76, -.3], [-.5, .18]], k.col);
+          poly(c, r, [[-1.58, -.4], [-1.78, -.86], [-1.93, -.84], [-1.86, -.34]], k.dk);
+          E(c, -r * 1.42, -r * .33, r * .2, r * .055, k.dk, 1);
+          Ln(c, [[-r * .38, r * .5], [-r * .48, r * .86]], '#2f3340', 1.6, false); Ln(c, [[r * .38, r * .5], [r * .46, r * .86]], '#2f3340', 1.6, false);
+          c.beginPath(); c.moveTo(-r * .92, r * .87); c.lineTo(r * .86, r * .87); c.quadraticCurveTo(r * 1.06, r * .87, r * 1.1, r * .7);
+          c.lineWidth = 3.8; c.strokeStyle = O; c.stroke(); c.lineWidth = 1.6; c.strokeStyle = '#6b707a'; c.stroke();
+          E(c, 0, 0, r, r * .64, k.col);
+          E(c, -r * .28, -r * .38, r * .4, r * .09, 'rgba(255,255,255,.3)', 0);
+          Ln(c, [[-r * .18, -r * .52], [-r * .2, r * .46]], k.dk, 1, false);
+          RR(c, -r * .5, -r * .8, r * .8, r * .22, r * .08, k.dk);
+          Ln(c, [[0, -r * .8], [0, -r * .96]], '#2f3340', 2, false);
+          E(c, r * .5, -r * .08, r * .42, r * .34, '#bfe3f2', 1.2);
+          c.beginPath(); c.arc(r * .5, -r * .08, r * .26, -2.4, -1.5); c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,255,255,.9)'; c.stroke();
+          whites(c, r, BOSS_DEF.heli.eyes);
+        },
+      },
+      // Heckrotor: zwei Blätter mit zarter Scheibe, dreht um die Mitte
+      tailRotor: {
+        draw(c, r) {
+          E(c, 0, 0, r * .36, r * .36, 'rgba(60,60,70,.12)', 0);
+          Ln(c, [[-r * .34, 0], [r * .34, 0]], '#2f3340', 1.5, false); E(c, 0, 0, r * .06, r * .06, '#5b5f69', .8);
+        },
+      },
+      // Rotorscheibe (Unschärfe) und Rotorblätter; der Renderer staucht beide senkrecht (rotorFlat)
+      rotorDisc: {
+        draw(c, r) {
+          E(c, 0, 0, r * 1.95, r * 1.95, 'rgba(70,75,90,.09)', 1.6, 'rgba(70,75,90,.25)');
+          E(c, 0, 0, r * 1.2, r * 1.2, null, 1.2, 'rgba(70,75,90,.12)');
+        },
+      },
+      rotorBlades: {
+        draw(c, r) {
+          Ln(c, [[-r * 1.9, 0], [r * 1.9, 0]], '#3a3f4a', 2.4);
+          E(c, -r * 1.86, 0, r * .05, r * .05, '#e5574f', 0); E(c, r * 1.86, 0, r * .05, r * .05, '#e5574f', 0);
+          E(c, 0, 0, r * .13, r * .13, '#5b5f69', 1.1);
+        },
+      },
+      // Bordkanone (Drehpunkt an der Halterung), Rückstoß nach hinten
+      weapon: {
+        draw(c, r) { RR(c, -r * .12, -r * .075, r * .42, r * .15, r * .05, '#3a3f4a'); Ln(c, [[r * .28, 0], [r * .58, 0]], '#2f3340', 1.6); },
+      },
+    },
+    compose(c, r, k, pupils) {
+      const P = this.parts, G = BOSS_GEO.heli;
+      P.body.draw(c, r, k);
+      c.save(); c.translate(G.gun[0] * r, G.gun[1] * r); P.weapon.draw(c, r, k); c.restore();
+      c.save(); c.translate(G.tailRotor[0] * r, G.tailRotor[1] * r); c.rotate(.6); P.tailRotor.draw(c, r, k); c.restore();
+      if (pupils) for (const p of [this.eyes.L, this.eyes.R]) pupil(c, r, this.eyes, p);
+      c.save(); c.translate(G.mast[0] * r, G.mast[1] * r); c.scale(1, G.rotorFlat); P.rotorDisc.draw(c, r, k); c.rotate(.35); P.rotorBlades.draw(c, r, k); c.restore();
+    },
+  },
+  drache: {
+    boss: true, eyeGroup: 'head', eyes: eyePair(.11, -.07, .15),
+    top: -1.6, crown: -1.7, iconFit: [4.1, -.2, -.3],
+    corpseBody: 'corpse',
+    parts: {
+      // Rumpf: Beine mit Krallen, Rückenzacken, Bauch
+      body: {
+        draw(c, r, k) {
+          for (const x of [-.55, -.25, .05, .32]) {
+            const yt = .15 - .6 * Math.sqrt(Math.max(0, 1 - (x / .95) ** 2));
+            poly(c, r, [[x - .1, yt + .08], [x - .02, yt - .2], [x + .1, yt + .08]], '#f3e2b0', 1.1);
+          }
+          E(c, -r * .45, r * .62, r * .27, r * .2, k.dk, 1.2); E(c, r * .42, r * .64, r * .2, r * .16, k.dk, 1.2);
+          for (let i = 0; i < 3; i++) { E(c, r * (-.62 + i * .11), r * .8, r * .045, r * .035, '#f3ead8', .7); E(c, r * (.3 + i * .09), r * .78, r * .04, r * .03, '#f3ead8', .7); }
+          E(c, 0, r * .15, r * .95, r * .6, k.col);
+          E(c, r * .12, r * .36, r * .6, r * .3, '#c4ecdd', 0);
+          c.strokeStyle = '#9fd3bf'; c.lineWidth = 1;
+          for (let i = 0; i < 4; i++) { c.beginPath(); c.arc(r * (-.22 + i * .2), r * .2, r * .2, .9, 2.2); c.stroke(); }
+        },
+      },
+      // Hals (Drehpunkt am Rumpf, nach +x), mit hellem Kehlstreifen
+      neck: {
+        draw(c, r, k) {
+          c.beginPath(); c.moveTo(-r * .08, -r * .21); c.lineTo(r * .6, -r * .14); c.quadraticCurveTo(r * .72, 0, r * .6, r * .14);
+          c.lineTo(-r * .08, r * .23); c.quadraticCurveTo(-r * .24, 0, -r * .08, -r * .21); c.closePath();
+          c.fillStyle = k.col; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+          Ln(c, [[r * .02, r * .13], [r * .55, r * .08]], '#c4ecdd', 2.6, false);
+        },
+      },
+      // Kopf (Drehpunkt am Halsende): Hörner, Schädel, Schnauze, Maul mit Zahn, Augenweiß
+      head: {
+        draw(c, r, k) { this.base(c, r, k); whites(c, r, BOSS_DEF.drache.eyes); },
+        base(c, r, k) {
+          poly(c, r, [[-.3, -.1], [-.48, -.55], [-.12, -.2]], '#f3e2b0', 1.1);
+          poly(c, r, [[-.08, -.22], [-.06, -.64], [.14, -.24]], '#f3e2b0', 1.1);
+          E(c, r * .1, r * .02, r * .4, r * .33, k.col);
+          E(c, r * .52, r * .12, r * .3, r * .2, k.col, 1.2);
+          E(c, r * .74, r * .05, r * .045, r * .035, O, 0);
+          poly(c, r, [[.6, .23], [.64, .32], [.68, .22]], '#fff', .8);
+          c.beginPath(); c.moveTo(r * .34, r * .2); c.quadraticCurveTo(r * .58, r * .3, r * .82, r * .17); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+        },
+      },
+      // Flügel (Drehpunkt an der Schulter): Flughaut zwischen den Fingern, helle Knochen, Kralle
+      wing: {
+        draw(c, r, k) {
+          c.beginPath(); c.moveTo(0, 0); c.lineTo(-r * .2, -r * .85); c.lineTo(-r * 1.05, -r * 1.15);
+          c.quadraticCurveTo(-r * .9, -r * .82, -r * .98, -r * .56); c.quadraticCurveTo(-r * .74, -r * .52, -r * .72, -r * .3);
+          c.quadraticCurveTo(-r * .44, -r * .24, -r * .36, r * .03); c.closePath();
+          c.fillStyle = k.dk; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+          const b = shade(k.col, .35);
+          Ln(c, [[0, 0], [-r * .2, -r * .85], [-r * 1.05, -r * 1.15]], b, 1.6, false);
+          Ln(c, [[-r * .2, -r * .85], [-r * .98, -r * .56]], b, 1.1, false); Ln(c, [[-r * .2, -r * .85], [-r * .72, -r * .3]], b, 1.1, false);
+          poly(c, r, [[-.24, -.84], [-.18, -1.0], [-.13, -.84]], '#f3ead8', .8);
+        },
+      },
+      // Schweif (Drehpunkt am Rumpf, nach −x): sich verjüngend, Spitze als Pfeil
+      tail: {
+        draw(c, r, k) {
+          const P = [[0, 0], [-.42, .2], [-.86, .14], [-1.18, -.16]], W = [.32, .24, .16];
+          for (let i = 0; i < 3; i++) { c.lineWidth = W[i] * r + 2.4; c.strokeStyle = O; c.beginPath(); c.moveTo(P[i][0] * r, P[i][1] * r); c.lineTo(P[i + 1][0] * r, P[i + 1][1] * r); c.stroke(); }
+          for (let i = 0; i < 3; i++) { c.lineWidth = W[i] * r; c.strokeStyle = k.col; c.beginPath(); c.moveTo(P[i][0] * r, P[i][1] * r); c.lineTo(P[i + 1][0] * r, P[i + 1][1] * r); c.stroke(); }
+          poly(c, r, [[-1.14, -.12], [-1.44, -.42], [-1.06, -.36], [-1.16, -.22]], k.dk, 1.2);
+        },
+      },
+      // liegende Leiche: ganze Figur mit angelegten Flügeln (keine Pupillen)
+      corpse: { draw(c, r, k) { BOSS_DEF.drache.compose(c, r, k, false, -.5); } },
+    },
+    compose(c, r, k, pupils, fold = 0) {
+      const P = this.parts, G = DRAGON_GEO, H = dragonHead(0, {});
+      const dark = { col: shade(k.col, -.15), dk: shade(k.col, -.45) };
+      c.save(); c.translate(G.wingB[0] * r, G.wingB[1] * r); c.rotate(.15 + fold); c.scale(.9, .9); P.wing.draw(c, r, dark); c.restore();
+      c.save(); c.translate(G.tail[0] * r, G.tail[1] * r); P.tail.draw(c, r, k); c.restore();
+      P.body.draw(c, r, k);
+      c.save(); c.translate(G.neck[0] * r, G.neck[1] * r); c.rotate(H.na); P.neck.draw(c, r, k); c.restore();
+      c.save(); c.translate(H.jx * r, H.jy * r); P.head.draw(c, r, k);
+      if (pupils) for (const p of [this.eyes.L, this.eyes.R]) pupil(c, r, this.eyes, p);
+      c.restore();
+      c.save(); c.translate(G.wingF[0] * r, G.wingF[1] * r); c.rotate(-.1 + fold); P.wing.draw(c, r, k); c.restore();
+    },
+  },
+};
 
 /* ---------- Teile pro Typ ----------
-   body(c,r,k,f)       Körper mit Augenweiß; f = Bild 0/1 (Füße, Beine, Flügel, Ketten, Heckrotor)
+   body(c,r,k,f)       Körper mit Augenweiß; f = Bild 0/1 (Füße, Beine, Flügel)
    eyes                Augen für Pupillen und Lid (fehlt: keine Pupillen)
    lid(c,r,e)          eigenes Lid statt des Standardlids; lid:false = kein Lid
-   headgear(c,r,k,f)   Kopfbedeckung; hgFrames:2 = zwei Bilder (Hauptrotor)
+   headgear(c,r,k,f)   Kopfbedeckung; hgFrames: Anzahl Bilder
    weapon              {draw(c,r,k), grip:[x,y] Drehpunkt in r, axis: Richtung des Rückstoßes (rad), swing: Anteil am Schwung}
-   k = {col, dk, shield} der Variante (neutral oder Team). */
+   k = {col, dk, shield} der Variante (neutral oder Team).
+   Panzer, Hubschrauber und Drache kommen aus BOSS_DEF (eigene Teile, siehe oben). */
 const DEF = {
   krieger: {
     eyes: eyePair(.28, -.02, .27),
@@ -190,23 +424,6 @@ const DEF = {
       E(c, r * .3, r * .32, r * .11, r * .14, O, 0);
     },
   },
-  drache: {
-    eyes: eyePair(.95, -.55, .15),
-    body(c, r, k, f) {
-      const wy = f ? -r * 1.3 : -r * .75;
-      c.beginPath(); c.moveTo(-r * .5, -r * .1); c.lineTo(-r * 1.05, wy); c.quadraticCurveTo(-r * .5, wy * .55, -r * .15, wy * .95); c.quadraticCurveTo(0, wy * .45, r * .3, wy * .9); c.lineTo(r * .3, -r * .2); c.closePath();
-      c.fillStyle = k.dk; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
-      Ln(c, [[-r * .85, r * .25], [-r * 1.35, r * .45], [-r * 1.75, r * .1]], k.col, 4.5);
-      E(c, 0, r * .15, r * 1.05, r * .72, k.col);
-      E(c, r * .15, r * .35, r * .6, r * .33, '#c4ecdd', 0);
-      c.beginPath(); c.moveTo(r * .85, -r * .8); c.lineTo(r * .75, -r * 1.25); c.lineTo(r * 1.05, -r * .88); c.closePath(); c.fillStyle = '#f3e2b0'; c.fill(); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
-      c.beginPath(); c.moveTo(r * 1.15, -r * .8); c.lineTo(r * 1.2, -r * 1.22); c.lineTo(r * 1.38, -r * .82); c.closePath(); c.fill(); c.stroke();
-      E(c, r * 1.0, -r * .42, r * .6, r * .46, k.col);
-      E(c, r * 1.48, -r * .32, r * .3, r * .22, k.col, 1.2);
-      whites(c, r, this.eyes);
-      E(c, r * 1.66, -r * .38, r * .05, r * .04, O, 0);
-    },
-  },
   soldat: {
     eyes: eyePair(.28, 0, .26),
     body(c, r, k, f) { feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes); },
@@ -269,48 +486,7 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .95, r * .95], [r * 1.4, -r * .35]], '#3a3f4a', 4.2); },
     },
   },
-  panzer: {
-    eyes: eyePair(.22, -.5, .14),
-    body(c, r, k, f) {
-      const w = f ? r * .05 : 0;
-      RR(c, -r * 1.3, r * .18, r * 2.6, r * .55, r * .27, '#3a3d45');
-      for (let i = -3; i <= 3; i++) E(c, i * r * .34 + w, r * .46, r * .13, r * .13, '#7b808a', 1);
-      RR(c, -r * 1.15, -r * .2, r * 2.3, r * .5, r * .12, k.col);
-      E(c, -r * .05, -r * .5, r * .62, r * .38, k.col);
-      E(c, -r * .25, -r * .84, r * .22, r * .08, k.dk, 1);
-      whites(c, r, this.eyes);
-    },
-    // Kanonenrohr: Rückstoß schiebt es in den Turm
-    weapon: {
-      grip: [.5, -.55], axis: Math.atan2(-.05, 1.3), swing: 0,
-      draw(c, r, k) { Ln(c, [[r * .5, -r * .55], [r * 1.8, -r * .6]], k.dk, 3.4); },
-    },
-  },
-  heli: {
-    eyes: eyePair(.52, -.06, .12),
-    lidCol: '#bfe3f2',
-    body(c, r, k, f) {
-      Ln(c, [[-r * .6, -r * .1], [-r * 1.7, -r * .35]], k.col, 3.4);
-      E(c, -r * 1.75, -r * .38, r * .08, f ? r * .42 : r * .16, '#cfd5dd', 1);
-      Ln(c, [[-r * .75, r * .78], [r * .8, r * .78]], '#2f3340', 1.6, false);
-      Ln(c, [[-r * .4, r * .45], [-r * .45, r * .78]], '#2f3340', 1.4, false); Ln(c, [[r * .4, r * .45], [r * .45, r * .78]], '#2f3340', 1.4, false);
-      E(c, 0, 0, r * .98, r * .64, k.col);
-      E(c, r * .5, -r * .08, r * .4, r * .32, '#bfe3f2', 1.2);
-      whites(c, r, this.eyes);
-      Ln(c, [[0, -r * .6], [0, -r * .86]], '#2f3340', 1.6, false);
-    },
-    // Hauptrotor: zwei Bilder
-    hgFrames: 2,
-    headgear(c, r, k, f) {
-      E(c, 0, -r * .9, r * 1.85, r * .16, 'rgba(60,60,70,.12)', 0);
-      if (f) Ln(c, [[-r * 1.85, -r * .9], [r * 1.85, -r * .9]], '#2f3340', 1.6, false); else Ln(c, [[-r * .6, -r * 1.02], [r * .6, -r * .78]], '#2f3340', 1.6, false);
-    },
-    // neu: Bordkanone unter der Nase
-    weapon: {
-      grip: [.35, .56], axis: 0, swing: 0,
-      draw(c, r) { Ln(c, [[r * .35, r * .56], [r * 1.1, r * .58]], '#2f3340', 1.6); },
-    },
-  },
+  ...BOSS_DEF,
 };
 
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
@@ -334,15 +510,22 @@ function drawLid(c, r, e) {
   }
 }
 
-// Zeichnet ein Teil in Variante vi, Bild f (Ursprung = Einheit bzw. Drehpunkt bei Pupillen).
+// Zeichenradius: Bosse größer (BOSS_VIS), alle anderen r
+export const drawR = t => U[t].r * (BOSS_VIS[t] || 1);
+const EYE_PARTS = new Set(['shadow', 'pupilL', 'pupilR', 'lid']);
+
+// Zeichnet ein Teil in Variante vi, Bild f (Ursprung = Einheit bzw. Drehpunkt bei Pupillen und Boss-Teilen).
 function drawPart(c, t, part, vi, f) {
-  const D = DEF[t], r = U[t].r, k = colors(t, vi);
+  const D = DEF[t], r = drawR(t), k = colors(t, vi);
   c.lineCap = 'round'; c.lineJoin = 'round';
+  if (D.parts && !EYE_PARTS.has(part)) { D.parts[part].draw(c, r, k, f); return; }
   switch (part) {
-    case 'shadow':
-      E(c, 0, r * 1.05, r * .85, r * .28, 'rgba(40,40,70,.13)', 0);
-      if (vi) E(c, 0, r * 1.0, r * 1.12, r * .42, null, 3, TEAMS[TEAM_KEYS[vi]].c);
+    case 'shadow': {
+      const sh = D.shadow || [.85, .28, 1.05], rg = D.ring || [1.12, .42, 1.0];
+      E(c, 0, r * sh[2], r * sh[0], r * sh[1], 'rgba(40,40,70,.13)', 0);
+      if (vi) E(c, 0, r * rg[2], r * rg[0], r * rg[1], null, 3, TEAMS[TEAM_KEYS[vi]].c);
       break;
+    }
     case 'body': D.body(c, r, k, f); break;
     case 'pupilL': case 'pupilR': E(c, 0, 0, D.eyes.prx * r, D.eyes.pry * r, O, 0); break;
     case 'lid': if (D.lid) D.lid(c, r, D.eyes); else drawLid(c, r, D.eyes); break;
@@ -351,9 +534,14 @@ function drawPart(c, t, part, vi, f) {
   }
 }
 
-// Welche Teile ein Typ hat, wie viele Varianten und Bilder; Drehpunkt in Welt-Einheiten
+// Welche Teile ein Typ hat, wie viele Varianten und Bilder; Drehpunkt in Welt-Einheiten.
+// Boss-Teile (DEF.parts) sind um ihren Drehpunkt gezeichnet (Anker = Ursprung).
 function partSpec(t, part) {
-  const D = DEF[t], r = U[t].r, tv = teamed(t) ? 5 : 1;
+  const D = DEF[t], r = drawR(t), tv = teamed(t) ? 5 : 1;
+  if (D.parts && !EYE_PARTS.has(part)) {
+    const P = D.parts[part];
+    return P ? { nv: P.team ? tv : 1, nf: P.frames || 1, scanV: 0, pivot: [0, 0] } : null;
+  }
   switch (part) {
     case 'shadow': return { nv: 5, nf: 1, scanV: 1, pivot: [0, 0] };
     case 'body': return { nv: tv, nf: D.frames || 2, scanV: 0, pivot: [0, 0] };
@@ -364,6 +552,8 @@ function partSpec(t, part) {
   }
   return null;
 }
+// alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile
+const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : RIG_PARTS);
 
 export const spriteSize = r => r * 4.6 + 14;
 
@@ -406,7 +596,7 @@ const hexNum = s => parseInt(s.slice(1), 16);
 export function bakeRigTextures(renderer, resolution) {
   const t0 = performance.now(), res = resolution, atlas = createAtlas();
   let maxPx = 0;
-  for (const t in U) maxPx = Math.max(maxPx, Math.ceil(spriteSize(U[t].r) * res));
+  for (const t in U) maxPx = Math.max(maxPx, Math.ceil(spriteSize(drawR(t)) * res));
   const scv = document.createElement('canvas'); scv.width = scv.height = maxPx;
   const sc = scv.getContext('2d', { willReadFrequently: true });
   const paintScratch = (spx, t, part, vi, f) => {
@@ -417,16 +607,19 @@ export function bakeRigTextures(renderer, resolution) {
 
   const rigs = new Map();
   for (const t in U) {
-    const T = U[t], D = DEF[t], r = T.r, spx = Math.ceil(spriteSize(r) * res);
+    const T = U[t], D = DEF[t], r = drawR(t), spx = Math.ceil(spriteSize(r) * res);
     const lidTint = [0, 1, 2, 3, 4].map(vi => hexNum(D.lidCol || colors(t, vi).col));
     const rig = {
       type: t, r, fly: !!T.fly, teamed: teamed(t), anchors: {}, tex: {}, lidTint,
       eyes: D.eyes ? { L: [D.eyes.L[0] * r, D.eyes.L[1] * r], R: [D.eyes.R[0] * r, D.eyes.R[1] * r] } : null,
       eyeR: D.eyes ? D.eyes.s * r : 0,
       axis: D.weapon ? D.weapon.axis : 0, swing: D.weapon ? D.weapon.swing : 0,
-      pivotY: T.fly ? 0 : r, offY: T.fly ? -r * .5 : 0,
+      pivotY: D.pivotY !== undefined ? D.pivotY * r : T.fly ? 0 : r, offY: T.fly ? -r * .5 : 0,
+      // Boss-Sticker: eigene Teile, Augen in eyeGroup, Lage der HP-Leiste und der Krone (Welt-Einheiten)
+      boss: !!D.boss, eyeGroup: D.eyeGroup || 'body', barTop: (D.top || -1.6) * r, crownTop: (D.crown || -1.75) * r,
+      corpseBody: D.corpseBody || 'body', partMap: D.partMap || null,
     };
-    for (const part of RIG_PARTS) {
+    for (const part of partNames(t)) {
       const sp = partSpec(t, part);
       rig[part] = null; rig.tex[part] = null; rig.anchors[part] = null;
       if (!sp) continue;
@@ -475,7 +668,13 @@ export function bakeRigTextures(renderer, resolution) {
 // Symbolbild (data-URL) für Palette und Zählerliste: das Rig in Ruhepose (Pupillen leicht nach vorn unten)
 export function iconURL(t){
   const c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d');
-  if(U[t]){
+  if(U[t]&&DEF[t].boss){
+    // Boss-Sticker: ganze Figur in Ruhepose, auf die Breite iconFit[0] (r-Einheiten) eingepasst
+    const D=DEF[t],r=drawR(t),f=D.iconFit,s=84/(f[0]*r);
+    x.setTransform(s,0,0,s,48-f[1]*r*s,52-f[2]*r*s);x.lineCap='round';x.lineJoin='round';
+    D.compose(x,r,colors(t,0),true);
+  }
+  else if(U[t]){
     const r=U[t].r,s=Math.min(42/(r*2.3),4.4),D=DEF[t];
     const at=(tx,ty)=>{x.setTransform(s,0,0,s,44,52);if(U[t].fly)x.translate(0,-r*.3);x.translate(tx,ty);};
     at(0,0);drawPart(x,t,'body',0,0);
@@ -497,6 +696,14 @@ export function iconURL(t){
 export function rigLayout(t) {
   const out = {};
   for (const part of RIG_PARTS) { const sp = partSpec(t, part); out[part] = sp ? { variants: sp.nv, frames: sp.nf } : null; }
+  return out;
+}
+// Boss-Teile (alle Teile aus DEF.parts) mit Varianten und Bildern; null für normale Figuren
+export function bossLayout(t) {
+  const D = DEF[t];
+  if (!D || !D.parts) return null;
+  const out = {};
+  for (const part in D.parts) { const sp = partSpec(t, part); out[part] = { variants: sp.nv, frames: sp.nf }; }
   return out;
 }
 export { E };

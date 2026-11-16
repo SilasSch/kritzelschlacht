@@ -119,7 +119,7 @@ test('poseUnit ist rein: verändert u nicht, gleiche Eingabe gleiche Pose, out w
 test('Bildwechsel: Bodentruppen im Stand Bild 0, Flieger flattern immer', () => {
   assert.equal(poseUnit(mk('krieger'), 1.234).frame, 0);
   const seen = new Set(), walk = new Set();
-  samples(0, 1, .01, t => { seen.add(poseUnit(mk('drache'), t).frame); walk.add(poseUnit(mk('krieger', { mx: 52 }), t).frame); });
+  samples(0, 1, .01, t => { seen.add(poseUnit(mk('biene'), t).frame); walk.add(poseUnit(mk('krieger', { mx: 52 }), t).frame); });
   assert.deepEqual([...seen].sort(), [0, 1]);
   assert.deepEqual([...walk].sort(), [0, 1]);
 });
@@ -139,8 +139,186 @@ test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', as
   assert.equal(L('ritter').pupilL, null); assert.equal(L('ritter').lid, null);   // Visier
   assert.equal(L('biene').pupilL, null);
   assert.ok(L('geist').pupilL && L('geist').lid);
-  assert.equal(L('heli').headgear.frames, 2);      // Hauptrotor
+  assert.equal(L('heli').headgear, null);   // Hauptrotor: eigenes Boss-Teil (bossLayout)
   assert.ok(L('panzer').weapon && L('reiter').weapon && L('baer').weapon);
   assert.equal(L('wolf').weapon, null); assert.equal(L('sani').weapon, null); assert.equal(L('wolf').headgear, null);
-  assert.equal(L('drache').body.frames, 2); assert.equal(L('biene').body.frames, 2);   // Flügelschlag
+  assert.equal(L('biene').body.frames, 2);   // Flügelschlag (Drache: eigene Flügel, bossLayout)
+});
+
+/* ---------- Boss-Sticker (Task 12c, Spez. #23): Panzer, Hubschrauber, Drache ---------- */
+const P = await import('../game/js/render/pose.js');
+const TAU = Math.PI * 2;
+const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+const frac = v => v - Math.floor(v);
+
+test('Boss: Turm zeigt zum Ziel (ohne Gedächtnis sofort, mit Gedächtnis weich und ohne Sprung)', () => {
+  near(poseUnit(mk('panzer', { tg: { x: 130, y: 140 } }), 1).turretRot, Math.atan2(40, 30));
+  near(poseUnit(mk('panzer', { tg: { x: 100, y: 60 } }), 1).turretRot, -Math.PI / 2);
+  // ohne Ziel: geradeaus in Blickrichtung
+  near(poseUnit(mk('panzer'), 1).turretRot, 0);
+  near(Math.cos(poseUnit(mk('panzer', { face: -1 }), 1).turretRot), -1);
+  // mit Gedächtnis: erstes Bild direkt aufs Ziel, danach höchstens TURRET_RATE rad/s
+  const m = P.bossMemory(), u = mk('panzer', { tg: { x: 200, y: 100 } }), o = {};
+  near(poseUnit(u, 0, o, m).turretRot, 0);
+  u.tg = { x: 0, y: 101 };   // Ziel hinten links: der Turm dreht sich hin, nicht springend
+  let prev = 0;
+  for (let k = 1; k <= 300; k++) {
+    const r = poseUnit(u, k / 60, o, m).turretRot;
+    assert.ok(Math.abs(wrapA(r - prev)) <= P.TURRET_RATE / 60 + 1e-9, `Sprung ${prev} → ${r}`);
+    if (k === 1) assert.ok(Math.abs(wrapA(r)) > 0, 'dreht sich schon');
+    prev = r;
+  }
+  near(wrapA(prev - Math.atan2(1, -100)), 0, 1e-6);
+  assert.ok(P.TURRET_RATE > 1 && P.TURRET_RATE < 6);
+  // im gespiegelten Rig: lokaler Winkel aus Weltwinkel und Blickrichtung
+  near(P.localAim(.3, 1), .3); near(P.localAim(Math.PI - .3, -1), .3); near(P.localAim(Math.PI, -1), 0);
+  near(P.localAim(-.4, -1), -(Math.PI - .4));
+});
+
+test('Boss: Hauptrotor und Heckrotor drehen sich gleichmäßig pro Zeit', () => {
+  const u = mk('heli', { seed: 2.5 });
+  assert.ok(P.ROTOR_SPEED >= 20, 'sichtbar schnell');
+  for (const [t, dt] of [[0, .01], [1.3, .05], [7.77, .1]]) {
+    const a = poseUnit(u, t), b = poseUnit(u, t + dt);
+    assert.ok(a.rotorRot >= 0 && a.rotorRot < TAU);
+    near(wrapA(b.rotorRot - a.rotorRot - P.ROTOR_SPEED * dt), 0, 1e-6);
+    near(wrapA(b.tailRotor - a.tailRotor - P.TAIL_ROTOR_SPEED * dt), 0, 1e-6);
+  }
+  // andere haben keinen Rotor
+  assert.equal(poseUnit(mk('panzer'), 1).rotorRot, 0);
+  assert.equal(poseUnit(mk('krieger'), 1).rotorRot, 0);
+});
+
+test('Boss: Flügelphase läuft periodisch (langsamer Takt, schneller beim Fliegen), Schweif schwingt nach', () => {
+  const u = mk('drache', { seed: .7 });
+  assert.ok(P.WING_HZ >= 1.2 && P.WING_HZ <= 2, `Takt ${P.WING_HZ}`);
+  for (const t of [0, .4, 3.1]) {
+    const a = poseUnit(u, t).wingPhase, b = poseUnit(u, t + 1 / P.WING_HZ).wingPhase;
+    assert.ok(a >= 0 && a < 1);
+    near(Math.min(Math.abs(a - b), 1 - Math.abs(a - b)), 0, 1e-6);
+    // Schweif: Schwingen mit Phasenverzug hinter dem Flügelschlag
+    near(poseUnit(u, t).tailSwing, P.TAIL_AMP * Math.sin(TAU * a - P.TAIL_LAG));
+  }
+  // Schläge zählen: 5 s im Stand ≈ 8, im Flug mit Gedächtnis mehr, und die Phase springt nie
+  const beats = (mx, mem) => {
+    const v = mk('drache', { mx, seed: .7 }), o = {};
+    let n = 0, prev = poseUnit(v, 0, o, mem).wingPhase;
+    for (let k = 1; k <= 300; k++) {
+      const w = poseUnit(v, k / 60, o, mem).wingPhase;
+      const step = frac(w - prev);
+      assert.ok(step <= (P.WING_HZ + P.WING_HZ_MOVE) / 60 + 1e-9, `Sprung ${step}`);
+      if (w < prev) n++; prev = w;
+    }
+    return n;
+  };
+  const idle = beats(0, P.bossMemory()), flying = beats(UNITS.drache.speed, P.bossMemory());
+  assert.ok(idle >= 7 && idle <= 9, `Stand ${idle}`);
+  assert.ok(flying > idle, `Flug ${flying}`);
+  // Schweif mit Gedächtnis: hängt beim Losfliegen nach (Nachschwingen), bleibt begrenzt
+  const m = P.bossMemory(), v = mk('drache'), o = {};
+  poseUnit(v, 0, o, m);
+  v.mx = UNITS.drache.speed;
+  const trail = [];
+  for (let k = 1; k <= 120; k++) { poseUnit(v, k / 60, o, m); trail.push(m.tail); assert.ok(Math.abs(o.tailSwing) <= P.TAIL_AMP + P.TAIL_TRAIL + 1e-9); }
+  assert.ok(Math.abs(trail[2]) < Math.abs(trail[100]), 'nachziehen statt springen');
+  near(trail[119], -P.TAIL_TRAIL, .02);
+});
+
+test('Boss: Panzer, Heli und Drache haben fast kein Squash (kein Hüpfen)', () => {
+  for (const type of ['panzer', 'heli', 'drache']) {
+    assert.ok(P.BOSS.has(type));
+    const sp = UNITS[type].speed;
+    samples(0, 2, .01, t => {
+      for (const o of [{ mx: sp }, { mx: -sp, my: sp / 2 }, { hitT: .1 }, { hitT: .1, mx: sp }, {}]) {
+        const p = poseUnit(mk(type, o), t);
+        assert.ok(Math.abs(p.sx - 1) <= P.BOSS_SQUASH + 1e-9 && Math.abs(p.sy - 1) <= P.BOSS_SQUASH + 1e-9, `${type} ${p.sx} ${p.sy}`);
+        if (type === 'panzer') assert.equal(p.bob, 0, 'Panzer hüpft nicht');
+      }
+    });
+  }
+  assert.ok(P.BOSS_SQUASH <= .03 && P.BOSS_SQUASH < P.WALK_SQUASH);
+  assert.ok(!P.BOSS.has('krieger'));
+  // normale Figuren quetschen weiter
+  near(poseUnit(mk('krieger', { hitT: .1 }), 0).sy, .85);
+});
+
+test('Boss: Heli neigt sich in Flugrichtung (bis 0,25 rad), Panzerketten laufen mit dem Weg', () => {
+  const sp = UNITS.heli.speed;
+  near(poseUnit(mk('heli', { mx: sp }), 1).tilt, P.HELI_LEAN);
+  near(poseUnit(mk('heli', { mx: -sp * 2, face: -1 }), 1).tilt, -P.HELI_LEAN);
+  near(poseUnit(mk('heli'), 1).tilt, 0);
+  near(P.HELI_LEAN, .25);
+  // mit Gedächtnis weich
+  const hm = P.bossMemory(), h = mk('heli'), ho = {};
+  poseUnit(h, 0, ho, hm); h.mx = sp;
+  assert.ok(poseUnit(h, 1 / 60, ho, hm).tilt < P.HELI_LEAN * .5);
+  for (let k = 2; k < 200; k++) poseUnit(h, k / 60, ho, hm);
+  near(ho.tilt, P.HELI_LEAN, .01);
+  // Ketten: Phase = Weg / TRACK_PITCH (mit Gedächtnis), Bild 0..3 daraus, im Stand steht sie
+  const m = P.bossMemory(), u = mk('panzer', { mx: UNITS.panzer.speed }), o = {};
+  poseUnit(u, 0, o, m);
+  const t0 = o.track, frames = new Set();
+  for (let k = 1; k <= 30; k++) { poseUnit(u, k / 60, o, m); frames.add(o.frame); assert.equal(o.frame, Math.floor(o.track * P.TRACK_FRAMES) % P.TRACK_FRAMES); }
+  near(frac(o.track - t0), frac(UNITS.panzer.speed * .5 / P.TRACK_PITCH), 1e-6);
+  assert.equal(frames.size, P.TRACK_FRAMES, 'alle Kettenbilder');
+  u.mx = 0; const st = poseUnit(u, 1, o, m).track;
+  near(poseUnit(u, 1.5, o, m).track, st);
+  // rückwärts laufen die Ketten rückwärts
+  const m2 = P.bossMemory(), b = mk('panzer', { mx: -UNITS.panzer.speed }), bo = {};
+  poseUnit(b, 0, bo, m2); const b0 = bo.track; poseUnit(b, .05, bo, m2);
+  near(frac(bo.track - b0), frac(-UNITS.panzer.speed * .05 / P.TRACK_PITCH), 1e-6);
+});
+
+test('Boss: Panzerrohr mit langem Rückstoß, Drachenkopf zielt zum Ziel', () => {
+  near(poseUnit(mk('panzer', { fireT: 0 }), 0).recoil, P.TANK_RECOIL);
+  let prev = Infinity;
+  for (let f = 0; f <= P.TANK_RECOIL_T + 1e-9; f += .01) {
+    const r = poseUnit(mk('panzer', { fireT: f }), 0).recoil;
+    assert.ok(r <= prev + 1e-12 && r >= 0); prev = r;
+  }
+  near(poseUnit(mk('panzer', { fireT: P.TANK_RECOIL_T }), 0).recoil, 0);
+  assert.ok(P.TANK_RECOIL > P.RECOIL && P.TANK_RECOIL_T > P.RECOIL_T);
+  // Kopf: lokaler Winkel zum Ziel, begrenzt auf ±HEAD_MAX, gespiegelt gleich
+  near(poseUnit(mk('drache', { tg: { x: 200, y: 100 } }), 0).headRot, 0);
+  near(poseUnit(mk('drache', { tg: { x: 200, y: 130 } }), 0).headRot, Math.min(P.HEAD_MAX, Math.atan2(30, 100)));
+  near(poseUnit(mk('drache', { face: -1, tg: { x: 0, y: 130 } }), 0).headRot, Math.min(P.HEAD_MAX, Math.atan2(30, 100)));
+  near(poseUnit(mk('drache', { tg: { x: 100, y: 300 } }), 0).headRot, P.HEAD_MAX);
+});
+
+test('Boss: Flammenstrahl beginnt am Maul (breathMouth), die Atem-Logik bleibt', async () => {
+  const { createFxCore } = await import('../game/js/render/fxcore.js');
+  const r = UNITS.drache.r, rv = r * P.BOSS_VIS.drache;
+  const ux = 500, uy = 300, z = 60;
+  const ev = (nx, ny, face) => ({ type: 'shot', kind: 'breath', x: ux + nx * r, y: uy - r * .6 + ny * r, z, face, nx, ny, tx: ux + nx * 100, ty: uy + ny * 100, tz: 0 });
+  const o = {};
+  P.breathMouth(ev(1, 0, 1), o);
+  assert.ok(o.x > ux + rv && o.x < ux + rv * 2.2, `vorn ${o.x}`);
+  assert.ok(o.y < uy - z && o.y > uy - z - rv, `oben ${o.y}`);
+  const right = { ...o };
+  P.breathMouth(ev(-1, 0, -1), o);
+  near(o.x - ux, -(right.x - ux)); near(o.y, right.y);
+  P.breathMouth(ev(.8, .6, 1), o);
+  assert.ok(o.y > right.y, 'Kopf nach unten: Maul tiefer');
+  // fxcore: mit Haken mouth startet der Strahl am Maul, ohne bleibt alles wie bisher
+  const core = createFxCore({ mouth: P.breathMouth });
+  core.consume([ev(1, 0, 1)]);
+  const jets = core.store.live.filter(p => p.k === 'jet');
+  assert.ok(jets.length >= 16);
+  for (const p of jets) assert.ok(Math.abs(p.x0 - right.x) <= 2 + 1e-9 && Math.abs(p.y0 - right.y) <= 2 + 1e-9);
+});
+
+test('Boss: eigene Teile im Atlas (rigLayout bleibt, bossLayout zeigt die Zusatzteile)', async () => {
+  const { bossLayout, rigLayout } = await import('../game/js/render/rig.js');
+  const pz = bossLayout('panzer'), he = bossLayout('heli'), dr = bossLayout('drache');
+  assert.ok(pz.body && pz.turret && pz.weapon && pz.treads, 'Wanne, Turm, Rohr, Ketten');
+  assert.equal(pz.treads.frames, P.TRACK_FRAMES); assert.equal(pz.treads.variants, 1);
+  assert.equal(pz.body.variants, 5); assert.equal(pz.turret.variants, 5);
+  assert.ok(he.body && he.rotorBlades && he.rotorDisc && he.tailRotor && he.weapon, 'Rumpf, Rotor, Heckrotor');
+  assert.equal(he.rotorBlades.variants, 1);
+  assert.ok(dr.body && dr.neck && dr.head && dr.wing && dr.tail && dr.corpse, 'Rumpf, Hals, Kopf, Flügel, Schweif');
+  assert.equal(dr.body.variants, 1);
+  assert.equal(bossLayout('krieger'), null);
+  // Leichenteile: der Turm fliegt mit Rohr davon, der Rotor als Rotor
+  assert.ok(pz.turretWreck);
+  assert.equal(rigLayout('heli').headgear, null);
 });

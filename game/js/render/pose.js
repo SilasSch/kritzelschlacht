@@ -1,6 +1,6 @@
 // Reine Darstellungs-Mathematik: Pose der Figuren-Rigs, Schatten nach Höhe, Aussehen der Leichen,
 // Bildschirmlage der Geschosse. Kein DOM, kein PIXI, kein Math.random.
-// poseUnit(u, t[, out]) liest nur die Einheit und die Zeit t (Sekunden, Echtzeit des Renderers)
+// poseUnit(u, t[, out[, mem]]) liest nur die Einheit und die Zeit t (Sekunden, Echtzeit des Renderers)
 // und schreibt das Ergebnis in out (wird für 2000 Einheiten pro Bild wiederverwendet).
 //
 // Bewegung: Laufen und Neigung kommen aus u.mx/u.my (Laufgeschwindigkeit, die think() setzt).
@@ -11,11 +11,11 @@
 // die Neigung zurück und liegt flach nach vorn am Boden).
 import { GRAVITY, CORPSE_FADE, SINK_T, ASH_T } from '../physics.js';
 import { MUZZLE_Z, PRONE_DOWN_T, PRONE_UP_T } from '../combat.js';
+import { UNITS } from '../data.js';
 
 export const RIG_PARTS = ['shadow', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
 
 export const WALK_SQUASH = .08;   // sy pendelt 1 ± 0.08, sx = 1/sy
-const RIGID_SQUASH = .03;         // Panzer: Ketten rumpeln statt Federn
 export const TILT_MAX = .12;      // rad bei voller Laufgeschwindigkeit
 export const HIT_SX = 1.15, HIT_SY = .85;
 export const RECOIL = 3, RECOIL_T = .12;
@@ -33,6 +33,121 @@ export const PRONE_GUN = [.25, .3];    // liegend: Waffe in r-Einheiten (lokal) 
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const wrap = a => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a + TAU : a; };
+const frac = v => v - Math.floor(v);
+
+/* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
+   Panzer, Hubschrauber und Drache: gleicher Sticker-Stil, aber größer gezeichnet (BOSS_VIS × r; Logik-
+   Radius und Kollision bleiben) und mit eigenen Bewegungen statt Hüpfen. poseUnit liefert für alle
+   Einheiten zusätzlich (sonst 0):
+     turretRot  Weltwinkel des Panzerturms (atan2 zum Ziel; ohne Ziel geradeaus)
+     rotorRot / tailRotor  Drehwinkel von Haupt- und Heckrotor (0..2π, gleichmäßig pro Zeit)
+     wingPhase  Phase des Flügelschlags 0..1 (WING_HZ, im Flug bis + WING_HZ_MOVE), wing = sin(2π·Phase)
+     tailSwing  Schweifausschlag (rad): Schwingen TAIL_AMP mit Verzug TAIL_LAG hinter dem Flügel, dazu
+                Nachziehen bis TAIL_TRAIL gegen die Flugrichtung
+     headRot    Drachenkopf: lokaler Winkel zum Ziel (±HEAD_MAX)
+     track      Kettenphase 0..1 (ein Kettenglied je TRACK_PITCH px Weg); frame = Bild 0..TRACK_FRAMES−1
+   Ohne Gedächtnis (mem) ist alles rein aus u und t. Mit mem (bossMemory(), vom Renderer je Einheit
+   gehalten; u bleibt unverändert) wird weich nachgeführt: Turm höchstens TURRET_RATE rad/s, Kettenweg
+   und Flügelphase aufintegriert (kein Sprung bei Tempowechsel), Heli-Neigung und Schweif mit Verzug. */
+export const BOSS = new Set(['panzer', 'heli', 'drache']);
+export const BOSS_VIS = { panzer: 1.35, heli: 1.35, drache: 1.3 };
+export const BOSS_SQUASH = .02;     // |sx − 1|, |sy − 1| höchstens (Rumpeln, Treffer)
+export const TURRET_RATE = 2.6;     // rad/s
+export const TANK_RECOIL = 7, TANK_RECOIL_T = .35, TANK_ROCK = .05;   // px Rohr-Rückstoß, s, rad Wippen
+export const TRACK_PITCH = 5, TRACK_FRAMES = 4;
+export const ROTOR_SPEED = 28, TAIL_ROTOR_SPEED = 42;                 // rad/s
+export const HELI_LEAN = .25, LEAN_RATE = 4;                          // rad, 1/s
+export const WING_HZ = 1.6, WING_HZ_MOVE = 1.1;
+export const TAIL_AMP = .16, TAIL_LAG = 1.1, TAIL_TRAIL = .3, TAIL_RATE = 2.5;
+export const HEAD_MAX = .6, HEAD_RATE = 8, DRAGON_BOB = 2;
+// Drachen-Geometrie in r·BOSS_VIS (Rig, Renderer und Maul des Flammenstrahls teilen sie): Hals-Ansatz am
+// Rumpf, Halslänge und -winkel (folgt dem Kopf zu NECK_FOLLOW), Maul im Kopf (Drehpunkt = Halsende)
+export const DRAGON_GEO = { neck: [.5, -.12], neckLen: .55, neckAng: -.95, neckFollow: .35, mouth: [.8, .2],
+  wingF: [-.05, -.3], wingB: [.2, -.4], tail: [-.78, .22] };
+
+export const bossMemory = () => ({ t: -1, turret: 0, track: 0, wing: 0, tail: 0, lean: 0, head: 0 });
+// Lokaler Winkel im gespiegelten Rig (Blick nach rechts gezeichnet): Weltwinkel a, Blickrichtung face
+export const localAim = (a, face) => Math.atan2(Math.sin(a), Math.cos(a) * (face < 0 ? -1 : 1));
+
+// Halsende und Maul des Drachen (lokal, r·BOSS_VIS-Einheiten) für den lokalen Kopfwinkel h
+const DG = DRAGON_GEO;
+function dragonHead(h, out) {
+  const na = DG.neckAng + h * DG.neckFollow;
+  out.jx = DG.neck[0] + Math.cos(na) * DG.neckLen; out.jy = DG.neck[1] + Math.sin(na) * DG.neckLen;
+  out.na = na;
+  const c = Math.cos(h), s = Math.sin(h);
+  out.mx = out.jx + DG.mouth[0] * c - DG.mouth[1] * s; out.my = out.jy + DG.mouth[0] * s + DG.mouth[1] * c;
+  return out;
+}
+export { dragonHead };
+// Maul (Bildschirm x, y − z) zu einem Atem-Ereignis (combat.breath: x = u.x + nx·r, y = u.y − 0.6r + ny·r);
+// Kopfwinkel wie poseUnit ohne Gedächtnis. Für fxcore (hooks.mouth): der Strahl beginnt am Maul.
+const MO = {};
+export function breathMouth(e, out = {}) {
+  const r = UNITS.drache.r, rv = r * BOSS_VIS.drache, face = e.face < 0 ? -1 : 1;
+  const nx = e.nx ?? face, ny = e.ny || 0;
+  const ux = e.x - nx * r, uy = e.y + r * .6 - ny * r;
+  dragonHead(clamp(Math.atan2(ny, nx * face), -HEAD_MAX, HEAD_MAX), MO);
+  out.x = ux + face * MO.mx * rv; out.y = uy - (e.z || 0) + MO.my * rv;
+  return out;
+}
+
+// Boss-Teil der Pose (nach der allgemeinen Pose; Luft, Betäubung und Drehung bleiben)
+function bossPose(u, t, out, mem, mx, my) {
+  const T = u.T, type = u.type, face = u.face < 0 ? -1 : 1;
+  const first = !mem || !(mem.t >= 0) || t < mem.t;
+  const dt = first ? 0 : Math.min(.1, t - mem.t);
+  if (mem) mem.t = t;
+  const sp = Math.sqrt(mx * mx + my * my), q = clamp(sp / T.speed, 0, 1);
+  const hit = u.hitT > 0;
+  // fast kein Squash: Treffer drückt nur um BOSS_SQUASH, kein Federn beim Fahren
+  out.sx = hit ? 1 + BOSS_SQUASH : 1; out.sy = hit ? 1 - BOSS_SQUASH : 1;
+  if (type === 'panzer') {
+    out.bob = 0; out.frame = 0;
+    const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
+    const aim = dx * dx + dy * dy > 1e-12 ? Math.atan2(dy, dx) : face < 0 ? Math.PI : 0;
+    let rot = aim;
+    if (mem) {
+      if (first) mem.turret = aim;
+      else { const d = wrap(aim - mem.turret), s = TURRET_RATE * dt; mem.turret = wrap(mem.turret + clamp(d, -s, s)); }
+      rot = mem.turret;
+    }
+    out.turretRot = rot;
+    // Ketten: Weg vorwärts (in Blickrichtung) bzw. rückwärts
+    const v = mx * face < -1e-9 ? -sp : sp;
+    let tr;
+    if (mem) { if (first) mem.track = frac(u.seed); mem.track = frac(mem.track + v * dt / TRACK_PITCH); tr = mem.track; }
+    else tr = frac(u.seed + v * t / TRACK_PITCH);
+    out.track = tr; out.frame = Math.floor(tr * TRACK_FRAMES) % TRACK_FRAMES;
+    // Rückstoß: Rohr fährt TANK_RECOIL zurück und langsam wieder vor, die Wanne wippt zurück
+    const k = u.fireT < TANK_RECOIL_T ? 1 - u.fireT / TANK_RECOIL_T : 0;
+    out.recoil = TANK_RECOIL * k * k;
+    out.tilt = -face * TANK_ROCK * k * k + clamp(mx / T.speed, -1, 1) * TILT_MAX * .25;
+  } else if (type === 'heli') {
+    out.rotorRot = frac((ROTOR_SPEED * t + u.seed) / TAU) * TAU;
+    out.tailRotor = frac((TAIL_ROTOR_SPEED * t + u.seed) / TAU) * TAU;
+    const lean = clamp(mx / T.speed, -1, 1) * HELI_LEAN;
+    if (mem) { mem.lean = first ? lean : mem.lean + (lean - mem.lean) * (1 - Math.exp(-LEAN_RATE * dt)); out.tilt = mem.lean; }
+    else out.tilt = lean;
+    out.bob *= .6; out.frame = 0;
+  } else {
+    const hz = WING_HZ + WING_HZ_MOVE * q;
+    let ph;
+    if (mem) { if (first) mem.wing = frac(u.seed); mem.wing = frac(mem.wing + hz * dt); ph = mem.wing; }
+    else ph = frac(u.seed + hz * t);
+    out.wingPhase = ph; out.wing = Math.sin(TAU * ph);
+    out.bob = DRAGON_BOB * Math.cos(TAU * ph);   // hebt sich beim Abschlag
+    const trail = -clamp(mx / T.speed, -1, 1) * TAIL_TRAIL;
+    let tl = 0;
+    if (mem) { mem.tail = first ? trail : mem.tail + (trail - mem.tail) * (1 - Math.exp(-TAIL_RATE * dt)); tl = mem.tail; }
+    out.tailSwing = TAIL_AMP * Math.sin(TAU * ph - TAIL_LAG) + tl;
+    const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
+    const h = dx * dx + dy * dy > 1e-12 ? clamp(Math.atan2(dy, dx * face), -HEAD_MAX, HEAD_MAX) : 0;
+    if (mem) { mem.head = first ? h : mem.head + (h - mem.head) * (1 - Math.exp(-HEAD_RATE * dt)); out.headRot = mem.head; }
+    else out.headRot = h;
+  }
+}
 
 // Anteil des Liegens 0..1 aus Haltung und Restzeit des Übergangs (smoothstep)
 export function proneOf(u) {
@@ -45,7 +160,7 @@ export function proneOf(u) {
   return q * q * (3 - 2 * q);
 }
 
-export function poseUnit(u, t, out = {}) {
+export function poseUnit(u, t, out = {}, mem) {
   const T = u.T, fly = !!T.fly;
   const mx = u.mx || 0, my = u.my || 0;
   const walking = !fly && Math.abs(mx) + Math.abs(my) > 1;
@@ -57,7 +172,7 @@ export function poseUnit(u, t, out = {}) {
   } else if (walking) {
     // Schrittfrequenz wächst mit dem Tempo des Typs; ein Federn je Schritt, Füße wechseln je Schritt
     const q = t * (2 + T.speed / 30) + u.seed, s = Math.sin(TAU * q);
-    sy = 1 + (u.type === 'panzer' ? RIGID_SQUASH : WALK_SQUASH) * s;
+    sy = 1 + WALK_SQUASH * s;
     sx = 1 / sy;
     bob = -1.5 * (s > 0 ? s : 0);
     frame = Math.floor(q * 2) % 2;
@@ -75,6 +190,9 @@ export function poseUnit(u, t, out = {}) {
   if (d > 1e-6) { out.lookX = dx / d * LOOK; out.lookY = dy / d * LOOK; }
   else { out.lookX = (u.face < 0 ? -1 : 1) * LOOK; out.lookY = 0; }
   out.frame = frame;
+  out.turretRot = 0; out.rotorRot = 0; out.tailRotor = 0; out.wingPhase = 0; out.wing = 0; out.tailSwing = 0;
+  out.headRot = 0; out.track = 0;
+  if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.
   const st = u.state;

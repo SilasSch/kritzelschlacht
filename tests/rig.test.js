@@ -187,6 +187,38 @@ test('Boss: Turm schaut zur Seite des Ziels (Kuppel bleibt waagrecht), nur das R
   near(o.turretRot, Math.atan2(30, 100)); near(o.turretFlip, 1);
 });
 
+test('Boss: Turm kehrt mitten im Umdrehen ohne Sprung um, Ziel genau darüber/darunter flackert nicht', () => {
+  const maxStep = Math.PI / P.TURN_T / 60 + 1e-9;   // größte Breitenänderung je Bild (cos-Verlauf)
+  // Umkehr bei k ≈ 0.3: die Breite läuft von der aktuellen Breite zurück, kein Sprung auf volle Breite
+  const m = P.bossMemory(), u = mk('panzer', { tg: { x: 200, y: 100 } }), o = {};
+  let prev = poseUnit(u, 0, o, m).turretFlip, k = 0;
+  const step = () => { k++; const f = poseUnit(u, k / 60, o, m).turretFlip; assert.ok(Math.abs(f - prev) <= maxStep, `Sprung ${prev} → ${f} (Bild ${k})`); prev = f; return f; };
+  u.tg = { x: 0, y: 100 };
+  for (let i = 0; i < 4; i++) step();
+  assert.ok(prev < 1 && prev > .3, `mitten im Umdrehen ${prev}`);
+  u.tg = { x: 200, y: 100 };                  // Ziel springt zurück
+  const atRev = step();
+  assert.ok(atRev > 0 && atRev < 1, `läuft von der aktuellen Breite weiter ${atRev}`);
+  for (let i = 0; i < 20; i++) step();
+  near(prev, 1);
+  // mehrfach hin und her mitten im Umdrehen: nie ein Sprung
+  for (let i = 0; i < 40; i++) { u.tg = { x: i % 6 < 3 ? 0 : 200, y: 100 }; step(); }
+  // Ziel genau über bzw. unter dem Panzer, dx wechselt jedes Bild das Vorzeichen: Seite bleibt
+  for (let i = 0; i < 30; i++) step();
+  const settled = prev;
+  assert.equal(Math.abs(settled), 1);
+  for (let i = 0; i < 60; i++) { u.tg = { x: 100 + (i % 2 ? 1.5 : -1.5), y: 160 }; assert.equal(step(), settled, 'kein Flackern'); }
+  // erst deutlich auf der anderen Seite dreht er sich um
+  u.tg = { x: 100 - settled * 40, y: 160 };
+  for (let i = 0; i < 20; i++) step();
+  near(prev, -settled);
+  // Schuss im Totbereich: Turm sofort auf der Seite der Logik (muzzle.tankAim), damit die Mündung stimmt
+  u.tg = { x: 100 + settled * 2, y: 160 }; step();
+  assert.equal(prev, -settled, 'Totbereich hält die Seite');
+  u.fireT = 0; k++; poseUnit(u, k / 60, o, m);
+  assert.equal(o.turretFlip, settled, 'Schuss: Seite wie die Logik');
+});
+
 test('Boss: Hauptrotor und Heckrotor drehen sich gleichmäßig pro Zeit', () => {
   const u = mk('heli', { seed: 2.5 });
   assert.ok(P.ROTOR_SPEED >= 20, 'sichtbar schnell');

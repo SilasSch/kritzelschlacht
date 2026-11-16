@@ -58,6 +58,9 @@ const frac = v => v - Math.floor(v);
 export const BOSS = new Set(['panzer', 'heli', 'drache']);
 export { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, DRAGON_GEO, dragonHead };
 export const TURN_T = .15, ELEV_RATE = 10;                            // s Umdrehen des Turms, 1/s Rohr
+// Totbereich (nur Darstellung, zwischen Schüssen): liegt das Ziel weniger als TURN_DEADBAND px seitlich, bleibt
+// der Turm auf seiner Seite (kein Flackern, wenn jemand genau über/unter dem Panzer steht)
+export const TURN_DEADBAND = 4;
 export const TANK_RECOIL = 7, TANK_RECOIL_T = .35, TANK_ROCK = .05;   // px Rohr-Rückstoß, s, rad Wippen
 export const KICK = .12;                // Anteil von RECOIL_T bis zum vollen Rückstoß (Stoß nach dem Schuss)
 export const TRACK_PITCH = 5, TRACK_FRAMES = 4;
@@ -102,9 +105,15 @@ function bossPose(u, t, out, mem, mx, my) {
     if (mem) {
       if (first) { mem.side = mem.from = TA.side; mem.turnT = TURN_T; mem.elev = TA.elev; }
       else {
-        if (TA.side !== mem.side) { mem.from = mem.side; mem.side = TA.side; mem.turnT = 0; } else mem.turnT += dt;
+        const side = tg && Math.abs(dx) < TURN_DEADBAND ? mem.side : TA.side;
+        if (side === mem.side) mem.turnT += dt;
+        else if (mem.turnT < TURN_T) {
+          // Umkehr mitten im Umdrehen: zurück ab der aktuellen Breite (cos-Verlauf gespiegelt), kein Sprung
+          mem.from = mem.side; mem.side = side; mem.turnT = TURN_T - mem.turnT;
+        } else { mem.from = mem.side; mem.side = side; mem.turnT = 0; }
         mem.elev += (TA.elev - mem.elev) * (1 - Math.exp(-ELEV_RATE * dt));
-        if (shot) { mem.turnT = TURN_T; mem.elev = TA.elev; }
+        // Schuss: Turm ganz auf der Seite der Logik (muzzle.tankAim, ohne Totbereich), Rohr am Ziel
+        if (shot) { mem.side = mem.from = TA.side; mem.turnT = TURN_T; mem.elev = TA.elev; }
       }
       // Umdrehen: schmal werden (cos), in der Mitte umklappen, wieder breit
       const k = Math.min(1, mem.turnT / TURN_T), c = Math.cos(Math.PI * k);

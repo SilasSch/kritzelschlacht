@@ -291,6 +291,8 @@ test('Pose: prone 0 stehend (auch ohne stance), 1 liegend; lie = Blickrichtung �
   // Blick zum Ziel rechts: lokal (vor der Drehung um π/2) zeigt er zum Kopf (−y), in der Welt also nach vorn
   const r = poseUnit(mk('mg', { stance: 'prone', tg: { x: 200, y: 100 } }), 1);
   near(r.lookX, 0); near(r.lookY, -.35);
+  // gerade geschleudert (stance wird erst im nächsten Denkschritt zurückgesetzt): kein Liegen in der Luft
+  for (const state of ['air', 'stun']) assert.equal(poseUnit(mk('mg', { stance: 'prone', state }), 1).prone, 0, state);
 });
 
 test('Pose: Hinlegen und Aufstehen animiert (prone läuft stetig 0 → 1 bzw. 1 → 0)', () => {

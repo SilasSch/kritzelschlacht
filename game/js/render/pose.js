@@ -91,7 +91,8 @@ export function poseUnit(u, t, out = {}) {
   }
   // Liegen: um bis zu 90° in Blickrichtung gekippt (Kopf vorn, Bauch unten), etwas flacher, ohne Neigung;
   // die Waffe dreht zurück und zeigt nach vorn. Blick in Weltrichtung: um −lie zurückgedreht.
-  const pr = proneOf(u);
+  // (in der Luft oder betäubt nie: think setzt die Haltung erst im nächsten Denkschritt zurück)
+  const pr = out.air || out.dizzy ? 0 : proneOf(u);
   out.prone = pr; out.lie = 0; out.weaponLie = 0;
   if (pr > 0) {
     const a = (u.face < 0 ? -1 : 1) * pr * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);

@@ -6,16 +6,20 @@ import { placeRect } from '../game/js/sim.js';
 const F = [.32, .3, .38, .7];   // Front
 const B = [.18, .32, .25, .68]; // hinten
 const Md = [.26, .32, .31, .68]; // Mitte
+const Deep = [.05, .1, .12, .9]; // ganz hinten, über fast die ganze Höhe verteilt
 
 // Index 0..8 = Mission 1..9
 export const MISSION_PLANS = [
   { smart: [['ritter', 9, ...F]], spam: [['krieger', 30, ...F]] },
-  { smart: [['ritter', 10, ...F], ['grenadier', 6, ...B]], spam: [['krieger', 50, ...F]] },
-  { smart: [['biene', 160, ...F]], spam: [['krieger', 55, ...F]] },
+  // M2: nur 4 Grenadiere: ihre Bomben fallen in den Nahkampf vor den Rittern und treffen die eigenen Ritter mit
+  { smart: [['ritter', 12, ...F], ['grenadier', 4, ...B]], spam: [['krieger', 50, ...F]] },
+  { smart: [['biene', 170, ...F]], spam: [['krieger', 55, ...F]] },
   { smart: [['reiter', 30, ...F]], spam: [['krieger', 60, ...F]] },
   { smart: [['magier', 14, ...B]], spam: [['krieger', 55, ...F]] },
   { smart: [['biene', 180, ...F]], spam: [['wolf', 80, ...F]] },
-  { smart: [['schuetze', 30, ...B]], spam: [['krieger', 55, ...F]] },
+  // M7: Bären und Wölfe kommen durch die Lavalücke (Wegfindung); weit hinten und breit verteilt (beides nötig)
+  // schießen die Schützen am längsten, bevor die Tiere heran sind
+  { smart: [['schuetze', 34, ...Deep]], spam: [['krieger', 55, ...F]] },
   { smart: [['schuetze', 14, ...Md], ['magier', 16, ...B]], spam: [['krieger', 85, ...F]] },
   { smart: [['soldat', 16, ...F], ['panzerfaust', 12, ...B]], spam: [['krieger', 75, ...F]] },
 ];

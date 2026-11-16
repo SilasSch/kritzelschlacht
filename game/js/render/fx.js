@@ -8,7 +8,7 @@
 //   autoLod(frameMs)  Bilddauer (ms) an den Detailregler (fxcore.createLodGovernor); setLod(n | null) legt die
 //             Stufe fest (null: wieder automatisch); lod = aktuelle Stufe (Task 13)
 //   clear(), debug(), shake (Zahl)
-// Partikel liegen in PIXI.ParticleContainern, alle aus einem Atlas (eine BaseTexture):
+// Partikel liegen in QuadBatches (quads.js, Task 13; vorher ParticleContainer), alle aus einem Atlas:
 //   warm  (Ebene 'light', normal): warme Scheibe #ffb347 der Explosionen, auch auf Weiß sichtbar (0.35 → 0)
 //   light (Ebene 'light', additiv): Bodenlicht der Explosionen (auf farbigem Boden)
 //   halo  (Ebene 'fx', normal): kleiner warmer Halo um Mündungsblitze und Feuer (auch Flammenstrahl, Brand)
@@ -17,6 +17,7 @@
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, createLodGovernor, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
+import { createQuadBatch, newMat, mat } from './quads.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
@@ -25,7 +26,6 @@ const CELL = 64, STRIDE = 68;                       // Atlas: 64-px-Felder mit 4
 const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32];   // Einheitsradius je Bildteil (F) in Atlas-px
 const N_FRAMES = FRAME_R.length;
 const DECAL_UPLOAD = .1;                            // Decal-Upload höchstens alle 0,1 s
-const PC_PROPS = { vertices: true, position: true, rotation: true, uvs: true, tint: true };
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 function paintAtlas(c) {
@@ -78,11 +78,11 @@ export function createFx(renderer) {
   const base = new PIXI.BaseTexture(acv, { mipmap: PIXI.MIPMAP_MODES.OFF });
   const tex = FRAME_R.map((_, i) => new PIXI.Texture(base, new PIXI.Rectangle(i * STRIDE + 2, 2, CELL, CELL)));
 
+  // Je Ebene eine QuadBatch (gezeichnet werden nur die belegten Vierecke, in Entstehungsreihenfolge)
   function makePC(layer, blend, name) {
-    const pc = new PIXI.ParticleContainer(FX_CAP, PC_PROPS, FX_CAP);
-    pc.blendMode = blend; pc.name = name;
-    layer.addChild(pc);
-    return { pc, arr: [], n: 0, blend };
+    const q = createQuadBatch(name, blend);
+    layer.addChild(q);
+    return { q, n: 0, blend };
   }
   const warm = makePC(L.light, PIXI.BLEND_MODES.NORMAL, 'fxWarm');   // warmes Licht unter dem additiven
   const light = makePC(L.light, PIXI.BLEND_MODES.ADD, 'fxLight');
@@ -90,19 +90,16 @@ export function createFx(renderer) {
   const glow = makePC(L.fx, PIXI.BLEND_MODES.ADD, 'fxGlow');        // unter den Kernen: Kerne behalten ihre Farbe
   const main = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxMain');
 
+  const PM = newMat();
   function put(g, t, x, y, scale, rot, tint, alpha, ax) {
-    let sp = g.arr[g.n];
-    if (!sp) {
-      if (g.arr.length >= FX_CAP) return;
-      sp = new PIXI.Sprite(t); g.pc.addChild(sp); g.arr.push(sp);
-    }
+    if (g.n >= FX_CAP) return;
+    if (g.n === 0) g.q.clear();
     g.n++;
-    sp.texture = t; sp.anchor.set(ax, .5); sp.position.set(x, y); sp.rotation = rot;
-    sp.scale.set(scale); sp.tint = tint; sp.alpha = alpha;
+    g.q.add(t, mat(PM, x, y, rot, scale, scale), ax, .5, tint, alpha);
   }
-  // ParticleContainer kennt kein visible: unbenutzte Sprites bekommen Größe und Deckkraft 0
+  // Ende des Bilds: Anzahl zurückgeben, leere Ebenen leeren
   function finish(g) {
-    for (let i = g.n; i < g.arr.length; i++) { const sp = g.arr[i]; if (sp.alpha !== 0) { sp.alpha = 0; sp.scale.set(0); } }
+    if (g.n === 0) g.q.clear();
     const n = g.n; g.n = 0;
     return n;
   }
@@ -208,7 +205,7 @@ export function createFx(renderer) {
     return {
       particles: core.store.count, cap: FX_CAP, byKind,
       sprites: { main: nMain, glow: nGlow, light: nLight, warm: nWarm, halo: nHalo },
-      blend: { main: main.pc.blendMode, glow: glow.pc.blendMode, light: light.pc.blendMode, warm: warm.pc.blendMode, halo: halo.pc.blendMode },
+      blend: { main: main.blend, glow: glow.blend, light: light.blend, warm: warm.blend, halo: halo.blend },
       // warme Lichter des letzten Bilds: Bodenlicht-Scheiben (warm) und Halos (halo) mit ihrer größten Deckkraft
       warmLights: { ground: nWarm, halos: nHalo, maxAlpha: r2(maxWarm) },
       dropped: st.dropped, skipped: st.skipped, lights: st.lights,

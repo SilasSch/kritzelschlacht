@@ -13,6 +13,7 @@ import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_G
 import { bossMuzzle, TURN_SQUASH } from '../muzzle.js';
 import { PRONE } from '../combat.js';
 import { createFx } from './fx.js';
+import { createQuadBatch, newMat, mat, mul } from './quads.js';
 
 const O = '#2a2a33';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -21,7 +22,6 @@ const MAX_TEX = 4096;
 const TAU = Math.PI * 2;
 // Zauberstab und Mörserrohr liegen wie in der alten Zeichnung hinter dem Körper (und damit unter dem Hut)
 const BACK_WEAPON = new Set(['magier', 'moerser']);
-const PC_MAX = 4000;                 // Sprites je Leichen-ParticleContainer (Logik deckelt bei 1500 + Verblassende)
 const SHADOW_TINT = 0x282846;        // wie rgba(40,40,70) des Rig-Schattens
 const HALF = { ax: .5, ay: .5 };
 
@@ -144,13 +144,16 @@ export function createRenderer(canvasHost) {
      mit den Rig-Teilen body, pupilL, pupilR, lid, headgear, weapon. Der Schatten (mit Teamring) liegt
      in einer eigenen Ebene unter allen Körpern. Pro Bild werden nur Texturen, Anker, Lage, Drehung,
      Sichtbarkeit und tint gesetzt; die Pose kommt aus poseUnit() in ein wiederverwendetes Objekt. */
-  const shadowSprites = new PIXI.Container(), links = new PIXI.Graphics();
-  L.shadows.addChild(shadowSprites, links);
-  const groundUnits = new PIXI.Container(), groundBars = new PIXI.Graphics();
-  L.ground.addChild(groundUnits, groundBars);
-  const airUnits = new PIXI.Container(), airBars = new PIXI.Graphics();
-  L.air.addChild(airUnits, airBars);
-  const shadowPool = makePool(shadowSprites), groundPool = makeRigPool(groundUnits), airPool = makeRigPool(airUnits);
+  // Task 13: alle Teile, Schatten und HP-Leisten liegen als flache Vierecke in QuadBatches (quads.js), die
+  // Lage jedes Teils rechnet bodies() selbst nach (Matrizen wie die früheren Container und Sprites), in derselben
+  // Zeichenreihenfolge wie vorher (Einheiten nach y, je Einheit die Teile in Rig-Reihenfolge).
+  const shadowQ = createQuadBatch('shadowQuads'), links = new PIXI.Graphics();
+  L.shadows.addChild(shadowQ, links);
+  const groundQ = createQuadBatch('groundQuads'), groundBars = createQuadBatch('groundBars');
+  L.ground.addChild(groundQ, groundBars);
+  const airQ = createQuadBatch('airQuads'), airBars = createQuadBatch('airBars');
+  L.air.addChild(airQ, airBars);
+  const UM = newMat(), GM = newMat(), PM = newMat(), TM = newMat();   // Einheit, Gruppe, Teil, Hilfe
   // Fliegende Leichen, Teile und Brocken liegen über den Bodentruppen (eigene Sprites), ruhende in der
   // Ebene corpses (Leichen im ParticleContainer, Brocken als Sprites darüber).
   const flySprites = new PIXI.Container(), projG = new PIXI.Graphics();
@@ -203,32 +206,8 @@ export function createRenderer(canvasHost) {
   const SH = {};   // Ergebnis von shadowParams, wiederverwendet
   // Schatten der Stufe SH.level als Ellipse rx × ry am Bodenpunkt (x, y)
   function blobShadow(x, y, rx, ry) {
-    const s = shadowPool.next();
-    s.texture = softTex[SH.level]; s.anchor.set(.5); s.position.set(x, y); s.rotation = 0;
-    s.scale.set(2 * rx * SH.scale / BLOB, 2 * ry * SH.scale / BLOB); s.tint = SHADOW_TINT; s.alpha = SH.alpha;
+    shadowQ.add(softTex[SH.level], mat(TM, x, y, 0, 2 * rx * SH.scale / BLOB, 2 * ry * SH.scale / BLOB), .5, .5, SHADOW_TINT, SH.alpha);
     stats.shadowLevels[SH.level]++;
-  }
-
-  // Pool von Einheiten-Containern; Kinder in Zeichenreihenfolge der Rig-Teile (Schatten liegt woanders)
-  function makeRigPool(container) {
-    const arr = [];
-    let n = 0;
-    return {
-      next() {
-        let r = arr[n];
-        if (!r) {
-          const c = new PIXI.Container();
-          r = { c, bosses: null, shown: null };   // Boss-Teile: je Typ einmal angelegt (makeBoss), shown = sichtbare
-          // weaponB: Waffe hinter dem Körper (BACK_WEAPON), weapon: davor
-          for (const k of ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon']) { const s = new PIXI.Sprite(); r[k] = s; c.addChild(s); }
-          container.addChild(c); arr.push(r);
-        }
-        r.c.visible = true; n++;
-        return r;
-      },
-      finish() { for (let i = n; i < arr.length; i++) arr[i].c.visible = false; n = 0; },
-      get size() { return arr.length; },
-    };
   }
 
   const groundList = [], airList = [];
@@ -258,7 +237,7 @@ export function createRenderer(canvasHost) {
     groundList.sort(byY); airList.sort(byY);
     stats.drawn = groundList.length + airList.length; stats.culled = culled; stats.airUnits = 0; stats.stunned = 0;
     const inv = 1 / rigs.resolution;
-    // Schatten und Teamringe liegen unter allen Körpern (shadowPool.finish in draw, nach Leichen und Geschossen)
+    // Schatten und Teamringe liegen unter allen Körpern (shadowQ, danach Leichen, Brocken und Geschosse)
     stats.shadowLevels[0] = stats.shadowLevels[1] = stats.shadowLevels[2] = 0;
     shadows(groundList, tm, inv); shadows(airList, tm, inv);
     // Schildwall: verbundene Schilde sichtbar machen (nur stehende Ritter; geschleuderte und betäubte nicht)
@@ -276,8 +255,8 @@ export function createRenderer(canvasHost) {
       }
     }
     nBoss = 0;
-    bodies(groundList, groundPool, groundBars, t, tm, inv);
-    bodies(airList, airPool, airBars, t, tm, inv);
+    bodies(groundList, groundQ, groundBars, t, tm, inv);
+    bodies(airList, airQ, airBars, t, tm, inv);
     starPool.finish();
     drawCrown(top);
   }
@@ -288,44 +267,46 @@ export function createRenderer(canvasHost) {
       const rig = rigs.get(u.type), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
       shadowParams(u.z, SH);
       if (SH.level === 0) {
-        const a = rig.anchors.shadow, s = shadowPool.next();
-        s.texture = rig.tex.shadow[ti][0]; s.anchor.set(a.ax, a.ay); s.position.set(u.x, u.y); s.rotation = 0;
-        s.scale.set(inv * SH.scale); s.tint = 0xffffff; s.alpha = SH.alpha / SHADOW_ALPHA;   // Textur trägt schon .13
+        const a = rig.anchors.shadow, k = inv * SH.scale;
+        shadowQ.add(rig.tex.shadow[ti][0], mat(TM, u.x, u.y, 0, k, k), a.ax, a.ay, 0xffffff, SH.alpha / SHADOW_ALPHA);   // Textur trägt schon .13
         stats.shadowLevels[0]++;
         continue;
       }
       blobShadow(u.x, u.y + r * 1.05, r * .85, r * .28);
       if (ti) {
-        const s = shadowPool.next();
-        s.texture = ringTex; s.anchor.set(.5); s.position.set(u.x, u.y + r); s.rotation = 0;
-        s.scale.set(r / RING_R * SH.scale / RING_RES); s.tint = C(TEAMS[u.team].c); s.alpha = SH.alpha / SHADOW_ALPHA;
+        const k = r / RING_R * SH.scale / RING_RES;
+        shadowQ.add(ringTex, mat(TM, u.x, u.y + r, 0, k, k), .5, .5, C(TEAMS[u.team].c), SH.alpha / SHADOW_ALPHA);
       }
     }
   }
 
-  function part(s, tex, a, x, y, inv) {
-    s.visible = true; s.texture = tex; s.anchor.set(a.ax, a.ay); s.position.set(x, y); s.scale.set(inv);
+  // Teil eines Rigs (früher ein Sprite im Container der Einheit): Lage (x, y) im Rig, Anker a, Drehung rot,
+  // Skalierung (sx, sy) (sonst 1/Auflösung), Elternmatrix P (Einheit oder Gruppe)
+  function part(Q, P, tex, a, x, y, inv, rot = 0, tint = 0xffffff, alpha = 1, sx = inv, sy = inv) {
+    mul(PM, P, mat(PM, x, y, rot, sx, sy));
+    Q.add(tex, PM, a.ax, a.ay, tint, alpha);
+    return PM;
   }
 
-  // Container-Transform: Drehpunkt an den Füßen (Flieger: Körpermitte), damit Quetschen und Neigen
+  // Container-Transform (UM): Drehpunkt an den Füßen (Flieger: Körpermitte), damit Quetschen und Neigen
   // die Figur am Boden lassen; scale.x < 0 spiegelt nach links, die Neigung wirkt danach in Weltrichtung.
   // Höhe: gezeichnet bei y − z (Flieger in Flughöhe statt des alten Versatzes rig.offY). In der Luft dreht
   // sich die Figur um ihre Mitte (p.spin), betäubt taumelt sie um die Füße und zwei Sternchen kreisen.
   // Liegen (p.prone 0..1): platt um die Füße gestaucht (p.sx, p.sy), r · PRONE_DROP tiefer, um p.lie
   // vorgeneigt; die Waffe dreht um p.weaponLie zurück (flach nach vorn) und rückt nach vorn unten
-  // (PRONE_GUN), der Rückstoß folgt ihrer Achse.
-  function bodies(list, pool, bars, t, tm, inv) {
-    bars.clear();
+  // (PRONE_GUN), der Rückstoß folgt ihrer Achse. Teile in Rig-Reihenfolge: Waffe hinten (BACK_WEAPON),
+  // Körper, Pupillen, Lid (nur beim Blinzeln), Kopfbedeckung, Waffe vorn.
+  function bodies(list, Q, bars, t, tm, inv) {
+    Q.clear(); bars.clear();
     for (const u of list) {
-      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined), slot = pool.next();
+      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
-      const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
+      const A = rig.anchors, X = rig.tex, sy = u.y - u.z;
       const pr = p.prone;
-      if (p.air) { c.position.set(u.x, sy); c.pivot.set(0, 0); stats.airUnits++; }
-      else { c.position.set(u.x + face * rig.pivotX, sy + rig.pivotY + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(rig.pivotX, rig.pivotY); }
-      c.scale.set(p.sx * face, p.sy);
       // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
-      c.rotation = p.tilt + p.spin + p.lie;
+      const rot = p.tilt + p.spin + p.lie;
+      if (p.air) { mat(UM, u.x, sy, rot, p.sx * face, p.sy); stats.airUnits++; }
+      else mat(UM, u.x + face * rig.pivotX, sy + rig.pivotY + p.bob + pr * rig.r * PRONE_DROP, rot, p.sx * face, p.sy, rig.pivotX, rig.pivotY);
       if (p.dizzy && u.stunT > .05) {
         stats.stunned++;
         for (let i = 0; i < 2; i++) {
@@ -336,43 +317,39 @@ export function createRenderer(canvasHost) {
         }
       }
       if (rig.boss) {
-        // Boss-Sticker: eigene Teile statt der normalen Rig-Sprites
-        for (let i = 0; i < MAIN_PARTS.length; i++) slot[MAIN_PARTS[i]].visible = false;
-        drawBoss(slot, u, p, rig, vi, tm ? TEAM_INDEX[u.team] || 0 : 0, face, inv);
+        // Boss-Sticker: eigene Teile statt der normalen Rig-Teile
+        drawBoss(Q, u, p, rig, vi, tm ? TEAM_INDEX[u.team] || 0 : 0, face, inv);
         bar(bars, u, T, rig, sy, 0);
         continue;
       }
-      if (slot.shown) { slot.shown.root.visible = false; slot.shown = null; }
-      let f = X.body[vi]; part(slot.body, f[fr] || f[0], A.body, 0, 0, inv);
+      const back = rig.weapon && BACK_WEAPON.has(u.type);
+      if (back) weaponPart(Q, rig, p, vi, pr, inv);
+      let f = X.body[vi]; part(Q, UM, f[fr] || f[0], A.body, 0, 0, inv);
       if (rig.pupilL) {
         // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
         const e = rig.eyes, ox = p.lookX * face * rig.eyeR, oy = p.lookY * rig.eyeR;
-        part(slot.pupilL, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
-        part(slot.pupilR, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
-      } else { slot.pupilL.visible = false; slot.pupilR.visible = false; }
-      if (rig.lid && p.blink) { part(slot.lid, rig.lid, A.lid, 0, 0, inv); slot.lid.tint = rig.lidTint[tm ? TEAM_INDEX[u.team] || 0 : 0]; }
-      else slot.lid.visible = false;
-      if (rig.headgear) { f = X.headgear[vi]; part(slot.headgear, f[fr] || f[0], A.headgear, 0, 0, inv); }
-      else slot.headgear.visible = false;
-      if (rig.weapon) {
-        // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
-        const back = BACK_WEAPON.has(u.type), w = back ? slot.weaponB : slot.weapon, a = A.weapon, k = p.recoil;
-        (back ? slot.weapon : slot.weaponB).visible = false;
-        const ax = rig.axis + p.weaponLie, gx = pr * PRONE_GUN[0] * rig.r, gy = pr * PRONE_GUN[1] * rig.r;
-        part(w, X.weapon[vi][0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv);
-        w.rotation = p.weaponRot * rig.swing + p.weaponLie;
-      } else { slot.weapon.visible = false; slot.weaponB.visible = false; }
+        part(Q, UM, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
+        part(Q, UM, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+      }
+      if (rig.lid && p.blink) part(Q, UM, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[tm ? TEAM_INDEX[u.team] || 0 : 0]);
+      if (rig.headgear) { f = X.headgear[vi]; part(Q, UM, f[fr] || f[0], A.headgear, 0, 0, inv); }
+      if (rig.weapon && !back) weaponPart(Q, rig, p, vi, pr, inv);
       bar(bars, u, T, rig, sy, pr);
     }
-    pool.finish();
+  }
+  // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
+  function weaponPart(Q, rig, p, vi, pr, inv) {
+    const a = rig.anchors.weapon, k = p.recoil;
+    const ax = rig.axis + p.weaponLie, gx = pr * PRONE_GUN[0] * rig.r, gy = pr * PRONE_GUN[1] * rig.r;
+    part(Q, UM, rig.tex.weapon[vi][0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv, p.weaponRot * rig.swing + p.weaponLie);
   }
 
   // HP-Leiste über der Figur (rig.barTop: Oberkante der Zeichnung, Bosse höher und breiter); liegend tiefer
   function bar(bars, u, T, rig, sy, pr) {
     if (!(u.hp < T.hp && T.hp > 10)) return;
     const w = Math.max(12, rig.r * 1.6), y = sy + rig.barTop * (1 - .375 * pr) - 4;
-    bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
-    bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
+    bars.rect(u.x - w / 2, y, w, 3, 0x2a2a33, .25);
+    bars.rect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3, u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f, 1);
   }
 
   /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
@@ -389,106 +366,84 @@ export function createRenderer(canvasHost) {
      von dort starten auch die Schüsse der Logik (muzzle.bossMuzzle in combat.fire/breath).
        Drache: hinterer Flügel (dunkler), Schweif (tailSwing), Rumpf, Hals, Kopfgruppe (headRot) mit Augen,
                vorderer Flügel; Flügelschlag aus wing = sin(2π·wingPhase) */
-  const MAIN_PARTS = ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
   const mems = new WeakMap();
   function memOf(u) { let m = mems.get(u); if (!m) { m = bossMemory(); mems.set(u, m); } return m; }
   const HD = {};   // dragonHead, wiederverwendet
   const WING_ROT = .55, WING_SQUASH = .18, FAR_WING = 0xa9b8b3, GHOST = .35;
-  // Prüfwerte der zuletzt gezeichneten Bosse (debugRig().bosses), feste Objekte; tipSprite/tipLx/tipLy: das
-  // Teil mit der Mündung und die Mündung darin (Sprite-Pixel ab Anker), für die Mündung aus den Sprites
+  // Prüfwerte der zuletzt gezeichneten Bosse (debugRig().bosses), feste Objekte; tipM/tipLx/tipLy: Matrix
+  // des Teils mit der Mündung und die Mündung darin (Sprite-Pixel ab Ursprung), für die Mündung aus den Teilen
   const BOSS_DBG = 24, bossDbg = [];
   for (let i = 0; i < BOSS_DBG; i++) bossDbg.push({ id: 0, type: '', turretFlip: 0, turretRot: 0, rotorRot: 0, tailRotor: 0, wingPhase: 0, tailSwing: 0, headRot: 0, track: 0, tilt: 0, recoil: 0, frame: 0,
-    fireT: 0, drawn: { x: 0, y: 0 }, logic: { x: 0, y: 0 }, hasLogic: false, tipSprite: null, tipLx: 0, tipLy: 0 });
+    fireT: 0, drawn: { x: 0, y: 0 }, logic: { x: 0, y: 0 }, hasLogic: false, tipM: newMat(), hasTip: false, tipLx: 0, tipLy: 0 });
   let nBoss = 0;
 
-  function makeBoss(type) {
-    const root = new PIXI.Container(), b = { root };
-    const sp = (parent, k) => { const s = new PIXI.Sprite(); parent.addChild(s); b[k] = s; return s; };
-    const ctr = (parent, k) => { const c = new PIXI.Container(); parent.addChild(c); b[k] = c; return c; };
-    if (type === 'panzer') {
-      sp(root, 'body'); sp(root, 'treads'); const g = ctr(root, 'g');
-      sp(g, 'weapon'); sp(g, 'turret'); sp(g, 'pupilL'); sp(g, 'pupilR'); sp(g, 'lid');
-    } else if (type === 'heli') {
-      sp(root, 'body'); sp(root, 'weapon'); sp(root, 'tailRotor'); b.g = root;
-      sp(root, 'pupilL'); sp(root, 'pupilR'); sp(root, 'lid');
-      const rc = ctr(root, 'rotor'); sp(rc, 'disc'); sp(rc, 'ghost'); sp(rc, 'blades');
-    } else {
-      sp(root, 'wingB'); sp(root, 'tail'); sp(root, 'body'); sp(root, 'neck');
-      const g = ctr(root, 'g'); sp(g, 'head'); sp(g, 'pupilL'); sp(g, 'pupilR'); sp(g, 'lid');
-      sp(root, 'wingF');
-    }
-    return b;
-  }
-  // Boss-Teil name aus dem Atlas (Teamvariante nur bei Team-Teilen), Bild f, an (x, y), gedreht um rot
-  function bp(s, rig, name, vi, f, x, y, rot, inv) {
+  // Boss-Teil name aus dem Atlas (Teamvariante nur bei Team-Teilen), Bild f, an (x, y) in der Gruppe P,
+  // gedreht um rot; Skalierung (sx, sy) sonst 1/Auflösung. Liefert die Matrix des Teils (PM, bis zum nächsten Teil).
+  function bp(Q, P, rig, name, vi, f, x, y, rot, inv, sx = inv, sy = inv, tint = 0xffffff, alpha = 1) {
     const set = rig.tex[name], v = set[vi] || set[0];
-    part(s, v[f] || v[0], rig.anchors[name], x, y, inv); s.rotation = rot; s.tint = 0xffffff; s.alpha = 1;
+    return part(Q, P, v[f] || v[0], rig.anchors[name], x, y, inv, rot, tint, alpha, sx, sy);
   }
-  // Augen in einer Gruppe, die lokal um rot gedreht und um fx (waagrecht) gespiegelt ist: der Blick
+  // Augen in einer Gruppe P, die lokal um rot gedreht und um fx (waagrecht) gespiegelt ist: der Blick
   // (Weltrichtung lookX/lookY) wird in die Gruppe zurückgerechnet
-  function bossEyes(b, rig, p, face, rot, fx, ti, inv) {
+  function bossEyes(Q, P, rig, p, face, rot, fx, ti, inv) {
     const lx = p.lookX * face, ly = p.lookY, c = Math.cos(rot), s = Math.sin(rot), e = rig.eyes, A = rig.anchors;
     const ox = (lx * c + ly * s) * fx * rig.eyeR, oy = (-lx * s + ly * c) * rig.eyeR;
-    part(b.pupilL, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
-    part(b.pupilR, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
-    if (p.blink) { part(b.lid, rig.lid, A.lid, 0, 0, inv); b.lid.tint = rig.lidTint[ti]; } else b.lid.visible = false;
+    part(Q, P, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
+    part(Q, P, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+    if (p.blink) part(Q, P, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[ti]);
   }
-  function drawBoss(slot, u, p, rig, vi, ti, face, inv) {
-    const type = u.type, R = rig.r;
-    if (!slot.bosses) slot.bosses = {};
-    let b = slot.bosses[type];
-    if (!b) { b = slot.bosses[type] = makeBoss(type); slot.c.addChild(b.root); }
-    if (slot.shown !== b) { if (slot.shown) slot.shown.root.visible = false; b.root.visible = true; slot.shown = b; }
-    let tipS = null, tlx = 0, tly = 0;
+  // Teile in der Reihenfolge der früheren Teilebäume (makeBoss): Panzer Wanne, Ketten, Turmgruppe (Rohr,
+  // Turm, Augen); Heli Rumpf, Kanone, Heckrotor, Augen, Rotorgruppe (Scheibe, Nachzieh-Blatt, Blätter);
+  // Drache hinterer Flügel, Schweif, Rumpf, Hals, Kopfgruppe (Kopf, Augen), vorderer Flügel.
+  function drawBoss(Q, u, p, rig, vi, ti, face, inv) {
+    const type = u.type, R = rig.r, d = nBoss < BOSS_DBG ? bossDbg[nBoss++] : null;
+    let tlx = 0, tly = 0;
+    const tip = M => { if (d) { d.tipM.set(M); d.hasTip = true; } };
     if (type === 'panzer') {
       const G = BOSS_GEO.panzer;
-      bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
-      bp(b.treads, rig, 'treads', 0, p.frame, 0, 0, 0, inv);
+      bp(Q, UM, rig, 'body', vi, 0, 0, 0, 0, inv);
+      bp(Q, UM, rig, 'treads', 0, p.frame, 0, 0, 0, inv);
       // Turm: Kuppel bleibt waagrecht, Breite = Seite des Ziels (lokal turretFlip · face), beim Umdrehen
       // schmal und etwas höher; Rohr um den Schildzapfen um turretRot, Rückstoß entlang des Rohrs
       const fl = p.turretFlip * face, e = p.turretRot, ce = Math.cos(e), se = Math.sin(e);
-      b.g.position.set(G.turret[0] * R, G.turret[1] * R); b.g.rotation = 0;
-      b.g.scale.set(fl, 1 + TURN_SQUASH * (1 - Math.abs(p.turretFlip)));
-      bp(b.weapon, rig, 'weapon', vi, 0, G.trunnion[0] * R - p.recoil * ce, G.trunnion[1] * R - p.recoil * se, e, inv);
-      bp(b.turret, rig, 'turret', vi, 0, 0, 0, 0, inv);
-      bossEyes(b, rig, p, face, 0, fl < 0 ? -1 : 1, ti, inv);
-      tipS = b.weapon; tlx = (G.tip[0] - G.trunnion[0]) * R; tly = (G.tip[1] - G.trunnion[1]) * R;
+      mul(GM, UM, mat(GM, G.turret[0] * R, G.turret[1] * R, 0, fl, 1 + TURN_SQUASH * (1 - Math.abs(p.turretFlip))));
+      tip(bp(Q, GM, rig, 'weapon', vi, 0, G.trunnion[0] * R - p.recoil * ce, G.trunnion[1] * R - p.recoil * se, e, inv));
+      bp(Q, GM, rig, 'turret', vi, 0, 0, 0, 0, inv);
+      bossEyes(Q, GM, rig, p, face, 0, fl < 0 ? -1 : 1, ti, inv);
+      tlx = (G.tip[0] - G.trunnion[0]) * R; tly = (G.tip[1] - G.trunnion[1]) * R;
     } else if (type === 'heli') {
       const G = BOSS_GEO.heli;
-      bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
-      bp(b.weapon, rig, 'weapon', vi, 0, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv);
-      bp(b.tailRotor, rig, 'tailRotor', 0, 0, G.tailRotor[0] * R, G.tailRotor[1] * R, p.tailRotor, inv);
-      bossEyes(b, rig, p, face, 0, 1, ti, inv);
-      b.rotor.position.set(G.mast[0] * R, G.mast[1] * R); b.rotor.scale.set(1, G.rotorFlat);
-      bp(b.disc, rig, 'rotorDisc', 0, 0, 0, 0, 0, inv);
-      bp(b.ghost, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot - GHOST, inv); b.ghost.alpha = .3;
-      bp(b.blades, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot, inv);
-      tipS = b.weapon; tlx = G.gunTip[0] * R; tly = G.gunTip[1] * R;
+      bp(Q, UM, rig, 'body', vi, 0, 0, 0, 0, inv);
+      tip(bp(Q, UM, rig, 'weapon', vi, 0, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv));
+      bp(Q, UM, rig, 'tailRotor', 0, 0, G.tailRotor[0] * R, G.tailRotor[1] * R, p.tailRotor, inv);
+      bossEyes(Q, UM, rig, p, face, 0, 1, ti, inv);
+      mul(GM, UM, mat(GM, G.mast[0] * R, G.mast[1] * R, 0, 1, G.rotorFlat));
+      bp(Q, GM, rig, 'rotorDisc', 0, 0, 0, 0, 0, inv);
+      bp(Q, GM, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot - GHOST, inv, inv, inv, 0xffffff, .3);
+      bp(Q, GM, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot, inv);
+      tlx = G.gunTip[0] * R; tly = G.gunTip[1] * R;
     } else {
       const G = BOSS_GEO.drache, w = p.wing;
-      bp(b.wingB, rig, 'wing', 0, 0, G.wingB[0] * R, G.wingB[1] * R, WING_ROT * w + .08, inv);
-      b.wingB.scale.set(inv * .9, inv * .9 * (1 - WING_SQUASH * w)); b.wingB.tint = FAR_WING;
-      bp(b.tail, rig, 'tail', 0, 0, G.tail[0] * R, G.tail[1] * R, p.tailSwing, inv);
-      bp(b.body, rig, 'body', 0, 0, 0, 0, 0, inv);
+      bp(Q, UM, rig, 'wing', 0, 0, G.wingB[0] * R, G.wingB[1] * R, WING_ROT * w + .08, inv, inv * .9, inv * .9 * (1 - WING_SQUASH * w), FAR_WING);
+      bp(Q, UM, rig, 'tail', 0, 0, G.tail[0] * R, G.tail[1] * R, p.tailSwing, inv);
+      bp(Q, UM, rig, 'body', 0, 0, 0, 0, 0, inv);
       dragonHead(p.headRot, HD);
-      bp(b.neck, rig, 'neck', 0, 0, G.neck[0] * R, G.neck[1] * R, HD.na, inv);
-      b.g.position.set(HD.jx * R, HD.jy * R); b.g.rotation = p.headRot;
-      bp(b.head, rig, 'head', 0, 0, 0, 0, 0, inv);
-      bossEyes(b, rig, p, face, p.headRot, 1, ti, inv);
-      bp(b.wingF, rig, 'wing', 0, 0, G.wingF[0] * R, G.wingF[1] * R, WING_ROT * w - .1, inv);
-      b.wingF.scale.set(inv, inv * (1 - WING_SQUASH * w));
-      tipS = b.head; tlx = G.mouth[0] * R; tly = G.mouth[1] * R;
+      bp(Q, UM, rig, 'neck', 0, 0, G.neck[0] * R, G.neck[1] * R, HD.na, inv);
+      mul(GM, UM, mat(GM, HD.jx * R, HD.jy * R, p.headRot, 1, 1));
+      tip(bp(Q, GM, rig, 'head', 0, 0, 0, 0, 0, inv));
+      bossEyes(Q, GM, rig, p, face, p.headRot, 1, ti, inv);
+      bp(Q, UM, rig, 'wing', 0, 0, G.wingF[0] * R, G.wingF[1] * R, WING_ROT * w - .1, inv, inv, inv * (1 - WING_SQUASH * w));
+      tlx = G.mouth[0] * R; tly = G.mouth[1] * R;
     }
-    if (nBoss < BOSS_DBG) {
-      const d = bossDbg[nBoss++];
+    if (d) {
       d.id = u.id; d.type = type; d.turretFlip = p.turretFlip; d.turretRot = p.turretRot; d.rotorRot = p.rotorRot; d.tailRotor = p.tailRotor;
       d.wingPhase = p.wingPhase; d.tailSwing = p.tailSwing; d.headRot = p.headRot; d.track = p.track;
       d.tilt = p.tilt; d.recoil = p.recoil; d.frame = p.frame; d.fireT = u.fireT;
-      // Mündung: aus der Pose gerechnet (drawn), wie die Logik jetzt schießen würde (logic), Sprite (debugRig)
+      // Mündung: aus der Pose gerechnet (drawn), wie die Logik jetzt schießen würde (logic), Teil (debugRig)
       drawnMuzzle(u, p, d.drawn);
       d.hasLogic = !!u.tg;
       if (u.tg) { bossMuzzle(u, u.tg.x, u.tg.y, d.logic); d.logic.x += u.x; d.logic.y += u.y - (u.z || 0); }
-      d.tipSprite = tipS; d.tipLx = tlx * rigs.resolution; d.tipLy = tly * rigs.resolution;
+      d.tipLx = tlx * rigs.resolution; d.tipLy = tly * rigs.resolution;
     }
   }
 
@@ -515,36 +470,16 @@ export function createRenderer(canvasHost) {
      visible: unbenutzte Sprites bekommen Größe und Deckkraft 0. Fliegende (state 'fly' mit z > 0 oder
      Steigen) sind normale Sprites über den Bodentruppen und werfen einen Schatten. Aussehen aus
      pose.corpseLook: liegend flach (.55) und grau getönt, fade → Deckkraft, float wippt, sink und ash verblassen. */
-  const pcs = new Map();   // BaseTexture → { pc, arr, n }
-  const PC_PROPS = { vertices: true, position: true, rotation: true, uvs: true, tint: true };
-  function resetCorpsePCs() {
-    pcs.forEach(g => { corpseRoot.removeChild(g.pc); g.pc.destroy({ children: true }); });
-    pcs.clear();
-  }
-  function pcSprite(tex) {
-    const base = tex.baseTexture;
-    let g = pcs.get(base);
-    if (!g) {
-      const pc = new PIXI.ParticleContainer(PC_MAX, PC_PROPS, PC_MAX);
-      corpseRoot.addChild(pc); g = { pc, arr: [], n: 0 }; pcs.set(base, g);
-    }
-    let sp = g.arr[g.n];
-    if (!sp) {
-      if (g.arr.length >= PC_MAX) return null;
-      sp = new PIXI.Sprite(tex); g.pc.addChild(sp); g.arr.push(sp);
-    }
-    g.n++;
-    return sp;
-  }
-  const finishPC = g => {
-    for (let i = g.n; i < g.arr.length; i++) { const sp = g.arr[i]; if (sp.alpha !== 0) { sp.alpha = 0; sp.scale.set(0); } }
-    g.n = 0;
-  };
+  // Ruhende Leichen und Teile: eine QuadBatch (Task 13; vorher ein ParticleContainer je Atlas-Seite), in Listenreihenfolge
+  const corpseQ = createQuadBatch('corpseQuads');
+  corpseRoot.addChild(corpseQ);
+  function resetCorpsePCs() { corpseQ.clear(); }
 
   const LK = {};   // Ergebnis von corpseLook, wiederverwendet
   function drawCorpses(world, t, tm, inv) {
     let nb = 0, nbf = 0, np = 0, npf = 0;
     const list = world.corpses, V = viewR;
+    corpseQ.clear();
     for (let i = 0; i < list.length; i++) {
       const c = list[i];
       if (c.x < V.x0 || c.x > V.x1 || c.y < V.y0 || c.y > V.y1) continue;
@@ -559,20 +494,19 @@ export function createRenderer(canvasHost) {
       corpseLook(c, t, LK);
       if (LK.alpha <= .01) continue;
       const flying = c.state === 'fly' && (c.z > .5 || c.vz > 0);
-      const sp = flying ? flyPool.next() : pcSprite(tex);
-      if (!sp) continue;
       const a = body ? rig.anchors[name] : HALF;
-      sp.texture = tex; sp.anchor.set(a.ax, a.ay);
-      sp.position.set(c.x, c.y - c.z + LK.dy); sp.rotation = LK.rot;
-      sp.scale.set(c.face < 0 ? -inv : inv, inv * LK.sy); sp.tint = LK.tint; sp.alpha = LK.alpha;
-      if (flying) {
+      if (!flying) corpseQ.add(tex, mat(TM, c.x, c.y - c.z + LK.dy, LK.rot, c.face < 0 ? -inv : inv, inv * LK.sy), a.ax, a.ay, LK.tint, LK.alpha);
+      else {
+        const sp = flyPool.next();
+        sp.texture = tex; sp.anchor.set(a.ax, a.ay);
+        sp.position.set(c.x, c.y - c.z + LK.dy); sp.rotation = LK.rot;
+        sp.scale.set(c.face < 0 ? -inv : inv, inv * LK.sy); sp.tint = LK.tint; sp.alpha = LK.alpha;
         const r = rig.r;
         shadowParams(c.z, SH);
         if (body) blobShadow(c.x, c.y + r * 1.05, r * .85, r * .28); else blobShadow(c.x, c.y, r * .45, r * .18);
       }
       if (body) { if (flying) nbf++; else nb++; } else if (flying) npf++; else np++;
     }
-    pcs.forEach(finishPC);
     stats.corpses = nb; stats.corpsesFlying = nbf; stats.parts = np; stats.partsFlying = npf;
   }
 
@@ -673,7 +607,25 @@ export function createRenderer(canvasHost) {
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { zoneText.dirty = true; crownT.dirty = true; }).catch(() => {});
 
   /* ---------- Bild ---------- */
-  function draw(world, cam, t) {
+  // draw = prepare (Szene setzen, JS) + present (PIXI zeichnet); getrennt für __bench.measure
+  function draw(world, cam, t) { prepare(world, cam, t); present(); }
+  function present() { app.renderer.render(app.stage); }
+  // Wartet, bis die GPU fertig ist (nur für Messungen)
+  function gpuFinish() { const gl = app.renderer.gl; if (gl) gl.finish(); }
+  // Anzeigeobjekte je Ebene (alle Nachfahren, auch unsichtbare) und davon sichtbare (für Messungen)
+  function countObjects() {
+    const all = {}, vis = {};
+    const walk = (o, v, k) => {
+      for (const c of o.children || []) { all[k]++; const cv = v && c.visible !== false; if (cv) vis[k]++; walk(c, cv, k); }
+    };
+    for (const k of LAYERS) { all[k] = 0; vis[k] = 0; walk(L[k], L[k].visible, k); }
+    return { all, visible: vis };
+  }
+  // ms je Teil von prepare im letzten Bild (für __bench.measure)
+  const prepMs = { terrain: 0, units: 0, corpses: 0, proj: 0, fx: 0 };
+  function prepare(world, cam, t) {
+    let t0 = performance.now(), t1;
+    const lap = k => { t1 = performance.now(); prepMs[k] = t1 - t0; t0 = t1; };
     ensureWorld(world, cam);
     for (const r of dirtyRects) drawTerrain(world, r.x0, r.y0, r.x1, r.y1);
     dirtyRects.length = 0;
@@ -681,16 +633,21 @@ export function createRenderer(canvasHost) {
       terrTex.update(); terrUpT = t; terrChanged = false; terrForce = false;
     }
     drawOverlay(world);
+    shadowQ.clear();
+    lap('terrain');
     drawUnits(world, cam, t);
+    lap('units');
     const inv = 1 / rigs.resolution;
     drawCorpses(world, t, world.teamMode, inv);
     drawDebris(world);
+    lap('corpses');
     drawProjectiles(world);
-    shadowPool.finish(); flyPool.finish();
+    flyPool.finish();
+    lap('proj');
     const off = fx.frame(t);   // Partikel, Decal-Upload, Wackeln (klingt in Echtzeit ab)
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
-    app.renderer.render(app.stage);
+    lap('fx');
   }
 
   function resize(viewW, viewH) { app.renderer.resize(viewW, viewH); }
@@ -698,13 +655,13 @@ export function createRenderer(canvasHost) {
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugRig()): Atlas, Pool, gezeichnet/ausgelassen
   function debugRig() {
     return { resolution: rigs && rigs.resolution, atlasPages: rigs && rigs.pages, bakeMs: rigs && rigs.bakeMs, drawn: stats.drawn, culled: stats.culled,
-      groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [],
+      groundQuads: groundQ.count, airQuads: airQ.count, shadowQuads: shadowQ.count, types: rigs ? [...rigs.keys()] : [],
       // Boss-Sticker (Task 12c): Pose der im letzten Bild gezeichneten Bosse (turretRot, rotorRot, wingPhase,
       // tailSwing, headRot, track, tilt, recoil, frame), um zu prüfen, dass sie sich mit der Zeit ändern
       // tip = Mündung aus den gezeichneten Sprites (Welt), drawn = aus der Pose (muzzle.tipOffset), logic = wo
       // die Logik jetzt schießen würde (muzzle.bossMuzzle; im Schuss-Moment gleich drawn)
       bosses: bossDbg.slice(0, nBoss).map(d => {
-        const g = d.tipSprite ? scene.toLocal(d.tipSprite.toGlobal(new PIXI.Point(d.tipLx, d.tipLy))) : null;
+        const M = d.tipM, g = d.hasTip ? { x: M[0] * d.tipLx + M[2] * d.tipLy + M[4], y: M[1] * d.tipLx + M[3] * d.tipLy + M[5] } : null;
         const r1 = v => Math.round(v * 10) / 10;
         return { id: d.id, type: d.type, turretFlip: d.turretFlip, turretRot: d.turretRot, rotorRot: d.rotorRot, tailRotor: d.tailRotor,
           wingPhase: d.wingPhase, tailSwing: d.tailSwing, headRot: d.headRot, track: d.track, tilt: d.tilt, recoil: d.recoil, frame: d.frame, fireT: d.fireT,
@@ -717,13 +674,12 @@ export function createRenderer(canvasHost) {
   // (liegend im ParticleContainer / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
   // Haltung der lebenden MG-Schützen und Scharfschützen (stances: stand/down/prone/up, Spez. #22)
   function debugPhysics() {
-    let pcSprites = 0, pcUsed = 0;
-    pcs.forEach(g => { pcSprites += g.arr.length; for (const sp of g.arr) if (sp.alpha > 0) pcUsed++; });
+    const pcUsed = corpseQ.count;
     return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
       debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
       stances: { ...stats.stances },
-      projShadows: stats.projShadows, shadowLevels: stats.shadowLevels.slice(), particleContainers: pcs.size, pcSprites, pcUsed };
+      projShadows: stats.projShadows, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
   }
 
-  return { app, canvas: view, layers: L, fx, resize, markTerrainDirty, draw, setOverlay, consume, debugRig, debugPhysics };
+  return { app, canvas: view, layers: L, fx, resize, markTerrainDirty, draw, prepare, present, gpuFinish, countObjects, prepMs, setOverlay, consume, debugRig, debugPhysics };
 }

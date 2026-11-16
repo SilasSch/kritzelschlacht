@@ -344,10 +344,41 @@ function startBench(n = benchN || 2000, scenario = benchScen) {
   hist.length = 0;
   bench = { tick, k: 0, t: 0, n: 0, sim: 0, steps: 0, render: 0, frame: 0, frameMax: 0, boxN: 0, boxT: 0, boxSim: 0, boxRender: 0, boxFrame: 0,
     scenario, out: { scenario, fps: 0, simMs: 0, simStepMs: 0, steps: 0, renderMs: 0, frameMs: 0, frameMaxMs: 0, units: 0, lod: 0, t: 0,
-      history: hist, summary: benchSummary, restart: () => startBench(n, scenario) } };
+      history: hist, summary: benchSummary, measure: benchMeasure, restart: () => startBench(n, scenario) } };
   window.__bench = bench.out;
   return scenario;
 }
+// Messung mit angehaltener Schleife: warm Schritte (mit Zeichnen) vorweg, dann frames Bilder je aus einem
+// Schritt + Ereignissen + fx.update (simFx), renderer.prepare (draw, JS), renderer.present (render: PIXI
+// durchläuft und bündelt die Szene) und gl.finish (gpuWait). Liefert avg/p95 je Teil, die Teile von draw
+// (drawParts), die Anzeigeobjekte je Ebene (counts) und den Zustand der Szene.
+function benchMeasure(frames = 60, opt = {}) {
+  const warm = opt.warm ?? 30, wasPaused = game.paused;
+  game.paused = true;
+  let t = performance.now() / 1000;
+  const one = () => { simStep(); drainEvents(); renderer.fx.update(STEP, world); };
+  for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
+  const S = { simFx: [], draw: [], render: [], gpuWait: [], total: [] }, parts = {};
+  for (let i = 0; i < frames; i++) {
+    const a = performance.now(); one();
+    const b = performance.now(); renderer.prepare(world, cam, t += STEP);
+    const c = performance.now(); renderer.present();
+    const d = performance.now(); renderer.gpuFinish();
+    const e = performance.now();
+    S.simFx.push(b - a); S.draw.push(c - b); S.render.push(d - c); S.gpuWait.push(e - d); S.total.push(e - a);
+    for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
+  }
+  game.paused = wasPaused;
+  const st = v => { const s = v.slice().sort((x, y) => x - y); return { avg: r2(s.reduce((p, x) => p + x, 0) / s.length), p95: r2(s[Math.min(s.length - 1, Math.floor(s.length * .95))]) }; };
+  const out = { frames, warm };
+  for (const k in S) out[k] = st(S[k]);
+  for (const k in parts) parts[k] = r2(parts[k]);
+  const fd = renderer.fx.debug();
+  Object.assign(out, { drawParts: parts, counts: renderer.countObjects(), units: world.totalAlive, corpses: world.corpses.length,
+    particles: fd.particles, lod: renderer.fx.lod, view: `${renderer.app.renderer.width}x${renderer.app.renderer.height}@${renderer.app.renderer.resolution}` });
+  return out;
+}
+const r2 = v => Math.round(v * 100) / 100;
 // Mittel über die Sekunden ab fromSec (Standard 2: ohne den Aufbau der Szene), dazu die schlechteste Sekunde
 function benchSummary(fromSec = 2) {
   const h = bench.out.history.filter(s => s.t > fromSec);

@@ -300,8 +300,9 @@ test('Brennende Einheiten gedeckelt: höchstens BURN_FX_UNITS je Bild, Partikel 
   for (let i = 0; i < 120; i++) core.update(DT, w);
   assert.ok(core.stats().burning <= BURN_FX_UNITS, `${core.stats().burning}`);
   assert.ok(core.store.count <= FX_CAP);
-  const t0 = performance.now(); for (let i = 0; i < 60; i++) core.update(DT, w);
-  assert.ok(performance.now() - t0 < 200, 'schnell');
+  // Laufzeit misst tools/bench.mjs (fx core ms), nicht dieser Test
+  for (let i = 0; i < 60; i++) core.update(DT, w);
+  assert.ok(core.store.count <= FX_CAP);
 });
 
 test('Leiche in Lava (terrain ash): Asche-Fleck, Dampfwölkchen und Zischen (Spez. #17)', () => {

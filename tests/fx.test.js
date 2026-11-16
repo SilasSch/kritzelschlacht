@@ -172,9 +172,7 @@ test('Gedeckelt: 500 land-Ereignisse in einem Bild bleiben begrenzt', () => {
   const { core } = mkCore();
   const ev = [];
   for (let i = 0; i < 500; i++) ev.push({ type: 'land', x: i, y: 0, impact: 5000 });
-  const t0 = performance.now();
   core.consume(ev);
-  assert.ok(performance.now() - t0 < 50);
   assert.ok(core.store.count <= FRAME_LIMITS.land * 6, `${core.store.count}`);
   assert.equal(core.stats().skipped.land, 500 - FRAME_LIMITS.land);
   // im nächsten Bild gibt es wieder Budget

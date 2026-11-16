@@ -161,8 +161,9 @@ test('steht auf, wenn ein Krieger näher als 140 px kommt: up 0,8 s ohne Schuss,
   // dann steht er auf; bis dahin darf er liegend weiterschießen (Schüsse vor dem Aufstehen zählen hier nicht)
   const maxSteps = Math.ceil((MELEE_RECHECK + .04) / DT) + 1;
   let n = 0;
-  while (u.stance === 'prone' && n < maxSteps) { u.cd = 0; w.proj.length = 0; w.time += DT; think(w, u, DT); n++; }
-  assert.ok(n <= maxSteps, `steht nach ${n} Schritten auf`);
+  // Schleife darf über maxSteps hinaus laufen, damit die Grenze wirklich geprüft wird
+  while (u.stance === 'prone' && n < maxSteps * 3) { u.cd = 0; w.proj.length = 0; w.time += DT; think(w, u, DT); n++; }
+  assert.ok(n <= maxSteps, `steht nach ${n} Schritten auf (höchstens ${maxSteps})`);
   assert.equal(u.stance, 'up'); near(u.stanceT, PRONE_UP_T);
   thinkFor(w, u, PRONE_UP_T - DT * 2, () => { u.cd = 0; assert.equal(u.mx, 0); assert.equal(u.my, 0); });
   assert.equal(bullets(w), 0, 'beim Aufstehen kein Schuss');

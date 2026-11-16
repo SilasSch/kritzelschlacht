@@ -12,20 +12,16 @@ import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
 import { buildBench } from './bench.js';
 import { createRng } from './rng.js';
+import { SAVE_KEY, parseSave, serializeSave } from './save.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
-const SKEY = 'kritzelschlacht-v1';
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 /* ---------- Speicher ---------- */
-let save = { stars: {}, muted: false };
-try {
-  const s = JSON.parse(localStorage.getItem(SKEY) || 'null');
-  if (s && typeof s === 'object') save = Object.assign(save, s);
-  if (!save.stars || typeof save.stars !== 'object') save.stars = {};
-} catch (e) { /* kein Speicher */ }
-function persist() { try { localStorage.setItem(SKEY, JSON.stringify({ stars: save.stars, muted: save.muted })); } catch (e) { /* ignore */ } }
+let save;
+try { save = parseSave(localStorage.getItem(SAVE_KEY)); } catch (e) { save = parseSave(null); /* kein Speicher */ }
+function persist() { try { localStorage.setItem(SAVE_KEY, serializeSave(save)); } catch (e) { /* ignore */ } }
 
 /* ---------- Welt, Kamera, Renderer ---------- */
 const host = document.getElementById('app');

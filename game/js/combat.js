@@ -390,7 +390,7 @@ export function fire(world, u, t, kind, ax, ay) {
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
       sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R });
   }
-  emit(world, { type: 'shot', kind, x: mx, y: my, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
+  emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
   sound(world, K[3]);
 }
 
@@ -405,7 +405,7 @@ function breath(world, u, nx, ny) {
     if ((dx * nx + dy * ny) / (d || 1) < .82) return;
     hurt(world, v, T.dmg, 'fire', u);
   });
-  emit(world, { type: 'shot', kind: 'breath', x: u.x + nx * T.r, y: u.y - T.r * .6 + ny * T.r, face: u.face, nx, ny });
+  emit(world, { type: 'shot', kind: 'breath', x: u.x + nx * T.r, y: u.y - T.r * .6 + ny * T.r, z: u.z, face: u.face, nx, ny });
   sound(world, 'fire');
 }
 

@@ -1,5 +1,5 @@
 // Start, Spielzustand und Schleife. Fester Simulationsschritt 1/60 s, Tempo 1/2/4×, Zeitlupe 0,3×, Pause.
-// Leert world.events jedes Bild und reicht sie an Renderer (Fx), Audio und UI weiter.
+// Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
@@ -118,7 +118,7 @@ function clearWorld() {
   world.contested = false;
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0);
   undoStack.length = 0;
-  renderer.clearFx(); markAll(); rebuildHash(world);
+  renderer.fx.clear(); markAll(); rebuildHash(world);
 }
 
 function seedDemo() {
@@ -290,9 +290,9 @@ const actions = {
 /* ---------- Schleife ---------- */
 function drainEvents() {
   const ev = world.events;
+  renderer.consume(ev);        // Gelände-Änderungen und Effekte (fx.js, mit Budget je Bild)
   for (let i = 0; i < ev.length; i++) {
     const e = ev[i];
-    renderer.event(e);
     const k = eventSound(e);   // sound-Ereignisse und die Physik-Geräusche land/impact, splash, crash
     if (k) audio.play(k);
     ui.onEvent(e);
@@ -330,10 +330,10 @@ function frame(now) {
     while (acc >= STEP && n < MAX_STEPS) { simStep(); acc -= STEP; n++; }
     if (n >= MAX_STEPS) acc = 0;
     drainEvents();
-    renderer.stepFx(realDt * ts, world);
+    renderer.fx.update(realDt * ts, world);
   } else {
     drainEvents();
-    renderer.stepFx(realDt * .5, null);
+    renderer.fx.update(realDt * .5, null);
   }
   if (m && m.endT >= 0) { m.endT -= realDt; if (m.endT < 0) { m.endT = -1; finishMission(); } }
 
@@ -373,7 +373,8 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
 // scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water';
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
-// Zähler des letzten Bilds: renderer.debugPhysics().
+// Zähler des letzten Bilds: renderer.debugPhysics(); Effekte: fx.debug() (Partikel je Art, Sprites je
+// Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift).
 const scenes = {
   grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
@@ -387,7 +388,7 @@ const scenes = {
 };
 if (new URLSearchParams(location.search).has('debug')) {
   window.__kritzel = {
-    world, cam, renderer, game, ui, audio, actions,
+    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions,
     scene(name) {
       if (!scenes[name]) return Object.keys(scenes);
       if (game.mission) game.enterSandbox();

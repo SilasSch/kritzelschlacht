@@ -1,6 +1,7 @@
 // Reine Daten: Einheiten, Gelände, Kategorien, Teams, Missionen. Kein DOM, kein Math.random.
 export const CELL = 10;
 export const HASH_CELL = 40;
+export const PATH_RECHECK = .25;   // s zwischen zwei Linienprüfungen der Wegfindung je Einheit (combat.think)
 
 export const UNITS = {
   krieger:{n:'Krieger',cat:'armee',col:'#5b8def',r:9,hp:60,dmg:12,range:3,speed:52,cd:.8,cost:2,mass:1,d:'Marschiert in Reihe und umzingelt Gegner. Treffer von hinten machen +35 %.'},

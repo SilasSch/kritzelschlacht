@@ -1,5 +1,5 @@
 // Reine Welt: Einheiten, Gelände-Gitter, Spatial Hash, Zielsuche. Zufall nur über world.rng().
-import { UNITS, CELL, HASH_CELL, RANGED } from './data.js';
+import { UNITS, CELL, HASH_CELL, RANGED, PATH_RECHECK } from './data.js';
 import { createRng } from './rng.js';
 
 const HC = HASH_CELL;
@@ -54,8 +54,11 @@ export function spawn(world, type, x, y, team) {
     cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0, lofFlip: false, lofT: -9,
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0,   // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt
     stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
-    pathT: 0, pathBlk: false,   // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung, Linie zum Ziel verbaut
+    // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
+    // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
+    pathT: 0, pathBlk: 0,
   };
+  u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
   return u;

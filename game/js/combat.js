@@ -1,9 +1,9 @@
 // Reiner Kampf: KI, Waffen, Geschosse, Schaden/Rüstung, Explosionen, Mauertreffer.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
-import { CELL, HASH_CELL, UNITS } from './data.js';
+import { CELL, HASH_CELL, UNITS, PATH_RECHECK } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world.js';
-import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN } from './pathing.js';
+import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 
@@ -60,7 +60,6 @@ const LOF_HOLD = 2.5;         // so lange bleibt das Ausweichziel gesetzt
 const LOF_SIDE = .7;          // Tempo beim seitlichen Ausweichen
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
-const PATH_RECHECK = .25;    // s zwischen zwei Linienprüfungen der Wegfindung (je Einheit, nach id gestaffelt)
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
 const PATH_STUCK_T = 3;      // s Festsitzen an einer dünnen Mauer, nach denen trotz Weg eingeschlagen wird
 export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
@@ -569,7 +568,7 @@ export function think(world, u, dt) {
   // Stück, das sie bis zur Reichweite noch laufen müssen, sie schießen über Mauern), folgt die Einheit dem
   // Flussfeld ihrer Fraktion statt der geraden Richtung; Gruppenverhalten gilt nur auf offener Fläche.
   // Vor einer Mauer festgesteckt wird nur eingeschlagen, wenn kein Weg führt (flowDir null) oder der
-  // Weg länger ist als PATH_BASH_DETOUR × Luftlinie (und mindestens PATH_BASH_MIN px länger), oder nach
+  // Weg (bei Mauer auf der Linie) länger ist als PATH_BASH_DETOUR × Luftlinie (und mindestens PATH_BASH_MIN px länger), oder nach
   // PATH_STUCK_T s Festsitzen an einer Mauer, die das grobe Raster für begehbar hält (dünne Mauer, durch
   // die der Fluss führt). Steht die Einheit schon im Feld eines Gegners (fd.dist 0), geht sie direkt.
   const stuck = !T.fly && u.blk > .45 && world.terr[u.bcell] === 4;
@@ -579,12 +578,15 @@ export function think(world, u, dt) {
     if (u.pathT <= 0) {
       u.pathT = PATH_RECHECK + (u.id % 8) * .01;
       const L = T.range >= 20 ? Math.max(0, d - reach + PATH_RANGE_PAD) : d;
-      u.pathBlk = L > 0 && directBlocked(world, world.flow, u.x, u.y, u.x + nx * L, u.y + ny * L);
+      u.pathBlk = L > 0 ? directBlocked(world, world.flow, u.x, u.y, u.x + nx * L, u.y + ny * L) : 0;
     }
     if (u.pathBlk || stuck) fd = flowDir(world.flow, factionOf(world, u), u.x, u.y);
   }
-  // Kein sinnvoller Umweg: wie ohne Wegfindung gerade aufs Ziel zu und an der Mauer einschlagen
-  const noDetour = fd === null || (fd.dist > PATH_BASH_DETOUR * d && fd.dist > d + PATH_BASH_MIN);
+  // Kein sinnvoller Umweg: wie ohne Wegfindung gerade aufs Ziel zu und an der Mauer einschlagen. Die
+  // Umweg-Grenze gilt nur für Mauern; versperrt nur Lava die Linie, folgt die Einheit dem Fluss immer
+  // (er hat die Lava schon mit ×12 gegen den Umweg abgewogen).
+  const lavaOnly = !stuck && u.pathBlk === PATH_BLOCK_LAVA;
+  const noDetour = fd === null || (!lavaOnly && fd.dist > PATH_BASH_DETOUR * d && fd.dist > d + PATH_BASH_MIN);
   if (stuck && (noDetour || (u.blk > PATH_STUCK_T && pathOpen(world, world.flow, u.bcell)))) {
     if (u.cd <= 0) { u.cd = T.cd; u.swingT = .25; hitWall(world, u.bcell, (T.dmg || 8) * (T.splash ? 2.5 : 1.3), u.x, u.y); sound(world, 'hit'); }
     return;

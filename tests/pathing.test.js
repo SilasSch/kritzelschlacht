@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { hitWall } from '../game/js/combat.js';
-import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL } from '../game/js/pathing.js';
+import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA } from '../game/js/pathing.js';
 import { CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -75,8 +75,11 @@ test('flowDir: Lava wird über die Lücke umgangen', () => {
   const fl = createFlow(w); updateFlow(w, fl, DT);
   const d = flowDir(fl, 'blau', 500, 120);
   assert.ok(d && d.dy > .4, `zur Lücke: ${d && d.dx} ${d && d.dy}`);
-  assert.equal(directBlocked(w, fl, 500, 120, 1000, 120), true, 'gerade Linie quert Lava');
-  assert.equal(directBlocked(w, fl, 500, 400, 1000, 400), false, 'durch die Lücke frei');
+  assert.equal(directBlocked(w, fl, 500, 120, 1000, 120), PATH_BLOCK_LAVA, 'gerade Linie quert Lava');
+  assert.equal(directBlocked(w, fl, 500, 400, 1000, 400), 0, 'durch die Lücke frei');
+  // Mauer hinter der Lava zählt als Mauer (Umweg-Regel gilt dann)
+  wallRect(w, 900, 920, 100, 140); updateFlow(w, fl, DT);
+  assert.equal(directBlocked(w, fl, 500, 120, 1000, 120), PATH_BLOCK_WALL, 'Mauer schlägt Lava');
 });
 
 test('updateFlow: Puffer bleiben bei wiederholter Aktualisierung dieselben', () => {
@@ -202,7 +205,7 @@ test('Flieger ignorieren Mauern', () => {
   spawn(w, 'krieger', 1000, 400, 'rot');
   let hits = 0, maxDy = 0;
   run(w, 6, w => { hits += wallHits(w); if (g.alive) maxDy = Math.max(maxDy, Math.abs(g.y - 400)); });
-  assert.ok(g.x > 720 || !g.alive || g.x > 650, `Geist flog hinüber: ${g.x}`);
+  assert.ok(g.x > 720 || !g.alive, `Geist flog hinüber: ${g.x}`);
   assert.ok(maxDy < 40, `gerade Linie: ${maxDy}`);
   assert.equal(hits, 0);
 });
@@ -242,4 +245,38 @@ test('resizeWorld: Flussfeld passt sich der neuen Rastergröße an', async () =>
   assert.equal(w.flow.fields.get('blau').dist.length, w.flow.N);
   const d = flowDir(w.flow, 'blau', 400, 200);
   assert.ok(d && d.dy > .5, 'weiter zur Lücke');
+});
+
+test('Dauernde Geländeänderung: jedes der 19 Felder wird in begrenzter Schrittzahl neu berechnet', () => {
+  const w = mk(18);
+  for (let k = 0; k < 19; k++) spawn(w, 'krieger', 60 + k * 70, 300 + (k % 3) * 60, 't' + k);
+  rebuildHash(w);
+  const fl = createFlow(w);
+  for (let i = 0; i < 12; i++) updateFlow(w, fl, DT);
+  const last = new Map(), maxGap = new Map();
+  for (let i = 0; i < 120; i++) {
+    setCell(w, cellIndex(w, 700, 100 + (i % 40) * 10), i % 2 ? 4 : 0, 0);   // jede Runde ändert sich das Gelände
+    updateFlow(w, fl, DT);
+    for (const [f, field] of fl.fields) {
+      if (field.age === 0) { if (last.has(f)) maxGap.set(f, Math.max(maxGap.get(f) || 0, i - last.get(f))); last.set(f, i); }
+    }
+    if (i === 60) spawn(w, 'ritter', 700, 700, 'neu');
+    if (i === 61) assert.ok(fl.fields.get('neu').ready, 'neue Fraktion sofort bereit');
+  }
+  assert.equal(fl.fields.size, 20);
+  for (const [f] of fl.fields) {
+    assert.ok(last.has(f), `${f} nie neu berechnet`);
+    if (f !== 'neu') assert.ok((maxGap.get(f) || 0) <= 11, `${f}: Lücke ${maxGap.get(f)} Schritte`);
+  }
+});
+
+test('Lava ohne Mauer: Wolf weit weg von der Lücke folgt dem Fluss, auch bei langem Umweg', () => {
+  const w = mk(19);
+  wallRect(w, 700, 780, 0, 330, 2); wallRect(w, 700, 780, 470, 800, 2);   // Lücke y 330..470
+  const wolf = spawn(w, 'wolf', 670, 60, 'blau');
+  const e = spawn(w, 'krieger', 830, 60, 'rot'); e.T = { ...e.T, speed: 0 };   // Ziel bleibt stehen
+  let onLava = 0;
+  run(w, 12, w => { if (wolf.alive && w.terr[cellIndex(w, wolf.x, wolf.y)] === 2) onLava++; });
+  assert.ok(onLava <= 6, `auf Lava: ${onLava} Schritte`);
+  assert.ok(!e.alive || e.hp < e.T.hp || Math.hypot(wolf.x - e.x, wolf.y - e.y) < 60, 'Wolf kam beim Ziel an');
 });

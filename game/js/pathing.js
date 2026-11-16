@@ -21,6 +21,7 @@ export const PATH_MAX_PER_STEP = 2;      // Felder je Schritt höchstens
 export const PATH_BASH_DETOUR = 2.5;     // think: einschlagen erst, wenn der Flussweg länger ist als 2,5× Luftlinie
 export const PATH_BASH_MIN = 80;         // think: … und mindestens so viele px länger (kurze Wege um eine Ecke)
 export const PATH_LAVA_CELLS = 2;        // think: gerade Linie über so viele Lavazellen folgt auch dem Fluss
+export const PATH_BLOCK_WALL = 1, PATH_BLOCK_LAVA = 2;   // directBlocked: Art der Sperre (0 frei)
 
 const WALL = 4, LAVA = 2;
 const TCOST = [PATH_COST.free, PATH_COST.water, PATH_COST.lava, PATH_COST.forest, 0];   // nach Gelände-id
@@ -176,11 +177,19 @@ export function updateFlow(world, flow, dt) {
   if (s.winT >= 1) { s.rate = s.winN / s.winT; s.msRate = s.winMs / s.winT; s.winN = 0; s.winMs = 0; s.winT = 0; }
   // Ohne Gegner mit Bodentruppen gibt es kein Ziel: Felder ungültig, beim nächsten Gegner sofort neu
   if (groundF < 2) { for (let k = 0; k < m; k++) { list[k].ready = false; list[k].dirty = true; } return; }
+  for (let k = 0; k < m; k++) list[k].age += dt;
+  // Veraltete Felder zuerst: noch nie berechnete vor allen, sonst das älteste (so kommt bei Gelände-
+  // änderungen in jedem Schritt jede Fraktion reihum dran, keine bleibt mit altem Feld liegen)
   let budget = PATH_MAX_PER_STEP;
-  for (let k = 0; k < m; k++) {
-    const fl = list[k];
-    fl.age += dt;
-    if (budget > 0 && (fl.dirty || !fl.ready)) { timed(world, flow, fl); budget--; }
+  while (budget > 0) {
+    let bfl = null;
+    for (let k = 0; k < m; k++) {
+      const fl = list[k];
+      if (!fl.dirty && fl.ready) continue;
+      if (!bfl || (!fl.ready && bfl.ready) || (fl.ready === bfl.ready && fl.age > bfl.age)) bfl = fl;
+    }
+    if (!bfl) break;
+    timed(world, flow, bfl); budget--;
   }
   if (budget <= 0) return;
   // eine Auffrischung je Schritt: das älteste fällige Feld
@@ -230,10 +239,11 @@ export function pathOpen(world, flow, i) {
   return px < flow.PW && py < flow.PH && flow.cost[py * flow.PW + px] !== 0;
 }
 
-// Gerade Linie (x0, y0) → (x1, y1) auf dem Geländeraster (Gitterlauf): true, wenn sie eine Mauerzelle
-// oder mindestens PATH_LAVA_CELLS Lavazellen kreuzt. Ohne Mauern und Lava im Gelände sofort false.
+// Gerade Linie (x0, y0) → (x1, y1) auf dem Geländeraster (Gitterlauf): PATH_BLOCK_WALL, wenn sie eine
+// Mauerzelle kreuzt, sonst PATH_BLOCK_LAVA bei mindestens PATH_LAVA_CELLS Lavazellen, sonst 0. Ohne
+// Mauern und Lava im Gelände sofort 0.
 export function directBlocked(world, flow, x0, y0, x1, y1) {
-  if (!flow || !flow.hazards) return false;
+  if (!flow || !flow.hazards) return 0;
   const { GW, GH, terr } = world, dx = x1 - x0, dy = y1 - y0;
   let gx = clamp(x0 / CELL | 0, 0, GW - 1), gy = clamp(y0 / CELL | 0, 0, GH - 1);
   const tgx = clamp(x1 / CELL | 0, 0, GW - 1), tgy = clamp(y1 / CELL | 0, 0, GH - 1);
@@ -244,11 +254,11 @@ export function directBlocked(world, flow, x0, y0, x1, y1) {
   let lava = 0;
   for (let guard = GW + GH + 2; guard > 0; guard--) {
     const t = terr[gy * GW + gx];
-    if (t === WALL) return true;
-    if (t === LAVA && ++lava >= PATH_LAVA_CELLS) return true;
-    if (gx === tgx && gy === tgy) return false;
-    if (tx < ty) { if (tx > 1) return false; tx += tdx; gx += sx; } else { if (ty > 1) return false; ty += tdy; gy += sy; }
-    if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) return false;
+    if (t === WALL) return PATH_BLOCK_WALL;
+    if (t === LAVA) lava++;
+    if (gx === tgx && gy === tgy) break;
+    if (tx < ty) { if (tx > 1) break; tx += tdx; gx += sx; } else { if (ty > 1) break; ty += tdy; gy += sy; }
+    if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) break;
   }
-  return false;
+  return lava >= PATH_LAVA_CELLS ? PATH_BLOCK_LAVA : 0;
 }

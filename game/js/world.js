@@ -47,6 +47,7 @@ export function spawn(world, type, x, y, team) {
     hitT: 0, fireT: 1, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
     cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0, lofFlip: false, lofT: -9,
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0,   // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt
+    stance: 'stand', stanceT: 0, proneCd: 0,           // Liegen (combat.PRONE): Haltung, Restzeit des Übergangs, Sperre
   };
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);

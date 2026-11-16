@@ -12,6 +12,18 @@ export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
 
+// Liegen (Spez. #22): MG-Schützen und Scharfschützen legen sich hin, wenn ein Ziel in Reichweite ist und
+// kein Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R ist. Haltung u.stance: 'stand' → 'down'
+// (PRONE_DOWN_T s) → 'prone' → 'up' (PRONE_UP_T s) → 'stand'; u.stanceT ist die Restzeit des Übergangs.
+// Beim Hinlegen und Aufstehen weder Schuss noch Bewegung, liegend keine Bewegung. Liegend: Schaden durch
+// Kugel, Pfeil, Rakete und Explosion ×PRONE_DMG, fremde gerade Schüsse treffen nur mit PRONE_DODGE,
+// Streuung ×PRONE_SPREAD, Reichweite ×PRONE_RANGE. Verdeckte Schusslinie: liegend kein Ausweichen, nach
+// PRONE_BLOCK_T s steht er auf und legt sich frühestens PRONE_BLOCK_T s nach dem Aufstehen wieder hin.
+export const PRONE = new Set(['mg', 'sniper']);
+export const PRONE_DOWN_T = .6, PRONE_UP_T = .8, PRONE_MELEE_R = 140, PRONE_BLOCK_T = 2;
+export const PRONE_DMG = .5, PRONE_DODGE = .5, PRONE_SPREAD = .4, PRONE_RANGE = 1.15;
+const PRONE_HALF = new Set(['bullet', 'arrow', 'rocket', 'blast']);
+
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 const emit = (world, e) => { world.events.push(e); };
@@ -60,6 +72,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : kind === 'fire' ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
   if (t === 'geist' && kind !== 'fire') m *= .5;
+  if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
@@ -333,11 +346,12 @@ export function hasLineOfFire(world, u, target) {
   return clearPath(world, u, target.x, target.y, g.z0, g.zt);
 }
 
-// Zielpunkt eines Schusses: Vorhalt (Zielbewegung über die Flugzeit · 0.8) plus Streuung aus world.rng().
+// Zielpunkt eines Schusses: Vorhalt (Zielbewegung über die Flugzeit · 0.8) plus Streuung aus world.rng()
+// (liegend ×PRONE_SPREAD).
 const AIM = { x: 0, y: 0 };
 function aimPoint(world, u, t, kind) {
   const K = SHOT[kind], d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
-  const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2];
+  const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2] * (u.stance === 'prone' ? PRONE_SPREAD : 1);
   AIM.x = t.x + t.mx * lead * .8 + rnd(world, -sp, sp);
   AIM.y = t.y + t.my * lead * .8 + rnd(world, -sp, sp);
   return AIM;
@@ -386,10 +400,11 @@ export function fire(world, u, t, kind, ax, ay) {
     // Gerade: fliegt vom Körper des Schützen (Boden-x/y) zum Zielpunkt und prüft jeden Schritt das Segment;
     // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
     // Mündungsversatz verschoben), dur = len / speed: der Renderer interpoliert die Position wie bisher.
+    // tg: gezieltes Ziel; pass: liegende Körper, an denen der Schuss schon vorbeiging (stepProjectiles).
     const g = shotGeo(u, t, kind, ax, ay), ox = mx - u.x, oy = my - u.y;
     world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + g.nx * g.len + ox, y1: u.y + g.ny * g.len + oy,
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
-      sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R });
+      sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R, tg: t, pass: null });
   }
   emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
   sound(world, K[3]);
@@ -492,8 +507,9 @@ export function think(world, u, dt) {
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
   // Brand läuft in jedem Zustand (kann töten)
   if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
-  // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter)
-  if (u.state !== 'ok') return;
+  // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
+  // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
+  if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
   if (u.gt <= 0) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
@@ -509,6 +525,8 @@ export function think(world, u, dt) {
   if (u.type === 'reiter' && u.st > 0) { u.mx = u.cvx; u.my = u.cvy; u.face = u.cvx < 0 ? -1 : 1; return; }
   // Mörser halten Mindestabstand
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
+  // MG und Scharfschütze: Hinlegen, Liegen, Aufstehen (sonst weiter wie stehend)
+  if (PRONE.has(u.type) && stance(world, u, t, d, dx, dy, reach, dt)) return;
   if (d <= reach) {
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
     // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
@@ -561,6 +579,67 @@ export function think(world, u, dt) {
   if (LINE.has(u.type) && u.gn >= 3 && d > reach + 20) { const depth = (u.x - u.gx) * nx + (u.y - u.gy) * ny; sp *= clamp(1 - depth / 45, .35, 1.3); }
   u.mx = a[0] * sp; u.my = a[1] * sp;
   u.run += dt;
+}
+
+// Gegnerischer Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R? Wiederverwendeter Rückruf über
+// Modulvariablen (keine Allokation je Schritt), bricht beim ersten Treffer ab.
+let MN_W = null, MN_U = null, MN_F = null, MN_HIT = false;
+function meleeTest(v) {
+  if (v.T.range >= 20 || factionOf(MN_W, v) === MN_F) return false;
+  const dx = v.x - MN_U.x, dy = v.y - MN_U.y;
+  if (dx * dx + dy * dy >= PRONE_MELEE_R * PRONE_MELEE_R) return false;
+  MN_HIT = true; return true;
+}
+function meleeNear(world, u) {
+  MN_W = world; MN_U = u; MN_F = factionOf(world, u); MN_HIT = false;
+  query(world, u.x, u.y, PRONE_MELEE_R, meleeTest);
+  MN_W = null; MN_U = null; MN_F = null;
+  return MN_HIT;
+}
+
+function standUp(u, frac = 1) { u.stance = 'up'; u.stanceT = PRONE_UP_T * frac; }
+
+// Haltung von MG und Scharfschütze (Spez. #22) für einen Denkschritt mit Ziel t im Abstand d (reach:
+// normale Reichweite). Liefert true, wenn der Schritt damit erledigt ist (Übergang oder liegend), false,
+// wenn die Einheit stehend wie sonst weitermacht. Hinlegen nur, wenn das Ziel in normaler Reichweite ist,
+// kein Nahkämpfer nahe ist, der letzte Zielcheck frei war (blockedT 0) und keine Sperre läuft (proneCd).
+// Liegend: Nahkämpfer nahe oder Ziel jenseits von PRONE_RANGE · Reichweite → aufstehen; sonst ohne
+// Bewegung schießen. Verdeckte Linie: Feuer halten, nach PRONE_BLOCK_T s aufstehen und bis
+// PRONE_BLOCK_T s nach dem Aufstehen nicht wieder hinlegen (Zeit zum Ausweichen bzw. Umsehen).
+function stance(world, u, t, d, dx, dy, reach, dt) {
+  const T = u.T;
+  if (u.proneCd > 0) u.proneCd -= dt;
+  switch (u.stance) {
+    case 'down':
+      // Nahkämpfer beim Hinlegen: umkehren, so weit wie schon hingelegt
+      if (meleeNear(world, u)) { standUp(u, 1 - u.stanceT / PRONE_DOWN_T); return true; }
+      u.stanceT -= dt;
+      if (u.stanceT <= 0) { u.stance = 'prone'; u.stanceT = 0; }
+      return true;
+    case 'up':
+      u.stanceT -= dt;
+      if (u.stanceT <= 0) { u.stance = 'stand'; u.stanceT = 0; }
+      return true;
+    case 'prone': {
+      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u)) { standUp(u); return true; }
+      if (u.cd > 0) return true;
+      const kind = STRAIGHT_KIND[u.type];
+      aimPoint(world, u, t, kind);
+      const ax = AIM.x, ay = AIM.y;
+      if (!aimLine(world, u, t, kind, ax, ay)) {
+        u.blockedT += dt;
+        if (u.blockedT >= PRONE_BLOCK_T) { u.blockedT = 0; u.proneCd = PRONE_UP_T + PRONE_BLOCK_T; standUp(u); }
+        return true;
+      }
+      u.blockedT = 0;
+      attack(world, u, t, d, dx, dy, ax, ay);
+      return true;
+    }
+    default:
+      if (u.proneCd > 0 || u.blockedT > 0 || d > reach || meleeNear(world, u)) return false;
+      u.stance = 'down'; u.stanceT = PRONE_DOWN_T;
+      return true;
+  }
 }
 
 // Verdeckter Schütze: weicht senkrecht zur Zielrichtung aus (Seite über id % 2, Tempo ×0.7) und zählt
@@ -679,6 +758,8 @@ function healer(world, u, dt) {
 // Gerade Schüsse bewegen sich je Schritt um speed·dt und treffen das Erste auf dem Segment:
 // Kugeln enden dort (Mauer nimmt Schaden), Raketen und Feuerbälle explodieren dort.
 // Ohne Treffer: Kugeln enden BULLET_OVERSHOOT px hinter dem Zielpunkt, Raketen/Feuer explodieren am Zielpunkt.
+// Liegende Körper, auf die der Schuss nicht gezielt ist, trifft er nur mit PRONE_DODGE: ein Wurf je Geschoss
+// und Körper; geht er vorbei, kommt der Körper in p.pass und der Strahl läuft dahinter weiter.
 export function stepProjectiles(world, dt) {
   const proj = world.proj;
   for (let i = proj.length - 1; i >= 0; i--) {
@@ -693,7 +774,11 @@ export function stepProjectiles(world, dt) {
     }
     const s1 = Math.min(p.len, p.t * p.sp), x1 = p.sx + p.nx * s1, y1 = p.sy + p.ny * s1;
     const z1 = zAlong(p.z0, p.zt, p.el, s1);
-    const r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, null, 0);
+    let r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0);
+    while (r.unit && r.unit.stance === 'prone' && r.unit !== p.tg && world.rng() >= PRONE_DODGE) {
+      (p.pass || (p.pass = new Set())).add(r.unit);
+      r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0);
+    }
     if (r.unit || r.cell >= 0) {
       proj.splice(i, 1);
       const hx = p.x + (x1 - p.x) * r.t, hy = p.y + (y1 - p.y) * r.t;

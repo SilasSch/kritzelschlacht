@@ -6,8 +6,10 @@
 // Bewegung: Laufen und Neigung kommen aus u.mx/u.my (Laufgeschwindigkeit, die think() setzt).
 // Rückstoß u.vx/u.vy zählt bewusst nicht: wer weggeschubst wird, läuft nicht.
 // In der Luft (state 'air') dreht sich der Körper (spin), betäubt ('stun') wackelt er und schaut im Kreis.
+// Liegen (MG, Scharfschütze, combat.PRONE): prone 0..1 (Hinlegen/Aufstehen weich überblendet), lie
+// (Drehung des Körpers, Kopf in Blickrichtung), weaponLie (Waffe zurückgedreht, zeigt nach vorn).
 import { GRAVITY, CORPSE_FADE, SINK_T, ASH_T } from '../physics.js';
-import { MUZZLE_Z } from '../combat.js';
+import { MUZZLE_Z, PRONE_DOWN_T, PRONE_UP_T } from '../combat.js';
 
 export const RIG_PARTS = ['shadow', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
 
@@ -23,9 +25,23 @@ export const FLIP_V = 200;        // ab dieser Fluggeschwindigkeit (px/s) ein ga
 export const AIR_LEAN = .5;       // darunter nur Kippen bis 0.5 rad und zurück
 export const STUN_WOBBLE = .15, STUN_HZ = 2.2;   // Taumeln betäubter Figuren (rad, Hz)
 const DIZZY_HZ = 1.6;             // Pupillen kreisen
+export const PRONE_FLAT = .82;    // liegend etwas flacher (sx wirkt nach der Drehung senkrecht)
+export const PRONE_DROP = .3;     // liegend: Körpermitte r · 0.3 unter der stehenden Mitte (Bauch am Boden)
+export const PRONE_GUN = [-.2, -.4];   // liegend: Waffe in r-Einheiten (lokal) zum Kopf hin verschoben
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+
+// Anteil des Liegens 0..1 aus Haltung und Restzeit des Übergangs (smoothstep)
+export function proneOf(u) {
+  const s = u.stance;
+  if (s === 'prone') return 1;
+  let q;
+  if (s === 'down') q = 1 - clamp(u.stanceT / PRONE_DOWN_T, 0, 1);
+  else if (s === 'up') q = clamp(u.stanceT / PRONE_UP_T, 0, 1);
+  else return 0;
+  return q * q * (3 - 2 * q);
+}
 
 export function poseUnit(u, t, out = {}) {
   const T = u.T, fly = !!T.fly;
@@ -72,6 +88,17 @@ export function poseUnit(u, t, out = {}) {
   if (out.air || out.dizzy) {
     const a = TAU * DIZZY_HZ * t + u.seed;
     out.lookX = Math.cos(a) * LOOK; out.lookY = Math.sin(a) * LOOK;
+  }
+  // Liegen: um bis zu 90° in Blickrichtung gekippt (Kopf vorn, Bauch unten), etwas flacher, ohne Neigung;
+  // die Waffe dreht zurück und zeigt nach vorn. Blick in Weltrichtung: um −lie zurückgedreht.
+  const pr = proneOf(u);
+  out.prone = pr; out.lie = 0; out.weaponLie = 0;
+  if (pr > 0) {
+    const a = (u.face < 0 ? -1 : 1) * pr * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
+    out.lie = a; out.weaponLie = -pr * Math.PI / 2;
+    out.sx *= 1 - (1 - PRONE_FLAT) * pr; out.tilt *= 1 - pr;
+    const lx = out.lookX, ly = out.lookY;
+    out.lookX = lx * c + ly * s; out.lookY = -lx * s + ly * c;
   }
   return out;
 }

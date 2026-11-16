@@ -3,7 +3,7 @@
 // werden als Ereignisse in world.events geschrieben.
 import { CELL, HASH_CELL, UNITS } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
-import { applyImpulse, makeCorpse, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
+import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -80,26 +80,33 @@ export const PARTS = {
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
+// Abgeschossene Flieger, die beim Aufschlag abstürzen (combat.crash); Bienen und Geister fallen nur
+export const CRASH = new Set(['heli', 'drache']);
+export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;     // Explosion beim Aufschlag des Helis
+export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag des Drachen, ohne Schaden
 
 // Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete (auch von
 // einer Explosion geschleuderte) fliegen weiter. Alle anderen (Kugel, Nahkampf, Pfeil, Lava, Feuer,
 // Explosion unter der Abhebeschwelle) bekommen einen Hüpfer: vz 140–200 und 60–110 px/s vom Mörder weg
-// (ohne Mörder in Zufallsrichtung). Dazu die Teile laut PARTS mit Zufallsimpuls. Das Seelchen zeichnet
-// der Renderer zum death-Ereignis.
+// (ohne Mörder in Zufallsrichtung). Flieger bekommen nur den waagrechten Teil und fallen aus ihrer Höhe;
+// Heli und Drache tragen crash (Absturz beim Aufschlag, stepCorpses → crash). Die Abschussgutschrift
+// geschieht hier beim Tod (hurt), der Absturz selbst schreibt niemandem etwas gut. Dazu die Teile laut
+// PARTS mit Zufallsimpuls. Das Seelchen zeichnet der Renderer zum death-Ereignis.
 function die(world, v, src) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
   const T = v.T, sgn = () => (world.rng() < .5 ? -1 : 1);
   let vx = v.vx + v.mx, vy = v.vy + v.my, vz = v.vz;
   const vrot = sgn() * rnd(world, VROT_MIN, VROT_MAX);
   if (v.state !== 'air') {
-    vz = Math.max(0, vz) + rnd(world, HOP_VZ[0], HOP_VZ[1]);
+    if (!T.fly) vz = Math.max(0, vz) + rnd(world, HOP_VZ[0], HOP_VZ[1]);
     const sp = rnd(world, HOP_V[0], HOP_V[1]);
     let dx = src && src !== v ? v.x - src.x : 0, dy = src && src !== v ? v.y - src.y : 0;
     const l = Math.hypot(dx, dy);
     if (l > 1e-6) { dx /= l; dy /= l; } else { const a = world.rng() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); }
     vx += dx * sp; vy += dy * sp;
   }
-  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot));
+  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot,
+    CRASH.has(v.type) ? v.type : null));
   const parts = PARTS[v.type];
   for (let i = 0; i < parts.length; i++) {
     const a = world.rng() * Math.PI * 2, sp = rnd(world, PART_V[0], PART_V[1]);
@@ -126,15 +133,19 @@ function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 // Schubs, keine Betäubung). Leichte Körper werden auf MAX_FLING gedeckelt. Der Impuls wirkt vor dem
 // Schaden, damit die Leiche einer getöteten Einheit mitfliegt.
 const BLAST_PUSH = 9, BLAST_LIFT = .6;
+// Stoß I vom Punkt weg (dx, dy: Abstand, d: Länge), gedeckelt auf MAX_FLING · Masse; hebt nur ab LAUNCH_VZ ab
+function fling(v, dx, dy, d, I) {
+  const m = v.T.mass || 1;
+  if (I > MAX_FLING * m) I = MAX_FLING * m;
+  const iz = BLAST_LIFT * I;
+  applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
+}
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   query(world, x, y, R + 16, v => {
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
-    const fall = 1 - .5 * Math.min(1, d / R), m = v.T.mass || 1;
-    let I = dmg * BLAST_PUSH * fall;
-    if (I > MAX_FLING * m) I = MAX_FLING * m;
-    const iz = BLAST_LIFT * I;
-    applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
+    const fall = 1 - .5 * Math.min(1, d / R);
+    fling(v, dx, dy, d, dmg * BLAST_PUSH * fall);
     hurt(world, v, dmg * fall * (v === src ? .5 : 1), kind, src);
   });
   if (wallMul) {
@@ -154,19 +165,52 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
   sound(world, kind === 'fire' ? 'fire' : 'boom');
 }
 
+// Absturz eines abgeschossenen Fliegers beim ersten Bodenkontakt seiner Leiche (aus stepCorpses).
+// Heli: Explosion (R 50, Schaden 60, Mauern ×2) ohne Fraktion und ohne Schützen: trifft alle, schreibt
+// niemandem etwas gut. Drache: Stoß DRAGON_CRASH_I im Radius 70 vom Aufschlag weg (Deckel und
+// Abhebeschwelle wie bei Explosionen), ohne Schaden.
+export function crash(world, kind, x, y) {
+  emit(world, { type: 'crash', kind, x, y });
+  if (kind === 'heli') blast(world, x, y, HELI_CRASH_R, HELI_CRASH_DMG, null, null, 'blast', 2);
+  else if (kind === 'drache') {
+    query(world, x, y, DRAGON_CRASH_R + 16, v => {
+      const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
+      if (d <= DRAGON_CRASH_R + v.T.r) fling(v, dx, dy, d, DRAGON_CRASH_I);
+    });
+  }
+}
+
 // Ab hier zeigt die Mauer Risse (Darstellung im Renderer)
 export const WALL_CRACK_HP = 70;
 
+// Mauerbrocken: DEBRIS_N je zerbrochener Zelle, vom Zerstörer weg (Streuung ±DEBRIS_SPREAD rad; ohne
+// Herkunft in Zufallsrichtungen), dazu nach oben. Bewegung in physics.stepDebris.
+const DEBRIS_N = 3, DEBRIS_SPREAD = .7, DEBRIS_V = [60, 160], DEBRIS_VZ = [80, 220], DEBRIS_Z = [2, 8], DEBRIS_VROT = [4, 12];
+function spawnDebris(world, x, y, fromX, fromY) {
+  const dx = fromX == null ? 0 : x - fromX, dy = fromY == null ? 0 : y - fromY;
+  const aimed = dx * dx + dy * dy > 1e-6, base = aimed ? Math.atan2(dy, dx) : 0;
+  for (let k = 0; k < DEBRIS_N; k++) {
+    const a = aimed ? base + rnd(world, -DEBRIS_SPREAD, DEBRIS_SPREAD) : world.rng() * Math.PI * 2;
+    const sp = rnd(world, DEBRIS_V[0], DEBRIS_V[1]), vz = rnd(world, DEBRIS_VZ[0], DEBRIS_VZ[1]);
+    const z = rnd(world, DEBRIS_Z[0], DEBRIS_Z[1]), rot = world.rng() * Math.PI * 2;
+    const vrot = (world.rng() < .5 ? -1 : 1) * rnd(world, DEBRIS_VROT[0], DEBRIS_VROT[1]);
+    world.debris.push(makeDebris(x, y, z, Math.cos(a) * sp, Math.sin(a) * sp, vz, rot, vrot));
+  }
+}
+
 // fromX/fromY: Herkunft des Treffers (Flugrichtung der Trümmer).
 // Liefert true, wenn sich das Aussehen geändert hat (Risse ab WALL_CRACK_HP oder zerbrochen);
-// nur dann gibt es ein terrain-Ereignis.
+// nur dann gibt es ein terrain-Ereignis. Zerbricht die Zelle, fliegen Brocken (world.debris).
 export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   const { GW, GH } = world;
   const before = world.whp[i];
   world.whp[i] -= d;
   const gx = i % GW, gy = i / GW | 0;
   let broken = false;
-  if (world.whp[i] <= 0) { world.terr[i] = 0; world.towner[i] = 0; broken = true; }
+  if (world.whp[i] <= 0) {
+    world.terr[i] = 0; world.towner[i] = 0; broken = true;
+    if (before > 0) spawnDebris(world, gx * CELL + 5, gy * CELL + 5, fromX, fromY);
+  }
   emit(world, { type: 'wallHit', i, x: gx * CELL + 5, y: gy * CELL + 5, fromX, fromY, broken });
   const changed = broken || (before >= WALL_CRACK_HP && world.whp[i] < WALL_CRACK_HP);
   if (changed && emitTerrain) emit(world, { type: 'terrain', gx0: Math.max(0, gx - 1), gy0: Math.max(0, gy - 1), gx1: Math.min(GW - 1, gx + 1), gy1: Math.min(GH - 1, gy + 1) });

@@ -3,7 +3,7 @@
 import { MISSIONS, TERRAIN, CELL } from './data.js';
 import { spawn, setCell, rebuildHash, clearBattle } from './world.js';
 import { think, stepProjectiles } from './combat.js';
-import { integrate, collide, collideWalls, stepCorpses } from './physics.js';
+import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -20,7 +20,7 @@ export function step(world, dt) {
   for (const u of units) if (u.alive) collideWalls(world, u, dt);
   stepProjectiles(world, dt);
   stepCorpses(world, dt);
-  // stepDebris (Task 10) kommt hier hinzu
+  stepDebris(world, dt);
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
 }
 

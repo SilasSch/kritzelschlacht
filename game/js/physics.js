@@ -5,10 +5,11 @@
 // (Impulse). Zustände: 'ok' (läuft), 'air' (fliegt nach Impuls mit iz > 0), 'stun' (gelandet, betäubt).
 // Flieger (T.fly) halten immer T.flyZ, ignorieren iz und werden nie 'air' oder 'stun'.
 // Leichen (world.corpses, angelegt von combat.die) fliegen, drehen sich, prallen auf und rutschen aus
-// (stepCorpses); sie sind für Einheiten und untereinander kein Hindernis.
-import { CELL, HASH_CELL, UNITS } from './data.js';
+// (stepCorpses); sie sind für Einheiten und untereinander kein Hindernis. Mauerbrocken (world.debris,
+// angelegt von combat.hitWall) fliegen genauso, berühren aber nur Boden und Mauern (stepDebris).
+import { CELL, HASH_CELL } from './data.js';
 import { cellIndex } from './world.js';
-import { hurt } from './combat.js';
+import { hurt, crash } from './combat.js';
 
 export const GRAVITY = 900;          // px/s²
 export const GROUND_FRICTION = 8;    // je s: v *= exp(-8·dt) auf Fremdgeschwindigkeit am Boden
@@ -23,7 +24,7 @@ export const MAX_FLING = 700;        // Explosionen beschleunigen waagrecht höc
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const WALL = 4;
+const WATER = 1, LAVA = 2, WALL = 4;
 
 /* ---------- Impuls ---------- */
 // v += I / Masse. Bei iz > 0 hebt der Körper ab; peakZ wird ab hier gemessen.
@@ -74,9 +75,11 @@ export function integrate(world, dt) {
   }
 }
 
+// Erster Bodenkontakt im Wasser (vor einem Abpraller oder beim direkten Landen): splash
 function land(world, u) {
   const impact = -u.vz;
   u.z = 0;
+  if (!u.bounced && world.terr[cellIndex(world, u.x, u.y)] === WATER) world.events.push({ type: 'splash', x: u.x, y: u.y });
   u.impact = Math.max(u.impact || 0, impact);
   if (impact > BOUNCE_V && !u.bounced) { u.vz = impact * BOUNCE; u.bounced = true; return; }
   u.vz = 0; u.state = 'stun';
@@ -187,37 +190,38 @@ function unstick(world, u) {
   u.x = bx; u.y = by; u.px = bx; u.py = by; u.vx = 0; u.vy = 0;
 }
 
-/* ---------- Leichen ---------- */
-// Leiche bzw. Leichenteil (kind 'part', part = 'headgear' | 'weapon' | 'shield' | 'turret').
-// state: 'fly' (in Bewegung), 'rest' (liegt), 'float' (treibt im Wasser), 'sink' (geht unter, wird nach
-// SINK_T entfernt), 'ash' (in Lava verbrannt). t: Sekunden im aktuellen Zustand. fade > 0: verblasst,
-// wird bei 0 entfernt. px/py: letzte Position (für unstick).
-export const CORPSE_CAP = 1500;      // darüber verblassen die ältesten
-export const CORPSE_FADE = 1;        // s
+/* ---------- Fliegende Körper ohne Einheit (Leichen, Brocken) ---------- */
+// Gemeinsame Bewegung: fall (Schwerkraft, Luftwiderstand; true beim Bodenkontakt), bounce (Abprallen
+// ×0.3 über 40 px/s), slide (Bodenreibung; false, sobald |v| < 5), advance (Weg, Drehung, Mauerprobe am
+// Boden, Kartenrand). Einheiten berühren sie nicht.
 const C_BOUNCE = .3, C_BOUNCE_V = 40;     // Aufprall über 40 px/s prallt mit 30 % ab
 const C_FRICTION = 3, C_GRIP = 80;        // Bodenreibung: v *= exp(−3·dt), dazu −80 px/s² Haftreibung
 const C_ROT_BRAKE = 5;                    // Drehung am Boden: vrot *= exp(−5·dt)
 const C_REST_V = 5;                       // Ruhe bei |v| < 5 und z = 0
-const SINK_T = 2;                         // s, dann ist die Leiche untergegangen
-const HEAVY = 3;                          // ab dieser Masse sinkt eine Leiche im Wasser
 
-export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot) {
-  return { kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y };
+function fall(b, dt, drag) {
+  b.vz -= GRAVITY * dt; b.z += b.vz * dt;
+  b.vx *= drag; b.vy *= drag;
+  if (b.z > 0) return false;
+  b.z = 0; return true;
+}
+function bounce(b) { const impact = -b.vz; b.vz = impact > C_BOUNCE_V ? impact * C_BOUNCE : 0; }
+function slide(b, dt, fr, rb) {
+  const v = Math.hypot(b.vx, b.vy);
+  if (v < C_REST_V) return false;
+  const k = Math.max(0, v * fr - C_GRIP * dt) / v;
+  b.vx *= k; b.vy *= k; b.vrot *= rb;
+  return true;
+}
+function advance(world, b, dt) {
+  b.x += b.vx * dt; b.y += b.vy * dt; b.rot += b.vrot * dt;
+  if (b.z < WALL_CLEAR_Z) bodyWalls(world, b);
+  clampEdge(b, world.W, world.H);
 }
 
-// Zustand beim Liegenbleiben je nach Gelände
-function settle(world, c) {
-  c.vx = 0; c.vy = 0; c.vz = 0; c.vrot = 0; c.t = 0;
-  const tt = world.terr[cellIndex(world, c.x, c.y)];
-  if (tt === 1) {
-    const heavy = c.kind === 'part' ? c.part === 'turret' : (UNITS[c.type].mass || 1) >= HEAVY;
-    c.state = heavy ? 'sink' : 'float';
-  } else c.state = tt === 2 ? 'ash' : 'rest';
-}
-
-// Mauer am Boden: der Weg wird in Teilschritten ≤ SWEEP_SUB px geprüft; an der ersten Mauerzelle bleibt
-// die Leiche davor liegen (waagrechte Geschwindigkeit 0). Mehr Kollision gibt es nicht.
-function corpseWalls(world, c) {
+// Mauer am Boden: der Weg (px/py → x/y) wird in Teilschritten ≤ SWEEP_SUB px geprüft; an der ersten
+// Mauerzelle bleibt der Körper davor liegen (waagrechte Geschwindigkeit 0). Mehr Kollision gibt es nicht.
+function bodyWalls(world, c) {
   const terr = world.terr, px = c.px, py = c.py;
   if (terr[cellIndex(world, px, py)] === WALL) { unstick(world, c); return; }
   const dx = c.x - px, dy = c.y - py, d2 = dx * dx + dy * dy;
@@ -232,41 +236,111 @@ function corpseWalls(world, c) {
   }
 }
 
+/* ---------- Leichen ---------- */
+// Leiche bzw. Leichenteil (kind 'part', part = 'headgear' | 'weapon' | 'shield' | 'turret').
+// state: 'fly' (in Bewegung), 'rest' (liegt), 'float' (treibt FLOAT_T s im Wasser), 'sink' (geht SINK_T s
+// unter, dann entfernt), 'ash' (in Lava verbrannt, nach ASH_T s entfernt). Wasser und Lava fangen eine
+// Leiche beim ersten Bodenkontakt (kein Abprallen) oder sobald sie rutschend hineingerät. Ereignisse dazu:
+// splash beim Eintauchen; terrain mit kind 'ash' und dem Zellbereich gx0…gy1 für den Asche-Fleck.
+// crash ('heli' | 'drache' | null): abgeschossener Flieger, löst beim ersten Bodenkontakt combat.crash aus.
+// t: Sekunden im aktuellen Zustand. fade > 0: verblasst, wird bei 0 entfernt. px/py: letzte Position.
+export const CORPSE_CAP = 1500;      // darüber verblassen die ältesten
+export const CORPSE_FADE = 1;        // s
+const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
+
+export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null) {
+  return { kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y, crash };
+}
+
+const liquid = tt => tt === WATER || tt === LAVA;
+
+// Zustand beim Liegenbleiben je nach Gelände tt
+function settle(world, c, tt) {
+  c.vx = 0; c.vy = 0; c.vz = 0; c.vrot = 0; c.t = 0;
+  if (tt === WATER) {
+    c.state = 'float';
+    world.events.push({ type: 'splash', x: c.x, y: c.y });
+  } else if (tt === LAVA) {
+    c.state = 'ash';
+    const { GW, GH } = world, gx = clamp(c.x / CELL | 0, 0, GW - 1), gy = clamp(c.y / CELL | 0, 0, GH - 1);
+    world.events.push({ type: 'terrain', kind: 'ash', x: c.x, y: c.y,
+      gx0: Math.max(0, gx - 1), gy0: Math.max(0, gy - 1), gx1: Math.min(GW - 1, gx + 1), gy1: Math.min(GH - 1, gy + 1) });
+  } else c.state = 'rest';
+}
+
 export function stepCorpses(world, dt) {
-  const list = world.corpses, terr = world.terr, W = world.W, H = world.H;
+  const list = world.corpses, terr = world.terr;
   const drag = Math.exp(-AIR_DRAG * dt), fr = Math.exp(-C_FRICTION * dt), rb = Math.exp(-C_ROT_BRAKE * dt);
   // Deckel: die ältesten (vorne in der Liste) über CORPSE_CAP verblassen
   const over = list.length - CORPSE_CAP;
   for (let i = 0; i < over; i++) if (list[i].fade === 0) list[i].fade = CORPSE_FADE;
+  // Ein Absturz (crash) kann während der Schleife Leichen anhängen; sie laufen noch in diesem Schritt mit.
   let n = 0;
   for (let i = 0; i < list.length; i++) {
     const c = list[i];
     c.t += dt;
     if (c.fade > 0) { c.fade -= dt; if (c.fade <= 0) continue; }
-    if (c.state === 'sink' && c.t >= SINK_T) continue;
+    if (c.state === 'float') { if (c.t >= FLOAT_T) { c.state = 'sink'; c.t -= FLOAT_T; } }
+    else if (c.state === 'sink') { if (c.t >= SINK_T) continue; }
+    else if (c.state === 'ash') { if (c.t >= ASH_T) continue; }
     if (c.state === 'fly') {
       c.px = c.x; c.py = c.y;
       if (c.z > 0 || c.vz > 0) {
-        c.vz -= GRAVITY * dt; c.z += c.vz * dt;
-        c.vx *= drag; c.vy *= drag;
-        if (c.z <= 0) {
-          c.z = 0;
-          const impact = -c.vz;
-          c.vz = impact > C_BOUNCE_V ? impact * C_BOUNCE : 0;
+        if (fall(c, dt, drag)) {
+          if (c.crash !== null) { const k = c.crash; c.crash = null; crash(world, k, c.x, c.y); }
+          const tt = terr[cellIndex(world, c.x, c.y)];
+          if (liquid(tt)) { settle(world, c, tt); list[n++] = c; continue; }
+          bounce(c);
         }
       } else {
-        const v = Math.hypot(c.vx, c.vy);
-        if (v < C_REST_V) { settle(world, c); list[n++] = c; continue; }
-        const k = Math.max(0, v * fr - C_GRIP * dt) / v;
-        c.vx *= k; c.vy *= k; c.vrot *= rb;
+        const tt = terr[cellIndex(world, c.x, c.y)];
+        if (liquid(tt) || !slide(c, dt, fr, rb)) { settle(world, c, tt); list[n++] = c; continue; }
       }
-      c.x += c.vx * dt; c.y += c.vy * dt; c.rot += c.vrot * dt;
-      if (c.z < WALL_CLEAR_Z) corpseWalls(world, c);
-      clampEdge(c, W, H);
+      advance(world, c, dt);
     } else if (terr[cellIndex(world, c.x, c.y)] === WALL) {
       unstick(world, c);   // übermalt: heraus aus der Mauer
     }
     list[n++] = c;
+  }
+  list.length = n;
+}
+
+/* ---------- Mauerbrocken ---------- */
+// { x, y, z, vx, vy, vz, rot, vrot, t, fade, rest, px, py } aus combat.hitWall. Fliegen, prallen ab und
+// rutschen wie Leichen, kennen aber kein Wasser und keine Lava; sie verletzen niemanden und berühren keine
+// Einheiten. Liegen DEBRIS_REST s (t zählt ab dem Liegen), verblassen dann DEBRIS_FADE s und werden
+// entfernt. Über DEBRIS_CAP werden die ältesten (vorne in der Liste) sofort entfernt.
+export const DEBRIS_CAP = 400;
+export const DEBRIS_REST = 6;        // s
+export const DEBRIS_FADE = 1;        // s
+
+export function makeDebris(x, y, z, vx, vy, vz, rot, vrot) {
+  return { x, y, z, vx, vy, vz, rot, vrot, t: 0, fade: 0, rest: false, px: x, py: y };
+}
+
+export function stepDebris(world, dt) {
+  const list = world.debris;
+  if (list.length === 0) return;
+  const terr = world.terr;
+  const drag = Math.exp(-AIR_DRAG * dt), fr = Math.exp(-C_FRICTION * dt), rb = Math.exp(-C_ROT_BRAKE * dt);
+  let n = 0;
+  for (let i = list.length > DEBRIS_CAP ? list.length - DEBRIS_CAP : 0; i < list.length; i++) {
+    const d = list[i];
+    d.t += dt;
+    if (d.fade > 0) { d.fade -= dt; if (d.fade <= 0) continue; }
+    else if (d.rest && d.t >= DEBRIS_REST) d.fade = DEBRIS_FADE;
+    if (!d.rest) {
+      d.px = d.x; d.py = d.y;
+      if (d.z > 0 || d.vz > 0) { if (fall(d, dt, drag)) bounce(d); }
+      else if (!slide(d, dt, fr, rb)) {
+        d.vx = 0; d.vy = 0; d.vz = 0; d.vrot = 0; d.rest = true; d.t = 0;
+        list[n++] = d; continue;
+      }
+      advance(world, d, dt);
+    } else if (terr[cellIndex(world, d.x, d.y)] === WALL) {
+      unstick(world, d);   // übermalt: heraus aus der Mauer
+    }
+    list[n++] = d;
   }
   list.length = n;
 }

@@ -185,7 +185,7 @@ test('Leichen landen nicht in Mauern und bleiben in der Welt', () => {
   assert.notEqual(w.terr[cellIndex(w, c.x, c.y)], 4);
 });
 
-test('Leiche in Wasser schwimmt oder sinkt, in Lava wird sie zu Asche', () => {
+test('Leiche in Wasser treibt (auch schwere), in Lava wird sie zu Asche (Task 10: danach entfernt)', () => {
   const w = mkWorld();
   for (let gx = 0; gx < 30; gx++) for (let gy = 0; gy < 30; gy++) { setCell(w, gy * w.GW + gx, 1); setCell(w, gy * w.GW + gx + 60, 2); }
   const a = spawn(w, 'wolf', 150, 150, 'rot'), b = spawn(w, 'panzer', 150, 150, 'rot'), l = spawn(w, 'wolf', 750, 150, 'rot');
@@ -193,9 +193,11 @@ test('Leiche in Wasser schwimmt oder sinkt, in Lava wird sie zu Asche', () => {
   const ca = w.corpses.find(c => c.type === 'wolf' && c.x < 400), cb = w.corpses.find(c => c.type === 'panzer' && c.kind === 'body');
   const cl = w.corpses.find(c => c.type === 'wolf' && c.x > 400);
   run(w, 1.5);
-  assert.equal(ca.state, 'float'); assert.equal(cb.state, 'sink'); assert.equal(cl.state, 'ash');
+  assert.equal(ca.state, 'float'); assert.equal(cb.state, 'float'); assert.equal(cl.state, 'ash');
   run(w, 3);
-  assert.ok(w.corpses.includes(ca) && w.corpses.includes(cl)); assert.ok(!w.corpses.includes(cb), 'gesunken und entfernt');
+  assert.equal(ca.state, 'sink'); assert.equal(cb.state, 'sink'); assert.ok(!w.corpses.includes(cl), 'verbrannt und entfernt');
+  run(w, 2);
+  assert.ok(!w.corpses.includes(ca) && !w.corpses.includes(cb), 'gesunken und entfernt');
 });
 
 test('Deckel: bei 1.600 Leichen verblassen die ältesten 100 und verschwinden', () => {

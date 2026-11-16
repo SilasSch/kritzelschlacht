@@ -5,7 +5,7 @@
 //   frame(t)  pro Bild vor dem Rendern: Sprites setzen, Decals hochladen, Wackeln abklingen lassen (Echtzeit)
 //             und den Versatz { x, y } zurückgeben
 //   resize(W, H, res)  Weltgröße / Auflösung der Decal-Leinwand (leert sie)
-//   autoLod(frameMs)  Bilddauer (ms) an den Detailregler (fxcore.createLodGovernor); setLod(n | null) legt die
+//   autoLod(workMs, frameMs)  Arbeitszeit und Bildabstand (ms) an den Detailregler (fxcore.createLodGovernor); setLod(n | null) legt die
 //             Stufe fest (null: wieder automatisch); lod = aktuelle Stufe (Task 13)
 //   clear(), debug(), shake (Zahl)
 // Partikel liegen in QuadBatches (quads.js, Task 13; vorher ParticleContainer), alle aus einem Atlas:
@@ -144,11 +144,11 @@ export function createFx(renderer) {
 
   const core = createFxCore({ decal, crater });
 
-  /* ---------- Detailstufe (Task 13): automatisch aus der Bilddauer, oder fest per setLod ---------- */
+  /* ---------- Detailstufe (Task 13): automatisch aus der Arbeitszeit je Bild, oder fest per setLod ---------- */
   const gov = createLodGovernor();
   let lodFixed = null, lodChanges = 0;
-  function autoLod(ms) {
-    const lv = gov.update(ms), want = lodFixed === null ? lv : lodFixed;
+  function autoLod(ms, frameMs) {
+    const lv = gov.update(ms, frameMs), want = lodFixed === null ? lv : lodFixed;
     if (want !== core.lod) { core.lod = want; lodChanges++; }
     return core.lod;
   }

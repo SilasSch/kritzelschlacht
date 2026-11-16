@@ -458,8 +458,10 @@ function frame(now) {
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); }
-  // Fx-Detailstufe aus der Bilddauer (über 20 ms: Rauch aus, Partikel ×0,5; fx.debug().lod)
-  renderer.fx.autoLod(rawMs);
+  // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
+  // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
+  // Partikel ×0,5; fx.debug().lod)
+  renderer.fx.autoLod(performance.now() - w0, rawMs);
   if (bench) benchFrame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
   if (fpsBox) {
     fpsN++; fpsT += realDt;

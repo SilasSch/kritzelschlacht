@@ -82,24 +82,27 @@ export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10)
    Stufe 0: alles. Stufe 1 (langsame Bilder): Rauch aus (alle Wolken-Arten LOD_OFF, große halbtransparente
    Sprites mit viel Überzeichnung) und von allen übrigen Partikeln nur jedes zweite (×0,5 je Ereignis und je
    Bild bei Brand und Bossen), außer den einzelnen Zeichen LOD_KEEP (Bodenlicht, Kern, Seelchen, Pfeil).
-   Wer gerade senkt, entscheidet der Regler createLodGovernor aus der Bilddauer. */
+   Wann gesenkt wird, entscheidet der Regler createLodGovernor aus der Arbeitszeit je Bild. */
 export const LOD_MAX = 1;
 export const LOD_OFF = new Set(['smoke', 'dust', 'wisp', 'exhaust', 'wash']);
 export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow']);
-// Regler: gleitendes Mittel der Bilddauer (ms, Gewicht LOD_EMA); länger als LOD_SLOW_T s über LOD_SLOW_MS →
-// eine Stufe tiefer; LOD_RECOVER_T s unter LOD_OK_MS → eine Stufe zurück. Jedes weitere Senken verdoppelt die
-// Wartezeit bis zur Rückkehr (bis LOD_RECOVER_MAX), damit die Stufe nicht im Sekundentakt springt.
-// Bilder über LOD_IGNORE_MS (Tab im Hintergrund, Haltepunkt) zählen nicht.
-export const LOD_SLOW_MS = 20, LOD_SLOW_T = .3, LOD_OK_MS = 18, LOD_RECOVER_T = 3, LOD_RECOVER_MAX = 24;
+// Regler: update(workMs, frameMs). Gewertet wird die gemessene Arbeitszeit je Bild (Simulation, Effekte,
+// Zeichnen; ms), nicht der Bildabstand: ein auf 30 Hz begrenzter Browser hat 33 ms Abstand, aber wenig Arbeit.
+// Gleitendes Mittel der Arbeitszeit (Gewicht LOD_EMA); länger als LOD_SLOW_T s (Echtzeit aus frameMs) über
+// LOD_SLOW_MS (ein 60-Hz-Bild) → eine Stufe tiefer; LOD_RECOVER_T s unter LOD_OK_MS → eine Stufe zurück.
+// Jedes weitere Senken verdoppelt die Wartezeit bis zur Rückkehr (bis LOD_RECOVER_MAX), damit die Stufe
+// nicht im Sekundentakt springt. Bilder mit Abstand über LOD_IGNORE_MS (Tab im Hintergrund, Haltepunkt)
+// zählen nicht. Ohne frameMs gilt frameMs = workMs.
+export const LOD_SLOW_MS = 16, LOD_SLOW_T = .3, LOD_OK_MS = 12, LOD_RECOVER_T = 3, LOD_RECOVER_MAX = 24;
 export const LOD_EMA = .1, LOD_IGNORE_MS = 250;
 export function createLodGovernor() {
   const g = {
     level: 0, ema: 0, slowT: 0, okT: 0, hold: LOD_RECOVER_T, drops: 0,
-    // eine Bilddauer in ms werten; liefert die (neue) Stufe
-    update(ms) {
-      if (!(ms > 0) || ms > LOD_IGNORE_MS) return g.level;
+    // ein Bild werten (Arbeitszeit und Bildabstand in ms); liefert die (neue) Stufe
+    update(ms, frameMs = ms) {
+      if (!(ms > 0) || !(frameMs > 0) || frameMs > LOD_IGNORE_MS) return g.level;
       g.ema = g.ema > 0 ? g.ema + (ms - g.ema) * LOD_EMA : ms;
-      const dt = ms / 1000;
+      const dt = frameMs / 1000;
       if (g.ema > LOD_SLOW_MS) { g.slowT += dt; g.okT = 0; }
       else { g.slowT = 0; g.okT = g.ema < LOD_OK_MS ? g.okT + dt : 0; }
       if (g.level < LOD_MAX && g.slowT >= LOD_SLOW_T) {

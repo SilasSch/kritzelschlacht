@@ -43,26 +43,35 @@ test('lod wird auf 0..LOD_MAX begrenzt', () => {
 
 test('Regler: langsame Bilder senken die Stufe, schnelle holen sie zurück', () => {
   const g = createLodGovernor();
-  for (let i = 0; i < 120; i++) g.update(16.7);
+  for (let i = 0; i < 120; i++) g.update(8, 16.7);
   assert.equal(g.level, 0);
   // ein einzelner Ruckler senkt nicht
-  g.update(45); g.update(16.7); assert.equal(g.level, 0);
-  // dauerhaft 25 ms: nach etwa LOD_SLOW_T s (plus Anlauf des Mittels) Stufe 1
+  g.update(45); g.update(8, 16.7); assert.equal(g.level, 0);
+  // dauerhaft 25 ms Arbeit: nach etwa LOD_SLOW_T s (plus Anlauf des Mittels) Stufe 1
   let t = 0; while (g.level === 0 && t < 2) { g.update(25); t += .025; }
   assert.equal(g.level, 1); assert.ok(t >= LOD_SLOW_T && t < LOD_SLOW_T + .6, `t ${t}`);
-  // 19 ms (zwischen LOD_OK_MS und LOD_SLOW_MS): bleibt
-  for (let i = 0; i < 400; i++) g.update(19);
+  // 14 ms (zwischen LOD_OK_MS und LOD_SLOW_MS): bleibt
+  for (let i = 0; i < 400; i++) g.update(14, 16.7);
   assert.equal(g.level, 1);
-  // 16,7 ms: nach LOD_RECOVER_T s zurück
-  t = 0; while (g.level === 1 && t < 10) { g.update(16.7); t += .0167; }
+  // 8 ms Arbeit bei 16,7 ms Abstand: nach LOD_RECOVER_T s zurück
+  t = 0; while (g.level === 1 && t < 10) { g.update(8, 16.7); t += .0167; }
   assert.equal(g.level, 0); assert.ok(t >= LOD_RECOVER_T && t < LOD_RECOVER_T + 1, `t ${t}`);
   assert.ok(LOD_OK_MS < LOD_SLOW_MS);
+});
+
+test('Regler: auf 30 Hz begrenzter Browser mit wenig Arbeit bleibt auf Stufe 0, Zeit zählt nach Bildabstand', () => {
+  const g = createLodGovernor();
+  for (let i = 0; i < 300; i++) g.update(6, 33.3);     // 10 s bei 30 fps, 6 ms Arbeit
+  assert.equal(g.level, 0);
+  // viel Arbeit bei 30 Hz: senkt nach etwa LOD_SLOW_T s Echtzeit (nicht Arbeitszeit)
+  let t = 0; while (g.level === 0 && t < 3) { g.update(24, 33.3); t += .0333; }
+  assert.equal(g.level, 1); assert.ok(t >= LOD_SLOW_T && t < LOD_SLOW_T + .8, `t ${t}`);
 });
 
 test('Regler: jedes weitere Senken verdoppelt die Wartezeit, Hintergrund-Bilder zählen nicht', () => {
   const g = createLodGovernor();
   const slow = () => { while (g.level === 0) g.update(30); };
-  const back = () => { let t = 0; while (g.level === 1) { g.update(16.7); t += .0167; } return t; };
+  const back = () => { let t = 0; while (g.level === 1) { g.update(8, 16.7); t += .0167; } return t; };
   slow(); const t1 = back();
   slow(); const t2 = back();
   slow(); const t3 = back();

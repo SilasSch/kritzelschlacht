@@ -7,7 +7,8 @@ import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, ZONE, PLAYER } from './paint.js';
 import { createRenderer } from './render/renderer.js';
-import { createAudio } from './audio.js';
+import { createAudio, eventSound } from './audio.js';
+import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
@@ -292,7 +293,8 @@ function drainEvents() {
   for (let i = 0; i < ev.length; i++) {
     const e = ev[i];
     renderer.event(e);
-    if (e.type === 'sound') audio.play(e.k);
+    const k = eventSound(e);   // sound-Ereignisse und die Physik-Geräusche land/impact, splash, crash
+    if (k) audio.play(k);
     ui.onEvent(e);
   }
   ev.length = 0;
@@ -368,8 +370,34 @@ window.addEventListener('resize', queueResize);
 if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observe(host);
 
 /* ---------- Start ---------- */
-// Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.)
-if (new URLSearchParams(location.search).has('debug')) window.__kritzel = { world, cam, renderer, game, ui, audio, actions };
+// Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water';
+// crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
+// Zähler des letzten Bilds: renderer.debugPhysics().
+const scenes = {
+  grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
+  tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
+  heli() { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },
+  walls() { world.teamMode = true; tRect(world, 'mauer', .5, .25, .512, .75); placeRect(world, 'grenadier', 12, .62, .38, .66, .62, 'rot'); placeRect(world, 'krieger', 24, .3, .38, .36, .62, 'blau'); },
+  water() {
+    world.teamMode = true; tCircle(world, 'wasser', .5, .5, .18); tCircle(world, 'lava', .2, .5, .08);
+    placeRect(world, 'krieger', 30, .44, .4, .56, .6, 'blau'); placeRect(world, 'krieger', 8, .18, .45, .22, .55, 'blau');
+    placeRect(world, 'grenadier', 10, .8, .4, .84, .6, 'rot');
+  },
+};
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__kritzel = {
+    world, cam, renderer, game, ui, audio, actions,
+    scene(name) {
+      if (!scenes[name]) return Object.keys(scenes);
+      if (game.mission) game.enterSandbox();
+      clearWorld(); scenes[name](); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
+      return name;
+    },
+    crashHeli() { let n = 0; for (const u of world.units) if (u.alive && u.type === 'heli') { hurt(world, u, 1e9, 'rocket', null); n++; } return n; },
+    boom(x, y, R = 50) { blast(world, x, y, R, 40, null, null, 'blast', 2); },
+  };
+}
 seedDemo();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);

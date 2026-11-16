@@ -1,10 +1,14 @@
 // PixiJS-Renderer (PIXI 7.4.2 als globales PIXI). Zeichnet die Welt im Kamera-Ausschnitt.
 // Ebenen in Zeichenreihenfolge: terrain, decals, corpses, shadows, ground, projectiles, air, fx, overlay.
 // Liest die Welt nur; Effekte entstehen aus world.events (event()).
+// Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
+// am Boden (y) und werden mit der Höhe kleiner, blasser und weicher (pose.shadowParams).
 /* global PIXI */
 import { UNITS, TEAMS, CELL } from '../data.js';
 import { query, factionOf } from '../world.js';
+import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, shade, E } from './rig.js';
+import { shadowParams, corpseLook, projScreen } from './pose.js';
 
 const O = '#2a2a33';
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -12,6 +16,12 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const LAYERS = ['terrain', 'decals', 'corpses', 'shadows', 'ground', 'projectiles', 'air', 'fx', 'overlay'];
 const MAX_TEX = 4096;
+const TAU = Math.PI * 2;
+// Zauberstab und Mörserrohr liegen wie in der alten Zeichnung hinter dem Körper (und damit unter dem Hut)
+const BACK_WEAPON = new Set(['magier', 'moerser']);
+const PC_MAX = 4000;                 // Sprites je Leichen-ParticleContainer (Logik deckelt bei 1500 + Verblassende)
+const SHADOW_TINT = 0x282846;        // wie rgba(40,40,70) des Rig-Schattens
+const HALF = { ax: .5, ay: .5 };
 
 const colorCache = new Map();
 function C(s) {
@@ -144,7 +154,7 @@ export function createRenderer(canvasHost) {
     decalDirty = false; decalForce = false;
     dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
-    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); }
+    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); resetCorpsePCs(); }
   }
 
   /* ---------- Einheiten ----------
@@ -159,8 +169,63 @@ export function createRenderer(canvasHost) {
   const airUnits = new PIXI.Container(), airBars = new PIXI.Graphics();
   L.air.addChild(airUnits, airBars);
   const shadowPool = makePool(shadowSprites), groundPool = makeRigPool(groundUnits), airPool = makeRigPool(airUnits);
-  const projG = new PIXI.Graphics();
-  L.projectiles.addChild(projG);
+  // Fliegende Leichen, Teile und Brocken liegen über den Bodentruppen (eigene Sprites), ruhende in der
+  // Ebene corpses (Leichen im ParticleContainer, Brocken als Sprites darüber).
+  const flySprites = new PIXI.Container(), projG = new PIXI.Graphics();
+  L.projectiles.addChild(flySprites, projG);
+  const flyPool = makePool(flySprites);
+  const corpseRoot = new PIXI.Container(), debrisSprites = new PIXI.Container();
+  L.corpses.addChild(corpseRoot, debrisSprites);
+  const debrisPool = makePool(debrisSprites);
+
+  /* ---------- Gebackene Hilfstexturen: Schattenstufen, Teamring, Steine ---------- */
+  const canvasTex = (w, h, paint) => {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    paint(cv.getContext('2d')); return PIXI.Texture.from(cv);
+  };
+  // 3 Schattenstufen als weiße Kreise (BLOB px), per Skalierung zur Ellipse und per tint gefärbt:
+  // scharf (gefüllt), weich (Rand läuft aus), sehr weich (von der Mitte an auslaufend)
+  const BLOB = 64;
+  const softTex = [0, 1, 2].map(level => canvasTex(BLOB, BLOB, c => {
+    if (level === 0) c.fillStyle = '#fff';
+    else {
+      const g = c.createRadialGradient(32, 32, 0, 32, 32, 31);
+      if (level === 1) { g.addColorStop(0, '#fff'); g.addColorStop(.5, '#fff'); g.addColorStop(1, 'rgba(255,255,255,0)'); }
+      else { g.addColorStop(0, '#fff'); g.addColorStop(.35, 'rgba(255,255,255,.75)'); g.addColorStop(1, 'rgba(255,255,255,0)'); }
+      c.fillStyle = g;
+    }
+    c.beginPath(); c.arc(32, 32, 31, 0, TAU); c.fill();
+  }));
+  // Teamring der weichen Schatten (Flieger, Fliegende): Ellipse wie im Rig (1.12 r × 0.42 r, Strich 3) für r = 10
+  const RING_RES = 4, RING_R = 10;
+  const ringTex = canvasTex(Math.ceil((RING_R * 2.24 + 6) * RING_RES), Math.ceil((RING_R * .84 + 6) * RING_RES), c => {
+    c.setTransform(RING_RES, 0, 0, RING_RES, c.canvas.width / 2, c.canvas.height / 2);
+    c.strokeStyle = '#fff'; c.lineWidth = 3; c.beginPath(); c.ellipse(0, 0, RING_R * 1.12, RING_R * .42, 0, 0, TAU); c.stroke();
+  });
+  // Mauerbrocken: 3 kleine graue Steine (Radius 2.6–3.6 Welt-px)
+  const STONE_RES = 4;
+  const stoneTex = [2.6, 3.1, 3.6].map((r, k) => canvasTex(Math.ceil((r * 2 + 3) * STONE_RES), Math.ceil((r * 2 + 3) * STONE_RES), c => {
+    c.setTransform(STONE_RES, 0, 0, STONE_RES, c.canvas.width / 2, c.canvas.height / 2);
+    c.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * TAU, q = r * (.75 + .25 * hh(i + k * 7, k + 3));
+      if (i) c.lineTo(Math.cos(a) * q, Math.sin(a) * q * .85); else c.moveTo(Math.cos(a) * q, Math.sin(a) * q * .85);
+    }
+    c.closePath(); c.fillStyle = k === 1 ? '#8d929c' : '#a3a8b2'; c.fill();
+    c.lineWidth = 1; c.lineJoin = 'round'; c.strokeStyle = '#5b5f69'; c.stroke();
+  }));
+  // Stein je Brocken bleibt fest (die Liste wird verdichtet, Indizes wandern)
+  const stoneOf = new WeakMap();
+  let stoneNext = 0;
+
+  const SH = {};   // Ergebnis von shadowParams, wiederverwendet
+  // Schatten der Stufe SH.level als Ellipse rx × ry am Bodenpunkt (x, y)
+  function blobShadow(x, y, rx, ry) {
+    const s = shadowPool.next();
+    s.texture = softTex[SH.level]; s.anchor.set(.5); s.position.set(x, y); s.rotation = 0;
+    s.scale.set(2 * rx * SH.scale / BLOB, 2 * ry * SH.scale / BLOB); s.tint = SHADOW_TINT; s.alpha = SH.alpha;
+    stats.shadowLevels[SH.level]++;
+  }
 
   // Pool von Einheiten-Containern; Kinder in Zeichenreihenfolge der Rig-Teile (Schatten liegt woanders)
   function makeRigPool(container) {
@@ -172,7 +237,8 @@ export function createRenderer(canvasHost) {
         if (!r) {
           const c = new PIXI.Container();
           r = { c };
-          for (const k of ['body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon']) { const s = new PIXI.Sprite(); r[k] = s; c.addChild(s); }
+          // weaponB: Waffe hinter dem Körper (BACK_WEAPON), weapon: davor
+          for (const k of ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon']) { const s = new PIXI.Sprite(); r[k] = s; c.addChild(s); }
           container.addChild(c); arr.push(r);
         }
         r.c.visible = true; n++;
@@ -186,12 +252,16 @@ export function createRenderer(canvasHost) {
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
-  const stats = { drawn: 0, culled: 0 };
+  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
+    debris: 0, debrisFlying: 0, projShadows: 0, shadowLevels: [0, 0, 0] };
+  const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
   function drawUnits(world, cam, t) {
     const tm = world.teamMode;
     // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
-    const vx0 = cam.x - 80, vy0 = cam.y - 80, vx1 = cam.x + cam.viewW / cam.zoom + 80, vy1 = cam.y + cam.viewH / cam.zoom + 120;
+    // (unten mehr Rand: Körper werden bis gut 200 px über ihrem Bodenpunkt gezeichnet)
+    const vx0 = cam.x - 80, vy0 = cam.y - 80, vx1 = cam.x + cam.viewW / cam.zoom + 80, vy1 = cam.y + cam.viewH / cam.zoom + 220;
+    viewR.x0 = vx0; viewR.y0 = vy0; viewR.x1 = vx1; viewR.y1 = vy1;
     groundList.length = 0; airList.length = 0;
     let top = null, culled = 0;
     for (const u of world.units) {
@@ -201,11 +271,11 @@ export function createRenderer(canvasHost) {
       (u.T.fly ? airList : groundList).push(u);
     }
     groundList.sort(byY); airList.sort(byY);
-    stats.drawn = groundList.length + airList.length; stats.culled = culled;
+    stats.drawn = groundList.length + airList.length; stats.culled = culled; stats.airUnits = 0; stats.stunned = 0;
     const inv = 1 / rigs.resolution;
-    // Schatten und Teamringe liegen unter allen Körpern
+    // Schatten und Teamringe liegen unter allen Körpern (shadowPool.finish in draw, nach Leichen und Geschossen)
+    stats.shadowLevels[0] = stats.shadowLevels[1] = stats.shadowLevels[2] = 0;
     shadows(groundList, tm, inv); shadows(airList, tm, inv);
-    shadowPool.finish();
     // Schildwall: verbundene Schilde sichtbar machen
     links.clear();
     for (const u of groundList) {
@@ -225,11 +295,24 @@ export function createRenderer(canvasHost) {
     drawCrown(top);
   }
 
+  // Stufe 0 (am Boden): Rig-Schatten mit Teamring; höher: weicher Fleck plus Teamring in Teamfarbe
   function shadows(list, tm, inv) {
     for (const u of list) {
-      const rig = rigs.get(u.type), a = rig.anchors.shadow, s = shadowPool.next();
-      s.texture = rig.tex.shadow[tm ? TEAM_INDEX[u.team] || 0 : 0][0];
-      s.anchor.set(a.ax, a.ay); s.position.set(u.x, u.y); s.scale.set(inv); s.alpha = 1;
+      const rig = rigs.get(u.type), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
+      shadowParams(u.z, SH);
+      if (SH.level === 0) {
+        const a = rig.anchors.shadow, s = shadowPool.next();
+        s.texture = rig.tex.shadow[ti][0]; s.anchor.set(a.ax, a.ay); s.position.set(u.x, u.y); s.rotation = 0;
+        s.scale.set(inv * SH.scale); s.tint = 0xffffff; s.alpha = SH.scale;   // Textur trägt schon .13
+        stats.shadowLevels[0]++;
+        continue;
+      }
+      blobShadow(u.x, u.y + r * 1.05, r * .85, r * .28);
+      if (ti) {
+        const s = shadowPool.next();
+        s.texture = ringTex; s.anchor.set(.5); s.position.set(u.x, u.y + r); s.rotation = 0;
+        s.scale.set(r / RING_R * SH.scale / RING_RES); s.tint = C(TEAMS[u.team].c); s.alpha = SH.scale;
+      }
     }
   }
 
@@ -239,16 +322,26 @@ export function createRenderer(canvasHost) {
 
   // Container-Transform: Drehpunkt an den Füßen (Flieger: Körpermitte), damit Quetschen und Neigen
   // die Figur am Boden lassen; scale.x < 0 spiegelt nach links, die Neigung wirkt danach in Weltrichtung.
+  // Höhe: gezeichnet bei y − z (Flieger in Flughöhe statt des alten Versatzes rig.offY). In der Luft dreht
+  // sich die Figur um ihre Mitte (p.spin), betäubt taumelt sie um die Füße und zwei Sternchen kreisen.
   function bodies(list, pool, bars, t, tm, inv) {
     bars.clear();
     for (const u of list) {
       const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose), slot = pool.next();
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
-      const c = slot.c, A = rig.anchors, X = rig.tex;
-      c.position.set(u.x, u.y + rig.offY + rig.pivotY + p.bob);
-      c.pivot.set(0, rig.pivotY);
+      const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
+      if (p.air) { c.position.set(u.x, sy); c.pivot.set(0, 0); stats.airUnits++; }
+      else { c.position.set(u.x, sy + rig.pivotY + p.bob); c.pivot.set(0, rig.pivotY); }
       c.scale.set(p.sx * face, p.sy);
-      c.rotation = p.tilt;
+      // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
+      c.rotation = p.tilt + p.spin;
+      if (p.dizzy && u.stunT > .05) {
+        stats.stunned++;
+        for (let i = 0; i < 2; i++) {
+          const a = TAU * 1.6 * t + u.seed + i * Math.PI;
+          dot(u.x + Math.cos(a) * T.r * .8, sy - T.r * 1.3 + Math.sin(a) * T.r * .25, 1.5, 0xffd84d, .95);
+        }
+      }
       let f = X.body[vi]; part(slot.body, f[fr] || f[0], A.body, 0, 0, inv);
       if (rig.pupilL) {
         // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
@@ -262,12 +355,13 @@ export function createRenderer(canvasHost) {
       else slot.headgear.visible = false;
       if (rig.weapon) {
         // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
-        const w = slot.weapon, a = A.weapon, k = p.recoil;
+        const back = BACK_WEAPON.has(u.type), w = back ? slot.weaponB : slot.weapon, a = A.weapon, k = p.recoil;
+        (back ? slot.weapon : slot.weaponB).visible = false;
         part(w, X.weapon[vi][0], a, a.x - Math.cos(rig.axis) * k, a.y - Math.sin(rig.axis) * k, inv);
         w.rotation = p.weaponRot * rig.swing;
-      } else slot.weapon.visible = false;
+      } else { slot.weapon.visible = false; slot.weaponB.visible = false; }
       if (u.hp < T.hp && T.hp > 10) {
-        const w = Math.max(12, T.r * 1.6), y = u.y - T.r * (T.fly ? 2.1 : 1.6) - 4;
+        const w = Math.max(12, T.r * 1.6), y = sy - T.r * 1.6 - 4;
         bars.beginFill(0x2a2a33, .25).drawRect(u.x - w / 2, y, w, 3).endFill();
         bars.beginFill(u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f).drawRect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3).endFill();
       }
@@ -283,7 +377,7 @@ export function createRenderer(canvasHost) {
     crownG.clear();
     crownT.visible = !!top;
     if (!top) return;
-    const x = top.x, y = top.y - top.T.r * (top.T.fly ? 2.3 : 1.75) - 14;
+    const x = top.x, y = top.y - top.z - top.T.r * 1.75 - 14;
     crownG.lineStyle({ width: 1.3, color: C(O), join: PIXI.LINE_JOIN.ROUND }).beginFill(0xffc533);
     crownG.drawPolygon([x - 7, y + 5, x - 8.5, y - 4, x - 3.5, y, x, y - 6, x + 3.5, y, x + 8.5, y - 4, x + 7, y + 5]);
     crownG.endFill();
@@ -292,23 +386,115 @@ export function createRenderer(canvasHost) {
     crownT.position.set(x + 11, y + 5);
   }
 
+  /* ---------- Leichen, Teile, Brocken ----------
+     Ruhende Leichen und Teile (auch rutschende mit z = 0) liegen in PIXI.ParticleContainern in der Ebene
+     corpses, einer je Atlas-Seite (ein ParticleContainer zeichnet nur eine BaseTexture). Er kennt kein
+     visible: unbenutzte Sprites bekommen Größe und Deckkraft 0. Fliegende (state 'fly' mit z > 0 oder
+     Steigen) sind normale Sprites über den Bodentruppen und werfen einen Schatten. Aussehen aus
+     pose.corpseLook: liegend flach (.55) und grau getönt, fade → Deckkraft, float wippt, sink und ash verblassen. */
+  const pcs = new Map();   // BaseTexture → { pc, arr, n }
+  const PC_PROPS = { vertices: true, position: true, rotation: true, uvs: true, tint: true };
+  function resetCorpsePCs() {
+    pcs.forEach(g => { corpseRoot.removeChild(g.pc); g.pc.destroy({ children: true }); });
+    pcs.clear();
+  }
+  function pcSprite(tex) {
+    const base = tex.baseTexture;
+    let g = pcs.get(base);
+    if (!g) {
+      const pc = new PIXI.ParticleContainer(PC_MAX, PC_PROPS, PC_MAX);
+      corpseRoot.addChild(pc); g = { pc, arr: [], n: 0 }; pcs.set(base, g);
+    }
+    let sp = g.arr[g.n];
+    if (!sp) {
+      if (g.arr.length >= PC_MAX) return null;
+      sp = new PIXI.Sprite(tex); g.pc.addChild(sp); g.arr.push(sp);
+    }
+    g.n++;
+    return sp;
+  }
+  const finishPC = g => {
+    for (let i = g.n; i < g.arr.length; i++) { const sp = g.arr[i]; if (sp.alpha !== 0) { sp.alpha = 0; sp.scale.set(0); } }
+    g.n = 0;
+  };
+
+  const LK = {};   // Ergebnis von corpseLook, wiederverwendet
+  function drawCorpses(world, t, tm, inv) {
+    let nb = 0, nbf = 0, np = 0, npf = 0;
+    const list = world.corpses, V = viewR;
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      if (c.x < V.x0 || c.x > V.x1 || c.y < V.y0 || c.y > V.y1) continue;
+      const rig = rigs.get(c.type); if (!rig) continue;
+      const body = c.kind === 'body';
+      // Teile: Kopfbedeckung bzw. Waffen-Teil des Rigs (Schild des Ritters, Rohr des Panzers)
+      const set = body ? rig.tex.body : c.part === 'headgear' ? rig.tex.headgear : rig.tex.weapon;
+      if (!set) continue;
+      const vi = tm && rig.teamed ? TEAM_INDEX[c.team] || 0 : 0, tex = (set[vi] || set[0])[0];
+      corpseLook(c, t, LK);
+      if (LK.alpha <= .01) continue;
+      const flying = c.state === 'fly' && (c.z > .5 || c.vz > 0);
+      const sp = flying ? flyPool.next() : pcSprite(tex);
+      if (!sp) continue;
+      const a = body ? rig.anchors.body : HALF;
+      sp.texture = tex; sp.anchor.set(a.ax, a.ay);
+      sp.position.set(c.x, c.y - c.z + LK.dy); sp.rotation = LK.rot;
+      sp.scale.set(c.face < 0 ? -inv : inv, inv * LK.sy); sp.tint = LK.tint; sp.alpha = LK.alpha;
+      if (flying) {
+        const r = rig.r;
+        shadowParams(c.z, SH);
+        if (body) blobShadow(c.x, c.y + r * 1.05, r * .85, r * .28); else blobShadow(c.x, c.y, r * .45, r * .18);
+      }
+      if (body) { if (flying) nbf++; else nb++; } else if (flying) npf++; else np++;
+    }
+    pcs.forEach(finishPC);
+    stats.corpses = nb; stats.corpsesFlying = nbf; stats.parts = np; stats.partsFlying = npf;
+  }
+
+  function drawDebris(world) {
+    let n = 0, nf = 0;
+    const list = world.debris, V = viewR, inv = 1 / STONE_RES;
+    for (let i = 0; i < list.length; i++) {
+      const d = list[i];
+      if (d.x < V.x0 || d.x > V.x1 || d.y < V.y0 || d.y > V.y1) continue;
+      let k = stoneOf.get(d);
+      if (k === undefined) { k = stoneNext++ % 3; stoneOf.set(d, k); }
+      const flying = !d.rest && (d.z > .5 || d.vz > 0);
+      const sp = flying ? flyPool.next() : debrisPool.next();
+      sp.texture = stoneTex[k]; sp.anchor.set(.5); sp.position.set(d.x, d.y - d.z); sp.rotation = d.rot;
+      sp.scale.set(inv); sp.tint = 0xffffff; sp.alpha = d.fade > 0 ? Math.min(1, d.fade / DEBRIS_FADE) : 1;
+      if (flying) { shadowParams(d.z, SH); blobShadow(d.x, d.y + 1, 3, 1.2); nf++; } else n++;
+    }
+    debrisPool.finish();
+    stats.debris = n; stats.debrisFlying = nf;
+  }
+
+  /* ---------- Geschosse ----------
+     Lage auf dem Bildschirm (y − z) und Flugwinkel aus pose.projScreen; Bögen werfen einen Schatten am
+     Bodenpunkt ihrer Bahn, der mit der Höhe kleiner und weicher wird. */
+  const PS = {};
+  const PROJ_SHADOW = { arrow: 3, bomb: 4, mortar: 4.5, shell: 3.5 };
   function drawProjectiles(world) {
     const g = projG; g.clear();
+    let ns = 0;
     for (const p of world.proj) {
-      const q = p.t / p.dur, x = p.x0 + (p.x1 - p.x0) * q, y = p.y0 + (p.y1 - p.y0) * q - Math.sin(q * Math.PI) * p.h;
+      projScreen(p, PS);
+      const x = PS.x, y = PS.y, ca = Math.cos(PS.a), sa = Math.sin(PS.a);
+      if (p.arc) {
+        const q = p.t < p.dur ? p.t / p.dur : 1, rx = PROJ_SHADOW[p.kind] || 3;
+        shadowParams(p.z, SH);
+        blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
+      }
       if (p.kind === 'arrow') {
-        const q2 = Math.min(1, q + .04), x2 = p.x0 + (p.x1 - p.x0) * q2, y2 = p.y0 + (p.y1 - p.y0) * q2 - Math.sin(q2 * Math.PI) * p.h, a = Math.atan2(y2 - y, x2 - x);
-        g.lineStyle(1.5, 0x8a5a2b).moveTo(x - Math.cos(a) * 5, y - Math.sin(a) * 5).lineTo(x + Math.cos(a) * 5, y + Math.sin(a) * 5);
+        g.lineStyle(1.5, 0x8a5a2b).moveTo(x - ca * 5, y - sa * 5).lineTo(x + ca * 5, y + sa * 5);
       } else if (p.kind === 'bomb' || p.kind === 'mortar') {
         g.lineStyle(1, C(O)).beginFill(0x2f3340).drawCircle(x, y, 4).endFill();
         if (p.kind === 'bomb') g.lineStyle(0).beginFill(0xffb800).drawCircle(x + 2, y - 4, 1.6).endFill();
       } else if (p.kind === 'bullet') {
-        const a = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
-        g.lineStyle(1.6, 0xe0a020).moveTo(x - Math.cos(a) * 7, y - Math.sin(a) * 7).lineTo(x + Math.cos(a) * 3, y + Math.sin(a) * 3);
+        g.lineStyle(1.6, 0xe0a020).moveTo(x - ca * 7, y - sa * 7).lineTo(x + ca * 3, y + sa * 3);
       } else if (p.kind === 'rocket') {
-        const a = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
-        g.lineStyle(0).beginFill(0xff8a3d).drawCircle(x - Math.cos(a) * 6, y - Math.sin(a) * 6, 3).endFill();
-        g.lineStyle(3.4, C(O)).moveTo(x - Math.cos(a) * 4, y - Math.sin(a) * 4).lineTo(x + Math.cos(a) * 4, y + Math.sin(a) * 4);
+        g.lineStyle(0).beginFill(0xff8a3d).drawCircle(x - ca * 6, y - sa * 6, 3).endFill();
+        g.lineStyle(3.4, C(O)).moveTo(x - ca * 4, y - sa * 4).lineTo(x + ca * 4, y + sa * 4);
       } else if (p.kind === 'shell') {
         g.lineStyle(0).beginFill(0x2f3340).drawCircle(x, y, 3.2).endFill();
       } else {
@@ -316,6 +502,7 @@ export function createRenderer(canvasHost) {
         g.beginFill(0xffe066).drawCircle(x, y, 3.5).endFill();
       }
     }
+    stats.projShadows = ns;
   }
 
   /* ==========================================================================
@@ -337,14 +524,30 @@ export function createRenderer(canvasHost) {
 
   function event(e) {
     switch (e.type) {
-      case 'terrain': markTerrainDirty(e.gx0, e.gy0, e.gx1, e.gy1, false); break;
+      case 'terrain':
+        // Asche einer in Lava verbrannten Leiche: dunkler Fleck, das Gelände selbst ändert sich nicht
+        if (e.kind === 'ash') decal(e.x, e.y, 9, '#3a3d45', .14);
+        else markTerrainDirty(e.gx0, e.gy0, e.gx1, e.gy1, false);
+        break;
       case 'death': {
         const T = UNITS[e.unitType]; if (!T) break;
+        const y = e.y - (e.z || 0);   // Flieger sterben in ihrer Höhe
         decal(e.x, e.y + T.r * .7, T.r * 1.1, shade(T.col, -.25), .13);
-        dots(e.x, e.y, 5, 60, .5, 1.5, 3.5, T.col);
-        push({ k: 'soul', x: e.x, y: e.y - T.r, vx: rnd(-8, 8), vy: -28, life: 1.3, max: 1.3, r: Math.min(9, T.r * .7 + 2) });
+        dots(e.x, y, 5, 60, .5, 1.5, 3.5, T.col);
+        push({ k: 'soul', x: e.x, y: y - T.r, vx: rnd(-8, 8), vy: -28, life: 1.3, max: 1.3, r: Math.min(9, T.r * .7 + 2) });
         break;
       }
+      // Schlichte Platzhalter bis zu den Effekten aus Task 12: Staub, Spritzer, Aufprallring
+      case 'land': if (e.impact > 120) dots(e.x, e.y + 6, e.impact > 320 ? 6 : 3, 45, .45, 1.5, 3.2, '#cdc6b4'); break;
+      case 'splash':
+        dots(e.x, e.y, 8, 70, .45, 1.5, 3, '#62b9ea');
+        push({ k: 'ring', x: e.x, y: e.y, life: .35, max: .35, r: 12, col: '#62b9ea' });
+        break;
+      case 'crash':
+        shake = Math.max(shake, 7);
+        dots(e.x, e.y, 10, 90, .6, 2, 4, '#9aa0aa');
+        if (e.kind === 'drache') push({ k: 'ring', x: e.x, y: e.y, life: .4, max: .4, r: 70 });
+        break;
       case 'blast': {
         const n = e.kind === 'fire' ? 14 : 18;
         for (let i = 0; i < n; i++) {
@@ -381,11 +584,12 @@ export function createRenderer(canvasHost) {
   }
 
   // Partikel altern lassen; Flugspuren von Feuerbällen und Raketen
+  const TR = {};
   function stepFx(dt, world) {
     if (world && dt > 0) {
       for (const p of world.proj) {
         if (p.kind !== 'fire' && p.kind !== 'rocket') continue;
-        const q = p.t / p.dur, x = p.x0 + (p.x1 - p.x0) * q, y = p.y0 + (p.y1 - p.y0) * q;
+        projScreen(p, TR); const x = TR.x, y = TR.y;
         if (p.kind === 'fire' && Math.random() < dt * 30) push({ k: 'fire', x, y, vx: rnd(-15, 15), vy: rnd(-15, 15), life: .25, max: .25, r: rnd(2, 4) });
         if (p.kind === 'rocket' && Math.random() < dt * 36) push({ k: 'smoke', x, y, vx: rnd(-8, 8), vy: rnd(-8, 8), life: .5, max: .5, r: rnd(2, 3.5) });
       }
@@ -413,7 +617,7 @@ export function createRenderer(canvasHost) {
         case 'fire': dot(p.x, p.y, p.r * (.6 + a * .6), a > .6 ? 0xffe066 : a > .3 ? 0xff8a3d : 0xe5574f, a); break;
         case 'smoke': dot(p.x, p.y, p.r * (2 - a), 0x9aa0aa, a * .5); break;
         case 'flash': dot(p.x, p.y, p.r, 0xffe066, a); break;
-        case 'ring': g.lineStyle(2, C(O), a * .8).drawCircle(p.x, p.y, Math.max(.1, p.r * (1.15 - a * .5))); break;
+        case 'ring': g.lineStyle(2, C(p.col || O), a * .8).drawCircle(p.x, p.y, Math.max(.1, p.r * (1.15 - a * .5))); break;
         case 'plus':
           g.lineStyle(0).beginFill(0x2fbf6b, a).drawRect(p.x - 1.5, p.y - 5, 3, 10).drawRect(p.x - 5, p.y - 1.5, 10, 3).endFill(); break;
         case 'arrow':
@@ -477,7 +681,11 @@ export function createRenderer(canvasHost) {
     }
     drawOverlay(world);
     drawUnits(world, cam, t);
+    const inv = 1 / rigs.resolution;
+    drawCorpses(world, t, world.teamMode, inv);
+    drawDebris(world);
     drawProjectiles(world);
+    shadowPool.finish(); flyPool.finish();
     drawFx();
     shake *= .85;
     const sx = RM ? 0 : (Math.random() - .5) * shake, sy = RM ? 0 : (Math.random() - .5) * shake;
@@ -494,5 +702,15 @@ export function createRenderer(canvasHost) {
       groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [] };
   }
 
-  return { app, canvas: view, layers: L, resize, markTerrainDirty, draw, setOverlay, event, stepFx, clearFx, debugRig };
+  // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen
+  // (liegend im ParticleContainer / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe
+  function debugPhysics() {
+    let pcSprites = 0, pcUsed = 0;
+    pcs.forEach(g => { pcSprites += g.arr.length; for (const sp of g.arr) if (sp.alpha > 0) pcUsed++; });
+    return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
+      debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
+      projShadows: stats.projShadows, shadowLevels: stats.shadowLevels.slice(), particleContainers: pcs.size, pcSprites, pcUsed };
+  }
+
+  return { app, canvas: view, layers: L, resize, markTerrainDirty, draw, setOverlay, event, stepFx, clearFx, debugRig, debugPhysics };
 }

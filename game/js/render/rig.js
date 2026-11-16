@@ -399,7 +399,8 @@ const hexNum = s => parseInt(s.slice(1), 16);
      anchors: {[part]: {ax, ay, x, y}}   Sprite-Anker (0..1) und Lage des Drehpunkts im Rig (Welt-Einheiten),
      tex: {[part]: Texture[variante][bild]} (pupilL/pupilR/lid nur Variante 0; das Lid wird per tint eingefärbt),
      lidTint: [5 Farben als Zahl], eyes, eyeR (Augenradius in Welt-Einheiten), weapon-Daten (axis, swing),
-     r, fly, teamed, pivotY (Quetsch-Drehpunkt: Füße bzw. Mitte), offY (Flieger: Körper höher) }
+     r, fly, teamed, pivotY (Quetsch-Drehpunkt: Füße bzw. Mitte), offY (alter Flieger-Versatz; der Renderer
+     zeichnet Flieger seit der Höhenachse bei y − z und nutzt offY nicht mehr) }
    Die Map trägt zusätzlich resolution und destroy(). renderer bleibt für die Schnittstelle erhalten. */
 // eslint-disable-next-line no-unused-vars
 export function bakeRigTextures(renderer, resolution) {

@@ -6,7 +6,7 @@ export const PATH_RECHECK = .25;   // s zwischen zwei Linienprüfungen der Wegfi
 export const UNITS = {
   krieger:{n:'Krieger',cat:'armee',col:'#5b8def',r:9,hp:60,dmg:12,range:3,speed:52,cd:.8,cost:2,mass:1,d:'Marschiert in Reihe und umzingelt Gegner. Treffer von hinten machen +35 %.'},
   schuetze:{n:'Schütze',cat:'armee',col:'#6cc067',r:9,hp:40,dmg:12,range:210,speed:44,cd:1.2,cost:2.5,mass:1,d:'Schießt Pfeile und weicht Nahkämpfern aus.'},
-  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:15,range:3,speed:34,cd:1,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Anfällig für Bomben und Feuer.'},
+  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:15,range:3,speed:34,cd:1,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Anfällig für Bomben, Feuer und MG-Dauerfeuer.'},
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:10,range:90,speed:50,cd:1,cost:3,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},

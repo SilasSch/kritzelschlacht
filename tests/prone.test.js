@@ -210,6 +210,15 @@ test('liegend mit verdeckter Schusslinie: hält das Feuer ohne Ausweichen, steht
   assert.equal(u.stance, 'stand'); assert.ok(side > 0, 'weicht aus');
 });
 
+test('Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (kein Einfrieren halb hingelegt)', () => {
+  for (const [st, T, end] of [['down', PRONE_DOWN_T, 'prone'], ['up', PRONE_UP_T, 'stand']]) {
+    const w = mkWorld(), u = spawn(w, 'mg', 300, 400, 'blau');
+    u.stance = st; u.stanceT = T; rebuildHash(w);
+    thinkFor(w, u, T + .05);
+    assert.equal(u.stance, end, st);
+  }
+});
+
 test('geschleudert (air/stun): Haltung springt auf stand', () => {
   for (const st of ['air', 'stun']) {
     const w = mkWorld(), u = spawn(w, 'mg', 300, 400, 'blau'); lie(u);

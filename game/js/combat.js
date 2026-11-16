@@ -517,6 +517,8 @@ export function think(world, u, dt) {
     u.tg = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
   }
   const t = u.tg;
+  // Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (und ohne Umdrehen mitten in der Bewegung)
+  if (PRONE.has(u.type) && transit(world, u, dt)) return;
   if (!t) return;
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
@@ -599,27 +601,35 @@ function meleeNear(world, u) {
 
 function standUp(u, frac = 1) { u.stance = 'up'; u.stanceT = PRONE_UP_T * frac; }
 
+// Übergänge von MG und Scharfschütze (jeder Denkschritt, auch ohne Ziel): Sperre proneCd läuft ab,
+// 'down' und 'up' laufen weiter. Liefert true während 'down'/'up' (kein Schuss, keine Bewegung).
+function transit(world, u, dt) {
+  if (u.proneCd > 0) u.proneCd -= dt;
+  if (u.stance === 'down') {
+    // Nahkämpfer beim Hinlegen: umkehren, so weit wie schon hingelegt
+    if (meleeNear(world, u)) { standUp(u, 1 - u.stanceT / PRONE_DOWN_T); return true; }
+    u.stanceT -= dt;
+    if (u.stanceT <= 0) { u.stance = 'prone'; u.stanceT = 0; }
+    return true;
+  }
+  if (u.stance === 'up') {
+    u.stanceT -= dt;
+    if (u.stanceT <= 0) { u.stance = 'stand'; u.stanceT = 0; }
+    return true;
+  }
+  return false;
+}
+
 // Haltung von MG und Scharfschütze (Spez. #22) für einen Denkschritt mit Ziel t im Abstand d (reach:
-// normale Reichweite). Liefert true, wenn der Schritt damit erledigt ist (Übergang oder liegend), false,
-// wenn die Einheit stehend wie sonst weitermacht. Hinlegen nur, wenn das Ziel in normaler Reichweite ist,
-// kein Nahkämpfer nahe ist, der letzte Zielcheck frei war (blockedT 0) und keine Sperre läuft (proneCd).
-// Liegend: Nahkämpfer nahe oder Ziel jenseits von PRONE_RANGE · Reichweite → aufstehen; sonst ohne
-// Bewegung schießen. Verdeckte Linie: Feuer halten, nach PRONE_BLOCK_T s aufstehen und bis
-// PRONE_BLOCK_T s nach dem Aufstehen nicht wieder hinlegen (Zeit zum Ausweichen bzw. Umsehen).
+// normale Reichweite), stehend oder liegend (Übergänge: transit). Liefert true, wenn der Schritt damit
+// erledigt ist, false, wenn die Einheit stehend wie sonst weitermacht. Hinlegen nur, wenn das Ziel in
+// normaler Reichweite ist, kein Nahkämpfer nahe ist, der letzte Zielcheck frei war (blockedT 0) und keine
+// Sperre läuft (proneCd). Liegend: Nahkämpfer nahe oder Ziel jenseits von PRONE_RANGE · Reichweite →
+// aufstehen; sonst ohne Bewegung schießen. Verdeckte Linie: Feuer halten, nach PRONE_BLOCK_T s aufstehen
+// und bis PRONE_BLOCK_T s nach dem Aufstehen nicht wieder hinlegen (Zeit zum Ausweichen bzw. Umsehen).
 function stance(world, u, t, d, dx, dy, reach, dt) {
   const T = u.T;
-  if (u.proneCd > 0) u.proneCd -= dt;
   switch (u.stance) {
-    case 'down':
-      // Nahkämpfer beim Hinlegen: umkehren, so weit wie schon hingelegt
-      if (meleeNear(world, u)) { standUp(u, 1 - u.stanceT / PRONE_DOWN_T); return true; }
-      u.stanceT -= dt;
-      if (u.stanceT <= 0) { u.stance = 'prone'; u.stanceT = 0; }
-      return true;
-    case 'up':
-      u.stanceT -= dt;
-      if (u.stanceT <= 0) { u.stance = 'stand'; u.stanceT = 0; }
-      return true;
     case 'prone': {
       if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u)) { standUp(u); return true; }
       if (u.cd > 0) return true;

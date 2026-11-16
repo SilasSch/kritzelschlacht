@@ -1,7 +1,7 @@
 // Flache Sprite-Listen (Task 13): statt eines PIXI-Containers je Einheit mit Kind-Sprites rechnet der
 // Renderer die Lage jedes Teils selbst (2D-Matrizen wie PIXI.Transform) und schreibt Vierecke in eine
-// QuadBatch. Die QuadBatch ist ein einzelnes Anzeigeobjekt, das seine Vierecke in Listenreihenfolge direkt
-// an den Batch-Renderer von PIXI reicht (wie Sprite._render), mit ihrer Welt-Transformation (Kamera).
+// QuadBatch. Die QuadBatch ist ein einzelnes Anzeigeobjekt; ihr Zeichner (quadRenderer) packt die Vierecke in
+// Listenreihenfolge mit ihrer Welt-Transformation (Kamera) selbst und zeichnet sie mit dem PIXI-Batch-Shader.
 // Kein Szenengraph je Teil, keine ObservablePoint-/Color-Setter je Bild.
 //
 // Matrix = Float64Array(6) [a, b, c, d, tx, ty] wie PIXI.Matrix: x' = a·x + c·y + tx, y' = b·x + d·y + ty.
@@ -44,7 +44,6 @@ export function corners(v, M, w, h, ax, ay) {
 // Farbe 0xRRGGBB → Reihenfolge von Sprite._tintRGB (Color.toLittleEndianNumber)
 export const bgr = c => ((c & 0xff) << 16) | (c & 0xff00) | ((c >> 16) & 0xff);
 
-const IDX = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
 // Farbe mit Deckkraft wie Color.toPremultiplied (PIXI 7.4) für c in _tintRGB-Reihenfolge: bei rgb (Textur mit
 // vormultipliziertem Alpha) werden auch die Farbanteile mit alpha multipliziert
@@ -56,22 +55,70 @@ export function premul(c, alpha, rgb) {
   return (alpha * 255 << 24) + (r << 16) + (g << 8) + b;
 }
 
-// Schnellerer Packweg im Batch-Renderer für Vierecke der QuadBatch (Farbe schon in e._argb, 4 Ecken, feste
-// Indizes); alle anderen Elemente (Sprites, Graphics, Text) gehen den Weg von PIXI. Einmal je Renderer.
-function fastPack(plugin) {
-  const orig = plugin.packInterleavedGeometry;
-  plugin.packInterleavedGeometry = function (el, ab, ib, aIndex, iIndex) {
-    const argb = el._argb;
-    if (argb === undefined) return orig.call(this, el, ab, ib, aIndex, iIndex);
-    const f = ab.float32View, u32 = ab.uint32View, p = aIndex / this.vertexSize;
-    const uvs = el.uvs, v = el.vertexData, tid = el._texture.baseTexture._batchLocation;
-    for (let i = 0; i < 8; i += 2) {
-      f[aIndex++] = v[i]; f[aIndex++] = v[i + 1]; f[aIndex++] = uvs[i]; f[aIndex++] = uvs[i + 1];
-      u32[aIndex++] = argb; f[aIndex++] = tid;
-    }
-    ib[iIndex++] = p; ib[iIndex++] = p + 1; ib[iIndex++] = p + 2; ib[iIndex++] = p; ib[iIndex++] = p + 2; ib[iIndex] = p + 3;
-  };
-  plugin._quadFast = true;
+// Eigener Zeichner der QuadBatches (ein PIXI.ObjectRenderer je Renderer): packt alle Vierecke einer Liste in
+// einem engen Durchlauf in einen Vertex-Puffer im Format des PIXI-Batch-Shaders (x, y, u, v, Farbe, Textur-Nr.)
+// und zeichnet sie mit dessen Shader, ein drawElements je Abschnitt (höchstens QMAX Vierecke und maxTextures
+// Texturen). Die Arbeit des PIXI-Batch je Element (render, buildTexturesAndDrawCalls, buildDrawCalls) entfällt.
+// Wechselt danach ein Sprite o. Ä. den Zeichner zurück, bindet der PIXI-Batch seinen Shader und Puffer neu.
+const QMAX = 16383;   // 4 Ecken je Viereck, 16-Bit-Indizes
+let QR_CLASS = null;
+function quadRenderer(renderer) {
+  if (renderer._quadRenderer) return renderer._quadRenderer;
+  if (!QR_CLASS) {
+    QR_CLASS = class QuadRenderer extends PIXI.ObjectRenderer {
+      constructor(r) {
+        super(r);
+        this.geom = new PIXI.BatchGeometry(); this.state = PIXI.State.for2d();
+        this.cap = 0; this.f32 = null; this.u32 = null; this.texs = []; this.tick = 0;
+        this.blendPM = PIXI.utils.premultiplyBlendMode;
+      }
+      start() {
+        const r = this.renderer, p = r.plugins.batch;
+        r.state.set(this.state); r.texture.ensureSamplerType(p.maxTextures);
+        r.shader.bind(p._shader); r.geometry.bind(this.geom);
+      }
+      ensure(nq) {
+        if (nq <= this.cap) return;
+        const cap = Math.min(QMAX, Math.max(nq, this.cap * 2, 1024));
+        this.f32 = new Float32Array(cap * 24); this.u32 = new Uint32Array(this.f32.buffer);
+        const idx = new Uint16Array(cap * 6);
+        for (let i = 0, v = 0; i < idx.length; i += 6, v += 4) { idx[i] = v; idx[i + 1] = v + 1; idx[i + 2] = v + 2; idx[i + 3] = v; idx[i + 4] = v + 2; idx[i + 5] = v + 3; }
+        this.geom._indexBuffer.update(idx);
+        this.cap = cap;
+      }
+      draw(qb) {
+        const r = this.renderer, gl = r.gl, maxT = r.plugins.batch.maxTextures, W = qb.worldTransform, wa = qb.worldAlpha;
+        const a = W.a, b = W.b, c = W.c, d = W.d, tx = W.tx, ty = W.ty, q = qb.q, n = qb.n;
+        let i = 0;
+        while (i < n) {
+          this.ensure(Math.min(n - i, QMAX));
+          const f = this.f32, u = this.u32, tick = ++this.tick;
+          let nt = 0, k = 0, o = 0, pma = true;
+          for (; i < n && k < QMAX; i++) {
+            const e = q[i], tex = e._texture, base = tex.baseTexture;
+            if (!tex.valid) continue;
+            if (base._qTick !== tick) { if (nt === maxT) break; base._qTick = tick; base._qSlot = nt; this.texs[nt++] = base; }
+            const am = base.alphaMode > 0;
+            if (!am) pma = false;
+            const slot = base._qSlot, l = e.loc, uv = e.uvs, al = e.alpha * wa;
+            const argb = premul(e._tintRGB, al > 1 ? 1 : al, am);
+            for (let m = 0; m < 8; m += 2) {
+              const x = l[m], y = l[m + 1];
+              f[o++] = a * x + c * y + tx; f[o++] = b * x + d * y + ty; f[o++] = uv[m]; f[o++] = uv[m + 1]; u[o++] = argb; f[o++] = slot;
+            }
+            k++;
+          }
+          if (!k) break;
+          for (let t = 0; t < nt; t++) { r.texture.bind(this.texs[t], t); this.texs[t] = null; }
+          this.state.blendMode = this.blendPM[pma ? 1 : 0][qb.blend]; r.state.set(this.state);
+          this.geom._buffer.update(f.subarray(0, k * 24));
+          r.geometry.updateBuffers();
+          gl.drawElements(gl.TRIANGLES, k * 6, gl.UNSIGNED_SHORT, 0);
+        }
+      }
+    };
+  }
+  return (renderer._quadRenderer = new QR_CLASS(renderer));
 }
 
 // QuadBatch: add(tex, M, ax, ay, tint, alpha) mit Matrix M in Weltkoordinaten (Textur-Pixel werden über M
@@ -90,7 +137,7 @@ export function createQuadBatch(name, blendMode = 0) {
     slot(tex, tint, alpha) {
       let e = this.q[this.n];
       if (!e) {
-        e = { _texture: null, uvs: null, indices: IDX, loc: new Float32Array(8), vertexData: new Float32Array(8), worldAlpha: 1, alpha: 1, _tintRGB: 0xffffff, _argb: 0, blendMode: this.blend };
+        e = { _texture: null, uvs: null, loc: new Float32Array(8), alpha: 1, _tintRGB: 0xffffff };
         this.q.push(e);
       }
       this.n++;
@@ -119,18 +166,9 @@ export function createQuadBatch(name, blendMode = 0) {
     }
     render(renderer) {
       if (!this.visible || this.worldAlpha <= 0 || !this.renderable || !this.n) return;
-      const plugin = renderer.plugins.batch, W = this.worldTransform, wa = this.worldAlpha;
-      if (!plugin._quadFast) fastPack(plugin);
-      const a = W.a, b = W.b, c = W.c, d = W.d, tx = W.tx, ty = W.ty;
-      renderer.batch.setObjectRenderer(plugin);
-      for (let i = 0; i < this.n; i++) {
-        const e = this.q[i], l = e.loc, v = e.vertexData;
-        for (let k = 0; k < 8; k += 2) { const x = l[k], y = l[k + 1]; v[k] = a * x + c * y + tx; v[k + 1] = b * x + d * y + ty; }
-        const al = e.alpha * wa;
-        e.worldAlpha = al;
-        e._argb = premul(e._tintRGB, al > 1 ? 1 : al, e._texture.baseTexture.alphaMode > 0);
-        plugin.render(e);
-      }
+      const qr = quadRenderer(renderer);
+      renderer.batch.setObjectRenderer(qr);
+      qr.draw(this);
     }
     // Für Prüfungen: Ecken des Vierecks i in Weltkoordinaten
     loc(i) { return i < this.n ? Array.from(this.q[i].loc) : null; }

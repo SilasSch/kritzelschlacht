@@ -71,7 +71,6 @@ export function integrate(world, dt) {
     u.vx *= f; u.vy *= f;
     u.x += vx * dt; u.y += vy * dt;
     clampEdge(u, W, H);
-    u.moving = Math.abs(vx) + Math.abs(vy) > 6;
   }
 }
 

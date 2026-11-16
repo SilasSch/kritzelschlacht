@@ -72,10 +72,10 @@ export function spawn(world, type, x, y, team) {
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
     pathT: 0, pathBlk: 0,
     // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):
-    // px/py (physics.integrate; NaN = noch keine Lage vor dem Schritt), moving, bounced/impact (Abheben), fx/fy
+    // px/py (physics.integrate; NaN = noch keine Lage vor dem Schritt), bounced/impact (Abheben), fx/fy
     // (Blickrichtung; 0/0 = noch keine: kein Flankenbonus), follow (Sanitäter). Zahlenfelder starten als Zahl
     // (nicht undefined), damit V8 sie als Double führt und Schreiben keine neuen HeapNumbers anlegt.
-    px: NaN, py: NaN, moving: false, bounced: false, impact: 0, fx: 0, fy: 0, follow: false,
+    px: NaN, py: NaN, bounced: false, impact: 0, fx: 0, fy: 0, follow: false,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)

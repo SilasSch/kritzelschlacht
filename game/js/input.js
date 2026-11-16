@@ -2,8 +2,8 @@
 // actions = { paintAt(wx, wy, erase), strokeStart(), strokeEnd(), brushDelta(d), brushRadius() -> Welteinheiten,
 //             setCat(dir), pickSlot(n), eraser(), undo(), togglePause(), hover(wx, wy, inside) }
 import { screenToWorld, zoomAt, pan } from './camera.js';
+import { createWheel, wheelAction } from './wheel.js';
 
-const WHEEL_ZOOM = 1.15;
 const BRUSH_STEP = 8;
 
 export function bindInput(canvas, cam, actions) {
@@ -11,6 +11,7 @@ export function bindInput(canvas, cam, actions) {
   let painting = false, erase = false, panning = false;
   let last = null;   // letzte Stempelposition (Welt)
   let lastS = null;  // letzte Bildschirmposition (fürs Verschieben)
+  const wheel = createWheel();
 
   const local = (e) => {
     const r = canvas.getBoundingClientRect();
@@ -83,12 +84,13 @@ export function bindInput(canvas, cam, actions) {
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const d = e.deltaY || e.deltaX; // Shift+Rad liefert in Chrome/Firefox (Win/Linux) deltaX
-    if (!d) return;
-    const dir = d < 0 ? 1 : -1;
-    if (e.shiftKey) { actions.brushDelta(dir * BRUSH_STEP); return; }
+    // deltaY/deltaX vor deltaMode lesen: Firefox meldet dann Pixel statt Zeilen
+    const dy = e.deltaY, dx = e.deltaX;
+    const a = wheelAction(wheel, { deltaY: dy, deltaX: dx, deltaMode: e.deltaMode, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey }, cam.viewH);
+    if (!a) return;
+    if (a.brush) { actions.brushDelta(a.brush); return; }
     const s = local(e);
-    zoomAt(cam, s.x, s.y, dir > 0 ? WHEEL_ZOOM : 1 / WHEEL_ZOOM);
+    zoomAt(cam, s.x, s.y, a.zoom);
     hover(s, true);
   }, { passive: false });
 

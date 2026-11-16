@@ -98,21 +98,32 @@ function clampEdge(u, W, H) {
 // Wer in der Luft höher als sein Radius ist, wird übersprungen.
 const high = u => u.state === 'air' && u.z > u.T.r;
 
+// Jedes Paar einmal (Task 13): Zellen des Spatial Hash der Reihe nach, je Einheit die späteren in ihrer Zelle
+// und alle in den vier Nachbarzellen "vorwärts" (rechts, links unten, unten, rechts unten). Beide weichen im
+// selben Besuch aus, u um m_v/(m_u+m_v), v um m_u/(m_u+m_v) des halben Überlapps (vorher besuchte jede
+// Einheit das Paar einmal von ihrer Seite und schob nur sich selbst; gleiche Wirkung, halbe Arbeit).
+const FWD_X = [1, -1, 0, 1], FWD_Y = [0, 1, 1, 1];
+function pushPair(u, v) {
+  if (!v.alive || !!v.T.fly !== !!u.T.fly || high(v)) return;
+  const rr = (u.T.r + v.T.r) * .92, dx = u.x - v.x, dy = u.y - v.y, d2 = dx * dx + dy * dy;
+  if (d2 >= rr * rr) return;
+  const mu = u.T.mass || 1, mv = v.T.mass || 1, d = Math.sqrt(d2) || .01, k = (rr - d) / d * .5 / (mu + mv);
+  u.x += dx * k * mv; u.y += dy * k * mv;
+  v.x -= dx * k * mu; v.y -= dy * k * mu;
+}
 export function collide(world) {
-  const { units, hash, HW, HH } = world;
-  for (const u of units) {
-    if (!u.alive || high(u)) continue;
-    const ru = u.T.r, fu = !!u.T.fly, mu = u.T.mass || 1;
-    const gx = clamp(u.x / HC | 0, 0, HW - 1), gy = clamp(u.y / HC | 0, 0, HH - 1);
-    for (let yy = Math.max(0, gy - 1); yy <= Math.min(HH - 1, gy + 1); yy++) for (let xx = Math.max(0, gx - 1); xx <= Math.min(HW - 1, gx + 1); xx++) {
-      const cell = hash[yy * HW + xx];
-      for (let i = 0; i < cell.length; i++) {
-        const v = cell[i]; if (v === u || !v.alive || !!v.T.fly !== fu || high(v)) continue;
-        const rr = (ru + v.T.r) * .92, dx = u.x - v.x, dy = u.y - v.y, d2 = dx * dx + dy * dy;
-        if (d2 < rr * rr) {
-          const mv = v.T.mass || 1, d = Math.sqrt(d2) || .01, ov = (rr - d) / d, w = mv / (mu + mv);
-          u.x += dx * ov * .5 * w; u.y += dy * ov * .5 * w;
-        }
+  const { hash, HW, HH } = world;
+  for (let gy = 0; gy < HH; gy++) for (let gx = 0; gx < HW; gx++) {
+    const cell = hash[gy * HW + gx], n = cell.length;
+    for (let i = 0; i < n; i++) {
+      const u = cell[i];
+      if (!u.alive || high(u)) continue;
+      for (let j = i + 1; j < n; j++) pushPair(u, cell[j]);
+      for (let k = 0; k < 4; k++) {
+        const nx = gx + FWD_X[k], ny = gy + FWD_Y[k];
+        if (nx < 0 || nx >= HW || ny >= HH) continue;
+        const c2 = hash[ny * HW + nx];
+        for (let j = 0; j < c2.length; j++) pushPair(u, c2[j]);
       }
     }
   }

@@ -296,6 +296,8 @@ export function createFxCore(hooks = {}, opt = {}) {
     const p = add('wisp', x, y, WISP.life * rnd(.8, 1.15), r, col); if (!p) return;
     p.vx = WISP.wind + rnd(-4, 4); p.vy = -WISP.rise * rnd(.8, 1.2); p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);
   }
+  // Dampfwölkchen (gelöschter Brand, Leiche in Lava)
+  function steam(x, y) { for (let i = 0; i < 3; i++) wisp(x + rnd(-4, 4), y - rnd(2, 8), rnd(2.5, 4), 0xe3e8ee); }
 
   // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z; beim Boss-Drachen das gezeichnete Maul, muzzle.js)
   // → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden
@@ -430,8 +432,12 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'terrain':
-        // Asche einer in Lava verbrannten Leiche: dunkler Fleck; andere terrain-Ereignisse gehen ans Gelände
-        if (e.kind === 'ash') decal(e.x, e.y, 9, ASH, .14);
+        // Asche einer in Lava versunkenen Leiche: dunkler Fleck und Zischen (Dampfwölkchen wie bei extinguish,
+        // Ton über audio.eventSound); andere terrain-Ereignisse gehen ans Gelände
+        if (e.kind === 'ash') {
+          decal(e.x, e.y, 9, ASH, .14);
+          if (take('misc')) steam(e.x, e.y);
+        }
         break;
       case 'death': {
         const T = UNITS[e.unitType]; if (!T) break;
@@ -465,7 +471,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       }
       case 'extinguish':
         // Dampfwölkchen
-        if (take('misc')) for (let i = 0; i < 3; i++) wisp(e.x + rnd(-4, 4), e.y - rnd(2, 8), rnd(2.5, 4), 0xe3e8ee);
+        if (take('misc')) steam(e.x, e.y);
         break;
       case 'burn': if (take('misc')) { const p = add('fire', e.x + rnd(-4, 4), e.y, .4, 3); if (p) p.vy = -40; } break;
       case 'wallHit':

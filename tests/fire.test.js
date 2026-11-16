@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { attack, think, ignite, BURN_T, BURN_DPS, BURN_MAX_GEN, SPREAD_DT, SPREAD_P, SPREAD_PAD } from '../game/js/combat.js';
 import { step, placeCircle } from '../game/js/sim.js';
+import { eventSound } from '../game/js/audio.js';
 import { createFxCore, look, GLOW_KINDS, WARM_KINDS, FRAME_LIMITS, FX_CAP, BURN_FX_UNITS } from '../game/js/render/fxcore.js';
 
 const DT = 1 / 60;
@@ -301,6 +302,21 @@ test('Brennende Einheiten gedeckelt: höchstens BURN_FX_UNITS je Bild, Partikel 
   assert.ok(core.store.count <= FX_CAP);
   const t0 = performance.now(); for (let i = 0; i < 60; i++) core.update(DT, w);
   assert.ok(performance.now() - t0 < 200, 'schnell');
+});
+
+test('Leiche in Lava (terrain ash): Asche-Fleck, Dampfwölkchen und Zischen (Spez. #17)', () => {
+  const core = mkCore();
+  core.consume([{ type: 'terrain', kind: 'ash', x: 300, y: 300, gx0: 29, gy0: 29, gx1: 31, gy1: 31 }]);
+  assert.ok(kinds(core).wisp >= 2, 'Dampf');
+  assert.equal(eventSound({ type: 'terrain', kind: 'ash' }), 'splash');
+  assert.equal(eventSound({ type: 'terrain', gx0: 0, gy0: 0, gx1: 1, gy1: 1 }), null);
+  // echte Leiche: fällt in Lava, settle meldet ash
+  const w = createWorld(400, 300, 3); w.teamMode = true;
+  for (let gy = 10; gy < 20; gy++) for (let gx = 10; gx < 20; gx++) setCell(w, gy * w.GW + gx, 2, 0);
+  const u = spawn(w, 'krieger', 150, 150, 'blau'); rebuildHash(w); u.hp = 1;
+  w.events.length = 0;
+  for (let k = 0; k < 120 && !w.events.some(e => e.type === 'terrain' && e.kind === 'ash'); k++) step(w, DT);
+  assert.ok(w.events.some(e => e.type === 'terrain' && e.kind === 'ash'), 'ash-Ereignis');
 });
 
 test('ignite: kleiner Flammenstoß; extinguish: Dampfwölkchen; beide gedeckelt', () => {

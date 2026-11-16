@@ -1,7 +1,8 @@
 // Klänge per WebAudio, Port aus kritzelschlacht.html (sfx). init() muss nach einer Nutzergeste laufen.
 
 // Geräusch zu einem Ereignis aus world.events (oder null). Neu für die Physik: land (Landung), impact
-// (harte Landung ab IMPACT_SOUND_V px/s Aufprall), splash (Wasser), crash (abgestürzter Flieger).
+// (harte Landung ab IMPACT_SOUND_V px/s Aufprall), splash (Wasser), crash (abgestürzter Flieger). Eine in Lava
+// versinkende Leiche (terrain-Ereignis kind 'ash', Spez. #17) zischt mit demselben Rauschen wie splash.
 // Gedrosselt wird in play() wie alle anderen Geräusche.
 export const IMPACT_SOUND_V = 320;
 export function eventSound(e) {
@@ -10,6 +11,7 @@ export function eventSound(e) {
     case 'land': return e.impact > IMPACT_SOUND_V ? 'impact' : 'land';
     case 'splash': return 'splash';
     case 'crash': return 'crash';
+    case 'terrain': return e.kind === 'ash' ? 'splash' : null;
   }
   return null;
 }

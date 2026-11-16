@@ -71,13 +71,16 @@ test('poseUnit bleibt rein mit Luftzustand', () => {
 });
 
 /* ---------- Schatten ---------- */
-test('Schatten: Größe 1 − min(z/200, .6), Deckkraft .13 · dasselbe, 3 Stufen nach z', () => {
+// R13 (Spez. #14): Schatten wachsen mit der Höhe und werden weicher und blasser
+test('Schatten: Größe 1 + min(z/200, .6), Deckkraft .13 · (1 − .5 · min(z/200, 1)), 3 Stufen nach z', () => {
   const s = {};
   shadowParams(0, s); near(s.scale, 1); near(s.alpha, .13); assert.equal(s.level, 0);
-  shadowParams(100, s); near(s.scale, .5); near(s.alpha, .065); assert.equal(s.level, 2);
-  shadowParams(200, s); near(s.scale, .4); near(s.alpha, .052);
-  shadowParams(1000, s); near(s.scale, .4);
-  shadowParams(-5, s); near(s.scale, 1); assert.equal(s.level, 0);
+  shadowParams(100, s); near(s.scale, 1.5); near(s.alpha, .0975); assert.equal(s.level, 2);
+  shadowParams(200, s); near(s.scale, 1.6); near(s.alpha, .065);
+  shadowParams(1000, s); near(s.scale, 1.6); near(s.alpha, .065);
+  shadowParams(-5, s); near(s.scale, 1); near(s.alpha, .13); assert.equal(s.level, 0);
+  let grow = 0;
+  for (let z = 0; z < 300; z += 1) { const k = shadowParams(z, s).scale; assert.ok(k >= grow - 1e-12, 'wächst'); grow = k; }
   // Stufen: Bienen/Geister weich, Heli/Drache sehr weich
   assert.equal(shadowParams(UNITS.biene.flyZ, s).level, 1);
   assert.equal(shadowParams(UNITS.geist.flyZ, s).level, 1);

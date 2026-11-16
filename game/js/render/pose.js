@@ -77,12 +77,14 @@ export function poseUnit(u, t, out = {}) {
 }
 
 /* ---------- Schatten ---------- */
-// Größe 1 − min(z/200, 0.6), Deckkraft 0.13 · dasselbe; Stufe 0 scharf (z < 6), 1 weich (< 36), 2 sehr weich.
+// Spez. #14 (R13): Schatten wachsen mit der Höhe und werden weicher und blasser.
+// Größe 1 + min(z/200, 0.6) (bis 1.6×), Deckkraft 0.13 · (1 − 0.5 · min(z/200, 1));
+// Stufe 0 scharf (z < 6), 1 weich (< 36), 2 sehr weich.
 export const SHADOW_ALPHA = .13;
 export const SHADOW_SOFT_Z = 6, SHADOW_VSOFT_Z = 36;
 export function shadowParams(z, out = {}) {
-  const k = 1 - Math.min(z > 0 ? z / 200 : 0, .6);
-  out.scale = k; out.alpha = SHADOW_ALPHA * k;
+  const h = z > 0 ? z / 200 : 0;
+  out.scale = 1 + Math.min(h, .6); out.alpha = SHADOW_ALPHA * (1 - .5 * Math.min(h, 1));
   out.level = z < SHADOW_SOFT_Z ? 0 : z < SHADOW_VSOFT_Z ? 1 : 2;
   return out;
 }

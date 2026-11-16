@@ -536,6 +536,132 @@ Glühen ist nur additive Mischung bei Feuer, Explosion und Mündungsblitz. Keine
   - Kein Dauerglühen, der weiße Hintergrund bleibt weiß.
 - [ ] **Step 3: Commit** mit `git commit -m "feat: effects pass"`.
 
+### Task 12a: Drachenfeuer und brennende Einheiten (Spec #21)
+
+**Files:**
+- Modify: `game/js/combat.js` (`breath`, Brand-Zustand, Ausbreitung), `game/js/render/fx.js` (Flammenstrahl, Brand-Effekt), `game/js/render/renderer.js` (falls nötig)
+- Create: `tests/fire.test.js`
+
+**Interfaces:**
+- Unit bekommt `burnT` (verbleibende Brenndauer in s) und `burnGen` (0 = direkt getroffen, 1–3 = übergesprungen).
+- `ignite(world, u, gen, src)`:
+  - setzt `burnT = 3` und `burnGen = gen`, nur wenn `gen ≤ 3` und die Einheit nicht schon mit einer niedrigeren Generation brennt.
+  - Ereignis `{type:'ignite', x, y}`.
+- Brennende Einheiten:
+  - nehmen 8 Schaden/s als `'fire'` mit `src` = Verursacher. Für die Treffer-Quetschung zählt das wie Schaden über Zeit, also kein dauerhaftes Quetschen.
+  - Alle 0,25 s darf eine brennende Einheit jede Nachbar-Einheit im Radius `r + v.r + 6` mit Chance `0.35 · 0.5^burnGen` anzünden (jede Fraktion, Flieger nur Flieger, Boden nur Boden). Die neue Generation ist `burnGen + 1`.
+- Drachenatem zündet getroffene Einheiten mit Generation 0 an. Wasser löscht sofort.
+- `burnT` und `burnGen` laufen über `world.rng()`, keine Allokation pro Schritt.
+- Darstellung:
+  - Der Flammenstrahl ist ein dichter, kegelförmiger, additiv leuchtender Strom mit Funken und Hitzeflimmern, nicht 4 Punkte.
+  - Brennende Einheiten haben kleine Flammen auf dem Körper und einen Rauchfaden.
+
+- [ ] **Step 1: Failing Tests schreiben** in `tests/fire.test.js`:
+  - Drachenatem zündet an.
+  - Brand macht Schaden über 3 s.
+  - In einem dichten Bienenschwarm (60 Bienen, Radius 40) erreicht das Feuer weitere Bienen, aber höchstens Generation 3.
+  - In einer verteilten Reihe (Abstand 40 px) springt es nicht über.
+  - Wasser löscht.
+  - Ein Seed ergibt reproduzierbare Ergebnisse.
+- [ ] **Step 2: Testlauf schlägt fehl.**
+- [ ] **Step 3: Implementieren.**
+- [ ] **Step 4: Tests grün, `node --check`.** Der Controller prüft im Browser (`fx.debug()` zählt Flammen- und Brand-Partikel).
+- [ ] **Step 5: Commit** mit `git commit -m "feat: dragon fire spreads and burns"`.
+
+### Task 12b: MG und Scharfschütze legen sich hin (Spec #22)
+
+**Files:**
+- Modify: `game/js/combat.js` (Haltung, Treffer, Zielen), `game/js/render/pose.js` + `renderer.js` (liegende Pose)
+- Create: `tests/prone.test.js`
+
+**Interfaces:**
+- Unit bekommt `stance` ∈ `'stand'|'down'|'prone'|'up'` und `stanceT` (Restzeit des Übergangs). Gilt für `mg` und `sniper`.
+- Übergänge:
+  - `'stand'` → `'down'` (0,6 s) → `'prone'`, wenn ein Ziel in Reichweite ist und kein Nahkampf-Gegner (Reichweite < 20) näher als 140 px.
+  - `'prone'` → `'up'` (0,8 s) → `'stand'`, wenn ein Nahkampf-Gegner näher als 140 px kommt.
+  - In `'down'` und `'up'` wird weder geschossen noch bewegt. In `'prone'` keine Bewegung.
+- Liegend:
+  - Eingehender Schaden durch `bullet`, `arrow`, `rocket` und `blast` ×0,5.
+  - Gerade Schüsse, die nicht gezielt auf diese Einheit gehen, treffen sie nur mit 50 % Chance (`world.rng()`).
+  - Streuung ×0,4, Reichweite ×1,15.
+- Darstellung: Die Figur liegt flach auf dem Bauch (Pose um 90° gekippt, Waffe nach vorn), Auf- und Abtauchen sind animiert.
+
+- [ ] **Step 1: Failing Tests schreiben:**
+  - Hinlegen ohne Nahkämpfer.
+  - Schaden halbiert.
+  - Reichweite +15 %.
+  - Während `'down'`/`'up'` kein Schuss.
+  - Aufstehen, wenn ein Krieger näher als 140 px kommt.
+  - Liegende Einheit bewegt sich nicht.
+- [ ] **Step 2: Testlauf schlägt fehl.**
+- [ ] **Step 3: Implementieren.**
+- [ ] **Step 4: Tests grün.**
+- [ ] **Step 5: Commit** mit `git commit -m "feat: prone stance for mg and sniper"`.
+
+### Task 12c: Boss-Sticker für Panzer, Hubschrauber, Drache (Spec #23)
+
+**Files:**
+- Modify: `game/js/render/rig.js` (neue, größere Teile), `game/js/render/pose.js` (eigene Bewegungen), `game/js/render/renderer.js`
+- Modify: `tests/rig.test.js`
+
+**Interfaces:**
+- Gleicher Sticker-Stil (Umriss `#2a2a33`, Glubschaugen bleiben), aber mehr Teile und mehr Details:
+  - **Panzer:** Wanne mit Kettenlauf (Kettenglieder laufen beim Fahren), eigener Turm-Teil, der sich zum Ziel dreht (`turretRot`), Rohr mit Rückstoß beim Schuss, Abgaswolke beim Anfahren.
+  - **Hubschrauber:** Rumpf, Heckausleger, Heckrotor, Kufen. Der Hauptrotor ist eine eigene, schnell rotierende Scheibe (`rotorRot`). Er neigt sich in Flugrichtung (bis 0,25 rad) und wirft Rotorwind-Staub, wenn er tief fliegt.
+  - **Drache:** Rumpf, Hals und Kopf (Kopf zielt zum Ziel), zwei Flügel mit Flügelschlag (`wingPhase`, langsamer Takt), Schweif mit Nachschwingen.
+- Kein Hüpfen: Squash & Stretch gibt es für diese drei nur minimal. Dafür haben sie die eigenen Bewegungen oben.
+- `poseUnit` liefert für diese Typen zusätzlich `turretRot`, `rotorRot`, `wingPhase` und `tailSwing`.
+
+- [ ] **Step 1: Failing Tests schreiben** in `tests/rig.test.js`:
+  - Turm zeigt zum Ziel.
+  - Rotor dreht sich pro Zeit.
+  - Flügelphase läuft periodisch.
+  - Panzer, Heli und Drache haben fast kein Squash.
+- [ ] **Step 2: Testlauf schlägt fehl.**
+- [ ] **Step 3: Implementieren.** Die Teile-Texturen werden im Atlas gebacken wie in Task 5.
+- [ ] **Step 4: Tests grün.** Der Controller prüft die Darstellung im Browser.
+- [ ] **Step 5: Commit** mit `git commit -m "feat: boss sticker rigs for tank, heli and dragon"`.
+
+### Task 12d: Pathfinding mit Flussfeld (Spec #24)
+
+**Files:**
+- Create: `game/js/pathing.js` (rein), `tests/pathing.test.js`
+- Modify: `game/js/combat.js` (`think` nutzt das Flussfeld), `game/js/sim.js` (Aktualisierung)
+
+**Interfaces:**
+- `createFlow(world) → Flow` mit grobem Raster `PATH_CELL = 20` (je 2×2 Gelände-Zellen).
+- Ein Pfad-Feld gilt als Mauer, wenn ≥ 2 seiner 4 Gelände-Zellen Mauer sind.
+- Kosten pro Feld:
+  - frei 1
+  - Wald 1,3
+  - Wasser 2,5
+  - Lava 12
+  - Mauer unpassierbar
+- `updateFlow(world, flow, dt)`:
+  - Pro Fraktion entsteht ein Distanzfeld per Dijkstra mit Bucket-Queue, mehrere Quellen von allen lebenden Gegner-Bodeneinheiten dieser Fraktion.
+  - Neu berechnet wird gestaffelt alle 0,5 s pro Fraktion und sofort nach einer Geländeänderung (Ereignis `terrain` oder Malen).
+  - Puffer werden pro Fraktion wiederverwendet, keine Allokation pro Aktualisierung.
+- `flowDir(flow, faction, x, y) → {dx, dy}|null` gibt die Richtung zum günstigsten Nachbarfeld (8 Nachbarn) zurück, `null` wenn unerreichbar.
+- In `think` (nur Bodentruppen, nicht Flieger):
+  - Ist die direkte Linie zum Ziel frei von Mauerzellen (Gelände-Raycast), läuft die Einheit wie bisher direkt.
+  - Sonst folgt sie `flowDir`.
+  - Wand einschlagen (`blk > 0.45`) nur, wenn `flowDir` null ist oder der Flussweg mehr als 2,5× so lang ist wie die Luftlinie.
+- Gruppenverhalten (Reihe, Rudel, Flanke) gilt weiterhin auf offener Fläche.
+- Ein Flussfeld für 2.000 Einheiten kostet pro Aktualisierung ≤ 2 ms (Bench in Task 13).
+
+- [ ] **Step 1: Failing Tests schreiben** in `tests/pathing.test.js`:
+  - Mauer mit Lücke: Krieger geht durch die Lücke und schlägt nicht ein.
+  - Geschlossener Ring: Krieger schlägt die Mauer ein.
+  - Lava-Streifen mit Lücke (Lavafeld): Einheiten nehmen die Lücke.
+  - Fluss: kurzer Weg durch Wasser wird gewählt, wenn der Umweg > 2,5× ist.
+  - Flieger ignorieren Mauern.
+  - Geländeänderung löst Neuberechnung aus.
+  - Keine Allokation bei wiederholtem `updateFlow` (Puffer-Identität bleibt gleich).
+- [ ] **Step 2: Testlauf schlägt fehl.**
+- [ ] **Step 3: Implementieren.**
+- [ ] **Step 4: Tests grün.** Balance laufen lassen und Abweichungen notieren (Kalibrierung in Task 14).
+- [ ] **Step 5: Commit** mit `git commit -m "feat: flow-field pathfinding around walls and hazards"`.
+
 ### Task 13: Leistung für 2.000 Einheiten
 
 **Files:**

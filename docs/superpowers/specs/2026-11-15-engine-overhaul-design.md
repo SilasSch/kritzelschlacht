@@ -29,6 +29,15 @@ Das Spielprinzip bleibt: Einheiten malen, zuschauen, Missionen mit Punktebudget.
 | 19 | Lieferung in 3 Etappen, jede veröffentlicht: (a) Renderer, Kamera und Animation, (b) Physik, (c) Effekte und Neukalibrierung. |
 | 20 | Gleicher Artifact-Link, gespeicherte Sterne bleiben, die alte Version bleibt über den Versionsverlauf erreichbar. |
 
+## Nachtrag (2026-11-16, vom Nutzer gewünscht)
+
+| # | Entscheidung |
+|---|---|
+| 21 | Drachenfeuer wird deutlich wuchtiger dargestellt. Getroffene brennen einige Sekunden nach, und Feuer springt in begrenztem Maß auf nahe Einheiten über: mit abnehmender Chance pro Sprung und höchstens 3 Generationen. Ein dichter Schwarm fängt gut Feuer, eine verteilte Armee kaum. |
+| 22 | MG-Schützen und Scharfschützen legen sich hin, wenn kein Nahkämpfer in der Nähe ist. Liegend sind sie schwerer zu treffen, zielen genauer und schießen weiter, können sich aber nicht bewegen. Kommt ein Nahkämpfer nahe, müssen sie erst aufstehen und schießen in der Zeit nicht. |
+| 23 | Panzer, Drache und Hubschrauber bekommen ein eigenes „Boss-Sticker“-Design im gleichen Stil, aber größer und detaillierter: Panzer mit Ketten, drehbarem Turm und Rückstoß; Hubschrauber mit sichtbar kreisendem Rotor und Kufen; Drache mit Hals, Flügelschlag und Schweif. Dazu eigene Bewegungen statt Hüpfen. |
+| 24 | Pathfinding: Bodentruppen umgehen Mauern über ein geteiltes Flussfeld pro Fraktion, statt sofort einzuschlagen. Wasser kostet mehr, Lava wird stark gemieden, Wald kostet etwas mehr. Eingeschlagen wird nur, wenn es keinen sinnvollen Umweg gibt. Flieger ignorieren das Gelände. |
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

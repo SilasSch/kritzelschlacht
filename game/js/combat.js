@@ -526,14 +526,21 @@ export function stepBurn(world, u, dt) {
 }
 
 /* ---------- KI ---------- */
+// Rückruf über Modulvariablen (keine Closure je Aufruf; Task 13: weniger Müll, weniger GC-Spitzen)
+let GI_W = null, GI_T = '', GI_F = null, GI_X = 0, GI_Y = 0, GI_N = 0;
+function groupTest(v) { if (v.type === GI_T && factionOf(GI_W, v) === GI_F) { GI_X += v.x; GI_Y += v.y; GI_N++; } }
 function groupInfo(world, u) {
-  const R = u.type === 'wolf' ? 170 : u.type === 'biene' ? 60 : 70, f = factionOf(world, u);
-  let cx = 0, cy = 0, n = 0;
-  query(world, u.x, u.y, R, v => { if (v.type === u.type && factionOf(world, v) === f) { cx += v.x; cy += v.y; n++; } });
-  u.gx = n ? cx / n : u.x; u.gy = n ? cy / n : u.y; u.gn = n; u.gt = GROUP_T[0] + world.rng() * GROUP_T[1];
+  const R = u.type === 'wolf' ? 170 : u.type === 'biene' ? 60 : 70;
+  GI_W = world; GI_T = u.type; GI_F = factionOf(world, u); GI_X = 0; GI_Y = 0; GI_N = 0;
+  query(world, u.x, u.y, R, groupTest);
+  const n = GI_N;
+  u.gx = n ? GI_X / n : u.x; u.gy = n ? GI_Y / n : u.y; u.gn = n; u.gt = GROUP_T[0] + world.rng() * GROUP_T[1];
+  GI_W = null; GI_F = null;
 }
 
-function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; return [x / l, y / l]; }
+// Richtung von u nach (px, py) in DIR (wiederverwendet, keine Allokation)
+const DIR = { x: 0, y: 0 };
+function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; DIR.x = x / l; DIR.y = y / l; return DIR; }
 
 export function think(world, u, dt) {
   const T = u.T;
@@ -617,37 +624,37 @@ export function think(world, u, dt) {
     return;
   }
   if (!noDetour && fd.dist > 0) { u.mx = fd.dx * T.speed; u.my = fd.dy * T.speed; u.face = fd.dx < 0 ? -1 : 1; u.run += dt; return; }
-  let a = [nx, ny], sp = T.speed;
+  let ax = nx, ay = ny, sp = T.speed;
   switch (u.type) {
     case 'wolf':
       // Rudel: fächert sich um die Beute auf und greift von den Seiten und von hinten an
       if (u.gn >= 3 && d > 40) {
         const base = Math.atan2(u.gy - t.y, u.gx - t.x) + ((u.id % 5) - 2) * .55, R = Math.max(8, d * .45);
-        a = toward(u, t.x + Math.cos(base) * R, t.y + Math.sin(base) * R);
+        toward(u, t.x + Math.cos(base) * R, t.y + Math.sin(base) * R); ax = DIR.x; ay = DIR.y;
       }
       break;
     case 'reiter':
       // Flankenritt: erst seitlich am Ziel vorbei, dann Sturmangriff
-      if (d > 140) { const s = u.id % 2 ? 1 : -1, R = Math.min(130, d * .5); a = toward(u, t.x - ny * s * R, t.y + nx * s * R); }
+      if (d > 140) { const s = u.id % 2 ? 1 : -1, R = Math.min(130, d * .5); toward(u, t.x - ny * s * R, t.y + nx * s * R); ax = DIR.x; ay = DIR.y; }
       break;
     case 'biene': {
       // Schwarm: kreist ums Ziel, bleibt zusammen, schwirrt
       const s = u.id % 2 ? 1 : -1, o = d < 60 ? .45 : .3;
-      const ax = nx - ny * s * o + (u.gx - u.x) * .01 + rnd(world, -.5, .5);
-      const ay = ny + nx * s * o + (u.gy - u.y) * .01 + rnd(world, -.5, .5);
-      const l = Math.hypot(ax, ay) || 1; a = [ax / l, ay / l]; break;
+      const bx = nx - ny * s * o + (u.gx - u.x) * .01 + rnd(world, -.5, .5);
+      const by = ny + nx * s * o + (u.gy - u.y) * .01 + rnd(world, -.5, .5);
+      const l = Math.hypot(bx, by) || 1; ax = bx / l; ay = by / l; break;
     }
     case 'krieger': case 'ritter': case 'geist': case 'baer':
       // Einkreisen: ist das Ziel schon umringt, sucht man sich einen freien Platz drumherum
       if (t.att > 3 && d < 130) {
         const g = Math.atan2(u.y - t.y, u.x - t.x) + ((u.id % 3) - 1) * .6, R = reach * .9;
-        a = toward(u, t.x + Math.cos(g) * R, t.y + Math.sin(g) * R);
+        toward(u, t.x + Math.cos(g) * R, t.y + Math.sin(g) * R); ax = DIR.x; ay = DIR.y;
       }
       break;
   }
   // Reihe halten: wer vor der Gruppe läuft, wartet; wer hinterherhängt, schließt auf
   if (LINE.has(u.type) && u.gn >= 3 && d > reach + 20) { const depth = (u.x - u.gx) * nx + (u.y - u.gy) * ny; sp *= clamp(1 - depth / 45, .35, 1.3); }
-  u.mx = a[0] * sp; u.my = a[1] * sp;
+  u.mx = ax * sp; u.my = ay * sp;
   u.run += dt;
 }
 
@@ -785,7 +792,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       u.swingT = .25;
       let a = T.dmg * (.85 + world.rng() * .3);
       // Treffer von hinten
-      const flank = t.fx !== undefined && ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;
+      const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
       // Sturmangriff der Reiter, danach Durchritt
       if (u.type === 'reiter' && u.run > .7) {

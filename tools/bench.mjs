@@ -1,9 +1,9 @@
 // Headless-Leistungsmessung: node tools/bench.mjs [units=2000] [scenario=mixed|blastcrowd] [seed=1] [--profile] [--lod=1]
 // Misst BENCH_STEPS Simulationsschritte (1/60 s) und gibt avg/p95/max step ms aus, dazu getrennt die reine
 // Effekt-Logik (fxcore: consume + update je Schritt, wie der Browser je Bild). Vorher läuft eine kurze
-// Aufwärmrunde mit anderer Saat (JIT), die nicht zählt. --profile: Zeit je Teil von sim.step (world.prof).
+// Aufwärmrunde mit anderer Saat (JIT), die nicht zählt. --profile: Zeit je Teil von sim.step (sim.SIM_TIME).
 import { createWorld } from '../game/js/world.js';
-import { step, SIM_PHASES as PH } from '../game/js/sim.js';
+import { step, SIM_PHASES as PH, SIM_TIME } from '../game/js/sim.js';
 import { createFxCore } from '../game/js/render/fxcore.js';
 import { buildBench, BENCH_STEPS, BENCH_W, BENCH_H, SCENARIOS } from '../game/js/bench.js';
 
@@ -22,7 +22,7 @@ function run(seed, steps, measure) {
   const tick = buildBench(world, SCEN, N);
   const fx = createFxCore({});
   const times = new Float64Array(steps), fxTimes = new Float64Array(steps);
-  if (measure && PROFILE) world.prof = {};
+  const ms0 = Float64Array.from(SIM_TIME.ms);
   if (LOD) fx.lod = LOD;
   const hot = [], fill = [];   // Schritte mit Salve bzw. mit aufgefülltem Schwarm (blastcrowd)
   let maxEv = 0, evSum = 0;
@@ -38,7 +38,8 @@ function run(seed, steps, measure) {
     if (what === 'volley') hot.push(t1 - t0); else if (what === 'fill') fill.push(t1 - t0);
   }
   let alive = 0; for (const u of world.units) if (u.alive) alive++;
-  return { times, fxTimes, acc: world.prof || {}, hot, fill, alive, maxEv, evAvg: evSum / steps, particles: fx.store.count, dropped: fx.store.dropped, corpses: world.corpses.length };
+  const acc = Object.fromEntries(PH.map((k, i) => [k, SIM_TIME.ms[i] - ms0[i]]));
+  return { times, fxTimes, acc, hot, fill, alive, maxEv, evAvg: evSum / steps, particles: fx.store.count, dropped: fx.store.dropped, corpses: world.corpses.length };
 }
 
 const stats = a => {

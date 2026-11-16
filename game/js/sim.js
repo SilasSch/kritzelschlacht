@@ -9,37 +9,39 @@ import { createFlow, updateFlow } from './pathing.js';
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
 /* ---------- Schritt ---------- */
-// world.prof (optional, Messungen: tools/bench.mjs --profile, __bench.measure): ms je Teil, aufsummiert
+// Zeit je Teil von step, immer mitgezählt (ms, aufsummiert seit Programmstart; SIM_TIME.steps = Schritte).
+// Für Messungen (tools/bench.mjs --profile, __bench.measure) Differenzen bilden. Immer aktiv statt nur unter
+// einem Schalter: ein selten genommener Messzweig ließ V8 step immer wieder verwerfen (Task 13).
 export const SIM_PHASES = ['hash', 'flow', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
-const pnow = () => (globalThis.performance ? globalThis.performance.now() : 0);
+export const SIM_TIME = { ms: new Float64Array(SIM_PHASES.length), steps: 0 };
+const pnow = globalThis.performance ? () => globalThis.performance.now() : () => 0;
 export function step(world, dt) {
-  const P = world.prof || null;
-  let t0 = P ? pnow() : 0;
-  const lap = P ? k => { const t1 = pnow(); P[k] = (P[k] || 0) + t1 - t0; t0 = t1; } : null;
+  const M = SIM_TIME.ms;
+  let t0 = pnow(), t1 = 0;
   world.time += dt;
   rebuildHash(world);
-  if (P) lap('hash');
+  t1 = pnow(); M[0] += t1 - t0; t0 = t1;
   // Flussfelder der Wegfindung (gestaffelt, sofort nach Geländeänderungen), vor den Entscheidungen
   if (!world.flow) world.flow = createFlow(world);
   updateFlow(world, world.flow, dt);
-  if (P) lap('flow');
+  t1 = pnow(); M[1] += t1 - t0; t0 = t1;
   const units = world.units;
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
-  if (P) lap('think');
+  t1 = pnow(); M[2] += t1 - t0; t0 = t1;
   integrate(world, dt);
-  if (P) lap('integrate');
+  t1 = pnow(); M[3] += t1 - t0; t0 = t1;
   collide(world);
-  if (P) lap('collide');
+  t1 = pnow(); M[4] += t1 - t0; t0 = t1;
   for (const u of units) if (u.alive) collideWalls(world, u, dt);
-  if (P) lap('walls');
+  t1 = pnow(); M[5] += t1 - t0; t0 = t1;
   stepProjectiles(world, dt);
-  if (P) lap('proj');
+  t1 = pnow(); M[6] += t1 - t0; t0 = t1;
   stepCorpses(world, dt);
   stepDebris(world, dt);
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
-  if (P) { lap('corpses'); P.steps = (P.steps || 0) + 1; }
+  M[7] += pnow() - t0; SIM_TIME.steps++;
 }
 
 /* ---------- Sieger ---------- */

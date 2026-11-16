@@ -1,5 +1,5 @@
 // Headless-Messung im echten Renderer: node tools/browser-bench.mjs [units=2000] [--chrome=PFAD] [--warm=240]
-//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--eval=AUSDRUCK] [--chain] [--swiftshader]
+//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--eval=AUSDRUCK] [--chain] [--js-flags=--trace-gc --chrome-log=gc.txt] [--swiftshader]
 //   --chain: nur der erste Lauf baut die Szene neu, die weiteren messen im selben Kampf weiter (früh, mitte, spät)
 // Startet einen kleinen statischen Server für das Repo, einen kopflosen Chrome/Chromium (CDP über den in
 // Node eingebauten WebSocket), öffnet game/index.html?bench=N&debug und ruft dort
@@ -48,7 +48,10 @@ const port = server.address().port, dport = 9300 + (process.pid % 500);
 const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'kritzel-bench-'));
 const gpu = argv.includes('--swiftshader') ? ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : ['--enable-gpu', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'];
 const chrome = spawn(findChrome(), ['--headless=new', `--remote-debugging-port=${dport}`, `--window-size=${VW},${VH}`, `--user-data-dir=${prof}`,
-  '--remote-allow-origins=*', '--no-first-run', '--no-default-browser-check', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', ...gpu, 'about:blank'], { stdio: 'ignore' });
+  '--remote-allow-origins=*', '--no-first-run', '--no-default-browser-check', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', ...gpu,
+  // --js-flags=…: V8-Optionen der Seite (z. B. --trace-gc); deren Ausgabe mit --chrome-log=Datei
+  ...(flag('js-flags', null) ? [`--js-flags=${flag('js-flags', null)}`, '--no-sandbox'] : []), 'about:blank'],
+  { stdio: flag('chrome-log', null) ? ['ignore', fs.openSync(flag('chrome-log', null), 'w'), 'ignore'] : 'ignore' });
 
 let ok = false, connected = false;
 try {
@@ -104,7 +107,12 @@ try {
   console.log(`chrome headless ${VW}x${VH}  gl: ${gl}`);
   // --eval: Ausdruck in der Seite statt der Messung (z. B. Prüfszenen und debug-Ausgaben), Ergebnis als JSON
   const ev = flag('eval', null);
-  if (ev) console.log(JSON.stringify(await evaluate(ev)));
+  if (ev) {
+    const po = flag('profile', null);
+    if (po) { await cdp('Profiler.enable'); await cdp('Profiler.setSamplingInterval', { interval: 200 }); await cdp('Profiler.start'); }
+    console.log(JSON.stringify(await evaluate(ev)));
+    if (po) { const pr = await cdp('Profiler.stop'); fs.writeFileSync(po, JSON.stringify(pr.result.profile)); log('profile ' + po); }
+  }
   for (let k = 0; k < (ev ? 0 : RUNS); k++) {
     const profOut = flag('profile', null);
     // Profil nur über die gemessenen Bilder: warm vorweg ohne Profil, dann measure ohne eigenes Aufwärmen

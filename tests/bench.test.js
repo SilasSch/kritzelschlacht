@@ -67,5 +67,7 @@ test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
   const bad = w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type);
   assert.deepEqual(bad, []);
   // mit Sanitätern, Flank-Treffern, Abheben und Landen kam in 4 s alles vor
-  assert.ok(w.units.some(u => u.fx !== undefined) && w.units.some(u => u.px !== undefined));
+  assert.ok(w.units.some(u => u.fx !== 0) && w.units.some(u => !Number.isNaN(u.px)));
+  // Zahlenfelder bleiben Zahlen (V8 führt sie als Double, Schreiben legt keine HeapNumbers an)
+  for (const k of ['px', 'py', 'fx', 'fy', 'x', 'y', 'mx', 'my', 'vx', 'vy', 'cd', 'rt']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);
 });

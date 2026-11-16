@@ -2,7 +2,7 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
-import { step, SIM_PHASES, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
+import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, ZONE, PLAYER } from './paint.js';
@@ -360,7 +360,7 @@ function benchMeasure(frames = 60, opt = {}) {
   const warm = opt.warm ?? 30, wasPaused = game.paused;
   game.paused = true;
   let t = performance.now() / 1000;
-  // simFx = Schritt (sim, mit world.prof je Teil) + Ereignisse (events) + fx.update (fxUpdate)
+  // simFx = Schritt (sim, je Teil aus sim.SIM_TIME) + Ereignisse (events) + fx.update (fxUpdate)
   const SF = { sim: 0, events: 0, fxUpdate: 0 };
   const one = () => {
     const a = performance.now(); simStep();
@@ -370,7 +370,7 @@ function benchMeasure(frames = 60, opt = {}) {
   };
   for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
   SF.sim = SF.events = SF.fxUpdate = 0;
-  world.prof = {};
+  const ms0 = Float64Array.from(SIM_TIME.ms);
   const S = { simFx: [], draw: [], render: [], gpuWait: [], total: [] }, parts = {};
   for (let i = 0; i < frames; i++) {
     const a = performance.now(); one();
@@ -382,10 +382,9 @@ function benchMeasure(frames = 60, opt = {}) {
     for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
   }
   game.paused = wasPaused;
-  const prof = world.prof; world.prof = null;
   const simParts = {};
   for (const k in SF) simParts[k] = r2(SF[k] / frames);
-  for (const k of SIM_PHASES) simParts['sim.' + k] = r2((prof[k] || 0) / frames);
+  SIM_PHASES.forEach((k, i) => { simParts['sim.' + k] = r2((SIM_TIME.ms[i] - ms0[i]) / frames); });
   const st = v => { const s = v.slice().sort((x, y) => x - y); return { avg: r2(s.reduce((p, x) => p + x, 0) / s.length), p95: r2(s[Math.min(s.length - 1, Math.floor(s.length * .95))]) }; };
   const out = { frames, warm };
   for (const k in S) out[k] = st(S[k]);

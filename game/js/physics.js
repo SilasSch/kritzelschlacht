@@ -142,7 +142,7 @@ export function collideWalls(world, u, dt = 1 / 60) {
   const T = u.T, terr = world.terr;
   let blocked = false;
   if (!T.fly && u.z < WALL_CLEAR_Z) {
-    const px = u.px ?? u.x, py = u.py ?? u.y;
+    const px = u.px === u.px ? u.px : u.x, py = u.py === u.py ? u.py : u.y;   // NaN: noch keine Lage vor dem Schritt
     // Stand schon vorher in der Mauer (übermalt, von oben gelandet): heraus. Sonst den Weg prüfen.
     if (terr[cellIndex(world, px, py)] === WALL) unstick(world, u);
     else {

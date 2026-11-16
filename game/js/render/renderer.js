@@ -156,8 +156,8 @@ export function createRenderer(canvasHost) {
   const UM = newMat(), GM = newMat(), PM = newMat(), TM = newMat();   // Einheit, Gruppe, Teil, Hilfe
   // Fliegende Leichen, Teile und Brocken liegen über den Bodentruppen (eigene Sprites), ruhende in der
   // Ebene corpses (Leichen im ParticleContainer, Brocken als Sprites darüber).
-  const flySprites = new PIXI.Container(), projG = new PIXI.Graphics();
-  L.projectiles.addChild(flySprites, projG);
+  const flySprites = new PIXI.Container(), projQ = createQuadBatch('projQuads');
+  L.projectiles.addChild(flySprites, projQ);
   const flyPool = makePool(flySprites);
   const corpseRoot = new PIXI.Container(), debrisSprites = new PIXI.Container();
   L.corpses.addChild(corpseRoot, debrisSprites);
@@ -533,9 +533,13 @@ export function createRenderer(canvasHost) {
      Bodenpunkt ihrer Bahn, der mit der Höhe kleiner und weicher wird. */
   const PS = {};
   const PROJ_SHADOW = { arrow: 3, bomb: 4, mortar: 4.5, shell: 3.5 };
+  // Gezeichnet aus Strichen (weiße Textur, gedreht) und Scheiben (softTex[0], Radius 31 px) in projQ wie
+  // früher mit Graphics: Pfeil, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
+  function disc(x, y, r, col) { projQ.add(softTex[0], mat(TM, x, y, 0, r / 31, r / 31), .5, .5, col, 1); }
   function drawProjectiles(world) {
-    const g = projG; g.clear();
+    projQ.clear();
     let ns = 0;
+    const OC = C(O);
     for (const p of world.proj) {
       projScreen(p, PS);
       const x = PS.x, y = PS.y, ca = Math.cos(PS.a), sa = Math.sin(PS.a);
@@ -544,22 +548,16 @@ export function createRenderer(canvasHost) {
         shadowParams(p.z, SH);
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
-      if (p.kind === 'arrow') {
-        g.lineStyle(1.5, 0x8a5a2b).moveTo(x - ca * 5, y - sa * 5).lineTo(x + ca * 5, y + sa * 5);
-      } else if (p.kind === 'bomb' || p.kind === 'mortar') {
-        g.lineStyle(1, C(O)).beginFill(0x2f3340).drawCircle(x, y, 4).endFill();
-        if (p.kind === 'bomb') g.lineStyle(0).beginFill(0xffb800).drawCircle(x + 2, y - 4, 1.6).endFill();
-      } else if (p.kind === 'bullet') {
-        g.lineStyle(1.6, 0xe0a020).moveTo(x - ca * 7, y - sa * 7).lineTo(x + ca * 3, y + sa * 3);
-      } else if (p.kind === 'rocket') {
-        g.lineStyle(0).beginFill(0xff8a3d).drawCircle(x - ca * 6, y - sa * 6, 3).endFill();
-        g.lineStyle(3.4, C(O)).moveTo(x - ca * 4, y - sa * 4).lineTo(x + ca * 4, y + sa * 4);
-      } else if (p.kind === 'shell') {
-        g.lineStyle(0).beginFill(0x2f3340).drawCircle(x, y, 3.2).endFill();
-      } else {
-        g.lineStyle(0).beginFill(0xff8a3d).drawCircle(x, y, 6).endFill();
-        g.beginFill(0xffe066).drawCircle(x, y, 3.5).endFill();
-      }
+      if (p.kind === 'arrow') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+      else if (p.kind === 'bomb' || p.kind === 'mortar') {
+        disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
+        if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);
+      } else if (p.kind === 'bullet') projQ.line(x - ca * 7, y - sa * 7, x + ca * 3, y + sa * 3, 1.6, 0xe0a020);
+      else if (p.kind === 'rocket') {
+        disc(x - ca * 6, y - sa * 6, 3, 0xff8a3d);
+        projQ.line(x - ca * 4, y - sa * 4, x + ca * 4, y + sa * 4, 3.4, OC);
+      } else if (p.kind === 'shell') disc(x, y, 3.2, 0x2f3340);
+      else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
     }
     stats.projShadows = ns;
   }

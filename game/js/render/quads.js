@@ -81,6 +81,14 @@ export function createQuadBatch(name, blendMode = 0) {
       const e = this.slot(white, tint, alpha);
       corners(e.loc, M, wf.width, wf.height, 0, 0);
     }
+    // Strich (x0, y0) → (x1, y1) der Breite w mit geraden Enden (wie Graphics.lineStyle mit LINE_CAP.BUTT)
+    line(x0, y0, x1, y1, w, tint, alpha = 1) {
+      const dx = x1 - x0, dy = y1 - y0, len = Math.sqrt(dx * dx + dy * dy);
+      if (!(alpha > 0) || !(len > 0)) return;
+      const M = mat(this.UM, x0, y0, Math.atan2(dy, dx), len / wf.width, w / wf.height);
+      const e = this.slot(white, tint, alpha);
+      corners(e.loc, M, wf.width, wf.height, 0, .5);
+    }
     render(renderer) {
       if (!this.visible || this.worldAlpha <= 0 || !this.renderable || !this.n) return;
       const plugin = renderer.plugins.batch, W = this.worldTransform, wa = this.worldAlpha;

@@ -17,7 +17,7 @@
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, createLodGovernor, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
-import { createQuadBatch, newMat, mat } from './quads.js';
+import { createQuadBatch } from './quads.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
@@ -90,12 +90,11 @@ export function createFx(renderer) {
   const glow = makePC(L.fx, PIXI.BLEND_MODES.ADD, 'fxGlow');        // unter den Kernen: Kerne behalten ihre Farbe
   const main = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxMain');
 
-  const PM = newMat();
   function put(g, t, x, y, scale, rot, tint, alpha, ax) {
     if (g.n >= FX_CAP) return;
     if (g.n === 0) g.q.clear();
     g.n++;
-    g.q.add(t, mat(PM, x, y, rot, scale, scale), ax, .5, tint, alpha);
+    g.q.addPart(t, null, x, y, rot, scale, scale, ax, .5, tint, alpha);
   }
   // Ende des Bilds: Anzahl zurückgeben, leere Ebenen leeren
   function finish(g) {

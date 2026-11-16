@@ -206,7 +206,7 @@ export function createRenderer(canvasHost) {
   const SH = {};   // Ergebnis von shadowParams, wiederverwendet
   // Schatten der Stufe SH.level als Ellipse rx × ry am Bodenpunkt (x, y)
   function blobShadow(x, y, rx, ry) {
-    shadowQ.add(softTex[SH.level], mat(TM, x, y, 0, 2 * rx * SH.scale / BLOB, 2 * ry * SH.scale / BLOB), .5, .5, SHADOW_TINT, SH.alpha);
+    shadowQ.addPart(softTex[SH.level], null, x, y, 0, 2 * rx * SH.scale / BLOB, 2 * ry * SH.scale / BLOB, .5, .5, SHADOW_TINT, SH.alpha);
     stats.shadowLevels[SH.level]++;
   }
 
@@ -268,14 +268,14 @@ export function createRenderer(canvasHost) {
       shadowParams(u.z, SH);
       if (SH.level === 0) {
         const a = rig.anchors.shadow, k = inv * SH.scale;
-        shadowQ.add(rig.tex.shadow[ti][0], mat(TM, u.x, u.y, 0, k, k), a.ax, a.ay, 0xffffff, SH.alpha / SHADOW_ALPHA);   // Textur trägt schon .13
+        shadowQ.addPart(rig.tex.shadow[ti][0], null, u.x, u.y, 0, k, k, a.ax, a.ay, 0xffffff, SH.alpha / SHADOW_ALPHA);   // Textur trägt schon .13
         stats.shadowLevels[0]++;
         continue;
       }
       blobShadow(u.x, u.y + r * 1.05, r * .85, r * .28);
       if (ti) {
         const k = r / RING_R * SH.scale / RING_RES;
-        shadowQ.add(ringTex, mat(TM, u.x, u.y + r, 0, k, k), .5, .5, C(TEAMS[u.team].c), SH.alpha / SHADOW_ALPHA);
+        shadowQ.addPart(ringTex, null, u.x, u.y + r, 0, k, k, .5, .5, C(TEAMS[u.team].c), SH.alpha / SHADOW_ALPHA);
       }
     }
   }
@@ -283,9 +283,7 @@ export function createRenderer(canvasHost) {
   // Teil eines Rigs (früher ein Sprite im Container der Einheit): Lage (x, y) im Rig, Anker a, Drehung rot,
   // Skalierung (sx, sy) (sonst 1/Auflösung), Elternmatrix P (Einheit oder Gruppe)
   function part(Q, P, tex, a, x, y, inv, rot = 0, tint = 0xffffff, alpha = 1, sx = inv, sy = inv) {
-    mul(PM, P, mat(PM, x, y, rot, sx, sy));
-    Q.add(tex, PM, a.ax, a.ay, tint, alpha);
-    return PM;
+    Q.addPart(tex, P, x, y, rot, sx, sy, a.ax, a.ay, tint, alpha);
   }
 
   // Container-Transform (UM): Drehpunkt an den Füßen (Flieger: Körpermitte), damit Quetschen und Neigen
@@ -378,10 +376,10 @@ export function createRenderer(canvasHost) {
   let nBoss = 0;
 
   // Boss-Teil name aus dem Atlas (Teamvariante nur bei Team-Teilen), Bild f, an (x, y) in der Gruppe P,
-  // gedreht um rot; Skalierung (sx, sy) sonst 1/Auflösung. Liefert die Matrix des Teils (PM, bis zum nächsten Teil).
+  // gedreht um rot; Skalierung (sx, sy) sonst 1/Auflösung.
   function bp(Q, P, rig, name, vi, f, x, y, rot, inv, sx = inv, sy = inv, tint = 0xffffff, alpha = 1) {
     const set = rig.tex[name], v = set[vi] || set[0];
-    return part(Q, P, v[f] || v[0], rig.anchors[name], x, y, inv, rot, tint, alpha, sx, sy);
+    part(Q, P, v[f] || v[0], rig.anchors[name], x, y, inv, rot, tint, alpha, sx, sy);
   }
   // Augen in einer Gruppe P, die lokal um rot gedreht und um fx (waagrecht) gespiegelt ist: der Blick
   // (Weltrichtung lookX/lookY) wird in die Gruppe zurückgerechnet
@@ -398,7 +396,8 @@ export function createRenderer(canvasHost) {
   function drawBoss(Q, u, p, rig, vi, ti, face, inv) {
     const type = u.type, R = rig.r, d = nBoss < BOSS_DBG ? bossDbg[nBoss++] : null;
     let tlx = 0, tly = 0;
-    const tip = M => { if (d) { d.tipM.set(M); d.hasTip = true; } };
+    // Matrix des Mündungsteils (Eltern P, Lage, Drehung, Maßstab inv) für debugRig
+    const tip = (P, x, y, rot, s) => { if (d) { mul(d.tipM, P, mat(PM, x, y, rot, s, s)); d.hasTip = true; } };
     if (type === 'panzer') {
       const G = BOSS_GEO.panzer;
       bp(Q, UM, rig, 'body', vi, 0, 0, 0, 0, inv);
@@ -407,14 +406,15 @@ export function createRenderer(canvasHost) {
       // schmal und etwas höher; Rohr um den Schildzapfen um turretRot, Rückstoß entlang des Rohrs
       const fl = p.turretFlip * face, e = p.turretRot, ce = Math.cos(e), se = Math.sin(e);
       mul(GM, UM, mat(GM, G.turret[0] * R, G.turret[1] * R, 0, fl, 1 + TURN_SQUASH * (1 - Math.abs(p.turretFlip))));
-      tip(bp(Q, GM, rig, 'weapon', vi, 0, G.trunnion[0] * R - p.recoil * ce, G.trunnion[1] * R - p.recoil * se, e, inv));
+      const wx = G.trunnion[0] * R - p.recoil * ce, wy = G.trunnion[1] * R - p.recoil * se;
+      bp(Q, GM, rig, 'weapon', vi, 0, wx, wy, e, inv); tip(GM, wx, wy, e, inv);
       bp(Q, GM, rig, 'turret', vi, 0, 0, 0, 0, inv);
       bossEyes(Q, GM, rig, p, face, 0, fl < 0 ? -1 : 1, ti, inv);
       tlx = (G.tip[0] - G.trunnion[0]) * R; tly = (G.tip[1] - G.trunnion[1]) * R;
     } else if (type === 'heli') {
       const G = BOSS_GEO.heli;
       bp(Q, UM, rig, 'body', vi, 0, 0, 0, 0, inv);
-      tip(bp(Q, UM, rig, 'weapon', vi, 0, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv));
+      bp(Q, UM, rig, 'weapon', vi, 0, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv); tip(UM, G.gun[0] * R - p.recoil * .6, G.gun[1] * R, 0, inv);
       bp(Q, UM, rig, 'tailRotor', 0, 0, G.tailRotor[0] * R, G.tailRotor[1] * R, p.tailRotor, inv);
       bossEyes(Q, UM, rig, p, face, 0, 1, ti, inv);
       mul(GM, UM, mat(GM, G.mast[0] * R, G.mast[1] * R, 0, 1, G.rotorFlat));
@@ -430,7 +430,7 @@ export function createRenderer(canvasHost) {
       dragonHead(p.headRot, HD);
       bp(Q, UM, rig, 'neck', 0, 0, G.neck[0] * R, G.neck[1] * R, HD.na, inv);
       mul(GM, UM, mat(GM, HD.jx * R, HD.jy * R, p.headRot, 1, 1));
-      tip(bp(Q, GM, rig, 'head', 0, 0, 0, 0, 0, inv));
+      bp(Q, GM, rig, 'head', 0, 0, 0, 0, 0, inv); tip(GM, 0, 0, 0, inv);
       bossEyes(Q, GM, rig, p, face, p.headRot, 1, ti, inv);
       bp(Q, UM, rig, 'wing', 0, 0, G.wingF[0] * R, G.wingF[1] * R, WING_ROT * w - .1, inv, inv, inv * (1 - WING_SQUASH * w));
       tlx = G.mouth[0] * R; tly = G.mouth[1] * R;
@@ -495,7 +495,7 @@ export function createRenderer(canvasHost) {
       if (LK.alpha <= .01) continue;
       const flying = c.state === 'fly' && (c.z > .5 || c.vz > 0);
       const a = body ? rig.anchors[name] : HALF;
-      if (!flying) corpseQ.add(tex, mat(TM, c.x, c.y - c.z + LK.dy, LK.rot, c.face < 0 ? -inv : inv, inv * LK.sy), a.ax, a.ay, LK.tint, LK.alpha);
+      if (!flying) corpseQ.addPart(tex, null, c.x, c.y - c.z + LK.dy, LK.rot, c.face < 0 ? -inv : inv, inv * LK.sy, a.ax, a.ay, LK.tint, LK.alpha);
       else {
         const sp = flyPool.next();
         sp.texture = tex; sp.anchor.set(a.ax, a.ay);
@@ -535,7 +535,7 @@ export function createRenderer(canvasHost) {
   const PROJ_SHADOW = { arrow: 3, bomb: 4, mortar: 4.5, shell: 3.5 };
   // Gezeichnet aus Strichen (weiße Textur, gedreht) und Scheiben (softTex[0], Radius 31 px) in projQ wie
   // früher mit Graphics: Pfeil, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
-  function disc(x, y, r, col) { projQ.add(softTex[0], mat(TM, x, y, 0, r / 31, r / 31), .5, .5, col, 1); }
+  function disc(x, y, r, col) { projQ.addPart(softTex[0], null, x, y, 0, r / 31, r / 31, .5, .5, col, 1); }
   function drawProjectiles(world) {
     projQ.clear();
     let ns = 0;

@@ -149,6 +149,24 @@ export function createQuadBatch(name, blendMode = 0) {
       const o = tex.orig, e = this.slot(tex, tint, alpha);
       corners(e.loc, M, o.width, o.height, ax, ay);
     }
+    // Wie add(tex, P · mat(x, y, rot, sx, sy), ax, ay, …), aber ohne Zwischenmatrizen (P null: keine Eltern);
+    // der häufigste Weg (Teile der Figuren, Partikel, Schatten, Leichen)
+    addPart(tex, P, x, y, rot, sx, sy, ax, ay, tint, alpha) {
+      if (!(alpha > 0)) return;
+      const cr = rot ? Math.cos(rot) : 1, sr = rot ? Math.sin(rot) : 0;
+      const la = cr * sx, lb = sr * sx, lc = -sr * sy, ld = cr * sy;
+      let A = la, B = lb, Cc = lc, D = ld, TX = x, TY = y;
+      if (P !== null) {
+        A = P[0] * la + P[2] * lb; B = P[1] * la + P[3] * lb; Cc = P[0] * lc + P[2] * ld; D = P[1] * lc + P[3] * ld;
+        TX = P[0] * x + P[2] * y + P[4]; TY = P[1] * x + P[3] * y + P[5];
+      }
+      const o = tex.orig, w = o.width, h = o.height, x1 = -ax * w, x0 = x1 + w, y1 = -ay * h, y0 = y1 + h;
+      const v = this.slot(tex, tint, alpha).loc;
+      v[0] = A * x1 + Cc * y1 + TX; v[1] = D * y1 + B * x1 + TY;
+      v[2] = A * x0 + Cc * y1 + TX; v[3] = D * y1 + B * x0 + TY;
+      v[4] = A * x0 + Cc * y0 + TX; v[5] = D * y0 + B * x0 + TY;
+      v[6] = A * x1 + Cc * y0 + TX; v[7] = D * y0 + B * x1 + TY;
+    }
     rect(x, y, w, h, tint, alpha = 1) {
       if (!(alpha > 0) || !(w > 0)) return;
       const M = this.UM;

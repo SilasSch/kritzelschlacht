@@ -71,6 +71,7 @@ export const WISP = { life: 1.2, rise: 26, wind: 10, grow: 2.2, alpha: .28 };
 // sich (WASH_RATE je s, ringförmig nach außen), Drachen gelegentliche Flügelböen (GUST_RATE je s). Zart:
 // Staub 'wash' höchstens WASH.alpha, Abgas 'exhaust' grau und kurz.
 export const BOSS_FX_UNITS = 24, EXHAUST_T = .5, EXHAUST_RATE = 14, WASH_RATE = 7, WASH_Z = 60, GUST_RATE = 2.5;
+export const EXHAUST_BURST = 2;
 export const WASH = { life: .9, grow: 2.2, alpha: .22 };
 export const EXHAUST = { life: .9, grow: 2.6, alpha: .34 };
 
@@ -250,13 +251,10 @@ export function createFxCore(hooks = {}, opt = {}) {
     p.vx = WISP.wind + rnd(-4, 4); p.vy = -WISP.rise * rnd(.8, 1.2); p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);
   }
 
-  // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z) → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden.
-  // hooks.mouth(e, out): Bildschirmlage des Mauls (Boss-Drache, pose.breathMouth) statt der Mündung.
-  const MOUTH = {};
+  // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z; beim Boss-Drachen das gezeichnete Maul, muzzle.js)
+  // → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden
   function jet(e) {
-    const z = e.z || 0, face = e.face < 0 ? -1 : 1;
-    let sx = e.x, sy = e.y - z;
-    if (hooks.mouth) { hooks.mouth(e, MOUTH); sx = MOUTH.x; sy = MOUTH.y; }
+    const z = e.z || 0, sx = e.x, sy = e.y - z, face = e.face < 0 ? -1 : 1;
     const hasT = Number.isFinite(e.tx) && Number.isFinite(e.ty);
     const gx = hasT ? e.tx : e.x + (e.nx ?? face) * 90, gy = hasT ? e.ty : e.y + (e.ny || 0) * 90;
     const ex = gx, ey = gy - (hasT ? e.tz || 0 : 0);
@@ -302,9 +300,10 @@ export function createFxCore(hooks = {}, opt = {}) {
       const moving = Math.abs(u.mx || 0) + Math.abs(u.my || 0) > 1;
       let st = drive.get(u);
       if (st === undefined) st = -1;   // zuerst gesehen (Aufstellen): gilt als stehend, das erste Losfahren pufft
-      st = !moving ? -1 : st < 0 ? EXHAUST_T : Math.max(0, st - dt);
+      const start = moving && st < 0;   // fährt gerade an: sofort EXHAUST_BURST Wölkchen, dann EXHAUST_RATE je s
+      st = !moving ? -1 : start ? EXHAUST_T : Math.max(0, st - dt);
       drive.set(u, st);
-      if (st > 0) for (let n = count(EXHAUST_RATE, dt); n > 0; n--) {
+      if (st > 0) for (let n = count(EXHAUST_RATE, dt) + (start ? EXHAUST_BURST : 0); n > 0; n--) {
         const p = add('exhaust', u.x - face * r * 1.42 + rnd(-2, 2), u.y - u.z - r * .14 + rnd(-1.5, 1.5), EXHAUST.life * rnd(.8, 1.2), rnd(2.2, 3.4), SMOKE_COLS[(rand() * 3) | 0] - 0x1a1a1a);
         if (!p) return;
         p.vx = -face * rnd(18, 32); p.vy = -rnd(10, 22); p.drag = 1.5; p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);

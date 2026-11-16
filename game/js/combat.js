@@ -4,6 +4,7 @@
 import { CELL, HASH_CELL, UNITS } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
+import { bossMuzzle, hasMuzzle } from './muzzle.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -393,8 +394,11 @@ export function fire(world, u, t, kind, ax, ay) {
   const T = u.T, P = PROJECTILES[kind], K = SHOT[kind];
   if (ax === undefined) { aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y; }
   const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
-  // Mündung (Darstellung): vor dem Körper, etwas erhöht
-  const mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
+  // Mündung (Darstellung): vor dem Körper, etwas erhöht. Boss-Sticker (Panzer, Heli) schießen aus der
+  // gezeichneten Mündung (muzzle.js, Bildschirmpunkt; gerade Schüsse unten um die Starthöhe verschoben)
+  const boss = hasMuzzle(u.type);
+  let mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
+  if (boss) { bossMuzzle(u, t.x, t.y, MZ); mx = u.x + MZ.x; my = u.y - (u.z || 0) + MZ.y; }
   u.fireT = 0;   // Rückstoß (rig.js)
   const f = factionOf(world, u), dmg = T.dmg, R = T.splash || 0;
   if (P.arc) {
@@ -406,7 +410,9 @@ export function fire(world, u, t, kind, ax, ay) {
     // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
     // Mündungsversatz verschoben), dur = len / speed: der Renderer interpoliert die Position wie bisher.
     // tg: gezieltes Ziel; pass: liegende Körper, an denen der Schuss schon vorbeiging (stepProjectiles).
-    const g = shotGeo(u, t, kind, ax, ay), ox = mx - u.x, oy = my - u.y;
+    const g = shotGeo(u, t, kind, ax, ay);
+    if (boss) my += g.z0 - MUZZLE_Z;   // pose.projScreen hebt um z0 − MUZZLE_Z an
+    const ox = mx - u.x, oy = my - u.y;
     world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + g.nx * g.len + ox, y1: u.y + g.ny * g.len + oy,
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
       sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R, tg: t, pass: null });
@@ -416,7 +422,9 @@ export function fire(world, u, t, kind, ax, ay) {
 }
 
 // Drachenfeuer: Kegel vor dem Drachen; Getroffene fangen Feuer (Generation 0, Verursacher der Drache).
-// t: das Ziel, sein Punkt (tx, ty, tz) geht für den Flammenstrahl ins shot-Ereignis.
+// t: das Ziel, sein Punkt (tx, ty, tz) geht für den Flammenstrahl ins shot-Ereignis. Der Strahl beginnt am
+// gezeichneten Maul (muzzle.js): x, y − z des Ereignisses = Bildschirmpunkt des Mauls.
+const MZ = {};
 function breath(world, u, nx, ny, t) {
   const T = u.T, f = factionOf(world, u);
   u.fireT = 0;
@@ -428,7 +436,8 @@ function breath(world, u, nx, ny, t) {
     hurt(world, v, T.dmg, 'fire', u);
     if (v.alive) ignite(world, v, 0, u);
   });
-  emit(world, { type: 'shot', kind: 'breath', x: u.x + nx * T.r, y: u.y - T.r * .6 + ny * T.r, z: u.z, face: u.face, nx, ny,
+  bossMuzzle(u, u.x + nx, u.y + ny, MZ);
+  emit(world, { type: 'shot', kind: 'breath', x: u.x + MZ.x, y: u.y + MZ.y, z: u.z, face: u.face, nx, ny,
     tx: t ? t.x : u.x + nx * T.range * .8, ty: t ? t.y : u.y + ny * T.range * .8, tz: t ? t.z : 0 });
   sound(world, 'fire');
 }

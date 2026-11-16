@@ -11,12 +11,12 @@
 // die Neigung zurück und liegt flach nach vorn am Boden).
 import { GRAVITY, CORPSE_FADE, SINK_T, ASH_T } from '../physics.js';
 import { MUZZLE_Z, PRONE_DOWN_T, PRONE_UP_T } from '../combat.js';
-import { UNITS } from '../data.js';
+import { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, TILT_MAX, DRAGON_GEO, dragonHead, tankAim, headAim, tipOffset } from '../muzzle.js';
 
 export const RIG_PARTS = ['shadow', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
 
 export const WALK_SQUASH = .08;   // sy pendelt 1 ± 0.08, sx = 1/sy
-export const TILT_MAX = .12;      // rad bei voller Laufgeschwindigkeit
+export { TILT_MAX };              // rad bei voller Laufgeschwindigkeit (muzzle.js)
 export const HIT_SX = 1.15, HIT_SY = .85;
 export const RECOIL = 3, RECOIL_T = .12;
 export const BLINK_EVERY = 3.2, BLINK_T = .12;
@@ -33,14 +33,15 @@ export const PRONE_GUN = [.25, .3];    // liegend: Waffe in r-Einheiten (lokal) 
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const wrap = a => { a %= TAU; return a > Math.PI ? a - TAU : a <= -Math.PI ? a + TAU : a; };
 const frac = v => v - Math.floor(v);
 
 /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
    Panzer, Hubschrauber und Drache: gleicher Sticker-Stil, aber größer gezeichnet (BOSS_VIS × r; Logik-
-   Radius und Kollision bleiben) und mit eigenen Bewegungen statt Hüpfen. poseUnit liefert für alle
-   Einheiten zusätzlich (sonst 0):
-     turretRot  Weltwinkel des Panzerturms (atan2 zum Ziel; ohne Ziel geradeaus)
+   Radius und Kollision bleiben) und mit eigenen Bewegungen statt Hüpfen. Geometrie und Mündungen teilen
+   Logik und Darstellung in ../muzzle.js. poseUnit liefert für alle Einheiten zusätzlich (sonst 0):
+     turretFlip Panzerturm: Breite in Weltrichtung −1..1 (Seite des Ziels; beim Seitenwechsel in TURN_T
+                schmal werden und umklappen), die Kuppel bleibt waagrecht
+     turretRot  Rohrwinkel im Turm (+ = nach unten), zum Ziel, höchstens ±TANK_ELEV_MAX
      rotorRot / tailRotor  Drehwinkel von Haupt- und Heckrotor (0..2π, gleichmäßig pro Zeit)
      wingPhase  Phase des Flügelschlags 0..1 (WING_HZ, im Flug bis + WING_HZ_MOVE), wing = sin(2π·Phase)
      tailSwing  Schweifausschlag (rad): Schwingen TAIL_AMP mit Verzug TAIL_LAG hinter dem Flügel, dazu
@@ -48,104 +49,105 @@ const frac = v => v - Math.floor(v);
      headRot    Drachenkopf: lokaler Winkel zum Ziel (±HEAD_MAX)
      track      Kettenphase 0..1 (ein Kettenglied je TRACK_PITCH px Weg); frame = Bild 0..TRACK_FRAMES−1
    Ohne Gedächtnis (mem) ist alles rein aus u und t. Mit mem (bossMemory(), vom Renderer je Einheit
-   gehalten; u bleibt unverändert) wird weich nachgeführt: Turm höchstens TURRET_RATE rad/s, Kettenweg
-   und Flügelphase aufintegriert (kein Sprung bei Tempowechsel), Heli-Neigung und Schweif mit Verzug. */
+   gehalten; u bleibt unverändert) wird weich nachgeführt: Turm dreht sich in TURN_T um, Rohrwinkel,
+   Heli-Neigung, Schweif und Kopf mit Verzug, Kettenweg und Flügelphase aufintegriert.
+   Schuss-Moment = Logik (muzzle.bossMuzzle): sobald u.fireT kleiner wird als im letzten Bild (neuer Schuss),
+   sind Turm und Rohr sofort am Ziel; das Rohr stößt erst danach zurück (KICK), die Wanne wippt erst danach;
+   der Drache hält beim Feuerspeien (fireT < BREATH_HOLD) den Kopf ungeglättet zum Ziel und ohne Auf und Ab;
+   der Heli neigt sich um seine Mündung. So startet jeder Schuss an der gezeichneten Mündung. */
 export const BOSS = new Set(['panzer', 'heli', 'drache']);
-export const BOSS_VIS = { panzer: 1.35, heli: 1.35, drache: 1.3 };
-export const BOSS_SQUASH = .02;     // |sx − 1|, |sy − 1| höchstens (Rumpeln, Treffer)
-export const TURRET_RATE = 2.6;     // rad/s
+export { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, DRAGON_GEO, dragonHead };
+export const TURN_T = .15, ELEV_RATE = 10;                            // s Umdrehen des Turms, 1/s Rohr
 export const TANK_RECOIL = 7, TANK_RECOIL_T = .35, TANK_ROCK = .05;   // px Rohr-Rückstoß, s, rad Wippen
+export const KICK = .12;                // Anteil von RECOIL_T bis zum vollen Rückstoß (Stoß nach dem Schuss)
 export const TRACK_PITCH = 5, TRACK_FRAMES = 4;
 export const ROTOR_SPEED = 28, TAIL_ROTOR_SPEED = 42;                 // rad/s
 export const HELI_LEAN = .25, LEAN_RATE = 4;                          // rad, 1/s
 export const WING_HZ = 1.6, WING_HZ_MOVE = 1.1;
 export const TAIL_AMP = .16, TAIL_LAG = 1.1, TAIL_TRAIL = .3, TAIL_RATE = 2.5;
-export const HEAD_MAX = .6, HEAD_RATE = 8, DRAGON_BOB = 2;
-// Drachen-Geometrie in r·BOSS_VIS (Rig, Renderer und Maul des Flammenstrahls teilen sie): Hals-Ansatz am
-// Rumpf, Halslänge und -winkel (folgt dem Kopf zu NECK_FOLLOW), Maul im Kopf (Drehpunkt = Halsende)
-export const DRAGON_GEO = { neck: [.5, -.12], neckLen: .55, neckAng: -.95, neckFollow: .35, mouth: [.8, .2],
-  wingF: [-.05, -.3], wingB: [.2, -.4], tail: [-.78, .22] };
+export const HEAD_RATE = 8, DRAGON_BOB = 2, BREATH_HOLD = .3;
 
-export const bossMemory = () => ({ t: -1, turret: 0, track: 0, wing: 0, tail: 0, lean: 0, head: 0 });
-// Lokaler Winkel im gespiegelten Rig (Blick nach rechts gezeichnet): Weltwinkel a, Blickrichtung face
-export const localAim = (a, face) => Math.atan2(Math.sin(a), Math.cos(a) * (face < 0 ? -1 : 1));
+export const bossMemory = () => ({ t: -1, track: 0, wing: 0, tail: 0, lean: 0, head: 0, side: 1, from: 1, turnT: 1, elev: 0, fireT: 1 });
+// Rückstoß-Verlauf 0..1 über q = fireT / Dauer: 0 im Schuss-Moment, voll bei KICK, dann zurück
+export const kick = q => (q >= 1 || q < 0 ? 0 : q < KICK ? q / KICK : ((1 - q) / (1 - KICK)) ** 2);
 
-// Halsende und Maul des Drachen (lokal, r·BOSS_VIS-Einheiten) für den lokalen Kopfwinkel h
-const DG = DRAGON_GEO;
-function dragonHead(h, out) {
-  const na = DG.neckAng + h * DG.neckFollow;
-  out.jx = DG.neck[0] + Math.cos(na) * DG.neckLen; out.jy = DG.neck[1] + Math.sin(na) * DG.neckLen;
-  out.na = na;
-  const c = Math.cos(h), s = Math.sin(h);
-  out.mx = out.jx + DG.mouth[0] * c - DG.mouth[1] * s; out.my = out.jy + DG.mouth[0] * s + DG.mouth[1] * c;
-  return out;
-}
-export { dragonHead };
-// Maul (Bildschirm x, y − z) zu einem Atem-Ereignis (combat.breath: x = u.x + nx·r, y = u.y − 0.6r + ny·r);
-// Kopfwinkel wie poseUnit ohne Gedächtnis. Für fxcore (hooks.mouth): der Strahl beginnt am Maul.
-const MO = {};
-export function breathMouth(e, out = {}) {
-  const r = UNITS.drache.r, rv = r * BOSS_VIS.drache, face = e.face < 0 ? -1 : 1;
-  const nx = e.nx ?? face, ny = e.ny || 0;
-  const ux = e.x - nx * r, uy = e.y + r * .6 - ny * r;
-  dragonHead(clamp(Math.atan2(ny, nx * face), -HEAD_MAX, HEAD_MAX), MO);
-  out.x = ux + face * MO.mx * rv; out.y = uy - (e.z || 0) + MO.my * rv;
+// Gezeichnete Mündung (Bildschirm) aus einer Pose p von poseUnit: muzzle.tipOffset mit denselben Werten,
+// mit denen der Renderer die Teile setzt
+const TQ = { face: 1, sx: 1, sy: 1, rot: 0, bob: 0, flip: 1, elev: 0, recoil: 0, head: 0 };
+export function drawnMuzzle(u, p, out = {}) {
+  TQ.face = u.face; TQ.sx = p.sx; TQ.sy = p.sy; TQ.rot = p.tilt + p.spin; TQ.bob = p.bob;
+  TQ.flip = p.turretFlip; TQ.elev = p.turretRot; TQ.recoil = p.recoil; TQ.head = p.headRot;
+  tipOffset(u.type, TQ, out);
+  out.x += u.x; out.y += u.y - (u.z || 0);
   return out;
 }
 
 // Boss-Teil der Pose (nach der allgemeinen Pose; Luft, Betäubung und Drehung bleiben)
+const TA = {};
 function bossPose(u, t, out, mem, mx, my) {
   const T = u.T, type = u.type, face = u.face < 0 ? -1 : 1;
   const first = !mem || !(mem.t >= 0) || t < mem.t;
   const dt = first ? 0 : Math.min(.1, t - mem.t);
-  if (mem) mem.t = t;
+  const shot = !!mem && !first && u.fireT < mem.fireT;   // seit dem letzten Bild geschossen
+  if (mem) { mem.t = t; mem.fireT = u.fireT; }
   const sp = Math.sqrt(mx * mx + my * my), q = clamp(sp / T.speed, 0, 1);
   const hit = u.hitT > 0;
+  const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
   // fast kein Squash: Treffer drückt nur um BOSS_SQUASH, kein Federn beim Fahren
   out.sx = hit ? 1 + BOSS_SQUASH : 1; out.sy = hit ? 1 - BOSS_SQUASH : 1;
   if (type === 'panzer') {
     out.bob = 0; out.frame = 0;
-    const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
-    const aim = dx * dx + dy * dy > 1e-12 ? Math.atan2(dy, dx) : face < 0 ? Math.PI : 0;
-    let rot = aim;
+    tankAim(dx, dy, face, TA);
+    let flip = TA.side, elev = TA.elev;
     if (mem) {
-      if (first) mem.turret = aim;
-      else { const d = wrap(aim - mem.turret), s = TURRET_RATE * dt; mem.turret = wrap(mem.turret + clamp(d, -s, s)); }
-      rot = mem.turret;
+      if (first) { mem.side = mem.from = TA.side; mem.turnT = TURN_T; mem.elev = TA.elev; }
+      else {
+        if (TA.side !== mem.side) { mem.from = mem.side; mem.side = TA.side; mem.turnT = 0; } else mem.turnT += dt;
+        mem.elev += (TA.elev - mem.elev) * (1 - Math.exp(-ELEV_RATE * dt));
+        if (shot) { mem.turnT = TURN_T; mem.elev = TA.elev; }
+      }
+      // Umdrehen: schmal werden (cos), in der Mitte umklappen, wieder breit
+      const k = Math.min(1, mem.turnT / TURN_T), c = Math.cos(Math.PI * k);
+      flip = k < .5 ? mem.from * c : -mem.side * c; elev = mem.elev;
     }
-    out.turretRot = rot;
+    out.turretFlip = flip; out.turretRot = elev;
     // Ketten: Weg vorwärts (in Blickrichtung) bzw. rückwärts
     const v = mx * face < -1e-9 ? -sp : sp;
     let tr;
     if (mem) { if (first) mem.track = frac(u.seed); mem.track = frac(mem.track + v * dt / TRACK_PITCH); tr = mem.track; }
     else tr = frac(u.seed + v * t / TRACK_PITCH);
     out.track = tr; out.frame = Math.floor(tr * TRACK_FRAMES) % TRACK_FRAMES;
-    // Rückstoß: Rohr fährt TANK_RECOIL zurück und langsam wieder vor, die Wanne wippt zurück
-    const k = u.fireT < TANK_RECOIL_T ? 1 - u.fireT / TANK_RECOIL_T : 0;
-    out.recoil = TANK_RECOIL * k * k;
-    out.tilt = -face * TANK_ROCK * k * k + clamp(mx / T.speed, -1, 1) * TILT_MAX * .25;
+    // Rückstoß: im Schuss-Moment liegt das Rohr vorn, dann Stoß TANK_RECOIL und langsamer Rücklauf;
+    // die Wanne wippt dabei zurück (0 im Schuss-Moment)
+    const fq = u.fireT / TANK_RECOIL_T;
+    out.recoil = TANK_RECOIL * kick(fq);
+    out.tilt = fq < 1 ? -face * TANK_ROCK * Math.sin(Math.PI * fq) : 0;
   } else if (type === 'heli') {
     out.rotorRot = frac((ROTOR_SPEED * t + u.seed) / TAU) * TAU;
     out.tailRotor = frac((TAIL_ROTOR_SPEED * t + u.seed) / TAU) * TAU;
     const lean = clamp(mx / T.speed, -1, 1) * HELI_LEAN;
     if (mem) { mem.lean = first ? lean : mem.lean + (lean - mem.lean) * (1 - Math.exp(-LEAN_RATE * dt)); out.tilt = mem.lean; }
     else out.tilt = lean;
-    out.bob *= .6; out.frame = 0;
+    out.bob = 0; out.frame = 0;
+    out.recoil = RECOIL * kick(u.fireT / RECOIL_T);
   } else {
     const hz = WING_HZ + WING_HZ_MOVE * q;
     let ph;
     if (mem) { if (first) mem.wing = frac(u.seed); mem.wing = frac(mem.wing + hz * dt); ph = mem.wing; }
     else ph = frac(u.seed + hz * t);
     out.wingPhase = ph; out.wing = Math.sin(TAU * ph);
-    out.bob = DRAGON_BOB * Math.cos(TAU * ph);   // hebt sich beim Abschlag
+    // hebt sich beim Abschlag; beim Feuerspeien ruhig (blendet danach in 0.3 s wieder ein)
+    const calm = clamp((u.fireT - BREATH_HOLD) / .3, 0, 1);
+    out.bob = DRAGON_BOB * Math.cos(TAU * ph) * calm;
     const trail = -clamp(mx / T.speed, -1, 1) * TAIL_TRAIL;
     let tl = 0;
     if (mem) { mem.tail = first ? trail : mem.tail + (trail - mem.tail) * (1 - Math.exp(-TAIL_RATE * dt)); tl = mem.tail; }
     out.tailSwing = TAIL_AMP * Math.sin(TAU * ph - TAIL_LAG) + tl;
-    const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
-    const h = dx * dx + dy * dy > 1e-12 ? clamp(Math.atan2(dy, dx * face), -HEAD_MAX, HEAD_MAX) : 0;
-    if (mem) { mem.head = first ? h : mem.head + (h - mem.head) * (1 - Math.exp(-HEAD_RATE * dt)); out.headRot = mem.head; }
-    else out.headRot = h;
+    const h = headAim(dx, dy, face);
+    if (mem) {
+      mem.head = first || u.fireT < BREATH_HOLD ? h : mem.head + (h - mem.head) * (1 - Math.exp(-HEAD_RATE * dt));
+      out.headRot = mem.head;
+    } else out.headRot = h;
   }
 }
 
@@ -190,7 +192,7 @@ export function poseUnit(u, t, out = {}, mem) {
   if (d > 1e-6) { out.lookX = dx / d * LOOK; out.lookY = dy / d * LOOK; }
   else { out.lookX = (u.face < 0 ? -1 : 1) * LOOK; out.lookY = 0; }
   out.frame = frame;
-  out.turretRot = 0; out.rotorRot = 0; out.tailRotor = 0; out.wingPhase = 0; out.wing = 0; out.tailSwing = 0;
+  out.turretFlip = 0; out.turretRot = 0; out.rotorRot = 0; out.tailRotor = 0; out.wingPhase = 0; out.wing = 0; out.tailSwing = 0;
   out.headRot = 0; out.track = 0;
   if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei

@@ -9,6 +9,7 @@
 /* global PIXI */
 import { UNITS, TEAMS, TINT } from '../data.js';
 import { RIG_PARTS, BOSS_VIS, DRAGON_GEO, TRACK_PITCH, TRACK_FRAMES, dragonHead } from './pose.js';
+import { TANK_GEO, HELI_GEO } from '../muzzle.js';
 export { poseUnit, RIG_PARTS } from './pose.js';
 
 const U = UNITS;
@@ -33,21 +34,18 @@ function poly(c, r, pts, fill, lw = 1.4) {
 /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
    Panzer, Hubschrauber und Drache bestehen aus mehr Teilen. Jedes Teil ist um seinen eigenen Drehpunkt
    gezeichnet (Ursprung = Drehpunkt), in r = U.r · BOSS_VIS (größer gezeichnet, Logik-Radius bleibt).
-   BOSS_GEO: Lage der Drehpunkte im Rig (r-Einheiten; der Renderer setzt die Teile dorthin).
+   BOSS_GEO: Lage der Drehpunkte im Rig (r-Einheiten; der Renderer setzt die Teile dorthin), aus muzzle.js
+   (dieselbe Geometrie bestimmt dort die Mündungen für die Logik). parts[name].pivot: Drehpunkt im Teil.
    eyes liegen in der Gruppe eyeGroup (Panzer: Turm, Drache: Kopf, Heli: Rumpf), Pupillen und Lid wie sonst.
    parts[name] = { draw(c, r, k, f), team (Teamfarbe je Team gebacken), frames }.
    partMap: Leichenteil (combat.PARTS) → Rig-Teil; corpseBody: Teil der liegenden Leiche.
    compose(c, r, k, pupils): ganze Figur in Ruhepose (Symbolbild, Drachenleiche). */
-export const BOSS_GEO = {
-  panzer: { turret: [-.12, -.38] },
-  heli: { mast: [0, -.95], tailRotor: [-1.76, -.38], gun: [.55, .4], rotorFlat: .26 },
-  drache: DRAGON_GEO,
-};
+export const BOSS_GEO = { panzer: TANK_GEO, heli: HELI_GEO, drache: DRAGON_GEO };
 const pupil = (c, r, e, p) => E(c, (p[0] + e.s * .35) * r, (p[1] + e.s * .15) * r, e.prx * r, e.pry * r, O, 0);
 const BOSS_DEF = {
   panzer: {
     boss: true, eyeGroup: 'turret', eyes: eyePair(.14, -.06, .13),
-    shadow: [1.3, .3, .76], ring: [1.45, .4, .72], pivotY: .74, top: -1.2, crown: -1.3, iconFit: [2.9, 0, -.22],
+    shadow: [1.3, .3, .76], ring: [1.45, .4, .72], pivot: [0, TANK_GEO.pivotY], top: -1.2, crown: -1.3, iconFit: [2.9, 0, -.22],
     partMap: { turret: 'turretWreck' },
     parts: {
       // Wanne mit Kettenband, Laufrollen, Kotflügel, Werkzeugkiste, Scheinwerfer und Auspuff (hinten)
@@ -97,9 +95,10 @@ const BOSS_DEF = {
           RR(c, r * .36, -r * .13, r * .2, r * .26, r * .06, k.dk);
         },
       },
-      // Kanonenrohr mit Mündungsbremse; Rückstoß schiebt es in den Turm
+      // Kanonenrohr mit Mündungsbremse (im Turm gezeichnet, Drehpunkt am Schildzapfen); Rückstoß schiebt
+      // es in den Turm
       weapon: {
-        team: true,
+        team: true, pivot: TANK_GEO.trunnion,
         draw(c, r, k) { Ln(c, [[r * .3, 0], [r * 1.02, 0]], k.dk, 4.2); RR(c, r * .98, -r * .085, r * .15, r * .17, r * .03, k.dk); },
       },
       // wegfliegender Turm (Leichenteil 'turret'): mit Rohr
@@ -117,7 +116,7 @@ const BOSS_DEF = {
     },
   },
   heli: {
-    boss: true, eyeGroup: 'body', eyes: eyePair(.52, -.06, .12), lidCol: '#bfe3f2',
+    boss: true, eyeGroup: 'body', eyes: eyePair(.52, -.06, .12), lidCol: '#bfe3f2', pivot: HELI_GEO.pivot,
     top: -1.5, crown: -1.55, iconFit: [4, 0, -.1],
     partMap: { headgear: 'rotorBlades' },
     parts: {
@@ -540,7 +539,7 @@ function partSpec(t, part) {
   const D = DEF[t], r = drawR(t), tv = teamed(t) ? 5 : 1;
   if (D.parts && !EYE_PARTS.has(part)) {
     const P = D.parts[part];
-    return P ? { nv: P.team ? tv : 1, nf: P.frames || 1, scanV: 0, pivot: [0, 0] } : null;
+    return P ? { nv: P.team ? tv : 1, nf: P.frames || 1, scanV: 0, pivot: P.pivot ? [P.pivot[0] * r, P.pivot[1] * r] : [0, 0] } : null;
   }
   switch (part) {
     case 'shadow': return { nv: 5, nf: 1, scanV: 1, pivot: [0, 0] };
@@ -589,7 +588,7 @@ const hexNum = s => parseInt(s.slice(1), 16);
      anchors: {[part]: {ax, ay, x, y}}   Sprite-Anker (0..1) und Lage des Drehpunkts im Rig (Welt-Einheiten),
      tex: {[part]: Texture[variante][bild]} (pupilL/pupilR/lid nur Variante 0; das Lid wird per tint eingefärbt),
      lidTint: [5 Farben als Zahl], eyes, eyeR (Augenradius in Welt-Einheiten), weapon-Daten (axis, swing),
-     r, fly, teamed, pivotY (Quetsch-Drehpunkt: Füße bzw. Mitte), offY (alter Flieger-Versatz; der Renderer
+     r, fly, teamed, pivotX/pivotY (Quetsch- und Neige-Drehpunkt: Füße bzw. Mitte; Heli: Mündung), offY (alter Flieger-Versatz; der Renderer
      zeichnet Flieger seit der Höhenachse bei y − z und nutzt offY nicht mehr) }
    Die Map trägt zusätzlich resolution und destroy(). renderer bleibt für die Schnittstelle erhalten. */
 // eslint-disable-next-line no-unused-vars
@@ -614,7 +613,7 @@ export function bakeRigTextures(renderer, resolution) {
       eyes: D.eyes ? { L: [D.eyes.L[0] * r, D.eyes.L[1] * r], R: [D.eyes.R[0] * r, D.eyes.R[1] * r] } : null,
       eyeR: D.eyes ? D.eyes.s * r : 0,
       axis: D.weapon ? D.weapon.axis : 0, swing: D.weapon ? D.weapon.swing : 0,
-      pivotY: D.pivotY !== undefined ? D.pivotY * r : T.fly ? 0 : r, offY: T.fly ? -r * .5 : 0,
+      pivotX: D.pivot ? D.pivot[0] * r : 0, pivotY: D.pivot ? D.pivot[1] * r : T.fly ? 0 : r, offY: T.fly ? -r * .5 : 0,
       // Boss-Sticker: eigene Teile, Augen in eyeGroup, Lage der HP-Leiste und der Krone (Welt-Einheiten)
       boss: !!D.boss, eyeGroup: D.eyeGroup || 'body', barTop: (D.top || -1.6) * r, crownTop: (D.crown || -1.75) * r,
       corpseBody: D.corpseBody || 'body', partMap: D.partMap || null,

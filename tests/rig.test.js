@@ -151,28 +151,40 @@ const TAU = Math.PI * 2;
 const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 const frac = v => v - Math.floor(v);
 
-test('Boss: Turm zeigt zum Ziel (ohne Gedächtnis sofort, mit Gedächtnis weich und ohne Sprung)', () => {
-  near(poseUnit(mk('panzer', { tg: { x: 130, y: 140 } }), 1).turretRot, Math.atan2(40, 30));
-  near(poseUnit(mk('panzer', { tg: { x: 100, y: 60 } }), 1).turretRot, -Math.PI / 2);
+test('Boss: Turm schaut zur Seite des Ziels (Kuppel bleibt waagrecht), nur das Rohr hebt und senkt sich', () => {
+  const E = P.TANK_ELEV_MAX;
+  near(E, .35);
+  // ohne Gedächtnis: Seite = Seite des Ziels, Rohrwinkel = Winkel zum Ziel (+ nach unten), begrenzt
+  let p = poseUnit(mk('panzer', { tg: { x: 130, y: 110 } }), 1);
+  near(p.turretFlip, 1); near(p.turretRot, Math.atan2(10, 30));
+  p = poseUnit(mk('panzer', { tg: { x: 130, y: 140 } }), 1);
+  near(p.turretRot, E);
+  p = poseUnit(mk('panzer', { tg: { x: 20, y: 60 } }), 1);
+  near(p.turretFlip, -1); near(p.turretRot, -E);
+  p = poseUnit(mk('panzer', { tg: { x: 40, y: 105 }, face: 1 }), 1);
+  near(p.turretFlip, -1, 1e-9); near(p.turretRot, Math.atan2(5, 60), 1e-9);   // Ziel hinter der Wanne
   // ohne Ziel: geradeaus in Blickrichtung
+  near(poseUnit(mk('panzer'), 1).turretFlip, 1); near(poseUnit(mk('panzer', { face: -1 }), 1).turretFlip, -1);
   near(poseUnit(mk('panzer'), 1).turretRot, 0);
-  near(Math.cos(poseUnit(mk('panzer', { face: -1 }), 1).turretRot), -1);
-  // mit Gedächtnis: erstes Bild direkt aufs Ziel, danach höchstens TURRET_RATE rad/s
+  // mit Gedächtnis: Ziel wechselt die Seite → Turm dreht sich in TURN_T (schmal werden, umklappen, breit)
   const m = P.bossMemory(), u = mk('panzer', { tg: { x: 200, y: 100 } }), o = {};
-  near(poseUnit(u, 0, o, m).turretRot, 0);
-  u.tg = { x: 0, y: 101 };   // Ziel hinten links: der Turm dreht sich hin, nicht springend
-  let prev = 0;
-  for (let k = 1; k <= 300; k++) {
-    const r = poseUnit(u, k / 60, o, m).turretRot;
-    assert.ok(Math.abs(wrapA(r - prev)) <= P.TURRET_RATE / 60 + 1e-9, `Sprung ${prev} → ${r}`);
-    if (k === 1) assert.ok(Math.abs(wrapA(r)) > 0, 'dreht sich schon');
-    prev = r;
-  }
-  near(wrapA(prev - Math.atan2(1, -100)), 0, 1e-6);
-  assert.ok(P.TURRET_RATE > 1 && P.TURRET_RATE < 6);
-  // im gespiegelten Rig: lokaler Winkel aus Weltwinkel und Blickrichtung
-  near(P.localAim(.3, 1), .3); near(P.localAim(Math.PI - .3, -1), .3); near(P.localAim(Math.PI, -1), 0);
-  near(P.localAim(-.4, -1), -(Math.PI - .4));
+  near(poseUnit(u, 0, o, m).turretFlip, 1);
+  u.tg = { x: 0, y: 100 };
+  const seq = [];
+  for (let k = 1; k <= 30; k++) seq.push(poseUnit(u, k / 60, o, m).turretFlip);
+  assert.ok(P.TURN_T >= .1 && P.TURN_T <= .2, `Dauer ${P.TURN_T}`);
+  for (let k = 1; k < seq.length; k++) assert.ok(seq[k] <= seq[k - 1] + 1e-12, 'monoton');
+  assert.ok(seq.some(f => Math.abs(f) < .5), 'wird schmal');
+  const done = seq.findIndex(f => f === -1);
+  assert.ok(done >= 0 && (done + 1) / 60 <= P.TURN_T + 1 / 60 + 1e-9, `fertig nach ${done + 1} Bildern`);
+  // Rohrwinkel weich, aber beim Schuss (fireT springt zurück) sofort am Ziel und der Turm ganz gedreht
+  u.tg = { x: 200, y: 130 };
+  const e1 = poseUnit(u, 31 / 60, o, m).turretRot;
+  assert.ok(e1 > 0 && e1 < Math.atan2(30, 100) - .01, `weich ${e1}`);
+  near(o.turretFlip, -1);   // Umdrehen beginnt (noch ganz links)
+  u.fireT = 0;
+  poseUnit(u, 32 / 60, o, m);
+  near(o.turretRot, Math.atan2(30, 100)); near(o.turretFlip, 1);
 });
 
 test('Boss: Hauptrotor und Heckrotor drehen sich gleichmäßig pro Zeit', () => {
@@ -269,42 +281,32 @@ test('Boss: Heli neigt sich in Flugrichtung (bis 0,25 rad), Panzerketten laufen 
   near(frac(bo.track - b0), frac(-UNITS.panzer.speed * .05 / P.TRACK_PITCH), 1e-6);
 });
 
-test('Boss: Panzerrohr mit langem Rückstoß, Drachenkopf zielt zum Ziel', () => {
-  near(poseUnit(mk('panzer', { fireT: 0 }), 0).recoil, P.TANK_RECOIL);
+test('Boss: Panzerrohr mit kurzem Stoß und langem Rücklauf, Drachenkopf zielt zum Ziel', () => {
+  // im Schuss-Moment liegt das Rohr noch vorn (Mündung = Startpunkt der Granate), dann Stoß und Rücklauf
+  near(poseUnit(mk('panzer', { fireT: 0 }), 0).recoil, 0);
+  near(poseUnit(mk('panzer', { fireT: P.KICK * P.TANK_RECOIL_T }), 0).recoil, P.TANK_RECOIL);
   let prev = Infinity;
-  for (let f = 0; f <= P.TANK_RECOIL_T + 1e-9; f += .01) {
+  for (let f = P.KICK * P.TANK_RECOIL_T; f <= P.TANK_RECOIL_T + 1e-9; f += .01) {
     const r = poseUnit(mk('panzer', { fireT: f }), 0).recoil;
     assert.ok(r <= prev + 1e-12 && r >= 0); prev = r;
   }
   near(poseUnit(mk('panzer', { fireT: P.TANK_RECOIL_T }), 0).recoil, 0);
   assert.ok(P.TANK_RECOIL > P.RECOIL && P.TANK_RECOIL_T > P.RECOIL_T);
+  // Wanne wippt erst nach dem Schuss
+  near(poseUnit(mk('panzer', { fireT: 0 }), 0).tilt, 0);
+  assert.ok(poseUnit(mk('panzer', { fireT: .1 }), 0).tilt < 0, 'wippt zurück');
   // Kopf: lokaler Winkel zum Ziel, begrenzt auf ±HEAD_MAX, gespiegelt gleich
   near(poseUnit(mk('drache', { tg: { x: 200, y: 100 } }), 0).headRot, 0);
   near(poseUnit(mk('drache', { tg: { x: 200, y: 130 } }), 0).headRot, Math.min(P.HEAD_MAX, Math.atan2(30, 100)));
   near(poseUnit(mk('drache', { face: -1, tg: { x: 0, y: 130 } }), 0).headRot, Math.min(P.HEAD_MAX, Math.atan2(30, 100)));
   near(poseUnit(mk('drache', { tg: { x: 100, y: 300 } }), 0).headRot, P.HEAD_MAX);
-});
-
-test('Boss: Flammenstrahl beginnt am Maul (breathMouth), die Atem-Logik bleibt', async () => {
-  const { createFxCore } = await import('../game/js/render/fxcore.js');
-  const r = UNITS.drache.r, rv = r * P.BOSS_VIS.drache;
-  const ux = 500, uy = 300, z = 60;
-  const ev = (nx, ny, face) => ({ type: 'shot', kind: 'breath', x: ux + nx * r, y: uy - r * .6 + ny * r, z, face, nx, ny, tx: ux + nx * 100, ty: uy + ny * 100, tz: 0 });
-  const o = {};
-  P.breathMouth(ev(1, 0, 1), o);
-  assert.ok(o.x > ux + rv && o.x < ux + rv * 2.2, `vorn ${o.x}`);
-  assert.ok(o.y < uy - z && o.y > uy - z - rv, `oben ${o.y}`);
-  const right = { ...o };
-  P.breathMouth(ev(-1, 0, -1), o);
-  near(o.x - ux, -(right.x - ux)); near(o.y, right.y);
-  P.breathMouth(ev(.8, .6, 1), o);
-  assert.ok(o.y > right.y, 'Kopf nach unten: Maul tiefer');
-  // fxcore: mit Haken mouth startet der Strahl am Maul, ohne bleibt alles wie bisher
-  const core = createFxCore({ mouth: P.breathMouth });
-  core.consume([ev(1, 0, 1)]);
-  const jets = core.store.live.filter(p => p.k === 'jet');
-  assert.ok(jets.length >= 16);
-  for (const p of jets) assert.ok(Math.abs(p.x0 - right.x) <= 2 + 1e-9 && Math.abs(p.y0 - right.y) <= 2 + 1e-9);
+  // beim Feuerspeien: Kopf ungeglättet, kein Auf und Ab
+  const m = P.bossMemory(), d = mk('drache', { tg: { x: 200, y: 100 } }), o = {};
+  poseUnit(d, 0, o, m); d.tg = { x: 200, y: 140 };
+  assert.ok(poseUnit(d, 1 / 60, o, m).headRot < Math.atan2(40, 100) - .05, 'sonst weich');
+  d.fireT = 0; poseUnit(d, 2 / 60, o, m);
+  near(o.headRot, Math.atan2(40, 100)); near(o.bob, 0);
+  d.fireT = 1; assert.notEqual(poseUnit(d, 2.2, o, m).bob, 0);
 });
 
 test('Boss: eigene Teile im Atlas (rigLayout bleibt, bossLayout zeigt die Zusatzteile)', async () => {

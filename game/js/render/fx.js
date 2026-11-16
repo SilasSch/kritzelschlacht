@@ -15,7 +15,6 @@
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, look, F, FX_CAP } from './fxcore.js';
-import { breathMouth } from './pose.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
@@ -145,8 +144,7 @@ export function createFx(renderer) {
     decalDirty = true; decalCount++;
   }
 
-  // Drachenfeuer beginnt am Maul des Boss-Drachen (Task 12c), die Atem-Logik bleibt
-  const core = createFxCore({ decal, crater, mouth: breathMouth });
+  const core = createFxCore({ decal, crater });
 
   /* ---------- Bild ---------- */
   const LK = {}, off = { x: 0, y: 0 };

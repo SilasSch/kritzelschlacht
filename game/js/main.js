@@ -373,7 +373,8 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
 // scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon', 'prone', 'bosses';
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
-// Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem Boss),
+// Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
+// Boss; Mündung tip aus den Sprites, drawn aus der Pose, logic wie combat.fire sie jetzt nähme),
 // fx.debug().boss (Abgas, Rotorwind-Staub). Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
 // Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
 const scenes = {

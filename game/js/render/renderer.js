@@ -9,7 +9,8 @@ import { TEAMS, CELL } from '../data.js';
 import { query, factionOf } from '../world.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
-import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, localAim, dragonHead } from './pose.js';
+import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, dragonHead, drawnMuzzle } from './pose.js';
+import { bossMuzzle, TURN_SQUASH } from '../muzzle.js';
 import { PRONE } from '../combat.js';
 import { createFx } from './fx.js';
 
@@ -321,7 +322,7 @@ export function createRenderer(canvasHost) {
       const c = slot.c, A = rig.anchors, X = rig.tex, sy = u.y - u.z;
       const pr = p.prone;
       if (p.air) { c.position.set(u.x, sy); c.pivot.set(0, 0); stats.airUnits++; }
-      else { c.position.set(u.x, sy + rig.pivotY + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(0, rig.pivotY); }
+      else { c.position.set(u.x + face * rig.pivotX, sy + rig.pivotY + p.bob + pr * rig.r * PRONE_DROP); c.pivot.set(rig.pivotX, rig.pivotY); }
       c.scale.set(p.sx * face, p.sy);
       // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
       c.rotation = p.tilt + p.spin + p.lie;
@@ -379,20 +380,25 @@ export function createRenderer(canvasHost) {
      im Einheiten-Container liegt (gleiche y-Sortierung wie alle). Pro Bild nur Texturen, Lage, Drehung,
      Sichtbarkeit. Die Pose kommt aus poseUnit mit einem Gedächtnis je Einheit (memOf: Turm weich, Ketten-
      weg, Flügelphase, Heli-Neigung, Schweif); die Einheit selbst bleibt unberührt.
-       Panzer: Wanne, Ketten (Bild = Kettenphase), Turmgruppe (lokaler Winkel aus turretRot; nach hinten
-               senkrecht gespiegelt, damit die Kuppel oben bleibt) mit Rohr (Rückstoß), Turm, Augen
-       Heli:   Rumpf, Kanone, Heckrotor (tailRotor), Augen, Rotorgruppe am Mast (senkrecht gestaucht) mit
-               Unschärfe-Scheibe, Nachzieh-Blatt und Blättern (rotorRot)
+       Panzer: Wanne, Ketten (Bild = Kettenphase), Turmgruppe mit waagrechter Kuppel, waagrecht gespiegelt
+               zur Seite des Ziels (Breite turretFlip, beim Umdrehen schmal und etwas höher), darin das Rohr
+               um den Schildzapfen gedreht (turretRot, Rückstoß entlang des Rohrs), Turm, Augen
+       Heli:   Rumpf (neigt sich um die Mündung, rig.pivotX/Y), Kanone, Heckrotor (tailRotor), Augen,
+               Rotorgruppe am Mast (senkrecht gestaucht) mit Unschärfe-Scheibe, Nachzieh-Blatt und Blättern
+     Die Mündungen (Rohrspitze, Kinnkanone, Maul) liegen damit dort, wo muzzle.tipOffset sie berechnet;
+     von dort starten auch die Schüsse der Logik (muzzle.bossMuzzle in combat.fire/breath).
        Drache: hinterer Flügel (dunkler), Schweif (tailSwing), Rumpf, Hals, Kopfgruppe (headRot) mit Augen,
                vorderer Flügel; Flügelschlag aus wing = sin(2π·wingPhase) */
   const MAIN_PARTS = ['weaponB', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
   const mems = new WeakMap();
   function memOf(u) { let m = mems.get(u); if (!m) { m = bossMemory(); mems.set(u, m); } return m; }
   const HD = {};   // dragonHead, wiederverwendet
-  const WING_ROT = .55, WING_SQUASH = .18, FAR_WING = 0xa9b8b3, GHOST = .35, TURRET_PERSP = .55;
-  // Prüfwerte der zuletzt gezeichneten Bosse (debugRig().bosses), feste Objekte
+  const WING_ROT = .55, WING_SQUASH = .18, FAR_WING = 0xa9b8b3, GHOST = .35;
+  // Prüfwerte der zuletzt gezeichneten Bosse (debugRig().bosses), feste Objekte; tipSprite/tipLx/tipLy: das
+  // Teil mit der Mündung und die Mündung darin (Sprite-Pixel ab Anker), für die Mündung aus den Sprites
   const BOSS_DBG = 24, bossDbg = [];
-  for (let i = 0; i < BOSS_DBG; i++) bossDbg.push({ id: 0, type: '', turretRot: 0, rotorRot: 0, tailRotor: 0, wingPhase: 0, tailSwing: 0, headRot: 0, track: 0, tilt: 0, recoil: 0, frame: 0 });
+  for (let i = 0; i < BOSS_DBG; i++) bossDbg.push({ id: 0, type: '', turretFlip: 0, turretRot: 0, rotorRot: 0, tailRotor: 0, wingPhase: 0, tailSwing: 0, headRot: 0, track: 0, tilt: 0, recoil: 0, frame: 0,
+    fireT: 0, drawn: { x: 0, y: 0 }, logic: { x: 0, y: 0 }, hasLogic: false, tipSprite: null, tipLx: 0, tipLy: 0 });
   let nBoss = 0;
 
   function makeBoss(type) {
@@ -418,11 +424,11 @@ export function createRenderer(canvasHost) {
     const set = rig.tex[name], v = set[vi] || set[0];
     part(s, v[f] || v[0], rig.anchors[name], x, y, inv); s.rotation = rot; s.tint = 0xffffff; s.alpha = 1;
   }
-  // Augen in einer Gruppe, die lokal um rot gedreht und senkrecht um flip gespiegelt ist: der Blick
+  // Augen in einer Gruppe, die lokal um rot gedreht und um fx (waagrecht) gespiegelt ist: der Blick
   // (Weltrichtung lookX/lookY) wird in die Gruppe zurückgerechnet
-  function bossEyes(b, rig, p, face, rot, flip, ti, inv) {
+  function bossEyes(b, rig, p, face, rot, fx, ti, inv) {
     const lx = p.lookX * face, ly = p.lookY, c = Math.cos(rot), s = Math.sin(rot), e = rig.eyes, A = rig.anchors;
-    const ox = (lx * c + ly * s) * rig.eyeR, oy = (-lx * s + ly * c) * flip * rig.eyeR;
+    const ox = (lx * c + ly * s) * fx * rig.eyeR, oy = (-lx * s + ly * c) * rig.eyeR;
     part(b.pupilL, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
     part(b.pupilR, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
     if (p.blink) { part(b.lid, rig.lid, A.lid, 0, 0, inv); b.lid.tint = rig.lidTint[ti]; } else b.lid.visible = false;
@@ -433,19 +439,20 @@ export function createRenderer(canvasHost) {
     let b = slot.bosses[type];
     if (!b) { b = slot.bosses[type] = makeBoss(type); slot.c.addChild(b.root); }
     if (slot.shown !== b) { if (slot.shown) slot.shown.root.visible = false; b.root.visible = true; slot.shown = b; }
+    let tipS = null, tlx = 0, tly = 0;
     if (type === 'panzer') {
-      const G = BOSS_GEO.panzer.turret;
+      const G = BOSS_GEO.panzer;
       bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
       bp(b.treads, rig, 'treads', 0, p.frame, 0, 0, 0, inv);
-      // Turm: Weltwinkel nach lokal (Spiegelung und Wannenneigung heraus). Der Turm dreht sich auf dem
-      // Boden: die Tiefenrichtung (sin) wird um TURRET_PERSP gestaucht, das Rohr dabei verkürzt (L);
-      // nach hinten gerichtet wird die Gruppe senkrecht gespiegelt, damit die Kuppel oben bleibt
-      const a = localAim(p.turretRot - slot.c.rotation, face), ca = Math.cos(a), sa = Math.sin(a) * TURRET_PERSP;
-      const flip = ca < 0 ? -1 : 1, L = Math.sqrt(ca * ca + sa * sa);
-      b.g.position.set(G[0] * R, G[1] * R); b.g.rotation = Math.atan2(sa, ca); b.g.scale.set(1, flip);
-      bp(b.weapon, rig, 'weapon', vi, 0, -p.recoil * L, 0, 0, inv); b.weapon.scale.x = inv * L;
+      // Turm: Kuppel bleibt waagrecht, Breite = Seite des Ziels (lokal turretFlip · face), beim Umdrehen
+      // schmal und etwas höher; Rohr um den Schildzapfen um turretRot, Rückstoß entlang des Rohrs
+      const fl = p.turretFlip * face, e = p.turretRot, ce = Math.cos(e), se = Math.sin(e);
+      b.g.position.set(G.turret[0] * R, G.turret[1] * R); b.g.rotation = 0;
+      b.g.scale.set(fl, 1 + TURN_SQUASH * (1 - Math.abs(p.turretFlip)));
+      bp(b.weapon, rig, 'weapon', vi, 0, G.trunnion[0] * R - p.recoil * ce, G.trunnion[1] * R - p.recoil * se, e, inv);
       bp(b.turret, rig, 'turret', vi, 0, 0, 0, 0, inv);
-      bossEyes(b, rig, p, face, b.g.rotation, flip, ti, inv);
+      bossEyes(b, rig, p, face, 0, fl < 0 ? -1 : 1, ti, inv);
+      tipS = b.weapon; tlx = (G.tip[0] - G.trunnion[0]) * R; tly = (G.tip[1] - G.trunnion[1]) * R;
     } else if (type === 'heli') {
       const G = BOSS_GEO.heli;
       bp(b.body, rig, 'body', vi, 0, 0, 0, 0, inv);
@@ -456,6 +463,7 @@ export function createRenderer(canvasHost) {
       bp(b.disc, rig, 'rotorDisc', 0, 0, 0, 0, 0, inv);
       bp(b.ghost, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot - GHOST, inv); b.ghost.alpha = .3;
       bp(b.blades, rig, 'rotorBlades', 0, 0, 0, 0, p.rotorRot, inv);
+      tipS = b.weapon; tlx = G.gunTip[0] * R; tly = G.gunTip[1] * R;
     } else {
       const G = BOSS_GEO.drache, w = p.wing;
       bp(b.wingB, rig, 'wing', 0, 0, G.wingB[0] * R, G.wingB[1] * R, WING_ROT * w + .08, inv);
@@ -469,12 +477,18 @@ export function createRenderer(canvasHost) {
       bossEyes(b, rig, p, face, p.headRot, 1, ti, inv);
       bp(b.wingF, rig, 'wing', 0, 0, G.wingF[0] * R, G.wingF[1] * R, WING_ROT * w - .1, inv);
       b.wingF.scale.set(inv, inv * (1 - WING_SQUASH * w));
+      tipS = b.head; tlx = G.mouth[0] * R; tly = G.mouth[1] * R;
     }
     if (nBoss < BOSS_DBG) {
       const d = bossDbg[nBoss++];
-      d.id = u.id; d.type = type; d.turretRot = p.turretRot; d.rotorRot = p.rotorRot; d.tailRotor = p.tailRotor;
+      d.id = u.id; d.type = type; d.turretFlip = p.turretFlip; d.turretRot = p.turretRot; d.rotorRot = p.rotorRot; d.tailRotor = p.tailRotor;
       d.wingPhase = p.wingPhase; d.tailSwing = p.tailSwing; d.headRot = p.headRot; d.track = p.track;
-      d.tilt = p.tilt; d.recoil = p.recoil; d.frame = p.frame;
+      d.tilt = p.tilt; d.recoil = p.recoil; d.frame = p.frame; d.fireT = u.fireT;
+      // Mündung: aus der Pose gerechnet (drawn), wie die Logik jetzt schießen würde (logic), Sprite (debugRig)
+      drawnMuzzle(u, p, d.drawn);
+      d.hasLogic = !!u.tg;
+      if (u.tg) { bossMuzzle(u, u.tg.x, u.tg.y, d.logic); d.logic.x += u.x; d.logic.y += u.y - (u.z || 0); }
+      d.tipSprite = tipS; d.tipLx = tlx * rigs.resolution; d.tipLy = tly * rigs.resolution;
     }
   }
 
@@ -687,7 +701,16 @@ export function createRenderer(canvasHost) {
       groundPool: groundPool.size, airPool: airPool.size, types: rigs ? [...rigs.keys()] : [],
       // Boss-Sticker (Task 12c): Pose der im letzten Bild gezeichneten Bosse (turretRot, rotorRot, wingPhase,
       // tailSwing, headRot, track, tilt, recoil, frame), um zu prüfen, dass sie sich mit der Zeit ändern
-      bosses: bossDbg.slice(0, nBoss).map(d => ({ ...d })) };
+      // tip = Mündung aus den gezeichneten Sprites (Welt), drawn = aus der Pose (muzzle.tipOffset), logic = wo
+      // die Logik jetzt schießen würde (muzzle.bossMuzzle; im Schuss-Moment gleich drawn)
+      bosses: bossDbg.slice(0, nBoss).map(d => {
+        const g = d.tipSprite ? scene.toLocal(d.tipSprite.toGlobal(new PIXI.Point(d.tipLx, d.tipLy))) : null;
+        const r1 = v => Math.round(v * 10) / 10;
+        return { id: d.id, type: d.type, turretFlip: d.turretFlip, turretRot: d.turretRot, rotorRot: d.rotorRot, tailRotor: d.tailRotor,
+          wingPhase: d.wingPhase, tailSwing: d.tailSwing, headRot: d.headRot, track: d.track, tilt: d.tilt, recoil: d.recoil, frame: d.frame, fireT: d.fireT,
+          tip: g ? { x: r1(g.x), y: r1(g.y) } : null, drawn: { x: r1(d.drawn.x), y: r1(d.drawn.y) },
+          logic: d.hasLogic ? { x: r1(d.logic.x), y: r1(d.logic.y) } : null };
+      }) };
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen

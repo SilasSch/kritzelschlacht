@@ -255,7 +255,11 @@ function bodyWalls(world, c) {
 // splash beim Eintauchen; terrain mit kind 'ash' und dem Zellbereich gx0…gy1 für den Asche-Fleck.
 // crash ('heli' | 'drache' | null): abgeschossener Flieger, löst beim ersten Bodenkontakt combat.crash aus.
 // t: Sekunden im aktuellen Zustand. fade > 0: verblasst, wird bei 0 entfernt. px/py: letzte Position.
-export const CORPSE_CAP = 1500;      // darüber verblassen die ältesten
+// Deckel (Spez. #11): höchstens CORPSE_CAP Körper (kind 'body') und PART_CAP Leichenteile; darüber verblassen
+// jeweils die ältesten. Teile haben den kleineren eigenen Deckel und gehen so vor den Körpern; zusammen
+// höchstens CORPSE_CAP + PART_CAP Einträge (zuzüglich der gerade verblassenden).
+export const CORPSE_CAP = 1500;
+export const PART_CAP = 500;
 export const CORPSE_FADE = 1;        // s
 export const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
 
@@ -282,9 +286,15 @@ function settle(world, c, tt) {
 export function stepCorpses(world, dt) {
   const list = world.corpses, terr = world.terr;
   const drag = Math.exp(-AIR_DRAG * dt), fr = Math.exp(-C_FRICTION * dt), rb = Math.exp(-C_ROT_BRAKE * dt);
-  // Deckel: die ältesten (vorne in der Liste) über CORPSE_CAP verblassen
-  const over = list.length - CORPSE_CAP;
-  for (let i = 0; i < over; i++) if (list[i].fade === 0) list[i].fade = CORPSE_FADE;
+  // Deckel: die ältesten (vorne in der Liste) Körper über CORPSE_CAP und Teile über PART_CAP verblassen
+  let bodies = 0;
+  for (let i = 0; i < list.length; i++) if (list[i].kind === 'body') bodies++;
+  let overB = bodies - CORPSE_CAP, overP = list.length - bodies - PART_CAP;
+  for (let i = 0; i < list.length && (overB > 0 || overP > 0); i++) {
+    const c = list[i];
+    if (c.kind === 'body') { if (overB-- > 0 && c.fade === 0) c.fade = CORPSE_FADE; }
+    else if (overP-- > 0 && c.fade === 0) c.fade = CORPSE_FADE;
+  }
   // Ein Absturz (crash) kann während der Schleife Leichen anhängen; sie laufen noch in diesem Schritt mit.
   let n = 0;
   for (let i = 0; i < list.length; i++) {

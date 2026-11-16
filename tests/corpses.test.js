@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash, resizeWorld, clearBattle } from '../game/js/world.js';
-import { applyImpulse, integrate, collide, collideWalls, stepCorpses, CORPSE_CAP, LAUNCH_VZ } from '../game/js/physics.js';
+import { applyImpulse, integrate, collide, collideWalls, stepCorpses, CORPSE_CAP, PART_CAP, LAUNCH_VZ } from '../game/js/physics.js';
 import { blast, hurt, PARTS } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
 
@@ -18,7 +18,7 @@ const wallCol = (w, x, y0, y1) => { for (let y = y0; y <= y1; y += 10) setCell(w
 const tough = u => { u.hp = 1e9; return u; };
 
 test('Konstanten', () => {
-  assert.equal(CORPSE_CAP, 1500); assert.equal(LAUNCH_VZ, 60);
+  assert.equal(CORPSE_CAP, 1500); assert.equal(PART_CAP, 500); assert.equal(LAUNCH_VZ, 60);
   assert.deepEqual(PARTS.krieger, ['headgear', 'weapon']);
   assert.deepEqual(PARTS.ritter, ['headgear', 'shield']);
   assert.deepEqual(PARTS.panzer, ['turret']);
@@ -220,12 +220,25 @@ test('Deckel: bei 1.600 Leichen verblassen die ältesten 100 und verschwinden', 
   assert.ok(w.corpses.slice(0, 10).every(c => c.fade > 0));
 });
 
-test('Teile zählen zum Deckel', () => {
+test('Teile haben einen eigenen Deckel: Körper erst ab 1.500, die ältesten Teile verblassen zuerst', () => {
   const w = mkWorld();
+  // 600 Krieger: 600 Körper + 1.200 Teile. Körper bleiben alle, von den Teilen verblassen die ältesten 700
   for (let k = 0; k < 600; k++) hurt(w, spawn(w, 'krieger', 100 + (k % 40) * 30, 100 + (k / 40 | 0) * 30, 'rot'), 1e9, 'melee', null);
   assert.equal(w.corpses.length, 1800);
+  const all = w.corpses.slice(), parts = all.filter(c => c.kind === 'part');
   stepCorpses(w, DT);
-  assert.equal(w.corpses.filter(c => c.fade > 0).length, 300);
+  assert.ok(all.filter(c => c.kind === 'body').every(c => c.fade === 0), 'kein Körper verblasst');
+  assert.equal(parts.filter(c => c.fade > 0).length, 1200 - PART_CAP);
+  assert.ok(parts.slice(0, 1200 - PART_CAP).every(c => c.fade > 0) && parts.slice(1200 - PART_CAP).every(c => c.fade === 0), 'die ältesten Teile');
+  for (let k = 0; k < 70; k++) stepCorpses(w, DT);
+  assert.equal(w.corpses.length, 600 + PART_CAP);
+  // 1.000 weitere Körper ohne Teile (Wölfe): 1.600 Körper → die ältesten 100 Körper verblassen
+  for (let k = 0; k < 1000; k++) hurt(w, spawn(w, 'wolf', 20 + (k % 60) * 20, 20 + (k / 60 | 0) * 20, 'rot'), 1e9, 'melee', null);
+  const bodies = w.corpses.filter(c => c.kind === 'body');
+  stepCorpses(w, DT);
+  assert.equal(bodies.filter(c => c.fade > 0).length, 100);
+  assert.ok(bodies.slice(0, 100).every(c => c.fade > 0));
+  assert.ok(w.corpses.filter(c => c.kind === 'part').every(c => c.fade === 0));
 });
 
 test('sim.step bewegt Leichen', () => {

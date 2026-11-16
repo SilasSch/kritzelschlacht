@@ -7,6 +7,7 @@ import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/
 import { attack, think, ignite, BURN_T, BURN_DPS, BURN_MAX_GEN, SPREAD_DT, SPREAD_P, SPREAD_PAD } from '../game/js/combat.js';
 import { step, placeCircle } from '../game/js/sim.js';
 import { eventSound } from '../game/js/audio.js';
+import { createRng } from '../game/js/rng.js';
 import { createFxCore, look, GLOW_KINDS, WARM_KINDS, FRAME_LIMITS, FX_CAP, BURN_FX_UNITS } from '../game/js/render/fxcore.js';
 
 const DT = 1 / 60;
@@ -264,7 +265,7 @@ test('Flammenstrahl gedeckelt: 500 Atemstöße in einem Bild → höchstens FRAM
 });
 
 test('Brennende Einheiten: Flammen auf dem Körper und ein Rauchfaden, solange burnT > 0', () => {
-  const core = mkCore();
+  const core = mkCore({ rand: createRng(7) });   // fester Zufall: mit Math.random schlug die Flammenzahl ~1/12 fehl
   const w = mkWorld(), k = spawn(w, 'krieger', 300, 300, 'blau'), b = spawn(w, 'biene', 500, 300, 'blau');
   spawn(w, 'krieger', 700, 300, 'blau');   // brennt nicht
   ignite(w, k, 0, null); ignite(w, b, 1, null);

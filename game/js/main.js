@@ -371,10 +371,10 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon';
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Zähler des letzten Bilds: renderer.debugPhysics(); Effekte: fx.debug() (Partikel je Art, Sprites je
-// Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift).
+// Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
 const scenes = {
   grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
@@ -384,6 +384,14 @@ const scenes = {
     world.teamMode = true; tCircle(world, 'wasser', .5, .5, .18); tCircle(world, 'lava', .2, .5, .08);
     placeRect(world, 'krieger', 30, .44, .4, .56, .6, 'blau'); placeRect(world, 'krieger', 8, .18, .45, .22, .55, 'blau');
     placeRect(world, 'grenadier', 10, .8, .4, .84, .6, 'rot');
+  },
+  // Drachenfeuer (Spez. #21): ein Drache gegen einen dichten Bienenschwarm (60, Radius 40 px; fängt gut
+  // Feuer) und eine verteilte Kriegerreihe (Abstand 40 px; Feuer springt nicht über)
+  dragon() {
+    world.teamMode = true;
+    spawn(world, 'drache', world.W * .62, world.H * .5, 'rot');
+    placeCircle(world, 'biene', 60, .4, .3, 40 / world.H, 'blau');
+    for (let i = 0; i < 9; i++) spawn(world, 'krieger', world.W * .4, Math.min(world.H - 8, world.H * .72 - 160 + i * 40), 'blau');
   },
 };
 if (new URLSearchParams(location.search).has('debug')) {

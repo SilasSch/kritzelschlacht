@@ -13,7 +13,7 @@ import { shade } from './rig.js';
 import { projScreen } from './pose.js';
 
 export const FX_CAP = 3000;
-export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160 };
+export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48 };
 
 /* ---------- Wackeln ---------- */
 // Explosion: max(shake, min(12, R/6)). Abklingen je Sekunde wie früher ×0.85 je Bild bei 60 fps.
@@ -55,6 +55,17 @@ export function landDust(impact, out = {}) {
   out.r = Math.min(9, 2.5 + impact / 80);
   return out;
 }
+/* ---------- Drachenfeuer (Spez. #21) ---------- */
+// Flammenstrahl je Atemstoß (alle 0,2 s je Drache): JET_N Flammen ('jet', additiv glühend mit warmem Halo)
+// von der Mündung zum Ziel, gestreut im Kegel ±JET_SPREAD, Dämpfung JET_DRAG; sie wachsen, werden von
+// weißgelb zu rot und enden grob am Ziel. Dazu Funken ('spark', fallen), Hitzeflimmern ('haze', zart,
+// normal gemischt), etwas Rauch am Ende und ein kurzes Bodenlicht am Ziel.
+export const JET_N = 20, JET_SPARKS = 5, JET_HAZE = 2, JET_SPREAD = .42, JET_DRAG = 2.4;
+// Brennende Einheiten (u.burnT > 0): je Bild höchstens BURN_FX_UNITS Einheiten (reihum), Flammen
+// ('flame') mit FLAME_RATE + FLAME_RATE_R · r je s auf dem Körper und ein Rauchfaden ('wisp', WISP_RATE je s).
+export const BURN_FX_UNITS = 160, FLAME_RATE = 9, FLAME_RATE_R = .9, WISP_RATE = 3.5;
+export const WISP = { life: 1.2, rise: 26, wind: 10, grow: 2.2, alpha: .28 };
+
 // Glut je Explosion: 14 bis 22, mit dem Radius mehr
 export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10));
 
@@ -99,8 +110,8 @@ export function createParticles(cap = FX_CAP) {
 /* ---------- Aussehen ---------- */
 // Bildteile des Atlas in fx.js
 export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7 };
-export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light']);
-export const WARM_KINDS = new Set(['light', 'flash', 'fire']);
+export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame']);
+export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
 // ax = Anker x), das additive Glühen (gR, gTint, gAlpha; gLight: im Bodenlicht-Layer unter den Figuren) und
@@ -120,6 +131,31 @@ export function look(p, o) {
       o.r = p.r * (.6 + a * .6); o.tint = a > .6 ? 0xffe066 : a > .3 ? 0xff8a3d : 0xe5574f;
       o.gR = p.r * 2.6; o.gTint = 0xff7a2a; o.gAlpha = a * .5;
       o.wR = p.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a;
+      break;
+    case 'jet': {
+      // wächst entlang des Strahls, weißgelb → orange → rot
+      o.r = p.r * (.55 + q * 1.25); o.alpha = a > .15 ? .95 : a / .15 * .95;
+      o.tint = q < .22 ? 0xfff1a8 : q < .48 ? 0xffc23d : q < .75 ? 0xff7a2a : 0xd8432f;
+      o.gR = o.r * 2.4; o.gTint = 0xff8a3a; o.gAlpha = a * .55;
+      o.wR = o.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a * .6;
+      break;
+    }
+    case 'spark':
+      o.tint = a > .5 ? 0xffe680 : 0xff9a3d; o.gR = p.r * 3.2; o.gTint = 0xffb050; o.gAlpha = a * .8;
+      break;
+    case 'haze':
+      // Hitzeflimmern: zarte warme Scheibe, die zittert und wächst
+      o.frame = F.warm; o.x = p.x + Math.sin(p.age * 40 + p.rot) * 2; o.y = p.y + Math.cos(p.age * 33 + p.rot) * 1.2;
+      o.r = p.r * (1 + q * .8); o.tint = 0xffe2b8; o.alpha = .12 * Math.min(1, .2 + q / .15) * a;
+      break;
+    case 'flame':
+      o.r = p.r * (.5 + a * .7); o.tint = a > .6 ? 0xffe066 : a > .3 ? 0xff8a3d : 0xe5574f;
+      o.gR = p.r * 2.4; o.gTint = 0xff7a2a; o.gAlpha = a * .5;
+      o.wR = p.r * HALO_RMUL; o.wAlpha = HALO_ALPHA * a * .6;
+      break;
+    case 'wisp':
+      puffLook(p.age, p.life, WISP.grow, WISP.alpha, PL);
+      o.frame = F.puff; o.r = p.r * PL.scale; o.alpha = PL.alpha;
       break;
     case 'flash':
       o.tint = 0xffe066; o.gR = p.r * 3.5; o.gTint = 0xffcf66; o.gAlpha = a * .9;
@@ -162,7 +198,7 @@ export function createFxCore(hooks = {}, opt = {}) {
   const store = createParticles(opt.cap || FX_CAP);
   const used = {}, skipped = {};
   const crashPts = [];
-  let shake = 0, lightLive = 0;
+  let shake = 0, lightLive = 0, burnCursor = 0, burning = 0, burningAll = 0;
   const rnd = (a, b) => a + rand() * (b - a);
 
   const take = k => {
@@ -188,6 +224,52 @@ export function createFxCore(hooks = {}, opt = {}) {
     const P = k === 'smoke' ? SMOKE : DUST, p = add(k, x, y, life, r, k === 'smoke' ? SMOKE_COLS[(rand() * 3) | 0] : 0xcdc6b4);
     if (!p) return;
     p.vx = P.wind; p.vy = -P.rise; p.rot = rand() * TAU; p.vrot = rnd(-.4, .4);
+  }
+
+  // Rauchfaden (brennende Einheit) bzw. Dampf (gelöscht): steigt WISP.rise px/s
+  function wisp(x, y, r, col) {
+    const p = add('wisp', x, y, WISP.life * rnd(.8, 1.15), r, col); if (!p) return;
+    p.vx = WISP.wind + rnd(-4, 4); p.vy = -WISP.rise * rnd(.8, 1.2); p.rot = rand() * TAU; p.vrot = rnd(-.6, .6);
+  }
+
+  // Flammenstrahl eines Atemstoßes: Mündung (e.x, e.y − z) → Ziel (tx, ty − tz), ohne Ziel 90 px voraus am Boden
+  function jet(e) {
+    const z = e.z || 0, sx = e.x, sy = e.y - z, face = e.face < 0 ? -1 : 1;
+    const hasT = Number.isFinite(e.tx) && Number.isFinite(e.ty);
+    const gx = hasT ? e.tx : e.x + (e.nx ?? face) * 90, gy = hasT ? e.ty : e.y + (e.ny || 0) * 90;
+    const ex = gx, ey = gy - (hasT ? e.tz || 0 : 0);
+    let L = Math.hypot(ex - sx, ey - sy); L = L < 40 ? 40 : L > 150 ? 150 : L;
+    const ang = Math.atan2(ey - sy, ex - sx), ca = Math.cos(ang), sa = Math.sin(ang);
+    for (let i = 0; i < JET_N; i++) {
+      const life = rnd(.38, .55), reach = (1 - Math.exp(-JET_DRAG * life)) / JET_DRAG;
+      const s = L * rnd(.7, 1.12) / reach, a = ang + (rand() + rand() - 1) * JET_SPREAD;
+      const p = add('jet', sx + rnd(-2, 2), sy + rnd(-2, 2), life, rnd(3, 5.5)); if (!p) return;
+      p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s; p.drag = JET_DRAG; p.rot = rand() * TAU;
+    }
+    for (let i = 0; i < JET_SPARKS; i++) {
+      const life = rnd(.3, .6), s = L * rnd(1.4, 2.4), a = ang + (rand() + rand() - 1) * JET_SPREAD * 1.5;
+      const p = add('spark', sx + ca * L * rnd(0, .5), sy + sa * L * rnd(0, .5), life, rnd(.9, 1.6)); if (!p) return;
+      p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 30; p.ay = 160; p.drag = 1.5;
+    }
+    for (let i = 0; i < JET_HAZE; i++) {
+      const f = rnd(.3, .75), p = add('haze', sx + ca * L * f, sy + sa * L * f - 6, .35, L * rnd(.14, .2)); if (!p) return;
+      p.vx = ca * 20; p.vy = sa * 20 - 14; p.rot = rand() * TAU;
+    }
+    if (rand() < .5) puff('smoke', ex + rnd(-6, 6), ey - rnd(0, 8), SMOKE.life * .5, rnd(4, 6));
+    if (lightLive < LIGHT_LIVE_MAX && add('light', gx + rnd(-6, 6), gy + rnd(-4, 4), LIGHT_T, 34)) lightLive++;
+  }
+
+  // Brennende Einheit für dt: Flammen auf dem Körper (Bildschirm y − z), die mit ihr ziehen und steigen
+  function burnFx(u, dt) {
+    const r = u.T.r, bx = u.x, by = u.y - u.z;
+    const vx = ((u.mx || 0) + (u.vx || 0)) * .8, vy = ((u.my || 0) + (u.vy || 0)) * .8;
+    for (let n = dt * (FLAME_RATE + FLAME_RATE_R * r); n > 0; n -= 1) {
+      if (n < 1 && rand() >= n) break;
+      const p = add('flame', bx + rnd(-.6, .6) * r, by + rnd(-.9, .3) * r, rnd(.3, .5), rnd(.35, .55) * (r > 4 ? r : 4));
+      if (!p) return;
+      p.vx = vx + rnd(-8, 8); p.vy = vy - rnd(28, 50); p.drag = 1;
+    }
+    if (rand() < dt * WISP_RATE) wisp(bx + rnd(-.3, .3) * r, by - r * .9, rnd(1.6, 2.6) * (r > 9 ? r / 9 : 1), SMOKE_COLS[(rand() * 3) | 0]);
   }
 
   // Explosion: Bodenlicht, heller Kern, Glut (Feuer: Flammen), Rauch, Krater, Wackeln
@@ -227,19 +309,11 @@ export function createFxCore(hooks = {}, opt = {}) {
         return;
       }
       case 'shot': {
-        if (e.kind !== 'breath' && e.kind !== 'bullet' && e.kind !== 'shell' && e.kind !== 'rocket') break;
+        if (e.kind === 'breath') { if (take('jet')) jet(e); break; }
+        if (e.kind !== 'bullet' && e.kind !== 'shell' && e.kind !== 'rocket') break;
         if (!take('shot')) break;
         // Flieger schießen aus ihrer Höhe (wie pose.projScreen am Start der Bahn)
         const y = e.y - ((e.z || 0) > MUZZLE_Z ? e.z - MUZZLE_Z : 0), face = e.face < 0 ? -1 : 1;
-        if (e.kind === 'breath') {
-          const by = e.y - (e.z || 0);
-          for (let i = 0; i < 4; i++) {
-            const a = Math.atan2(e.ny || 0, e.nx || face) + rnd(-.5, .5), s = rnd(140, 260);
-            const p = add('fire', e.x, by, rnd(.3, .5), rnd(3, 6)); if (!p) break;
-            p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s; p.drag = DRAG;
-          }
-          break;
-        }
         add('flash', e.x + face * 3, y, .07, e.kind === 'shell' ? 7 : 3.5);
         if (e.kind === 'shell') for (let i = 0; i < 3; i++) puff('smoke', e.x + face * rnd(5, 12), y + rnd(-3, 3), SMOKE.life * .5, rnd(4, 6));
         break;
@@ -284,6 +358,20 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (e.kind === 'arrow') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
         else dots(e.x, e.y, 1, 20, .25, 1.5, 1.5, 0xb8a98a);
         break;
+      case 'ignite': {
+        // Stichflamme beim Anzünden
+        if (!take('ignite')) break;
+        const y = e.y - (e.z || 0);
+        for (let i = 0; i < 4; i++) {
+          const p = add('flame', e.x + rnd(-4, 4), y + rnd(-4, 2), rnd(.25, .4), rnd(2.5, 4)); if (!p) break;
+          p.vx = rnd(-30, 30); p.vy = -rnd(40, 80); p.drag = 2;
+        }
+        break;
+      }
+      case 'extinguish':
+        // Dampfwölkchen
+        if (take('misc')) for (let i = 0; i < 3; i++) wisp(e.x + rnd(-4, 4), e.y - rnd(2, 8), rnd(2.5, 4), 0xe3e8ee);
+        break;
       case 'burn': if (take('misc')) { const p = add('fire', e.x + rnd(-4, 4), e.y, .4, 3); if (p) p.vy = -40; } break;
       case 'wallHit':
         if (e.broken && take('misc')) { dots(e.x, e.y, 3, 50, .5, 1.5, 3, 0x8d929c); puff('dust', e.x, e.y, DUST.life, 5); }
@@ -314,6 +402,21 @@ export function createFxCore(hooks = {}, opt = {}) {
         } else if (rand() < dt * 36) puff('smoke', TR.x - Math.cos(TR.a) * 6, TR.y - Math.sin(TR.a) * 6, 1, rnd(2, 3.5));
       }
     }
+    // brennende Einheiten: höchstens BURN_FX_UNITS je Bild, reihum ab burnCursor
+    if (world && dt > 0 && world.units) {
+      const us = world.units, n = us.length;
+      let done = 0, all = 0, next = 0;
+      const i0 = n ? burnCursor % n : 0;
+      for (let j = 0; j < n; j++) {
+        const i = i0 + j < n ? i0 + j : i0 + j - n, u = us[i];
+        if (!u.alive || !(u.burnT > 0)) continue;
+        all++;
+        if (done >= BURN_FX_UNITS) continue;
+        burnFx(u, dt); done++; next = i + 1;
+      }
+      burnCursor = all > done ? next : 0;
+      burning = done; burningAll = all;
+    }
     if (dt > 0) store.step(dt);
     let nl = 0;
     const live = store.live;
@@ -321,14 +424,14 @@ export function createFxCore(hooks = {}, opt = {}) {
     lightLive = nl;
   }
 
-  function clear() { store.clear(); shake = 0; lightLive = 0; for (const k in skipped) delete skipped[k]; }
+  function clear() { store.clear(); shake = 0; lightLive = 0; burnCursor = 0; burning = 0; burningAll = 0; for (const k in skipped) delete skipped[k]; }
 
   return {
     store, consume, update, clear,
     get shake() { return shake; },
     set shake(v) { shake = v; },
     decay(dt) { shake = decayShake(shake, dt); },
-    stats() { return { skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive }; },
+    stats() { return { skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive, burning, burningAll }; },
   };
 }
 

@@ -9,9 +9,9 @@
 // Partikel liegen in PIXI.ParticleContainern, alle aus einem Atlas (eine BaseTexture):
 //   warm  (Ebene 'light', normal): warme Scheibe #ffb347 der Explosionen, auch auf Weiß sichtbar (0.35 → 0)
 //   light (Ebene 'light', additiv): Bodenlicht der Explosionen (auf farbigem Boden)
-//   halo  (Ebene 'fx', normal): kleiner warmer Halo um Mündungsblitze und Feuer
-//   glow  (Ebene 'fx', additiv): weiches Glühen von Feuer, Explosion, Mündungsblitz
-//   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile
+//   halo  (Ebene 'fx', normal): kleiner warmer Halo um Mündungsblitze und Feuer (auch Flammenstrahl, Brand)
+//   glow  (Ebene 'fx', additiv): weiches Glühen von Feuer, Explosion, Mündungsblitz, Flammenstrahl, Funken
+//   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile, Hitzeflimmern
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
 import { createFxCore, look, F, FX_CAP } from './fxcore.js';
@@ -198,6 +198,14 @@ export function createFx(renderer) {
       dropped: st.dropped, skipped: st.skipped, lights: st.lights,
       shake: r2(core.shake), decals: decalCount, decalUploads,
       smoke: n ? { n, dx: r2(dx / n), dy: r2(dy / n), age: r2(age / n) } : { n: 0 },
+      // Drachenfeuer (Spez. #21): Partikel des Flammenstrahls (jet, Funken, Hitzeflimmern) und der
+      // brennenden Einheiten (Flammen, Rauchfaden); burning = im letzten Bild bedient (≤ BURN_FX_UNITS),
+      // burningAll = alle brennenden; skippedJet = Atemstöße über dem Budget je Bild (seit clear)
+      fire: {
+        jet: byKind.jet || 0, sparks: byKind.spark || 0, haze: byKind.haze || 0,
+        flames: byKind.flame || 0, wisps: byKind.wisp || 0,
+        burning: st.burning, burningAll: st.burningAll, skippedJet: st.skipped.jet || 0,
+      },
       filters,
     };
   }

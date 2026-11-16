@@ -150,7 +150,7 @@ test('shot: Mündungsblitz 0,07 s bei bullet/shell/rocket, shell mit Rauchstoß;
   core.consume([{ type: 'shot', kind: 'bomb', x: 10, y: 10, face: 1 }]);
   assert.equal(core.store.count, 0);
   core.consume([{ type: 'shot', kind: 'breath', x: 10, y: 10, face: 1, nx: 1, ny: 0 }]);
-  assert.ok(kinds(core).fire >= 3);
+  assert.ok(kinds(core).jet >= 16, 'Flammenstrahl (Spez. #21), nicht mehr 4 Punkte');
 });
 
 test('land: Staubwolke nach impact; splash: 10 Tropfen und ein Ring; Asche und Tod als Decal', () => {
@@ -208,7 +208,8 @@ test('Flugspuren: Rakete raucht (normal), Feuerball glüht', () => {
 });
 
 test('Aussehen: Glühen (additiv) nur bei Feuer, Explosion, Mündungsblitz und Bodenlicht; Rauch grau und normal', () => {
-  assert.deepEqual([...GLOW_KINDS].sort(), ['core', 'ember', 'fire', 'flash', 'light']);
+  // Spez. #21: Flammenstrahl (jet, spark) und brennende Einheiten (flame) sind Feuer
+  assert.deepEqual([...GLOW_KINDS].sort(), ['core', 'ember', 'fire', 'flame', 'flash', 'jet', 'light', 'spark']);
   const { core } = mkCore();
   core.consume([
     { type: 'blast', x: 0, y: 0, R: 40, kind: 'blast' }, { type: 'blast', x: 0, y: 0, R: 40, kind: 'fire' },
@@ -247,7 +248,7 @@ test('Warmes Bodenlicht (normal): #ffb347, Deckkraft 0,35 → 0 in 0,25 s, Radiu
 });
 
 test('Warmer Halo (normal) nur bei Mündungsblitz und Feuer: 2–3× so groß, Deckkraft ≤ 0,25, kurz', () => {
-  assert.deepEqual([...WARM_KINDS].sort(), ['fire', 'flash', 'light']);
+  assert.deepEqual([...WARM_KINDS].sort(), ['fire', 'flame', 'flash', 'jet', 'light']);
   assert.equal(HALO_ALPHA, .25);
   const { core } = mkCore();
   core.consume([{ type: 'shot', kind: 'bullet', x: 0, y: 0, face: 1 }, { type: 'burn', x: 0, y: 0 },

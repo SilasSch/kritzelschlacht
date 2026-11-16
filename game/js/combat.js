@@ -49,7 +49,8 @@ const HC = HASH_CELL, WALL = 4;
 export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 
 /* ---------- Schaden ---------- */
-export function hurt(world, v, a, kind, src) {
+// dot: Schaden über Zeit (Brand), quetscht nie, auch mit Verursacher.
+export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
   let m = 1; const t = v.type;
   if (t === 'ritter') {
@@ -62,10 +63,10 @@ export function hurt(world, v, a, kind, src) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
-  // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand ohne Schützen)
-  // würde hitT sonst jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis.
+  // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
+  // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
   const d = a * m; v.hp -= d;
-  if (src || kind !== 'fire') v.hitT = .15;
+  if (!dot && (src || kind !== 'fire')) v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
   if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src); }
   return d;
@@ -394,8 +395,9 @@ export function fire(world, u, t, kind, ax, ay) {
   sound(world, K[3]);
 }
 
-// Drachenfeuer: Kegel vor dem Drachen
-function breath(world, u, nx, ny) {
+// Drachenfeuer: Kegel vor dem Drachen; Getroffene fangen Feuer (Generation 0, Verursacher der Drache).
+// t: das Ziel, sein Punkt (tx, ty, tz) geht für den Flammenstrahl ins shot-Ereignis.
+function breath(world, u, nx, ny, t) {
   const T = u.T, f = factionOf(world, u);
   u.fireT = 0;
   query(world, u.x, u.y, T.range + 30, v => {
@@ -404,9 +406,71 @@ function breath(world, u, nx, ny) {
     if (d > T.range + v.T.r) return;
     if ((dx * nx + dy * ny) / (d || 1) < .82) return;
     hurt(world, v, T.dmg, 'fire', u);
+    if (v.alive) ignite(world, v, 0, u);
   });
-  emit(world, { type: 'shot', kind: 'breath', x: u.x + nx * T.r, y: u.y - T.r * .6 + ny * T.r, z: u.z, face: u.face, nx, ny });
+  emit(world, { type: 'shot', kind: 'breath', x: u.x + nx * T.r, y: u.y - T.r * .6 + ny * T.r, z: u.z, face: u.face, nx, ny,
+    tx: t ? t.x : u.x + nx * T.range * .8, ty: t ? t.y : u.y + ny * T.range * .8, tz: t ? t.z : 0 });
   sound(world, 'fire');
+}
+
+/* ---------- Brand (Spez. #21) ---------- */
+// Getroffene brennen BURN_T s nach und nehmen BURN_DPS Schaden/s ('fire', Schaden über Zeit) vom
+// Verursacher burnSrc, solange er lebt (sonst ohne). Alle SPREAD_DT s (je Einheit nach id gestaffelt)
+// darf eine brennende Einheit jede Nachbar-Einheit im Radius r + v.r + SPREAD_PAD mit Chance
+// SPREAD_P · 0.5^burnGen anzünden (jede Fraktion; Flieger nur Flieger, Boden nur Boden), Generation +1,
+// höchstens BURN_MAX_GEN. So fängt ein dichter Schwarm gut Feuer, eine verteilte Armee kaum.
+// Wasser löscht Bodentruppen sofort (Flieger darüber brennen weiter). Drachen sind feuerfest.
+export const BURN_T = 3, BURN_DPS = 8, BURN_MAX_GEN = 3;
+export const SPREAD_DT = .25, SPREAD_P = .35, SPREAD_PAD = 6;
+const WATER = 1, BURN_Z = 4;   // Bodentruppen unter dieser Höhe stehen im Wasser
+const wet = (world, u) => !u.T.fly && u.z < BURN_Z && world.terr[cellIndex(world, u.x, u.y)] === WATER;
+
+// Zündet u mit Generation gen an (Verursacher src), wenn gen ≤ BURN_MAX_GEN und u nicht schon mit einer
+// niedrigeren Generation brennt; gleiche oder höhere Generation frischt auf bzw. ersetzt. Liefert true,
+// wenn gesetzt. ignite-Ereignis nur beim Anzünden (nicht beim Auffrischen).
+export function ignite(world, u, gen, src) {
+  if (gen > BURN_MAX_GEN || !u.alive || u.type === 'drache') return false;
+  const burning = u.burnT > 0;
+  if (burning && u.burnGen < gen) return false;
+  if (wet(world, u)) return false;
+  u.burnT = BURN_T; u.burnGen = gen; u.burnSrc = src || null;
+  if (!burning) {
+    // erste Prüfung nach (1..16)/16 · SPREAD_DT, nach id gestaffelt: nicht alle im selben Schritt
+    u.burnCk = SPREAD_DT * ((u.id * 7) % 16 + 1) / 16;
+    emit(world, { type: 'ignite', x: u.x, y: u.y, z: u.z });
+  }
+  return true;
+}
+
+function extinguish(u) { u.burnT = 0; u.burnGen = 0; u.burnSrc = null; u.burnCk = 0; }
+
+// Nachbarn anzünden: wiederverwendeter Rückruf über Modulvariablen, keine Allokation je Schritt
+let SP_W = null, SP_U = null, SP_P = 0;
+function spreadTo(v) {
+  const u = SP_U;
+  if (v === u || !!v.T.fly !== !!u.T.fly) return;
+  const R = u.T.r + v.T.r + SPREAD_PAD, dx = v.x - u.x, dy = v.y - u.y;
+  if (dx * dx + dy * dy > R * R) return;
+  if (v.burnT > 0 && v.burnGen <= u.burnGen + 1) return;   // brennt schon mindestens so früh: kein Wurf
+  if (SP_W.rng() < SP_P) ignite(SP_W, v, u.burnGen + 1, u.burnSrc);
+}
+
+// Ein Schritt Brand für u (aus think, auch in der Luft oder betäubt). Kann u töten.
+export function stepBurn(world, u, dt) {
+  if (wet(world, u)) { extinguish(u); emit(world, { type: 'extinguish', x: u.x, y: u.y }); return; }
+  const src = u.burnSrc && u.burnSrc.alive ? u.burnSrc : null;
+  const a = dt < u.burnT ? dt : u.burnT;
+  u.burnT -= a;
+  hurt(world, u, BURN_DPS * a, 'fire', src, true);
+  if (!u.alive) return;
+  u.burnCk -= dt;
+  if (u.burnCk <= 0 && u.burnGen < BURN_MAX_GEN && u.burnT > 0) {
+    SP_W = world; SP_U = u; SP_P = SPREAD_P * Math.pow(.5, u.burnGen);
+    query(world, u.x, u.y, u.T.r + MAX_R + SPREAD_PAD, spreadTo);
+    SP_W = null; SP_U = null;
+  }
+  while (u.burnCk <= 0) u.burnCk += SPREAD_DT;
+  if (u.burnT <= 0) extinguish(u);
 }
 
 /* ---------- KI ---------- */
@@ -426,6 +490,8 @@ export function think(world, u, dt) {
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
+  // Brand läuft in jedem Zustand (kann töten)
+  if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter)
   if (u.state !== 'ok') return;
   if (u.gt <= 0) groupInfo(world, u);
@@ -529,7 +595,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       fire(world, u, t, STRAIGHT_KIND[u.type], ax, ay); break;
     case 'panzer': fire(world, u, t, 'shell'); break;
     case 'moerser': fire(world, u, t, 'mortar'); break;
-    case 'drache': breath(world, u, dx / d, dy / d); break;
+    case 'drache': breath(world, u, dx / d, dy / d, t); break;
     case 'baer': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);

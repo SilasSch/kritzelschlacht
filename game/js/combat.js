@@ -266,8 +266,10 @@ function wallHit(world, x0, y0, x1, y1, za, zb) {
 // schräg nach unten); ein Körper zählt, wenn |body.z − z| < r + 10 an der Stelle seiner größten
 // Annäherung. Mauern zählen nur, wo z < WALL_CLEAR_Z.
 // skip: ein Körper, skipSet: Set oder null; pad macht alle Körper dicker (Schusslinie).
+// duckF: Fraktion des Schützen oder null; liegende Körper dieser Fraktion zählen nicht (sie ducken sich
+// unter dem eigenen Feuer, Spez. #22).
 // Ergebnis in RAY: unit (oder null), cell (Mauerzelle oder −1), t (Anteil am Segment, 1 ohne Treffer).
-function cast(world, x0, y0, x1, y1, za, zb, skip, skipSet, pad) {
+function cast(world, x0, y0, x1, y1, za, zb, skip, skipSet, pad, duckF = null) {
   RAY.unit = null; RAY.cell = -1; RAY.t = 1;
   let best = wallHit(world, x0, y0, x1, y1, za, zb);   // setzt RAY.cell bei Treffer
   const { HW, HH, hash } = world, dx = x1 - x0, dy = y1 - y0, dz = zb - za, L2 = dx * dx + dy * dy;
@@ -290,6 +292,7 @@ function cast(world, x0, y0, x1, y1, za, zb, skip, skipSet, pad) {
       for (let i = 0; i < cell.length; i++) {
         const v = cell[i];
         if (!v.alive || v === skip || (skipSet !== null && skipSet.has(v))) continue;
+        if (duckF !== null && v.stance === 'prone' && factionOf(world, v) === duckF) continue;
         const band = v.T.r + BODY_Z_PAD;
         if (v.z <= zlo - band || v.z >= zhi + band) continue;
         const rr = v.T.r + pad, cx = v.x - x0, cy = v.y - y0, c2 = cx * cx + cy * cy;
@@ -333,9 +336,11 @@ function shotGeo(u, t, kind, ax, ay) {
 const zAlong = (z0, zt, el, s) => { const z = z0 + (zt - z0) * s / el; return z > 0 ? z : 0; };
 
 // Ist der Weg u → (x1, y1) frei von eigenen Leuten? Erster Treffer aus der eigenen Fraktion → falsch.
+// Liegende eigene Leute blockieren nicht (der Schuss geht über sie hinweg).
 function clearPath(world, u, x1, y1, z0, z1) {
-  const r = cast(world, u.x, u.y, x1, y1, z0, z1, u, null, LOF_PAD);
-  return !(r.unit && factionOf(world, r.unit) === factionOf(world, u));
+  const f = factionOf(world, u);
+  const r = cast(world, u.x, u.y, x1, y1, z0, z1, u, null, LOF_PAD, f);
+  return !(r.unit && factionOf(world, r.unit) === f);
 }
 
 // Falsch, wenn der erste Treffer auf dem Weg zur Zielmitte zur eigenen Fraktion gehört
@@ -768,8 +773,9 @@ function healer(world, u, dt) {
 // Gerade Schüsse bewegen sich je Schritt um speed·dt und treffen das Erste auf dem Segment:
 // Kugeln enden dort (Mauer nimmt Schaden), Raketen und Feuerbälle explodieren dort.
 // Ohne Treffer: Kugeln enden BULLET_OVERSHOOT px hinter dem Zielpunkt, Raketen/Feuer explodieren am Zielpunkt.
-// Liegende Körper, auf die der Schuss nicht gezielt ist, trifft er nur mit PRONE_DODGE: ein Wurf je Geschoss
-// und Körper; geht er vorbei, kommt der Körper in p.pass und der Strahl läuft dahinter weiter.
+// Liegende Verbündete des Schützen (Fraktion p.f) trifft er nie (sie ducken sich). Andere liegende Körper,
+// auf die der Schuss nicht gezielt ist, trifft er nur mit PRONE_DODGE: ein Wurf je Geschoss und Körper;
+// geht er vorbei, kommt der Körper in p.pass und der Strahl läuft dahinter weiter.
 export function stepProjectiles(world, dt) {
   const proj = world.proj;
   for (let i = proj.length - 1; i >= 0; i--) {
@@ -784,10 +790,10 @@ export function stepProjectiles(world, dt) {
     }
     const s1 = Math.min(p.len, p.t * p.sp), x1 = p.sx + p.nx * s1, y1 = p.sy + p.ny * s1;
     const z1 = zAlong(p.z0, p.zt, p.el, s1);
-    let r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0);
+    let r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0, p.f);
     while (r.unit && r.unit.stance === 'prone' && r.unit !== p.tg && world.rng() >= PRONE_DODGE) {
       (p.pass || (p.pass = new Set())).add(r.unit);
-      r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0);
+      r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0, p.f);
     }
     if (r.unit || r.cell >= 0) {
       proj.splice(i, 1);

@@ -271,6 +271,54 @@ test('durchgelassene Kugel trifft den Körper dahinter', () => {
   assert.ok(behind > 30);
 });
 
+/* ---------- Eigene Liegende (Controller-Entscheid) ---------- */
+test('MG hinter einem liegenden verbündeten Scharfschützen schießt weiter, der Scharfschütze bleibt heil', () => {
+  const w = mkWorld(), m = spawn(w, 'mg', 200, 400, 'blau'), sn = spawn(w, 'sniper', 250, 400, 'blau');
+  lie(sn); sn.cd = 1e9;   // der Scharfschütze selbst schießt nicht (nur das MG zählt)
+  const a = spawn(w, 'schuetze', 340, 400, 'rot'); a.hp = 1e9;
+  const seen = new Set();
+  for (let t = 0; t < 3; t += DT) {
+    a.cd = 1e9; sn.cd = 1e9;   // Ziel schießt nicht zurück
+    step(w, DT); w.events.length = 0;
+    for (const p of w.proj) if (p.src === m) seen.add(p);
+  }
+  assert.ok(seen.size > 5, `MG-Schüsse ${seen.size}`);
+  assert.equal(sn.hp, UNITS.sniper.hp, 'Scharfschütze unverletzt');
+  assert.equal(sn.stance, 'prone');
+  assert.ok(a.hp < 1e9, 'Ziel getroffen');
+});
+
+test('gerade Schüsse treffen liegende Verbündete des Schützen nie (ducken sich), stehende schon', () => {
+  for (const [stance, want] of [['prone', 0], ['stand', 50]]) {
+    const w = mkWorld(4);
+    const s = spawn(w, 'soldat', 100, 400, 'blau'), m = spawn(w, 'mg', 300, 400, 'blau'), k = spawn(w, 'krieger', 500, 400, 'rot');
+    m.stance = stance; k.hp = 1e9; rebuildHash(w);
+    let hits = 0, kh = 0;
+    for (let i = 0; i < 50; i++) {
+      m.hp = 1e9; w.proj.length = 0; const before = k.hp;
+      fire(w, s, k, 'bullet', k.x, k.y);
+      for (let j = 0; j < 5000 && w.proj.length; j++) stepProjectiles(w, DT);
+      if (m.hp < 1e9) hits++;
+      if (k.hp < before) kh++;
+    }
+    assert.equal(hits, want, stance);
+    if (stance === 'prone') assert.equal(kh, 50, 'alle treffen das Ziel dahinter');
+  }
+});
+
+test('fremder Streuschuss in einen liegenden Gegner trifft über viele Seeds rund 50 %', () => {
+  let hits = 0; const N = 300;
+  for (let seed = 1; seed <= N; seed++) {
+    const w = mkWorld(seed);
+    const s = spawn(w, 'soldat', 100, 400, 'rot'), m = spawn(w, 'mg', 300, 400, 'blau'), k = spawn(w, 'krieger', 500, 400, 'blau');
+    lie(m); m.hp = k.hp = 1e9; rebuildHash(w);
+    fire(w, s, k, 'bullet', k.x, k.y);
+    for (let j = 0; j < 400 && w.proj.length; j++) stepProjectiles(w, DT);
+    if (m.hp < 1e9) hits++;
+  }
+  assert.ok(hits / N > .4 && hits / N < .6, `Trefferquote ${hits / N}`);
+});
+
 /* ---------- Pose ---------- */
 const mk = (type, o = {}) => ({
   id: 1, type, T: UNITS[type], x: 100, y: 100, mx: 0, my: 0, vx: 0, vy: 0, face: 1,

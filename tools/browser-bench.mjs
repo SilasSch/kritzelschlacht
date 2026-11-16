@@ -79,12 +79,21 @@ try {
     if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 800));
     return r.result.result.value;
   };
-  const tg = await cdp('Target.createTarget', { url: 'about:blank' });
-  session = (await cdp('Target.attachToTarget', { targetId: tg.result.targetId, flatten: true })).result.sessionId;
-  // Erst laden, dann Runtime.enable (auf about:blank blieb es manchmal ohne Antwort); Seitenfehler danach
+  // Seite direkt mit dem Spiel öffnen und anhängen. Manchmal antwortet eine frische Seite nicht (Renderer
+  // startet nicht): dann Seite schließen und eine neue öffnen (bis zu 5 Versuche im selben Browser).
+  const url = `http://127.0.0.1:${port}/game/index.html?bench=${N}&debug&seed=${flag('seed', '1')}`;
+  for (let a = 1; a <= 5 && !connected; a++) {
+    session = null;
+    const tg = await cdp('Target.createTarget', { url, newWindow: false });
+    session = (await cdp('Target.attachToTarget', { targetId: tg.result.targetId, flatten: true })).result.sessionId;
+    const alive = await Promise.race([evaluate('1').then(() => true, () => false), sleep(8000).then(() => false)]);
+    if (alive) { connected = true; break; }
+    log(`Seite ${a} antwortet nicht, neue Seite`);
+    const s0 = session; session = null; await cdp('Target.closeTarget', { targetId: tg.result.targetId }).catch(() => {}); void s0;
+  }
+  if (!connected) throw new Error('keine Seite antwortet');
   await cdp('Emulation.setDeviceMetricsOverride', { width: VW, height: VH, deviceScaleFactor: 1, mobile: false });
-  await cdp('Page.navigate', { url: `http://127.0.0.1:${port}/game/index.html?bench=${N}&debug&seed=${flag('seed', '1')}` });
-  log('connected'); connected = true;
+  log('connected');
   cdp('Runtime.enable').catch(() => log('Runtime.enable ohne Antwort (Seitenfehler werden nicht gemeldet)'));
   let ready = false;
   for (let i = 0; i < 200 && !ready; i++) { await sleep(100); ready = await evaluate('!!(window.__bench && window.__kritzel)'); }

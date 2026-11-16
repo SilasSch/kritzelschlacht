@@ -40,6 +40,10 @@ export const COUNTERS = [
   ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90],
 ];
 
+// Weltformen, an denen das Balance-Gate gelten muss (Welt = Viewport / Grundzoom, main.js baseZoomFor).
+// 1400×875 = 1280×800-Laptop; die anderen sind typische Laptop-Viewports; 1400×1050 = 1024×768.
+export const SHAPES = [[1400, 875], [1614, 820], [1670, 826], [1726, 820], [1670, 939], [1400, 1050]];
+
 // Duell-Aufstellung: a links (blau), b rechts (rot)
 export const DUEL_A = [.22, .3, .34, .7];
 export const DUEL_B = [.66, .3, .78, .7];

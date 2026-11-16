@@ -1,18 +1,43 @@
-// Headless-Balance: node tools/balance.mjs missions|duels [runs=8]
-// Gibt pro Zeile "name  wins/runs  spent" aus; Exitcode 1, wenn eine Erwartung verfehlt ist.
+// Headless-Balance: node tools/balance.mjs missions|duels [runs=8] [WxH,WxH,...]
+// Ohne Formen läuft jede Weltform aus SHAPES (tools/plans.mjs) in einem eigenen Prozess (parallel);
+// Exitcode 1, wenn bei irgendeiner Form eine Erwartung verfehlt ist.
+// Pro Zeile "name  wins/runs  spent".
+import { spawn as spawnProc } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult, placeRect } from '../game/js/sim.js';
-import { MISSION_PLANS, SPAM_MUST_LOSE, COUNTERS, DUEL_A, DUEL_B, placePlan } from './plans.mjs';
+import { MISSION_PLANS, SPAM_MUST_LOSE, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan } from './plans.mjs';
 
-const W = 1400, H = 1050, DT = 1 / 60;
+const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
 const SPAM_LOSE_MIN = 6 / 8;  // gelisteter Spam-Plan verliert mindestens 6/8
 const SPAM_WIN_MIN = 6 / 8;   // Spam-Plan der Einstiegsmission M1 gewinnt mindestens 6/8
 const DUEL_MIN = 3 / 4;       // Konter gewinnt mindestens 3/4
 
-const [cmd = 'missions', runsArg = '8'] = process.argv.slice(2);
+const [cmd = 'missions', runsArg = '8', shapeArg] = process.argv.slice(2);
 const runs = Math.max(1, parseInt(runsArg, 10) || 8);
+if (cmd !== 'missions' && cmd !== 'duels') {
+  console.error('usage: node tools/balance.mjs missions|duels [runs=8] [WxH,WxH,...]');
+  process.exit(2);
+}
+
+if (!shapeArg) {
+  // Alle Formen parallel, Ausgabe in fester Reihenfolge
+  const self = fileURLToPath(import.meta.url);
+  const results = await Promise.all(SHAPES.map(([W, H]) => new Promise(res => {
+    const p = spawnProc(process.execPath, [self, cmd, String(runs), `${W}x${H}`]);
+    let out = '';
+    p.stdout.on('data', d => { out += d; }); p.stderr.on('data', d => { out += d; });
+    p.on('close', code => res({ shape: `${W}x${H}`, code, out }));
+  })));
+  const failed = [];
+  for (const r of results) { process.stdout.write(`== ${r.shape}\n${r.out}`); if (r.code !== 0) failed.push(r.shape); }
+  console.log(failed.length ? `FAILED at ${failed.join(', ')}` : `OK at all ${SHAPES.length} shapes`);
+  process.exit(failed.length ? 1 : 0);
+}
+
+const [W, H] = shapeArg.split('x').map(Number);
 
 function runMission(i, plan, seed) {
   const w = createWorld(W, H, seed); buildMission(w, i);
@@ -54,7 +79,7 @@ if (cmd === 'missions') {
       console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
     }
   }
-} else if (cmd === 'duels') {
+} else {
   for (const [a, b, pts] of COUNTERS) {
     let wins = 0, spent = 0;
     for (let s = 1; s <= runs; s++) { const r = runDuel(a, b, pts, 500 + s); if (r.win) wins++; spent = r.spent; }
@@ -62,9 +87,6 @@ if (cmd === 'missions') {
     if (note) ok = false;
     console.log(`${pad(`${a}>${b}@${pts}`, 24)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
   }
-} else {
-  console.error('usage: node tools/balance.mjs missions|duels [runs=8]');
-  process.exit(2);
 }
 
 console.log(ok ? 'OK' : 'FAILED');

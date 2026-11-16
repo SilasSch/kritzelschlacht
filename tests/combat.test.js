@@ -144,6 +144,17 @@ test('Timer: Treffer setzt hitT=0.15', () => {
   assert.equal(v.hitT, .15);
 });
 
+test('Timer: Schaden über Zeit (Lava, Feuer ohne Schützen) setzt hitT nicht, Treffer mit Quelle schon', () => {
+  const { w, v } = mk('krieger');
+  hurt(w, v, 1, 'fire', null);
+  assert.equal(v.hitT, 0, 'Lava/Brand ohne Quelle quetscht nicht');
+  const s = spawn(w, 'magier', 200, 300, 'blau');
+  hurt(w, v, 1, 'fire', s);
+  assert.equal(v.hitT, .15, 'Feuer mit Schütze quetscht');
+  v.hitT = 0; hurt(w, v, 1, 'blast', null);
+  assert.equal(v.hitT, .15, 'Explosion ohne Quelle (Absturz) quetscht');
+});
+
 test('Timer: Nahkampfschlag setzt swingT=0.25 (Schwert, Bärenhieb, Mauer)', () => {
   const w = createWorld(1400, 800, 5); w.teamMode = true;
   const t = spawn(w, 'ritter', 310, 300, 'rot');

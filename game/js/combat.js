@@ -62,7 +62,10 @@ export function hurt(world, v, a, kind, src) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
-  const d = a * m; v.hp -= d; v.hitT = .15;   // Treffer-Quetschen (rig.js)
+  // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand ohne Schützen)
+  // würde hitT sonst jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis.
+  const d = a * m; v.hp -= d;
+  if (src || kind !== 'fire') v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
   if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src); }
   return d;

@@ -246,7 +246,7 @@ function bodyWalls(world, c) {
 // t: Sekunden im aktuellen Zustand. fade > 0: verblasst, wird bei 0 entfernt. px/py: letzte Position.
 export const CORPSE_CAP = 1500;      // darüber verblassen die ältesten
 export const CORPSE_FADE = 1;        // s
-const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
+export const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
 
 export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null) {
   return { kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y, crash };

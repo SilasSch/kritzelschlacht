@@ -1,4 +1,19 @@
 // Klänge per WebAudio, Port aus kritzelschlacht.html (sfx). init() muss nach einer Nutzergeste laufen.
+
+// Geräusch zu einem Ereignis aus world.events (oder null). Neu für die Physik: land (Landung), impact
+// (harte Landung ab IMPACT_SOUND_V px/s Aufprall), splash (Wasser), crash (abgestürzter Flieger).
+// Gedrosselt wird in play() wie alle anderen Geräusche.
+export const IMPACT_SOUND_V = 320;
+export function eventSound(e) {
+  switch (e.type) {
+    case 'sound': return e.k;
+    case 'land': return e.impact > IMPACT_SOUND_V ? 'impact' : 'land';
+    case 'splash': return 'splash';
+    case 'crash': return 'crash';
+  }
+  return null;
+}
+
 export function createAudio() {
   let AC = null, noiseB = null;
   const lastS = {};
@@ -53,6 +68,10 @@ export function createAudio() {
         case 'whoosh': noise('bandpass', 900, .3, .06); break;
         case 'thump': tone('sine', 180, 70, .18, .12); break;
         case 'die': tone('sine', 380, 140, .12, .04); break;
+        case 'land': tone('sine', 150, 80, .1, .07); break;
+        case 'impact': tone('sine', 110, 40, .22, .15); break;
+        case 'splash': noise('bandpass', 1500, .22, .06); break;
+        case 'crash': noise('lowpass', 420, .7, .26); break;
         case 'win':
           [523, 659, 784, 1046].forEach((f, i) => {
             const o = AC.createOscillator(), gg = AC.createGain(); o.type = 'triangle'; o.frequency.value = f;

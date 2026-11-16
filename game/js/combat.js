@@ -118,7 +118,7 @@ function die(world, v, src) {
       vx + Math.cos(a) * sp, vy + Math.sin(a) * sp, Math.max(0, v.vz) + vz, 0, pr));
   }
   emit(world, {
-    type: 'death', x: v.x, y: v.y, unitType: v.type, team: v.team,
+    type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team,
     killerId: src ? src.id : null, killerType: src ? src.type : null,
     killerTeam: src ? src.team : null, killerKills: src ? src.kills : null,
   });

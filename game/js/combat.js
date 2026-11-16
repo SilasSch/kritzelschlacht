@@ -67,6 +67,8 @@ export const LOF_RECHECK = .1, LOF_STAGGER = .02;
 export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET_FAR_MUL = 2;
 // Takt der Zielsuche (s, Grundwert + Zufall) und der Gruppenmitte (groupInfo), gestreckt in Task 13
 export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5, .3];
+// Nur diese Typen lesen die Gruppenmitte (Rudel, Schwarm, Schildwall, Reihe halten); alle anderen sparen sich groupInfo
+export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -557,7 +559,7 @@ export function think(world, u, dt) {
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
-  if (u.gt <= 0) groupInfo(world, u);
+  if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {

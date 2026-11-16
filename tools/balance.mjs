@@ -6,8 +6,9 @@ import { step, buildMission, missionResult, placeRect } from '../game/js/sim.js'
 import { MISSION_PLANS, SPAM_MUST_LOSE, COUNTERS, DUEL_A, DUEL_B, placePlan } from './plans.mjs';
 
 const W = 1400, H = 1050, DT = 1 / 60;
-const SMART_MIN = 5 / 8;      // Smart-Plan gewinnt mindestens 5/8 (Regel R2; Task 14 hebt auf 6/8)
+const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
 const SPAM_LOSE_MIN = 6 / 8;  // gelisteter Spam-Plan verliert mindestens 6/8
+const SPAM_WIN_MIN = 6 / 8;   // Spam-Plan der Einstiegsmission M1 gewinnt mindestens 6/8
 const DUEL_MIN = 3 / 4;       // Konter gewinnt mindestens 3/4
 
 const [cmd = 'missions', runsArg = '8'] = process.argv.slice(2);
@@ -43,8 +44,12 @@ if (cmd === 'missions') {
       let wins = 0, spent = 0;
       for (let s = 1; s <= runs; s++) { const r = runMission(i, MISSION_PLANS[i][kind], 1000 * (i + 1) + s); if (r.res === 'win') wins++; spent = r.spent; }
       let note = '';
-      if (kind === 'smart') { if (wins / runs < SMART_MIN) { ok = false; note = 'FAIL (smart < 5/8 wins)'; } }
+      if (kind === 'smart') {
+        if (wins / runs < SMART_MIN) { ok = false; note = 'FAIL (smart < 6/8 wins)'; }
+        if (spent > MISSIONS[i].par) { ok = false; note += `${note ? ' ' : ''}FAIL (smart costs > par ${MISSIONS[i].par})`; }
+      }
       else if (SPAM_MUST_LOSE.includes(i)) { if ((runs - wins) / runs < SPAM_LOSE_MIN) { ok = false; note = 'FAIL (spam < 6/8 losses)'; } }
+      else if (i === 0) { if (wins / runs < SPAM_WIN_MIN) { ok = false; note = 'FAIL (M1 spam < 6/8 wins)'; } }
       else note = '(not checked)';
       console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
     }

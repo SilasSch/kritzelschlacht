@@ -21,7 +21,7 @@ export const MISSION_PLANS = [
 ];
 
 // Missionen (Index), deren Spam-Plan verlieren muss: M2, M4, M5, M7, M8, M9.
-// M1 (Tutorial), M3 (Eiserne Front) und M6 (Wilde Jagd) sind ausgenommen.
+// M3 (Eiserne Front) und M6 (Wilde Jagd) sind ausgenommen; der M1-Spam (Einstieg) muss gewinnen.
 export const SPAM_MUST_LOSE = [1, 3, 4, 6, 7, 8];
 
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten

@@ -57,6 +57,10 @@ export function spawn(world, type, x, y, team) {
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
     pathT: 0, pathBlk: 0,
+    // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):
+    // px/py (physics.integrate), moving, bounced/impact (Abheben), fx/fy (Blickrichtung, undefined = noch
+    // keine: kein Flankenbonus), follow (Sanitäter)
+    px: undefined, py: undefined, moving: false, bounced: false, impact: 0, fx: undefined, fy: undefined, follow: false,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)

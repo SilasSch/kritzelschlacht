@@ -3,7 +3,7 @@
 // mission = null (Sandkasten) oder { budget, spent } (spent wird hier fortgeschrieben).
 // phase = 'plan' | 'battle' | 'done' (nur in Missionen relevant).
 import { UNITS, TERRAIN, CELL } from './data.js';
-import { spawn, cellIndex, query, rebuildHash } from './world.js';
+import { spawn, cellIndex, query, rebuildHash, touchTerrain } from './world.js';
 
 export const UNIT_CAP = 2600;
 export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= ZONE * W
@@ -88,7 +88,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
     if (old === id && id !== 4) continue;
     if (stroke && !stroke.cells.has(i)) stroke.cells.set(i, [old, towner[i], whp[i]]);
     terr[i] = id; towner[i] = mission && id ? 1 : 0; whp[i] = id === 4 ? 140 : 0;
-    changed = true;
+    changed = true; touchTerrain(world);
   }
   if (key === 'radierer') {
     query(world, x, y, R + 10, v => {
@@ -113,6 +113,7 @@ export function undo(world, stroke) {
     if (i >= world.terr.length) continue;
     world.terr[i] = t; world.towner[i] = o; world.whp[i] = h;
   }
+  touchTerrain(world);
   for (const e of stroke.erased) { const n = spawn(world, e.type, e.x, e.y, e.team); n.hp = e.hp; }
   rebuildHash(world);
   return stroke.spent;

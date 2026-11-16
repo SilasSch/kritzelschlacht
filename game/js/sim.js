@@ -1,9 +1,10 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
 import { MISSIONS, TERRAIN, CELL } from './data.js';
-import { spawn, setCell, rebuildHash, clearBattle } from './world.js';
+import { spawn, setCell, rebuildHash, clearBattle, touchTerrain } from './world.js';
 import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
+import { createFlow, updateFlow } from './pathing.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -11,6 +12,9 @@ const rnd = (world, a, b) => a + world.rng() * (b - a);
 export function step(world, dt) {
   world.time += dt;
   rebuildHash(world);
+  // Flussfelder der Wegfindung (gestaffelt, sofort nach Geländeänderungen), vor den Entscheidungen
+  if (!world.flow) world.flow = createFlow(world);
+  updateFlow(world, world.flow, dt);
   const units = world.units;
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && u.tg && u.tg.alive) u.tg.att++;
@@ -88,7 +92,7 @@ export function tCircle(world, key, cx, cy, rr, inner = 0) {
 export function buildMission(world, i) {
   const m = MISSIONS[i];
   clearBattle(world);
-  world.terr.fill(0); world.towner.fill(0); world.whp.fill(0);
+  world.terr.fill(0); world.towner.fill(0); world.whp.fill(0); touchTerrain(world);
   world.contested = false; world.teamMode = true;
   const { W, H } = world;
   for (const p of m.place) {

@@ -18,6 +18,8 @@ export function createWorld(W, H, seed = 1) {
     units: [], proj: [], corpses: [], debris: [], events: [],
     GW, GH, terr: new Uint8Array(GW * GH), towner: new Uint8Array(GW * GH), whp: new Float32Array(GW * GH),
     HW: 0, HH: 0, hash: [], facCount: new Map(), totalAlive: 0, nextId: 1,
+    terrainVersion: 0,   // zählt jede Geländeänderung (pathing.js berechnet daraufhin neu)
+    flow: null,          // Flussfelder der Wegfindung (pathing.js), legt sim.step an
   };
   makeHash(world);
   return world;
@@ -28,7 +30,11 @@ export const factionOf = (world, u) => (world.teamMode ? u.team : u.type);
 export const cellIndex = (world, x, y) =>
   clamp((y / CELL) | 0, 0, world.GH - 1) * world.GW + clamp((x / CELL) | 0, 0, world.GW - 1);
 
+// Nach jeder Änderung an terr (Malen, Rückgängig, Mission, Szene): Wegfindung neu berechnen lassen.
+export const touchTerrain = world => { world.terrainVersion = (world.terrainVersion | 0) + 1; };
+
 export function setCell(world, i, terrainId, owner = 0) {
+  touchTerrain(world);
   world.terr[i] = terrainId;
   world.towner[i] = owner;
   world.whp[i] = terrainId === 4 ? 140 : 0;
@@ -48,6 +54,7 @@ export function spawn(world, type, x, y, team) {
     cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0, lofFlip: false, lofT: -9,
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0,   // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt
     stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
+    pathT: 0, pathBlk: false,   // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung, Linie zum Ziel verbaut
   };
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
@@ -116,6 +123,7 @@ export function resizeWorld(world, W, H) {
     t[b] = world.terr[a]; o[b] = world.towner[a]; h[b] = world.whp[a];
   }
   world.W = W; world.H = H; world.GW = nGW; world.GH = nGH; world.terr = t; world.towner = o; world.whp = h;
+  touchTerrain(world);
   makeHash(world);
   for (const u of world.units) { u.x = clamp(u.x, 6, W - 6); u.y = clamp(u.y, 6, H - 6); }
   for (const c of world.corpses) { c.x = clamp(c.x, 6, W - 6); c.y = clamp(c.y, 6, H - 6); c.px = c.x; c.py = c.y; }

@@ -2,7 +2,8 @@
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
 import { CELL, HASH_CELL, UNITS } from './data.js';
-import { factionOf, cellIndex, query, nearestEnemy } from './world.js';
+import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world.js';
+import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 
@@ -59,6 +60,9 @@ const LOF_HOLD = 2.5;         // so lange bleibt das Ausweichziel gesetzt
 const LOF_SIDE = .7;          // Tempo beim seitlichen Ausweichen
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
+const PATH_RECHECK = .25;    // s zwischen zwei Linienprüfungen der Wegfindung (je Einheit, nach id gestaffelt)
+const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
+const PATH_STUCK_T = 3;      // s Festsitzen an einer dünnen Mauer, nach denen trotz Weg eingeschlagen wird
 export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 
 /* ---------- Schaden ---------- */
@@ -226,7 +230,7 @@ export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   const gx = i % GW, gy = i / GW | 0;
   let broken = false;
   if (world.whp[i] <= 0) {
-    world.terr[i] = 0; world.towner[i] = 0; broken = true;
+    world.terr[i] = 0; world.towner[i] = 0; broken = true; touchTerrain(world);
     if (before > 0) spawnDebris(world, gx * CELL + 5, gy * CELL + 5, fromX, fromY);
   }
   emit(world, { type: 'wallHit', i, x: gx * CELL + 5, y: gy * CELL + 5, fromX, fromY, broken });
@@ -528,7 +532,9 @@ export function think(world, u, dt) {
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {
-    u.tg = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
+    const nt = nearestEnemy(world, u); u.rt = .35 + world.rng() * .3;
+    if (nt !== u.tg) u.pathT = 0;   // neues Ziel: Linie gleich neu prüfen
+    u.tg = nt;
   }
   const t = u.tg;
   // Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (und ohne Umdrehen mitten in der Bewegung)
@@ -558,11 +564,32 @@ export function think(world, u, dt) {
     else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
   }
-  // Vor einer Mauer festgesteckt: draufhauen
-  if (!T.fly && u.blk > .45 && world.terr[u.bcell] === 4) {
+  // Wegfindung (Spez. #24, pathing.js), nur Bodentruppen mit Bodenziel: Ist die gerade Linie zum Ziel
+  // verbaut (Mauerzelle oder ≥ 2 Lavazellen; Prüfung alle PATH_RECHECK s; Fernkämpfer prüfen nur das
+  // Stück, das sie bis zur Reichweite noch laufen müssen, sie schießen über Mauern), folgt die Einheit dem
+  // Flussfeld ihrer Fraktion statt der geraden Richtung; Gruppenverhalten gilt nur auf offener Fläche.
+  // Vor einer Mauer festgesteckt wird nur eingeschlagen, wenn kein Weg führt (flowDir null) oder der
+  // Weg länger ist als PATH_BASH_DETOUR × Luftlinie (und mindestens PATH_BASH_MIN px länger), oder nach
+  // PATH_STUCK_T s Festsitzen an einer Mauer, die das grobe Raster für begehbar hält (dünne Mauer, durch
+  // die der Fluss führt). Steht die Einheit schon im Feld eines Gegners (fd.dist 0), geht sie direkt.
+  const stuck = !T.fly && u.blk > .45 && world.terr[u.bcell] === 4;
+  let fd = null;
+  if (!T.fly && !t.T.fly && world.flow) {
+    u.pathT -= dt;
+    if (u.pathT <= 0) {
+      u.pathT = PATH_RECHECK + (u.id % 8) * .01;
+      const L = T.range >= 20 ? Math.max(0, d - reach + PATH_RANGE_PAD) : d;
+      u.pathBlk = L > 0 && directBlocked(world, world.flow, u.x, u.y, u.x + nx * L, u.y + ny * L);
+    }
+    if (u.pathBlk || stuck) fd = flowDir(world.flow, factionOf(world, u), u.x, u.y);
+  }
+  // Kein sinnvoller Umweg: wie ohne Wegfindung gerade aufs Ziel zu und an der Mauer einschlagen
+  const noDetour = fd === null || (fd.dist > PATH_BASH_DETOUR * d && fd.dist > d + PATH_BASH_MIN);
+  if (stuck && (noDetour || (u.blk > PATH_STUCK_T && pathOpen(world, world.flow, u.bcell)))) {
     if (u.cd <= 0) { u.cd = T.cd; u.swingT = .25; hitWall(world, u.bcell, (T.dmg || 8) * (T.splash ? 2.5 : 1.3), u.x, u.y); sound(world, 'hit'); }
     return;
   }
+  if (!noDetour && fd.dist > 0) { u.mx = fd.dx * T.speed; u.my = fd.dy * T.speed; u.face = fd.dx < 0 ? -1 : 1; u.run += dt; return; }
   let a = [nx, ny], sp = T.speed;
   switch (u.type) {
     case 'wolf':

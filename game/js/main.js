@@ -1,7 +1,7 @@
 // Start, Spielzustand und Schleife. Fester Simulationsschritt 1/60 s, Tempo 1/2/4×, Zeitlupe 0,3×, Pause.
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
-import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle } from './world.js';
+import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
@@ -43,7 +43,8 @@ audio.muted = !!save.muted;
 const pointer = { x: -999, y: -999, inside: false, erasing: false };
 let stroke = null, undoStack = [], sandSave = null, snap = null;
 
-const markAll = () => renderer.markTerrainDirty(0, 0, world.GW - 1, world.GH - 1);
+// Ganzes Gelände neu zeichnen und die Wegfindung neu rechnen lassen (nach jeder Änderung an world.terr hier)
+const markAll = () => { touchTerrain(world); renderer.markTerrainDirty(0, 0, world.GW - 1, world.GH - 1); };
 
 /* ---------- Spielzustand und Aktionen ---------- */
 const game = {
@@ -371,7 +372,8 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'water', 'dragon', 'prone', 'bosses';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses';
+// flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
 // Boss; Mündung tip aus den Sprites, drawn aus der Pose, logic wie combat.fire sie jetzt nähme),
@@ -382,6 +384,17 @@ const scenes = {
   tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
   heli() { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },
   walls() { world.teamMode = true; tRect(world, 'mauer', .5, .25, .512, .75); placeRect(world, 'grenadier', 12, .62, .38, .66, .62, 'rot'); placeRect(world, 'krieger', 24, .3, .38, .36, .62, 'blau'); },
+  // Wegfindung (Spez. #24): links eine Mauer mit Lücke zwischen Blau und Rot (Krieger gehen durch die
+  // Lücke, kein Einschlagen), rechts ein geschlossener Mauerring wie in M5 mit gelben Schützen innen und
+  // grünen Rittern außen (kein Weg: sie schlagen die Mauer ein)
+  walls2() {
+    world.teamMode = true;
+    tRect(world, 'mauer', .25, 0, .262, .55); tRect(world, 'mauer', .25, .72, .262, 1);
+    placeRect(world, 'krieger', 24, .06, .12, .14, .4, 'blau'); placeRect(world, 'krieger', 24, .36, .12, .44, .4, 'rot');
+    tCircle(world, 'mauer', .8, .5, .22, .18);
+    placeCircle(world, 'schuetze', 10, .8, .5, .08, 'gelb');
+    placeRect(world, 'ritter', 12, .95, .38, .99, .62, 'gruen');
+  },
   water() {
     world.teamMode = true; tCircle(world, 'wasser', .5, .5, .18); tCircle(world, 'lava', .2, .5, .08);
     placeRect(world, 'krieger', 30, .44, .4, .56, .6, 'blau'); placeRect(world, 'krieger', 8, .18, .45, .22, .55, 'blau');
@@ -431,6 +444,13 @@ if (new URLSearchParams(location.search).has('debug')) {
     },
     crashHeli() { let n = 0; for (const u of world.units) if (u.alive && u.type === 'heli') { hurt(world, u, 1e9, 'rocket', null); n++; } return n; },
     boom(x, y, R = 50) { blast(world, x, y, R, 40, null, null, 'blast', 2); },
+    flow() {
+      const f = world.flow; if (!f) return null;
+      const s = f.stats;
+      return { factions: [...f.fields.keys()], grid: `${f.PW}x${f.PH}`, recomputes: s.recomputes, perSec: +s.rate.toFixed(1),
+        msAvg: s.recomputes ? +(s.ms / s.recomputes).toFixed(3) : 0, msLast: +s.lastMs.toFixed(3), msMax: +s.maxMs.toFixed(3),
+        msPerSec: +s.msRate.toFixed(3) };
+    },
   };
 }
 seedDemo();

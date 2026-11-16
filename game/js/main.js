@@ -10,6 +10,7 @@ import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
+import { buildBench } from './bench.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const SKEY = 'kritzelschlacht-v1';
@@ -302,6 +303,7 @@ function drainEvents() {
 }
 
 function simStep() {
+  if (bench && bench.tick) bench.tick(bench.k++);   // ?bench&scenario=blastcrowd: Salven im Takt der Schritte
   step(world, STEP);
   const m = game.mission;
   if (m) {
@@ -317,18 +319,80 @@ function simStep() {
 }
 
 let acc = 0, last = performance.now(), uiT = 0;
-const fpsBox = new URLSearchParams(location.search).has('fps') ? document.createElement('div') : null;
+const params = new URLSearchParams(location.search);
+
+/* ---------- Leistungsprobe ?bench=N (Task 13) ----------
+   Baut die Szene aus bench.js (mixed mit N Einheiten; &scenario=blastcrowd: Bienenschwarm mit Salven) im
+   Sandkasten und zeigt oben links fps, Sim-ms und Render-ms je Bild, die Bilddauer (Mittel und Spitze), die
+   Einheiten und die Fx-Detailstufe. Die Anzeige ist maschinenlesbar (key=value), dazu jede Sekunde
+   window.__bench = { fps, simMs, simStepMs, steps, renderMs, frameMs, frameMaxMs, units, lod, t, scenario,
+   history (eine Zeile je Sekunde), summary(fromSec), restart() }. Sim-ms: alle Simulationsschritte des Bilds;
+   Render-ms: der Rest der Arbeit im Bild (Ereignisse, Effekte, Zeichnen); Bilddauer: Abstand der Bilder. */
+const benchN = params.has('bench') ? clamp(parseInt(params.get('bench'), 10) || 2000, 4, 10000) : 0;
+const benchScen = params.get('scenario') === 'blastcrowd' ? 'blastcrowd' : 'mixed';
+const BENCH_HISTORY = 600;
+let bench = null, benchBox = null;
+
+// Szene (neu) aufbauen und die Messung von vorn beginnen; mit ?debug auch als __kritzel.bench(n, scenario)
+function startBench(n = benchN || 2000, scenario = benchScen) {
+  if (!benchBox) { benchBox = document.createElement('div'); benchBox.className = 'fps'; benchBox.textContent = 'bench …'; host.append(benchBox); }
+  if (game.mission) game.enterSandbox();
+  clearWorld();
+  const tick = buildBench(world, scenario, n);
+  markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
+  const hist = bench ? bench.out.history : [];
+  hist.length = 0;
+  bench = { tick, k: 0, t: 0, n: 0, sim: 0, steps: 0, render: 0, frame: 0, frameMax: 0, boxN: 0, boxT: 0, boxSim: 0, boxRender: 0, boxFrame: 0,
+    scenario, out: { scenario, fps: 0, simMs: 0, simStepMs: 0, steps: 0, renderMs: 0, frameMs: 0, frameMaxMs: 0, units: 0, lod: 0, t: 0,
+      history: hist, summary: benchSummary, restart: () => startBench(n, scenario) } };
+  window.__bench = bench.out;
+  return scenario;
+}
+// Mittel über die Sekunden ab fromSec (Standard 2: ohne den Aufbau der Szene), dazu die schlechteste Sekunde
+function benchSummary(fromSec = 2) {
+  const h = bench.out.history.filter(s => s.t > fromSec);
+  if (!h.length) return null;
+  const avg = k => +(h.reduce((p, s) => p + s[k], 0) / h.length).toFixed(2);
+  return { seconds: h.length, fps: avg('fps'), minFps: Math.min(...h.map(s => s.fps)), simMs: avg('simMs'), renderMs: avg('renderMs'),
+    frameMs: avg('frameMs'), frameMaxMs: Math.max(...h.map(s => s.frameMaxMs)), lodMax: Math.max(...h.map(s => s.lod)) };
+}
+const r1 = v => Math.round(v * 10) / 10;
+function benchFrame(rawMs, simMs, renderMs, steps, dt) {
+  if (!(rawMs >= 0) || rawMs > 1000) return;   // Tab im Hintergrund: nicht werten
+  const b = bench;
+  b.n++; b.sim += simMs; b.render += renderMs; b.steps += steps; b.frame += rawMs; if (rawMs > b.frameMax) b.frameMax = rawMs;
+  b.t += rawMs / 1000; b.boxN++; b.boxT += dt; b.boxFrame += rawMs; b.boxSim += simMs; b.boxRender += renderMs;
+  const lod = renderer.fx.lod;
+  if (b.boxT >= .5) {
+    benchBox.textContent = `bench ${b.scenario} fps=${Math.round(b.boxN * 1000 / (b.boxFrame || 1))} sim=${(b.boxSim / b.boxN).toFixed(1)}ms ` +
+      `render=${(b.boxRender / b.boxN).toFixed(1)}ms frame=${(b.boxFrame / b.boxN).toFixed(1)}ms units=${world.totalAlive} lod=${lod}`;
+    b.boxN = 0; b.boxT = 0; b.boxSim = 0; b.boxRender = 0; b.boxFrame = 0;
+  }
+  const o = b.out, secT = b.frame / 1000;
+  if (secT >= 1) {
+    o.fps = r1(b.n / secT); o.simMs = r1(b.sim / b.n); o.simStepMs = b.steps ? r1(b.sim / b.steps) : 0; o.steps = b.steps;
+    o.renderMs = r1(b.render / b.n); o.frameMs = r1(b.frame / b.n); o.frameMaxMs = r1(b.frameMax);
+    o.units = world.totalAlive; o.lod = lod; o.t = r1(b.t);
+    o.history.push({ t: o.t, fps: o.fps, simMs: o.simMs, simStepMs: o.simStepMs, renderMs: o.renderMs, frameMs: o.frameMs, frameMaxMs: o.frameMaxMs, units: o.units, lod });
+    if (o.history.length > BENCH_HISTORY) o.history.shift();
+    b.n = 0; b.sim = 0; b.render = 0; b.steps = 0; b.frame = 0; b.frameMax = 0;
+  }
+}
+
+const fpsBox = params.has('fps') && !benchN ? document.createElement('div') : null;
 let fpsN = 0, fpsT = 0;
 if (fpsBox) { fpsBox.className = 'fps'; fpsBox.textContent = '… fps'; host.append(fpsBox); }
 
 function frame(now) {
-  const realDt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+  const rawMs = now - last;
+  const realDt = Math.min(.05, Math.max(0, rawMs / 1000)); last = now;
+  const w0 = performance.now();
+  let simMs = 0, n = 0;
   const m = game.mission;
   const ts = (game.slow ? SLOW : 1) * game.speed * (m && m.endT >= 0 ? .35 : 1);
   if (!game.paused && !(m && m.phase === 'plan')) {
     acc += realDt * ts;
-    let n = 0;
-    while (acc >= STEP && n < MAX_STEPS) { simStep(); acc -= STEP; n++; }
+    while (acc >= STEP && n < MAX_STEPS) { const s0 = performance.now(); simStep(); simMs += performance.now() - s0; acc -= STEP; n++; }
     if (n >= MAX_STEPS) acc = 0;
     drainEvents();
     renderer.fx.update(realDt * ts, world);
@@ -347,9 +411,12 @@ function frame(now) {
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); }
+  // Fx-Detailstufe aus der Bilddauer (über 20 ms: Rauch aus, Partikel ×0,5; fx.debug().lod)
+  renderer.fx.autoLod(rawMs);
+  if (bench) benchFrame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
   if (fpsBox) {
     fpsN++; fpsT += realDt;
-    if (fpsT >= .5) { fpsBox.textContent = `${Math.round(fpsN / fpsT)} fps · ${world.totalAlive} Einheiten`; fpsN = 0; fpsT = 0; }
+    if (fpsT >= .5) { fpsBox.textContent = `${Math.round(fpsN / fpsT)} fps · ${world.totalAlive} Einheiten · LOD ${renderer.fx.lod}`; fpsN = 0; fpsT = 0; }
   }
   requestAnimationFrame(frame);
 }
@@ -435,7 +502,7 @@ const scenes = {
 };
 if (new URLSearchParams(location.search).has('debug')) {
   window.__kritzel = {
-    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions,
+    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: startBench,
     scene(name) {
       if (!scenes[name]) return Object.keys(scenes);
       if (game.mission) game.enterSandbox();
@@ -454,6 +521,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   };
 }
 seedDemo();
+if (benchN) startBench();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
 requestAnimationFrame(t => { last = t; frame(t); });

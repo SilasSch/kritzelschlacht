@@ -1,4 +1,4 @@
-// Headless-Leistungsmessung: node tools/bench.mjs [units=2000] [scenario=mixed|blastcrowd] [seed=1] [--profile]
+// Headless-Leistungsmessung: node tools/bench.mjs [units=2000] [scenario=mixed|blastcrowd] [seed=1] [--profile] [--lod=1]
 // Misst BENCH_STEPS Simulationsschritte (1/60 s) und gibt avg/p95/max step ms aus, dazu getrennt die reine
 // Effekt-Logik (fxcore: consume + update je Schritt, wie der Browser je Bild). Vorher läuft eine kurze
 // Aufwärmrunde mit anderer Saat (JIT), die nicht zählt. --profile: Zeit je Teil von sim.step (nachgebaute
@@ -13,6 +13,7 @@ import { buildBench, BENCH_STEPS, BENCH_W, BENCH_H, SCENARIOS } from '../game/js
 
 const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
 const PROFILE = process.argv.includes('--profile');
+const LOD = process.argv.includes('--lod=1') ? 1 : 0;   // Fx-Detailstufe der Effekt-Logik (nur fx core ms, Partikel)
 const N = Math.max(4, parseInt(args[0] ?? '2000', 10) || 2000);
 const SCEN = args[1] ?? 'mixed';
 const SEED = parseInt(args[2] ?? '1', 10) || 1;
@@ -50,10 +51,11 @@ function run(seed, steps, measure) {
   const fx = createFxCore({});
   const times = new Float64Array(steps), fxTimes = new Float64Array(steps);
   const acc = Object.fromEntries(PH.map(k => [k, 0]));
-  const hot = [];   // Schritte mit Salve (blastcrowd)
+  if (LOD) fx.lod = LOD;
+  const hot = [], fill = [];   // Schritte mit Salve bzw. mit aufgefülltem Schwarm (blastcrowd)
   let maxEv = 0, evSum = 0;
   for (let k = 0; k < steps; k++) {
-    const volley = tick ? tick(k) : false;
+    const what = tick ? tick(k) : false;
     const t0 = now();
     if (measure && PROFILE) profiledStep(world, DT, acc); else step(world, DT);
     const t1 = now();
@@ -61,10 +63,10 @@ function run(seed, steps, measure) {
     fx.consume(world.events); fx.update(DT, world);
     world.events.length = 0;
     times[k] = t1 - t0; fxTimes[k] = now() - t1;
-    if (volley) hot.push(t1 - t0);
+    if (what === 'volley') hot.push(t1 - t0); else if (what === 'fill') fill.push(t1 - t0);
   }
   let alive = 0; for (const u of world.units) if (u.alive) alive++;
-  return { times, fxTimes, acc, hot, alive, maxEv, evAvg: evSum / steps, particles: fx.store.count, dropped: fx.store.dropped, corpses: world.corpses.length };
+  return { times, fxTimes, acc, hot, fill, alive, maxEv, evAvg: evSum / steps, particles: fx.store.count, dropped: fx.store.dropped, corpses: world.corpses.length };
 }
 
 const stats = a => {
@@ -80,8 +82,9 @@ console.log(`scenario ${SCEN}  units ${SCEN === 'blastcrowd' ? 500 : N}  world $
 console.log(`avg step ms  ${f2(s.avg)}`);
 console.log(`p95 step ms  ${f2(s.p95)}`);
 console.log(`max step ms  ${f2(s.max)}`);
-if (r.hot.length) { const h = stats(r.hot); console.log(`volley steps ${r.hot.length}  avg ${f2(h.avg)}  max ${f2(h.max)} ms`); }
-console.log(`fx core ms   avg ${f2(fs.avg)}  p95 ${f2(fs.p95)}  max ${f2(fs.max)}  (consume + update, not in step)`);
+if (r.hot.length) { const h = stats(r.hot); console.log(`volley steps ${r.hot.length}  avg ${f2(h.avg)}  max ${f2(h.max)} ms  (20 mortar hits in one step)`); }
+if (r.fill.length) { const h = stats(r.fill); console.log(`refill steps ${r.fill.length}  avg ${f2(h.avg)}  max ${f2(h.max)} ms  (swarm topped up to 500)`); }
+console.log(`fx core ms   avg ${f2(fs.avg)}  p95 ${f2(fs.p95)}  max ${f2(fs.max)}  (consume + update, not in step; lod ${LOD})`);
 console.log(`alive at end ${r.alive}  events/step avg ${r.evAvg.toFixed(1)} max ${r.maxEv}  particles ${r.particles} (dropped ${r.dropped})  corpses ${r.corpses}`);
 if (PROFILE) {
   const tot = PH.reduce((p, k) => p + r.acc[k], 0);

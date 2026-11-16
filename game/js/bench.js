@@ -5,7 +5,8 @@
 //               MG-Schützen, Scharfschützen, Bienen …). Gelände: Mauerkreuz mit Lücken in der Mitte (Wegfindung
 //               aktiv), zwei Lavafelder, ein Teich, ein Wäldchen.
 //   blastcrowd: 500 Bienen im Kreis mit Radius 80 px, alle BLAST_EVERY Schritte 20 gleichzeitige
-//               Mörsereinschläge darin (Review Focus #5); vor jeder Salve wird der Schwarm auf 500 aufgefüllt.
+//               Mörsereinschläge darin (Review Focus #5); eine halbe Periode vor jeder Salve wird der Schwarm
+//               wieder auf 500 aufgefüllt (buildBench).
 import { UNITS } from './data.js';
 import { spawn, rebuildHash, factionOf } from './world.js';
 import { placeCircle, tRect, tCircle } from './sim.js';
@@ -66,13 +67,19 @@ export function fillCrowd(world) {
   if (k > 0) placeCircle(world, 'biene', k, .5, .5, CROWD_R / world.H, 'blau');
 }
 
-// VOLLEY_N Mörsergranaten, die im nächsten Schritt gleichzeitig im Schwarmkreis einschlagen (Bögen wie
-// combat.fire sie anlegt, aber schon am Ende ihrer Flugzeit). Schütze: ein lebender roter Mörser.
+// VOLLEY_N Mörsergranaten, die im nächsten Schritt gleichzeitig im Kreis CROWD_R um die Schwarmmitte
+// (Mittel der lebenden Bienen, sonst Kartenmitte) einschlagen: Bögen wie combat.fire sie anlegt, aber schon
+// am Ende ihrer Flugzeit. Schütze: ein lebender roter Mörser.
 export function mortarVolley(world) {
-  let src = null;
-  for (const u of world.units) if (u.alive && u.type === 'moerser') { src = u; break; }
+  let src = null, cx = 0, cy = 0, nb = 0;
+  for (const u of world.units) {
+    if (!u.alive) continue;
+    if (!src && u.type === 'moerser') src = u;
+    if (u.type === 'biene') { cx += u.x; cy += u.y; nb++; }
+  }
   if (!src) return 0;
-  const T = UNITS.moerser, cx = world.W * .5, cy = world.H * .5, f = factionOf(world, src);
+  if (nb) { cx /= nb; cy /= nb; } else { cx = world.W * .5; cy = world.H * .5; }
+  const T = UNITS.moerser, f = factionOf(world, src);
   for (let i = 0; i < VOLLEY_N; i++) {
     const a = world.rng() * Math.PI * 2, d = Math.sqrt(world.rng()) * CROWD_R;
     const x1 = cx + Math.cos(a) * d, y1 = cy + Math.sin(a) * d;
@@ -83,11 +90,19 @@ export function mortarVolley(world) {
   return VOLLEY_N;
 }
 
-// Szene aufbauen (Welt vorher leer); liefert den Takt je Schritt (vor dem Schritt aufrufen) oder null.
+// Szene aufbauen (Welt vorher leer); liefert den Takt je Schritt k (vor dem Schritt aufrufen) oder null.
+// blastcrowd: Schritt VOLLEY_AT, VOLLEY_AT + BLAST_EVERY, …: Salve ('volley'); dazwischen (Schritt
+// BLAST_EVERY, 2·BLAST_EVERY, …) wird der Schwarm aufgefüllt ('fill'), damit er bis zur nächsten Salve
+// wieder steht (die Kosten von 500 frisch gesetzten Bienen zählen so getrennt von den Einschlägen).
+export const VOLLEY_AT = BLAST_EVERY / 2;
 export function buildBench(world, scenario, n) {
   if (scenario === 'blastcrowd') {
     benchBlastcrowd(world);
-    return k => { if (k % BLAST_EVERY === 0) { fillCrowd(world); rebuildHash(world); mortarVolley(world); return true; } return false; };
+    return k => {
+      if (k % BLAST_EVERY === VOLLEY_AT) { mortarVolley(world); return 'volley'; }
+      if (k > 0 && k % BLAST_EVERY === 0) { fillCrowd(world); rebuildHash(world); return 'fill'; }
+      return false;
+    };
   }
   benchMixed(world, n);
   return null;

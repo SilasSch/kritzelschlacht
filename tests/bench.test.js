@@ -5,7 +5,7 @@ import { UNITS } from '../game/js/data.js';
 import { createWorld, spawn } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import {
-  buildBench, benchMixed, BENCH_W, BENCH_H, BENCH_TEAMS, BENCH_BOSSES, CROWD_N, CROWD_R, VOLLEY_N, BLAST_EVERY,
+  buildBench, benchMixed, BENCH_W, BENCH_H, BENCH_TEAMS, BENCH_BOSSES, CROWD_N, CROWD_R, VOLLEY_N, BLAST_EVERY, VOLLEY_AT,
 } from '../game/js/bench.js';
 
 const DT = 1 / 60;
@@ -38,22 +38,24 @@ test('mixed: gleiche Saat, gleicher Aufbau und gleicher Verlauf', () => {
   assert.equal(run(), run());
 });
 
-test('blastcrowd: 500 Bienen im Radius 80, alle BLAST_EVERY Schritte 20 Einschläge im selben Schritt', () => {
+test('blastcrowd: 500 Bienen im Radius 80, alle BLAST_EVERY Schritte 20 Einschläge im selben Schritt, dazwischen Auffüllen', () => {
   const w = createWorld(BENCH_W, BENCH_H, 1);
   const tick = buildBench(w, 'blastcrowd');
   const bees = w.units.filter(u => u.type === 'biene');
   assert.equal(bees.length, CROWD_N);
   for (const b of bees) assert.ok(Math.hypot(b.x - w.W / 2, b.y - w.H / 2) <= CROWD_R + 1e-6);
-  assert.equal(tick(0), true);
+  for (let k = 0; k < VOLLEY_AT; k++) { assert.equal(tick(k), false); step(w, DT); w.events.length = 0; }
+  assert.equal(tick(VOLLEY_AT), 'volley');
   assert.equal(w.proj.filter(p => p.kind === 'mortar').length, VOLLEY_N);
   step(w, DT);
   assert.equal(w.events.filter(e => e.type === 'blast').length, VOLLEY_N);
   assert.equal(w.proj.filter(p => p.kind === 'mortar').length, 0);
   assert.ok(w.units.filter(u => u.alive && u.type === 'biene').length < CROWD_N / 2, 'Salve trifft den Schwarm');
   w.events.length = 0;
-  for (let k = 1; k < BLAST_EVERY; k++) assert.equal(tick(k), false);
-  assert.equal(tick(BLAST_EVERY), true);   // füllt wieder auf 500 auf
+  for (let k = VOLLEY_AT + 1; k < BLAST_EVERY; k++) assert.equal(tick(k), false);
+  assert.equal(tick(BLAST_EVERY), 'fill');   // füllt wieder auf 500 auf
   assert.equal(w.units.filter(u => u.alive && u.type === 'biene').length, CROWD_N);
+  assert.equal(tick(BLAST_EVERY + VOLLEY_AT), 'volley');
 });
 
 // Leistung: Felder, die erst im Spiel gesetzt werden, legt spawn schon an. So teilen alle Einheiten eine

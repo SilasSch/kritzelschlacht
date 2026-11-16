@@ -5,6 +5,8 @@
 //   frame(t)  pro Bild vor dem Rendern: Sprites setzen, Decals hochladen, Wackeln abklingen lassen (Echtzeit)
 //             und den Versatz { x, y } zurückgeben
 //   resize(W, H, res)  Weltgröße / Auflösung der Decal-Leinwand (leert sie)
+//   autoLod(frameMs)  Bilddauer (ms) an den Detailregler (fxcore.createLodGovernor); setLod(n | null) legt die
+//             Stufe fest (null: wieder automatisch); lod = aktuelle Stufe (Task 13)
 //   clear(), debug(), shake (Zahl)
 // Partikel liegen in PIXI.ParticleContainern, alle aus einem Atlas (eine BaseTexture):
 //   warm  (Ebene 'light', normal): warme Scheibe #ffb347 der Explosionen, auch auf Weiß sichtbar (0.35 → 0)
@@ -14,7 +16,7 @@
 //   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile, Hitzeflimmern
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
-import { createFxCore, look, F, FX_CAP } from './fxcore.js';
+import { createFxCore, createLodGovernor, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
@@ -146,6 +148,20 @@ export function createFx(renderer) {
 
   const core = createFxCore({ decal, crater });
 
+  /* ---------- Detailstufe (Task 13): automatisch aus der Bilddauer, oder fest per setLod ---------- */
+  const gov = createLodGovernor();
+  let lodFixed = null, lodChanges = 0;
+  function autoLod(ms) {
+    const lv = gov.update(ms), want = lodFixed === null ? lv : lodFixed;
+    if (want !== core.lod) { core.lod = want; lodChanges++; }
+    return core.lod;
+  }
+  function setLod(n) {
+    lodFixed = n === null || n === undefined ? null : Math.max(0, Math.min(LOD_MAX, n | 0));
+    core.lod = lodFixed === null ? gov.level : lodFixed;
+    return core.lod;
+  }
+
   /* ---------- Bild ---------- */
   const LK = {}, off = { x: 0, y: 0 };
   let maxWarm = 0;
@@ -210,11 +226,15 @@ export function createFx(renderer) {
       // Bild bediente Bosse (≤ BOSS_FX_UNITS), bossesAll = alle lebenden
       boss: { exhaust: byKind.exhaust || 0, wash: byKind.wash || 0, bosses: st.bosses, bossesAll: st.bossesAll },
       filters,
+      // Detailstufe (Task 13): level 0 voll, 1 = Rauch aus und Partikel ×0,5; auto: Regler aktiv (sonst fest
+      // per setLod); emaMs: gleitende Bilddauer; changes: Stufenwechsel; skipped: seit clear ausgelassene Partikel
+      lod: { level: core.lod, auto: lodFixed === null, emaMs: r2(gov.ema), changes: lodChanges, skipped: st.lodSkipped },
     };
   }
 
   return {
-    consume: core.consume, update: core.update, frame, resize, clear, debug,
+    consume: core.consume, update: core.update, frame, resize, clear, debug, autoLod, setLod,
+    get lod() { return core.lod; },
     get shake() { return core.shake; },
     set shake(v) { core.shake = v; },
   };

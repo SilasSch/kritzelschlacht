@@ -126,7 +126,8 @@ export function createRenderer(canvasHost) {
   // Größe von Welt oder Auflösung geändert: Gelände-Canvas und Decals neu anlegen
   function ensureWorld(world, cam) {
     const want = Math.min(2.5, Math.max(1, cam.fit * dpr * 2), MAX_TEX / world.W, MAX_TEX / world.H);
-    const r = Math.round(want * 4) / 4;
+    // abrunden (nicht runden): W·res und H·res bleiben ≤ MAX_TEX, auch auf HiDPI-Bildschirmen
+    const r = Math.max(.25, Math.floor(want * 4) / 4);
     if (world.W === worldW && world.H === worldH && world.GW === GW && world.GH === GH && r === res) return;
     worldW = world.W; worldH = world.H; GW = world.GW; GH = world.GH; res = r;
     tcv.width = Math.ceil(worldW * res); tcv.height = Math.ceil(worldH * res);

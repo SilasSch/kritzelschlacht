@@ -478,7 +478,10 @@ function onResize() {
   resizeWorld(world, vw / bz, vh / bz);
   resizeCamera(cam, vw, vh, world.W, world.H);
   renderer.resize(vw, vh);
+  // Rückgängig kennt Zellindizes des alten Gitters: Verlauf leeren und einen laufenden Strich sperren
+  // (malt nicht weiter und landet beim Loslassen nicht im Verlauf)
   undoStack.length = 0;
+  if (stroke) stroke.blocked = true;
   markAll();
 }
 let resizeQueued = false;

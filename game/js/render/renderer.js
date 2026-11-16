@@ -137,7 +137,7 @@ export function createRenderer(canvasHost) {
     fx.resize(worldW, worldH, res);   // leert die Decals
     dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
-    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); resetCorpsePCs(); }
+    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); resetCorpseQuads(); }
   }
 
   /* ---------- Einheiten ----------
@@ -156,7 +156,7 @@ export function createRenderer(canvasHost) {
   L.air.addChild(airQ, airBars);
   const UM = newMat(), GM = newMat(), PM = newMat(), TM = newMat();   // Einheit, Gruppe, Teil, Hilfe
   // Fliegende Leichen, Teile und Brocken liegen über den Bodentruppen (eigene Sprites), ruhende in der
-  // Ebene corpses (Leichen im ParticleContainer, Brocken als Sprites darüber).
+  // Ebene corpses (Leichen und Teile in der QuadBatch corpseQ, Brocken als Sprites darüber).
   const flySprites = new PIXI.Container(), projQ = createQuadBatch('projQuads');
   L.projectiles.addChild(flySprites, projQ);
   const flyPool = makePool(flySprites);
@@ -355,9 +355,9 @@ export function createRenderer(canvasHost) {
   }
 
   /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
-     Panzer, Hubschrauber, Drache: je Pool-Container einmal pro Typ ein eigener Teilebaum (makeBoss), der
-     im Einheiten-Container liegt (gleiche y-Sortierung wie alle). Pro Bild nur Texturen, Lage, Drehung,
-     Sichtbarkeit. Die Pose kommt aus poseUnit mit einem Gedächtnis je Einheit (memOf: Turm weich, Ketten-
+     Panzer, Hubschrauber, Drache: jedes Teil ist ein Quad in derselben QuadBatch wie die übrigen Einheiten
+     (gleiche y-Sortierung wie alle), gesetzt mit bp() aus Atlas-Textur, Lage, Drehung und Spiegelung der
+     Teilegruppe (Matrix P). Kein eigener Teilebaum, keine Pool-Container. Die Pose kommt aus poseUnit mit einem Gedächtnis je Einheit (memOf: Turm weich, Ketten-
      weg, Flügelphase, Heli-Neigung, Schweif); die Einheit selbst bleibt unberührt.
        Panzer: Wanne, Ketten (Bild = Kettenphase), Turmgruppe mit waagrechter Kuppel, waagrecht gespiegelt
                zur Seite des Ziels (Breite turretFlip, beim Umdrehen schmal und etwas höher), darin das Rohr
@@ -394,7 +394,7 @@ export function createRenderer(canvasHost) {
     part(Q, P, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
     if (p.blink) part(Q, P, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[ti]);
   }
-  // Teile in der Reihenfolge der früheren Teilebäume (makeBoss): Panzer Wanne, Ketten, Turmgruppe (Rohr,
+  // Teile von hinten nach vorn: Panzer Wanne, Ketten, Turmgruppe (Rohr,
   // Turm, Augen); Heli Rumpf, Kanone, Heckrotor, Augen, Rotorgruppe (Scheibe, Nachzieh-Blatt, Blätter);
   // Drache hinterer Flügel, Schweif, Rumpf, Hals, Kopfgruppe (Kopf, Augen), vorderer Flügel.
   function drawBoss(Q, u, p, rig, vi, ti, face, inv) {
@@ -469,15 +469,14 @@ export function createRenderer(canvasHost) {
   }
 
   /* ---------- Leichen, Teile, Brocken ----------
-     Ruhende Leichen und Teile (auch rutschende mit z = 0) liegen in PIXI.ParticleContainern in der Ebene
-     corpses, einer je Atlas-Seite (ein ParticleContainer zeichnet nur eine BaseTexture). Er kennt kein
-     visible: unbenutzte Sprites bekommen Größe und Deckkraft 0. Fliegende (state 'fly' mit z > 0 oder
+     Ruhende Leichen und Teile (auch rutschende mit z = 0) sind Quads in der QuadBatch corpseQ in der Ebene
+     corpses, jedes Bild neu in Listenreihenfolge gefüllt (Task 13). Fliegende (state 'fly' mit z > 0 oder
      Steigen) sind normale Sprites über den Bodentruppen und werfen einen Schatten. Aussehen aus
      pose.corpseLook: liegend flach (.55) und grau getönt, fade → Deckkraft, float wippt, sink und ash verblassen. */
-  // Ruhende Leichen und Teile: eine QuadBatch (Task 13; vorher ein ParticleContainer je Atlas-Seite), in Listenreihenfolge
+  // Ruhende Leichen und Teile: eine QuadBatch, in Listenreihenfolge
   const corpseQ = createQuadBatch('corpseQuads');
   corpseRoot.addChild(corpseQ);
-  function resetCorpsePCs() { corpseQ.clear(); }
+  function resetCorpseQuads() { corpseQ.clear(); }
 
   const LK = {};   // Ergebnis von corpseLook, wiederverwendet
   function drawCorpses(world, t, tm, inv) {
@@ -673,7 +672,7 @@ export function createRenderer(canvasHost) {
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen
-  // (liegend im ParticleContainer / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
+  // (liegend in corpseQ / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
   // Haltung der lebenden MG-Schützen und Scharfschützen (stances: stand/down/prone/up, Spez. #22)
   function debugPhysics() {
     const pcUsed = corpseQ.count;

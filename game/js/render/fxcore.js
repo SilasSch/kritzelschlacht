@@ -1,5 +1,5 @@
 // Reine Effekt-Logik (Task 12): Ereignisse → Partikel und Decals, Partikel altern lassen, Aussehen je
-// Partikel, Bildschirmwackeln. Kein DOM, kein PIXI; fx.js zeichnet die Partikel (ParticleContainer) und
+// Partikel, Bildschirmwackeln. Kein DOM, kein PIXI; fx.js zeichnet die Partikel (QuadBatches, quads.js) und
 // malt die Decals, die es über hooks.decal / hooks.crater bekommt.
 //
 // Spez. #14 "Effekte mit Maß": Glühen (additiv) nur bei Feuer, Explosionen, Mündungsblitzen und dem kurzen

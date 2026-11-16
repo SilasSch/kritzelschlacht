@@ -1,7 +1,8 @@
 // Testarmeen pro Mission und Konter-Erwartungen für tools/balance.mjs und die Tests.
-// Plan = Array<[type, n, x0, y0, x1, y1]> (blaue Rechtecke in Anteilen von W/H).
+// Plan = Array<[type, n, x0, y0, x1, y1]> (blaue Rechtecke; x in Anteilen des Missionsrahmens world.frameX, y von H).
 import { UNITS } from '../game/js/data.js';
 import { placeRect } from '../game/js/sim.js';
+import { frameX } from '../game/js/world.js';
 
 const F = [.32, .3, .38, .7];   // Front
 const B = [.18, .32, .25, .68]; // hinten
@@ -48,11 +49,11 @@ export const SHAPES = [[1400, 875], [1614, 820], [1670, 826], [1726, 820], [1670
 export const DUEL_A = [.22, .3, .34, .7];
 export const DUEL_B = [.66, .3, .78, .7];
 
-// Setzt einen Plan als blaue Einheiten (Rasterlayout wie placeRect) und gibt die Kosten zurück.
+// Setzt einen Plan als blaue Einheiten (Rasterlayout wie placeRect, im Missionsrahmen) und gibt die Kosten zurück.
 export function placePlan(world, plan) {
   let spent = 0;
   for (const [type, n, x0, y0, x1, y1] of plan) {
-    placeRect(world, type, n, x0, y0, x1, y1, 'blau');
+    placeRect(world, type, n, frameX(world, x0) / world.W, y0, frameX(world, x1) / world.W, y1, 'blau');
     spent += n * UNITS[type].cost;
   }
   return spent;

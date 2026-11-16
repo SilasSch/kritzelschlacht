@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
-import { createStroke, stamp, paintTerrain, undo, UNIT_CAP, ZONE } from '../game/js/paint.js';
+import { createStroke, stamp, paintTerrain, undo, UNIT_CAP, zoneX } from '../game/js/paint.js';
 import { UNITS, TERRAIN } from '../game/js/data.js';
 
 const alive = w => w.units.filter(u => u.alive);
@@ -44,9 +44,9 @@ test('stamp: Mission nur links der Zone und nur in der Planphase', () => {
   assert.equal(right.placed, 0);
   const battle = stamp(w, createStroke(0), 200, 400, 60, 'krieger', 'blau', m, 'battle');
   assert.equal(battle.placed, 0);
-  const edge = stamp(w, createStroke(0), 1400 * ZONE, 400, 80, 'krieger', 'blau', m, 'plan');
+  const edge = stamp(w, createStroke(0), zoneX(w), 400, 80, 'krieger', 'blau', m, 'plan');
   assert.ok(edge.placed > 0);
-  for (const u of alive(w)) assert.ok(u.x <= 1400 * ZONE);
+  for (const u of alive(w)) assert.ok(u.x <= zoneX(w));
   assert.equal(m.spent, edge.placed * UNITS.krieger.cost);
 });
 

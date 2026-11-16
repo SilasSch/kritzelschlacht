@@ -3,10 +3,10 @@
 // mission = null (Sandkasten) oder { budget, spent } (spent wird hier fortgeschrieben).
 // phase = 'plan' | 'battle' | 'done' (nur in Missionen relevant).
 import { UNITS, TERRAIN, CELL } from './data.js';
-import { spawn, cellIndex, query, rebuildHash, touchTerrain } from './world.js';
+import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
 
 export const UNIT_CAP = 2600;
-export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= ZONE * W
+export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= zoneX (Anteil des Missionsrahmens)
 export const PLAYER = 'blau';
 export const MSG_BUDGET = 'Budget aufgebraucht.';
 export const MSG_FULL = 'Das Schlachtfeld ist voll.';
@@ -21,8 +21,11 @@ export function createStroke(spent = 0) {
 
 export const strokeEmpty = s => !s.units.length && !s.cells.size && !s.erased.length;
 
+// Mallinie der Missionen in px (world.frameX)
+export const zoneX = world => frameX(world, ZONE);
+
 export function canPaintAt(world, x, mission, phase) {
-  return !(mission && (phase !== 'plan' || x > world.W * ZONE));
+  return !(mission && (phase !== 'plan' || x > zoneX(world)));
 }
 
 // Warnung höchstens einmal pro Strich

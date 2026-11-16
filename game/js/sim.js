@@ -1,7 +1,7 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
 import { MISSIONS, TERRAIN, CELL } from './data.js';
-import { spawn, setCell, rebuildHash, clearBattle, touchTerrain } from './world.js';
+import { spawn, setCell, rebuildHash, clearBattle, touchTerrain, frameX } from './world.js';
 import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
 import { createFlow, updateFlow } from './pathing.js';
@@ -105,19 +105,20 @@ export function tCircle(world, key, cx, cy, rr, inner = 0) {
 }
 
 // Baut Mission i auf (leert vorher die Schlacht per clearBattle und das Gelände). Gegner gehören 'rot'.
+// x-Angaben der Mission sind Anteile des Missionsrahmens (world.frameX), y Anteile von H.
 export function buildMission(world, i) {
   const m = MISSIONS[i];
   clearBattle(world);
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0); touchTerrain(world);
   world.contested = false; world.teamMode = true;
-  const { W, H } = world;
+  const { W, H } = world, fx = f => frameX(world, f) / W;
   for (const p of m.place) {
     switch (p[0]) {
-      case 'rect': placeRect(world, p[1], p[2], p[3], p[4], p[5], p[6], 'rot'); break;
-      case 'circle': placeCircle(world, p[1], p[2], p[3], p[4], p[5], 'rot'); break;
-      case 'unit': spawn(world, p[1], p[2] * W, p[3] * H, 'rot'); break;
-      case 'tRect': tRect(world, p[1], p[2], p[3], p[4], p[5]); break;
-      case 'tCircle': tCircle(world, p[1], p[2], p[3], p[4], p[5]); break;
+      case 'rect': placeRect(world, p[1], p[2], fx(p[3]), p[4], fx(p[5]), p[6], 'rot'); break;
+      case 'circle': placeCircle(world, p[1], p[2], fx(p[3]), p[4], p[5], 'rot'); break;
+      case 'unit': spawn(world, p[1], fx(p[2]) * W, p[3] * H, 'rot'); break;
+      case 'tRect': tRect(world, p[1], fx(p[2]), p[3], fx(p[4]), p[5]); break;
+      case 'tCircle': tCircle(world, p[1], fx(p[2]), p[3], p[4], p[5]); break;
     }
   }
   world.events.push({ type: 'terrain', gx0: 0, gy0: 0, gx1: world.GW - 1, gy1: world.GH - 1 });

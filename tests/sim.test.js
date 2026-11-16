@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn } from '../game/js/world.js';
+import { createWorld, spawn, frameX, MISSION_ASPECT } from '../game/js/world.js';
 import { step, buildMission, missionResult, sandboxWinner } from '../game/js/sim.js';
 import { placePlan, MISSION_PLANS, COUNTERS } from '../tools/plans.mjs';
 
@@ -16,6 +16,26 @@ test('buildMission setzt Teammodus, rote Einheiten und Gelände', () => {
   assert.equal(w.units.length, 22 + 10 + 4);
   assert.ok(w.units.every(u => u.team === 'rot'));
   assert.ok(w.terr.some(t => t === 1));
+});
+
+test('Missionsrahmen: bis Seitenverhältnis 1,6 die ganze Breite, darüber mittig mit Breite 1,6·H', () => {
+  const near = (a, b) => Math.abs(a - b) < 1e-9;
+  const n = createWorld(1400, 875, 1);            // 1280×800-Laptop: Rahmen = Welt
+  assert.ok(near(frameX(n, 0), 0) && near(frameX(n, 1), 1400) && near(frameX(n, .5), 700));
+  const t = createWorld(1400, 1050, 1);           // schmaler als 1,6: ganze Breite
+  assert.ok(near(frameX(t, 0), 0) && near(frameX(t, 1), 1400));
+  const wd = createWorld(1726, 820, 1), L = MISSION_ASPECT * 820;
+  assert.ok(near(frameX(wd, 1) - frameX(wd, 0), L) && near(frameX(wd, .5), 863));
+});
+
+test('buildMission: Abstände wachsen auf breiten Welten nicht mit W (Rahmen statt W-Anteil)', () => {
+  // Mission 5: Festung bei x .8 des Rahmens; Abstand zur Mallinie in Einheiten von H gleich bei 1400×875 und 1726×820
+  const gap = (W, H) => {
+    const w = createWorld(W, H, 2); buildMission(w, 4);
+    const mages = w.units.filter(u => u.type === 'magier'), cx = mages.reduce((a, u) => a + u.x, 0) / mages.length;
+    return (cx - frameX(w, .42)) / H;
+  };
+  assert.ok(Math.abs(gap(1400, 875) - gap(1726, 820)) < .02, `${gap(1400, 875)} vs ${gap(1726, 820)}`);
 });
 
 test('missionResult: Blau 0 → lose, Rot 0 → win, >180 s → lose, sonst null', () => {

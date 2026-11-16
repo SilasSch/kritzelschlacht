@@ -32,6 +32,16 @@ export const factionOf = (world, u) => (world.teamMode ? u.team : u.type);
 export const cellIndex = (world, x, y) =>
   clamp((y / CELL) | 0, 0, world.GH - 1) * world.GW + clamp((x / CELL) | 0, 0, world.GW - 1);
 
+// Missionsrahmen: Missionen (data.js), Testpläne (tools/plans.mjs) und die Mallinie (paint.ZONE) sind in
+// Anteilen eines Rahmens der Breite min(W, MISSION_ASPECT · H) angelegt, waagrecht mittig; y bleibt Anteil
+// von H. So wachsen die Wege auf breiten Laptop-Welten (Welt = Viewport / Grundzoom) nicht mit W mit,
+// sondern bleiben wie bei 1400×875 (1280×800-Viewport) im selben Verhältnis zur Höhe. Liefert px.
+export const MISSION_ASPECT = 1.6;
+export function frameX(world, f) {
+  const L = Math.min(world.W, MISSION_ASPECT * world.H);
+  return (world.W - L) / 2 + f * L;
+}
+
 // Nach jeder Änderung an terr (Malen, Rückgängig, Mission, Szene): Wegfindung neu berechnen lassen.
 export const touchTerrain = world => { world.terrainVersion = (world.terrainVersion | 0) + 1; };
 

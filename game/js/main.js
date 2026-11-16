@@ -5,7 +5,7 @@ import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain
 import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
-import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, ZONE, PLAYER } from './paint.js';
+import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER } from './paint.js';
 import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
@@ -252,7 +252,7 @@ const actions = {
     if (stroke.first) {
       stroke.first = false;
       if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? 'Während des Kampfes wird nicht gemalt.' : 'Plane neu, um weiter zu malen.'); stroke.blocked = true; }
-      else if (m && wx > world.W * ZONE) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
+      else if (m && wx > zoneX(world)) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
     }
     if (stroke.blocked) return;
     pointer.erasing = erase;
@@ -453,7 +453,7 @@ function frame(now) {
   renderer.setOverlay({
     brushX: pointer.x, brushY: pointer.y, brushR: pointer.inside && canPaint ? game.brush : 0,
     erase: game.sel === 'radierer' || pointer.erasing,
-    missionZoneX: m && m.phase === 'plan' ? world.W * ZONE : null,
+    missionZoneX: m && m.phase === 'plan' ? zoneX(world) : null,
   });
   renderer.draw(world, cam, now / 1000);
 

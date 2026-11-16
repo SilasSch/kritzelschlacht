@@ -626,20 +626,25 @@ export function think(world, u, dt) {
   u.run += dt;
 }
 
-// Gegnerischer Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R? Wiederverwendeter Rückruf über
-// Modulvariablen (keine Allokation je Schritt), bricht beim ersten Treffer ab.
-let MN_W = null, MN_U = null, MN_F = null, MN_HIT = false;
-function meleeTest(v) {
-  if (v.T.range >= 20 || factionOf(MN_W, v) === MN_F) return false;
-  const dx = v.x - MN_U.x, dy = v.y - MN_U.y;
-  if (dx * dx + dy * dy >= PRONE_MELEE_R * PRONE_MELEE_R) return false;
-  MN_HIT = true; return true;
-}
+// Gegnerischer Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R? Dieselben Hash-Zellen wie
+// query(world, u.x, u.y, PRONE_MELEE_R), aber als eigene Schleife ohne Rückruf (läuft für jeden stehenden
+// oder liegenden MG-Schützen und Scharfschützen in Reichweite in jedem Schritt; Task 13), bricht beim
+// ersten Treffer ab.
+const MELEE_R2 = PRONE_MELEE_R * PRONE_MELEE_R;
 function meleeNear(world, u) {
-  MN_W = world; MN_U = u; MN_F = factionOf(world, u); MN_HIT = false;
-  query(world, u.x, u.y, PRONE_MELEE_R, meleeTest);
-  MN_W = null; MN_U = null; MN_F = null;
-  return MN_HIT;
+  const { HW, HH, hash } = world, f = factionOf(world, u), R = PRONE_MELEE_R, ux = u.x, uy = u.y;
+  const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
+  const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
+  for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+    const cell = hash[gy * HW + gx];
+    for (let i = 0; i < cell.length; i++) {
+      const v = cell[i];
+      if (!v.alive || v.T.range >= 20) continue;
+      const dx = v.x - ux, dy = v.y - uy;
+      if (dx * dx + dy * dy < MELEE_R2 && factionOf(world, v) !== f) return true;
+    }
+  }
+  return false;
 }
 
 function standUp(u, frac = 1) { u.stance = 'up'; u.stanceT = PRONE_UP_T * frac; }

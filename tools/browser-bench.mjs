@@ -1,5 +1,5 @@
 // Headless-Messung im echten Renderer: node tools/browser-bench.mjs [units=2000] [--chrome=PFAD] [--warm=240]
-//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--swiftshader]
+//   [--frames=60] [--size=1280x800] [--runs=1] [--seed=1] [--shot=bild.png] [--clip=x,y,w,h,zoom] [--profile=out.cpuprofile] [--eval=AUSDRUCK] [--swiftshader]
 // Startet einen kleinen statischen Server für das Repo, einen kopflosen Chrome/Chromium (CDP über den in
 // Node eingebauten WebSocket), öffnet game/index.html?bench=N&debug und ruft dort
 // __bench.restart(); __bench.measure(frames, { warm }) auf (siehe main.js). Ausgabe: JSON je Lauf.
@@ -87,7 +87,10 @@ try {
   const gl = await evaluate(`(() => { const gl = __kritzel.renderer.app.renderer.gl, e = gl.getExtension('WEBGL_debug_renderer_info');
     return e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); })()`);
   console.log(`chrome headless ${VW}x${VH}  gl: ${gl}`);
-  for (let k = 0; k < RUNS; k++) {
+  // --eval: Ausdruck in der Seite statt der Messung (z. B. Prüfszenen und debug-Ausgaben), Ergebnis als JSON
+  const ev = flag('eval', null);
+  if (ev) console.log(JSON.stringify(await evaluate(ev)));
+  for (let k = 0; k < (ev ? 0 : RUNS); k++) {
     const profOut = flag('profile', null);
     // Profil nur über die gemessenen Bilder: warm vorweg ohne Profil, dann measure ohne eigenes Aufwärmen
     if (profOut) { await evaluate(`(() => { __bench.restart(); __bench.measure(1, { warm: ${WARM} }); return 1; })()`); await cdp('Profiler.enable'); await cdp('Profiler.start'); }

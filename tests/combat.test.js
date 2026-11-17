@@ -228,7 +228,7 @@ test('Sanitäter: mehrere heilen dasselbe Ziel gedämpft (voll, 50 %, 25 %), nur
   const { ABILITY, HEAL_WAVE, stepAbility } = await import('../game/js/abilities.js');
   const { UNITS } = await import('../game/js/data.js');
   assert.equal(UNITS.sani.cost, 3.5);
-  assert.deepEqual(HEAL_STACK.MUL, [1, .5, .25]);
+  assert.deepEqual(HEAL_STACK.MUL, [1, .5, .25]); assert.ok(HEAL_STACK.T < UNITS.sani.cd);
   const w = createWorld(1400, 800, 5); w.teamMode = true;
   const k = spawn(w, 'krieger', 400, 400, 'blau'); k.hp = 10;
   const n = spawn(w, 'krieger', 420, 400, 'blau'); n.hp = 10;   // Nachbar in 20 px: wird nicht mitgeheilt
@@ -252,4 +252,29 @@ test('Sanitäter: mehrere heilen dasselbe Ziel gedämpft (voll, 50 %, 25 %), nur
   assert.equal(stepAbility(w2, a, 1 / 60), false);   // Welle sofort fertig
   assert.ok(b.abCd >= ABILITY.sani.cd, `b wartet: ${b.abCd}`);
   assert.equal(c.abCd, 0, 'ferner Sanitäter unberührt');
+});
+
+// Fix-Runde 1 (Prüfung 4b): ein einzelner Sanitäter heilt immer voll, Ghule werden nicht vergiftet, Bienen vergessen Tote
+test('Fix-Runde 1: einzelner Sanitäter 10 s lang immer volle Heilung; kein Gift für Ghule; Biene hält kein totes Stichziel', async () => {
+  const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
+  const { think, attack } = await import('../game/js/combat.js');
+  const { UNITS } = await import('../game/js/data.js');
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const k = spawn(w, 'krieger', 400, 400, 'blau'); k.T = { ...UNITS.krieger, hp: 1e6 }; k.hp = 1; k.cd = 1e9;
+  const m = spawn(w, 'sani', 350, 400, 'blau'); m.T = { ...UNITS.sani, speed: 0 }; m.abCd = 1e9;
+  const gains = [];
+  for (let i = 0; i < 600; i++) {
+    w.time += 1 / 60; rebuildHash(w);
+    const h = k.hp; think(w, m, 1 / 60); if (k.hp > h) gains.push(k.hp - h);
+  }
+  assert.ok(gains.length >= 9, `Heilungen ${gains.length}`);
+  assert.ok(gains.every(g => Math.abs(g - UNITS.sani.heal) < 1e-9), gains.join(','));
+  // Ghul: kein Gift
+  const b = spawn(w, 'biene', 600, 400, 'rot'), g = spawn(w, 'ghul', 605, 400, 'blau');
+  rebuildHash(w); b.cd = 0; attack(w, b, g, 5, 5, 0);
+  assert.equal(g.poisonT, 0);
+  // Biene tötet ihr Ziel: kein Verweis bleibt
+  const e = spawn(w, 'krieger', 610, 420, 'blau'); e.hp = 1;
+  b.cd = 0; attack(w, b, e, 5, 5, 0);
+  assert.ok(!e.alive); assert.equal(b.stingTg, null);
 });

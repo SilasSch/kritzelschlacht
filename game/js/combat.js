@@ -622,11 +622,12 @@ export function stepBurn(world, u, dt) {
 /* ---------- Gift (Nachtrag 4, #37) ---------- */
 // Der erste Stich einer Biene auf ein Ziel (u.stingTg) vergiftet es: POISON.T s lang POISON.DPS Schaden/s, Schadensart
 // 'poison' (kein Feuer: Panzer, Vampir und Brand bleiben unberührt; Rüstung, Deckung und Liegen schützen nicht).
-// Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) vergiftet es nicht.
+// Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) und Untote
+// (Ghule, data.UNDEAD) vergiftet es nicht.
 export const POISON = { DPS: 4, T: 3 };
 const NO_POISON = new Set(['panzer', 'heli']);
 export function poison(world, v, src) {
-  if (!v.alive || NO_POISON.has(v.type)) return;
+  if (!v.alive || NO_POISON.has(v.type) || UNDEAD.has(v.type)) return;
   if (!(v.poisonT > 0)) emit(world, { type: 'poison', x: v.x, y: v.y, z: v.z });
   v.poisonT = POISON.T; v.poisonSrc = src || null;
 }
@@ -834,6 +835,7 @@ export function think(world, u, dt) {
     // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)
     if (nt && (nt.x - u.x) ** 2 + (nt.y - u.y) ** 2 > RETARGET_FAR * RETARGET_FAR) u.rt *= RETARGET_FAR_MUL;
     if (nt !== u.tg) { u.pathT = 0; u.lofWait = 0; }   // neues Ziel: Wege- und Schusslinie gleich neu prüfen
+    if (u.stingTg !== null && !u.stingTg.alive) u.stingTg = null;   // Biene: erstes Stichziel ist gefallen
     u.tg = nt;
   }
   const t = u.tg;
@@ -1104,6 +1106,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       const before = t.hp, dealt = hurt(world, t, a, 'melee', u);
       // Biene: der erste Stich auf dieses Ziel vergiftet (Nachtrag 4, #37)
       if (u.type === 'biene' && u.stingTg !== t) { u.stingTg = t; if (t.alive) poison(world, t, u); }
+      if (u.stingTg !== null && !u.stingTg.alive) u.stingTg = null;   // keinen Verweis auf Tote festhalten
       if (u.type === 'geist') u.hp = Math.min(T.hp, u.hp + dealt);
       // Lebensraub des Vampirs (Spez. #32): die Hälfte des Schadens, ohne den Überschuss über die LP des Opfers
       else if (u.type === 'vampir') { const h = u.hp + VAMPIRE.HEAL * (dealt < before ? dealt : before > 0 ? before : 0); u.hp = h < T.hp ? h : T.hp; }
@@ -1121,14 +1124,16 @@ function healOne(world, f, v, a) {
 }
 const HEAL_FLEE_BONUS = 1e12;   // px²: zieht jeden Fliehenden jedem anderen Verletzten vor
 // Gedämpfte Heilung (Nachtrag 4, #38): heilen mehrere Sanitäter dasselbe Ziel zugleich (innerhalb von HEAL_STACK.T s ab der
-// ersten Heilung, v.healAt/v.healN), wirkt die erste voll, die zweite zu MUL[1], jede weitere zu MUL[2].
+// ersten Heilung, v.healAt/v.healN), wirkt die erste voll, die zweite zu MUL[1], jede weitere zu MUL[2]. T liegt klar unter
+// der Abklingzeit der Sanitäter (1 s): mit T = 1 ließ der Rundungsfehler der Schritte (0,99999 s) die Heilungen eines
+// einzelnen Sanitäters zwischen voll und halb wechseln (Prüfung Fix-Runde 1).
 // SPLASH: Anteil für Verletzte bis SPLASH_R px um das Ziel (vorher voll). Der Prüfstand zeigte, dass dieser Umkreis die
 // Sanitäter stark machte (ein Sanitäter heilte in einer dichten Reihe 5 und mehr Einheiten je Sekunde): 18 Soldaten mit
 // 15 Sanitätern schlugen 35 Soldaten 8/8, mit SPLASH .5 noch 8/8, mit .25 7/8, mit 0 0/8. Den Umkreis heilt jetzt nur die
 // Heilwelle (abilities.HEAL_WAVE).
-export const HEAL_STACK = { T: 1, MUL: [1, .5, .25], SPLASH: 0, SPLASH_R: 50 };
+export const HEAL_STACK = { T: .9, MUL: [1, .5, .25], SPLASH: 0, SPLASH_R: 50 };
 export function healMul(world, v) {
-  if (world.time - v.healAt >= HEAL_STACK.T) { v.healAt = world.time; v.healN = 0; }
+  if (world.time - v.healAt >= HEAL_STACK.T - 1e-6) { v.healAt = world.time; v.healN = 0; }
   const M = HEAL_STACK.MUL, k = v.healN < M.length ? v.healN : M.length - 1;
   v.healN++;
   return M[k];

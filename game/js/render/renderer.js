@@ -688,7 +688,7 @@ export function createRenderer(canvasHost) {
     drawProjectiles(world);
     flyPool.finish();
     lap('proj');
-    const off = fx.frame(t);   // Partikel, Decal-Upload, Wackeln (klingt in Echtzeit ab)
+    const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
     lap('fx');

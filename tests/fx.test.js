@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   FX_CAP, FRAME_LIMITS, SMOKE, DUST, LIGHT_T, LIGHT_ALPHA, SHAKE_MAX, GLOW_KINDS, CRASH_SMOKE_MUL,
   WARM_KINDS, WARM_TINT, WARM_ALPHA, HALO_ALPHA, groundWarm,
-  createParticles, createFxCore, createDecalAger, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
+  createParticles, createFxCore, createDecalAger, AGER_MAX_DT, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
 } from '../game/js/render/fxcore.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R } from '../game/js/combat.js';
 
@@ -330,6 +330,23 @@ test('Decal-Generationen', () => {
   assert.equal(a.tick(15), true); assert.equal(a.oldAlpha(), 1);
   a.tick(10); a.reset();
   assert.equal(a.oldAlpha(), 0); assert.equal(a.tick(29), false); assert.equal(a.tick(2), true);
+});
+
+// Finale Prüfung: die Decals altern mit der Spielzeit (world.time), nicht mit der Bildzeit. In der Pause steht
+// world.time still, dann verblasst nichts; eine neue Welt (Zeit läuft zurück) zählt 0 s.
+test('Decal-Generationen: at(simT) altert mit der Spielzeit', () => {
+  const a = createDecalAger(30);
+  // Spielzeit in Schritten von .5 s bis T; liefert, ob dabei getauscht wurde
+  let T = 5;
+  const until = end => { let sw = false; for (; T < end - 1e-9;) { T += .5; if (a.at(T)) sw = true; } return sw; };
+  assert.equal(a.at(T), false, 'erster Aufruf zählt 0 s');
+  assert.equal(until(34), false, '29 s');
+  for (let i = 0; i < 100; i++) assert.equal(a.at(T), false, 'Pause: Spielzeit steht');
+  assert.equal(until(35.5), true, 'nach 30 s Spielzeit getauscht');
+  until(50.5); near(a.oldAlpha(), 1 - 15.5 / 30);
+  assert.equal(a.at(2), false, 'Zeit zurück (neue Welt): 0 s'); near(a.oldAlpha(), 1 - 15.5 / 30);
+  a.at(102); near(a.oldAlpha(), 1 - (15.5 + AGER_MAX_DT) / 30);   // höchstens AGER_MAX_DT s je Aufruf
+  a.reset(); assert.equal(a.oldAlpha(), 0); assert.equal(a.at(500), false, 'nach reset zählt der erste Aufruf 0 s');
 });
 
 /* ---------- Römer (Spez. #25, Task 4) ---------- */

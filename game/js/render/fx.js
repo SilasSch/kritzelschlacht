@@ -2,8 +2,8 @@
 // und liefert das Bildschirmwackeln. createFx(renderer) mit renderer.layers (Ebenen des Renderers).
 //   consume(events)  Ereignisse eines Bilds (world.events) → Partikel, Decals, Wackeln
 //   update(dt[, world])  Partikel altern lassen (Spielzeit), Flugspuren der Geschosse aus world.proj
-//   frame(t)  pro Bild vor dem Rendern: Sprites setzen, Decals hochladen, Wackeln abklingen lassen (Echtzeit)
-//             und den Versatz { x, y } zurückgeben
+//   frame(t, simT)  pro Bild vor dem Rendern: Sprites setzen, Decals hochladen, Wackeln abklingen lassen (Echtzeit t)
+//             und den Versatz { x, y } zurückgeben; die Decals altern mit der Spielzeit simT (world.time)
 //   resize(W, H, res)  Weltgröße / Auflösung der Decal-Leinwand (leert sie)
 //   autoLod(workMs, frameMs)  Arbeitszeit und Bildabstand (ms) an den Detailregler (fxcore.createLodGovernor); setLod(n | null) legt die
 //             Stufe fest (null: wieder automatisch); lod = aktuelle Stufe (Task 13)
@@ -113,13 +113,18 @@ export function createFx(renderer) {
   }
 
   /* ---------- Decals (zwei Offscreen-Leinwände wie das Gelände, Upload gedrosselt) ----------
-     Gemalt wird nur auf cur; old zeigt die vorige Generation und blendet aus (createDecalAger): ein Fleck lebt 30-60 s. */
+     Gemalt wird nur auf cur; old zeigt die vorige Generation und blendet aus (createDecalAger, Spielzeit): ein Fleck
+     lebt 30-60 s. Beim Tausch wird nur hochgeladen, was sich geändert hat: die bisherige cur nur mit ausstehenden
+     Strichen (decalDirty), die gelöschte Leinwand nur, wenn ihre Generation Decals hatte (oldN). old ist unsichtbar
+     (visible = false, kein Zeichnen), solange sie fast ausgeblendet ist (< OLD_MIN_ALPHA) oder leer war. */
   const mkLayer = () => { const cv = document.createElement('canvas'); return { cv, ctx: cv.getContext('2d'), tex: null, sprite: new PIXI.Sprite() }; };
   let cur = mkLayer(), old = mkLayer(), dctx = cur.ctx;
   const ager = createDecalAger(30);
   let res = 0, decalDirty = false, decalForce = false, decalUpT = -1, decalCount = 0, decalUploads = 0;
+  let curN = 0, oldN = 0;   // Decals je Generation (auf cur bzw. old gemalt)
+  const OLD_MIN_ALPHA = .02;
   L.decals.addChild(old.sprite, cur.sprite);   // alte Generation unten
-  old.sprite.alpha = 0;
+  old.sprite.alpha = 0; old.sprite.visible = false;
 
   function resize(W, H, r) {
     res = r;
@@ -129,8 +134,8 @@ export function createFx(renderer) {
       d.tex = PIXI.Texture.from(d.cv);
       d.sprite.texture = d.tex; d.sprite.scale.set(1 / res);
     }
-    ager.reset(); old.sprite.alpha = 0;
-    decalDirty = false; decalForce = false; decalCount = 0;
+    ager.reset(); old.sprite.alpha = 0; old.sprite.visible = false;
+    decalDirty = false; decalForce = false; decalCount = 0; curN = 0; oldN = 0;
   }
   // Fleck: drei verschobene flache Ellipsen (wie im alten Spiel)
   function decal(x, y, r, col, a) {
@@ -138,7 +143,7 @@ export function createFx(renderer) {
     const c = dctx; c.setTransform(res, 0, 0, res, 0, 0); c.globalAlpha = a; c.fillStyle = col;
     for (let i = 0; i < 3; i++) { c.beginPath(); c.ellipse(x + rnd(-r, r) * .5, y + rnd(-r, r) * .3, r * rnd(.4, .8), r * rnd(.22, .42), 0, 0, TAU); c.fill(); }
     c.globalAlpha = 1;
-    decalDirty = true; decalCount++;
+    decalDirty = true; decalCount++; curN++;
   }
   // Krater (nur optisch, Spez. #12): dunkler, leicht unrunder Ring mit Deckkraft 0.1
   function crater(x, y, R) {
@@ -154,7 +159,7 @@ export function createFx(renderer) {
     }
     c.closePath(); c.stroke();
     c.globalAlpha = 1;
-    decalDirty = true; decalCount++;
+    decalDirty = true; decalCount++; curN++;
   }
 
   const core = createFxCore({ decal, crater });
@@ -177,21 +182,26 @@ export function createFx(renderer) {
   const LK = {}, off = { x: 0, y: 0 };
   let maxWarm = 0;
   let lastT = -1, nMain = 0, nGlow = 0, nLight = 0, nWarm = 0, nHalo = 0;
-  function frame(t) {
+  function frame(t, simT = 0) {
     const dt = lastT < 0 || t < lastT ? 0 : Math.min(.1, t - lastT);
     lastT = t;
     core.decay(dt);   // Wackeln klingt je Sekunde ab, nicht je Bild
-    if (cur.tex && ager.tick(dt)) {
+    if (cur.tex && ager.at(simT)) {
       // Generationen tauschen: die alte Leinwand wird gelöscht und zur neuen cur, die bisherige cur wird old
-      old.ctx.setTransform(1, 0, 0, 1, 0, 0); old.ctx.clearRect(0, 0, old.cv.width, old.cv.height);
+      const clearOld = oldN > 0;
+      if (clearOld) { old.ctx.setTransform(1, 0, 0, 1, 0, 0); old.ctx.clearRect(0, 0, old.cv.width, old.cv.height); }
       const t0 = cur; cur = old; old = t0; dctx = cur.ctx;
       // die ausblendende alte Generation liegt immer unter der neuen (die Sprites tauschen nur die Rollen)
       L.decals.setChildIndex(old.sprite, 0);
-      cur.sprite.alpha = 1;
-      old.tex.update(); cur.tex.update();   // beide neu hochladen
-      decalDirty = false; decalForce = false; decalUpT = t; decalUploads++;
+      cur.sprite.alpha = 1; cur.sprite.visible = true;
+      // hochladen nur, was sich geändert hat: ausstehende Striche der bisherigen cur, die gelöschte Leinwand
+      if (decalDirty) { old.tex.update(); decalUploads++; }
+      if (clearOld) { cur.tex.update(); decalUploads++; }
+      oldN = curN; curN = 0;
+      decalDirty = false; decalForce = false; decalUpT = t;
     }
-    old.sprite.alpha = ager.oldAlpha();
+    const oa = ager.oldAlpha();
+    old.sprite.alpha = oa; old.sprite.visible = oldN > 0 && oa >= OLD_MIN_ALPHA;
     if (cur.tex && decalDirty && (decalForce || t - decalUpT >= DECAL_UPLOAD || t < decalUpT)) {
       cur.tex.update(); decalUpT = t; decalDirty = false; decalForce = false; decalUploads++;
     }
@@ -213,9 +223,9 @@ export function createFx(renderer) {
   function clear() {
     core.clear();
     for (const d of [cur, old]) { d.ctx.setTransform(1, 0, 0, 1, 0, 0); d.ctx.clearRect(0, 0, d.cv.width, d.cv.height); }
-    ager.reset(); old.sprite.alpha = 0;
+    ager.reset(); old.sprite.alpha = 0; old.sprite.visible = false;
     if (old.tex) old.tex.update();
-    decalDirty = true; decalForce = true; decalCount = 0;
+    decalDirty = true; decalForce = true; decalCount = 0; curN = 0; oldN = 0;
   }
 
   // Für Prüfungen (?debug: window.__kritzel.fx.debug()): lebende Partikel je Art, Sprites des letzten

@@ -97,18 +97,28 @@ export const LOD_SLOW_MS = 16, LOD_SLOW_T = .3, LOD_OK_MS = 12, LOD_RECOVER_T = 
 export const LOD_EMA = .1, LOD_IGNORE_MS = 250;
 // Decal-Generationen: zwei Leinwände, alle gen s tauscht die alte (gelöscht) mit der aktuellen. Die alte blendet
 // linear über gen s aus; ein Fleck lebt so gen bis 2·gen s. Rein: tick gibt true, wenn getauscht werden muss.
+// at(simT): tick mit der Spielzeit (world.time) seit dem letzten Aufruf statt der Bildzeit, damit Krater in der
+// Pause nicht verblassen (wie die Gefallenen, physics.stepCorpses). Höchstens AGER_MAX_DT s je Aufruf; läuft die
+// Zeit zurück (neue Welt) oder ist es der erste Aufruf (auch nach reset), zählt der Aufruf 0 s.
+export const AGER_MAX_DT = 1;
 export function createDecalAger(gen = 30) {
-  let since = 0, swapped = false;
-  return {
+  let since = 0, swapped = false, last = -1;
+  const ager = {
     tick(dt) {
       since += dt;
       if (since < gen) return false;
       since = 0; swapped = true;
       return true;
     },
+    at(simT) {
+      const dt = last < 0 || simT < last ? 0 : Math.min(AGER_MAX_DT, simT - last);
+      last = simT;
+      return ager.tick(dt);
+    },
     oldAlpha: () => (swapped ? 1 - since / gen : 0),
-    reset() { since = 0; swapped = false; },
+    reset() { since = 0; swapped = false; last = -1; },
   };
+  return ager;
 }
 
 export function createLodGovernor() {

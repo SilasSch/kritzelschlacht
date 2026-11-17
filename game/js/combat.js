@@ -1182,7 +1182,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
 }
 
 function healOne(world, f, v, a) {
-  if (!v.alive || factionOf(world, v) !== f || v.hp >= v.T.hp || UNDEAD.has(v.type)) return;
+  if (!v.alive || factionOf(world, v) !== f || v.hp >= v.T.hp || v.ashT > 0 || UNDEAD.has(v.type)) return;
   v.hp = Math.min(v.T.hp, v.hp + a * healMul(world, v));
   emit(world, { type: 'heal', x: v.x, y: v.y - v.T.r });
 }
@@ -1204,12 +1204,12 @@ export function healMul(world, v) {
 }
 function healer(world, u, dt) {
   const T = u.T, f = factionOf(world, u);
-  if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || factionOf(world, u.tg) !== f) {
+  if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || u.tg.ashT > 0 || factionOf(world, u.tg) !== f) {
     let best = null, bd = Infinity;
     // Fliehende und Erschreckte (morale.isFleeing) vor allen anderen, unter ihnen der nächste
-    // Untote (Ghule, data.UNDEAD) heilt er nicht
+    // Untote (Ghule, data.UNDEAD) heilt er nicht, die Asche des Phönix (Task 6) auch nicht: sie steht ohnehin mit halben LP auf
     query(world, u.x, u.y, 380, v => {
-      if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal || UNDEAD.has(v.type)) return;
+      if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal || v.ashT > 0 || UNDEAD.has(v.type)) return;
       const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (isFleeing(v) ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
     });
     if (!best) {

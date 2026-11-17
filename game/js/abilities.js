@@ -269,8 +269,8 @@ function archerEnd(world, u) { const c = (u.abK - 1) * u.T.cd; if (u.cd < c) u.c
 export const HEAL_WAVE = { R: 90, FRAC: .25, MIN: 2, SHARE: 120 };
 let HW_W = null, HW_U = null, HW_F = null, HW_N = 0, HW_DO = false;
 function waveTest(v) {
-  // Untote (Ghule) heilt sie nicht (data.UNDEAD)
-  if (v.hp >= v.T.hp || factionOf(HW_W, v) !== HW_F || UNDEAD.has(v.type)) return;
+  // Untote (Ghule) heilt sie nicht (data.UNDEAD), die Asche des Phönix (Task 6) auch nicht
+  if (v.hp >= v.T.hp || v.ashT > 0 || factionOf(HW_W, v) !== HW_F || UNDEAD.has(v.type)) return;
   const dx = v.x - HW_U.x, dy = v.y - HW_U.y, R = HEAL_WAVE.R;
   if (dx * dx + dy * dy > R * R) return;
   HW_N++;

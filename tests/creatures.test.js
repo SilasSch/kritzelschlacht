@@ -398,3 +398,17 @@ test('Effekte und Posen: creature-Ereignisse erzeugen Partikel, der Frosch hüpf
   for (let t = 0; t < 1; t += .02) lo = Math.min(lo, poseUnit(f, t).bob);
   assert.ok(lo < -3, `Frosch springt (${lo})`);
 });
+
+// Review Task 6, Punkt 3: Sanitäter und Heilwelle verschwenden nichts an der Asche des Phönix
+test('Sanitäter: heilt nicht die Asche des Phönix, sondern den verletzten Krieger daneben', () => {
+  const w = mkWorld(), s = spawn(w, 'sani', 300, 400, 'blau');
+  const p = spawn(w, 'phoenix', 340, 400, 'blau'); p.hp = 0; p.ashT = 1.8; p.z = 0; p.fz = 0;
+  const k = spawn(w, 'krieger', 360, 430, 'blau'); k.hp = 10;
+  spawn(w, 'krieger', 1300, 700, 'rot').cd = 1e9;
+  rebuildHash(w); s.cd = 0; s.abCd = 1e9;
+  think(w, s, DT);
+  assert.equal(s.tg, k);
+  s.tg = p; s.rt = 5; think(w, s, DT);
+  assert.notEqual(s.tg, p, 'altes Ziel zu Asche geworden: neu wählen');
+  assert.equal(p.hp, 0);
+});

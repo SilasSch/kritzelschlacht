@@ -93,12 +93,15 @@ export function spawn(world, type, x, y, team) {
     // Abklingzeit beim Spawn ABILITY.cd · (0,3 + 0,7 · q), damit nicht alle zugleich auslösen; q nach id gestreut
     // (goldener Schnitt) statt aus world.rng(): bekommt ein Typ eine Fähigkeit, bleibt die Zufallsfolge der ganzen
     // Schlacht gleich (Task 2: sonst verschob jede neue Fähigkeit alle Saaten des Prüfstands).
-    abCd: 0, abOn: false, abT: 0, abK: 0, abX: 0, abY: 0, fearT: 0,
+    abCd: .5, abOn: false, abT: .5, abK: 0, abX: .5, abY: .5, fearT: .5,
     // Verstärkung (abilities.js, Heulen): Restdauer (s) und Faktoren auf Wunschtempo (physics.integrate) und
     // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
     // fz: Flughöhe der Flieger (physics.integrate führt z mit höchstens FLY_VZ px/s dorthin; Sturzflug senkt sie).
-    buffT: 0, spdMul: 1, dmgMul: 1, fz: T.flyZ || 0,
+    buffT: .5, spdMul: 1.5, dmgMul: 1.5, fz: .5,
   };
+  // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
+  // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
+  u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;

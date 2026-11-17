@@ -105,6 +105,26 @@ test('Magier wirkt im Kampf: Blitz auf einen einzelnen Feind (sofort, Ereignis s
   assert.ok(m.cd > 0, 'lädt danach wie nach einem Wurf');
 });
 
+test('Windstoß und Steinwand als Reaktion: auch während des Nachladens, geprüft alle SPELL.REACT_T s', () => {
+  const w = best(mkWorld()), m = spawn(w, 'magier', 400, 400, 'blau'), k = dummy(w, 'krieger', 450, 400, 'rot', true);
+  m.cd = 2; rebuildHash(w);
+  think(w, m, DT);
+  assert.ok(w.events.some(e => e.type === 'spell' && e.k === 'wind'), 'Windstoß trotz Nachladen');
+  assert.ok(m.cd > 1.5, 'lädt danach neu');
+  // Wind lädt, ein Angreifer kommt auf 55 px: die Wand steht zwischen beiden
+  const w2 = best(mkWorld()), m2 = spawn(w2, 'magier', 400, 400, 'blau');
+  dummy(w2, 'krieger', 1200, 400, 'rot', true);   // ein Ziel weit weg
+  m2.cd = 2; m2.windCd = 3; rebuildHash(w2);
+  think(w2, m2, DT);
+  assert.equal(w2.tempWalls.length, 0, 'ohne Angreifer in 60 px nichts');
+  const a = dummy(w2, 'krieger', 455, 400, 'rot', true); rebuildHash(w2);
+  think(w2, m2, DT);
+  assert.equal(w2.tempWalls.length, 0, 'gedrosselt: erst nach REACT_T wieder geprüft');
+  for (let t = 0; t < SPELL.REACT_T + .05; t += DT) think(w2, m2, DT);
+  assert.ok(w2.tempWalls.length >= STONE_WALL.MIN, `Wand ${w2.tempWalls.length}`);
+  for (const e of w2.tempWalls) { const gx = e.i % w2.GW; assert.ok(gx * CELL + 5 > m2.x && gx * CELL + 5 < a.x, 'zwischen Magier und Angreifer'); }
+});
+
 /* ---------- Feuerball ---------- */
 test('Feuerball setzt Getroffene in Brand (Feuer, auch Eigene im Splash)', () => {
   const w = mkWorld(), m = spawn(w, 'magier', 300, 400, 'blau'), t = dummy(w, 'krieger', 420, 400), o = dummy(w, 'krieger', 436, 400, 'blau');

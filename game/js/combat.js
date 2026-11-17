@@ -9,7 +9,7 @@ import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire } from './abilities.js';
-import { castSpell, FIREBALL } from './spells.js';
+import { castSpell, spellReact, FIREBALL } from './spells.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -728,6 +728,8 @@ export function think(world, u, dt) {
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
   const reach = T.range + T.r + t.T.r;
+  // Magier: Windstoß und Steinwand auch zwischen den Würfen (spells.spellReact, gedrosselt)
+  if (u.type === 'magier' && u.cd > 0 && spellReact(world, u)) return;
   // Reiter reiten nach dem Sturmangriff durch die Reihen und wenden dann
   if (u.type === 'reiter' && u.st > 0) { u.mx = u.cvx; u.my = u.cvy; u.face = u.cvx < 0 ? -1 : 1; return; }
   // Mörser halten Mindestabstand

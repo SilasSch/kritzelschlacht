@@ -24,7 +24,9 @@ const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 // Feuerball vor Blitz. Kein Feuerball, wenn im Einschlagkreis (Splash
 // des Magiers) mehr Eigene als Feinde stehen (Festlegung 2). Mit SECOND_P (world.rng) nimmt er den zweitbesten
 // passenden Zauber; mit nur einem passenden wird nicht gewürfelt.
-export const SPELL = { MELEE_R: 60, DENSE_R: 45, DENSE_N: 4, SECOND_P: .2, RETRY: 2 };
+// REACT_T: Takt der Abwehrprüfung zwischen den Würfen (spellReact); RETRY: s bis zum nächsten Versuch einer Steinwand
+// ohne Platz
+export const SPELL = { MELEE_R: 60, DENSE_R: 45, DENSE_N: 4, SECOND_P: .2, RETRY: 2, REACT_T: .2 };
 // Feuerball: Wurf und Splash des Magiers (UNITS.magier), zündet alle Getroffenen an (combat.impact → blast). GEN:
 // Generation des Brands; 3 = höchste (combat.BURN_MAX_GEN): der Getroffene brennt, das Feuer springt nicht über (wie
 // bei den Brandpfeilen; die Magier-Konter bleiben so im Rahmen).
@@ -136,6 +138,27 @@ export function castSpell(world, u, t) {
   }
   lightning(world, u, t);
   return s;
+}
+
+// Abwehr zwischen den Würfen (combat.think, solange der Magier nachlädt, u.cd > 0): Windstoß und Steinwand haben eigene
+// Abklingzeiten und sind Antworten auf die Lage, darum prüft er sie alle REACT_T s (Drossel u.meleeT, nach id
+// gestaffelt) und nicht nur, wenn er wieder werfen darf; sonst käme die Wand fast nie rechtzeitig zwischen ihn und den
+// Angreifer. Ein feindlicher Nahkämpfer bis MELEE_R → Windstoß, lädt der → Steinwand (nicht gegen Flieger). Danach lädt
+// er wie nach einem Wurf (u.cd). Kein Zufall. Liefert true, wenn er gezaubert hat.
+export function spellReact(world, u) {
+  if (u.meleeT > 0) return false;
+  u.meleeT = SPELL.REACT_T + (u.id % 4) * .02;
+  const windOk = !(u.windCd > 0), wallOk = !(u.wallCd > 0);
+  if (!windOk && !wallOk) return false;
+  const v = meleeThreat(world, u);
+  if (!v || (!windOk && v.T.fly)) return false;
+  const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || 1;
+  if (windOk) windGust(world, u, dx / d, dy / d);
+  else if (stoneWall(world, u, dx / d, dy / d) === 0) { u.wallCd = SPELL.RETRY; return false; }
+  u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d;
+  u.cd = u.T.cd * (.85 + world.rng() * .3);
+  u.fireT = 0;
+  return true;
 }
 
 /* ---------- Blitz ---------- */

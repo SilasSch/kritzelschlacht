@@ -490,7 +490,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -557,6 +557,24 @@ const scenes = {
     placeRect(world, 'krieger', 20, .58, .36, .64, .64, 'rot');
     spawn(world, 'sani', world.W * .26, world.H * .5, 'blau');
     spawn(world, 'sani', world.W * .74, world.H * .5, 'rot');
+  },
+  // Fähigkeiten (Spez. #30, Task 2): neun Reihen, je eine kleine blaue Gruppe eines Typs mit Fähigkeit (Schütze,
+  // Sanitäter mit verletzten Kriegern, Soldat, Mörser, Panzer, Wolfsrudel, Bär, Geist, Drache) und rechts davon eine
+  // dichte gemischte rote Gruppe (Krieger, Schützen, Ritter, Römer). Die Abklingzeiten der Blauen starten bei 1–3 s:
+  // jede Fähigkeit ist in den ersten Sekunden zu sehen (Mörser und Panzer, sobald ein Ziel in Reichweite ist).
+  faehigkeiten() {
+    world.teamMode = true;
+    const rows = [['schuetze', 4], ['sani', 2], ['soldat', 4], ['moerser', 2], ['panzer', 1], ['wolf', 5], ['baer', 1], ['geist', 2], ['drache', 1]];
+    const foes = ['krieger', 'schuetze', 'ritter', 'roemer'], W = world.W, dy = world.H / rows.length;
+    rows.forEach(([type, n], i) => {
+      const y = (i + .5) * dy;
+      for (let k = 0; k < n; k++) {
+        const u = spawn(world, type, W * .3 - (k % 3) * 22, y + ((k / 3 | 0) - .5 * (n > 3)) * 22 + ((k % 3) - 1) * 5, 'blau');
+        u.abCd = 1 + world.rng() * 2;
+      }
+      if (type === 'sani') for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', W * .3 + 26, y - 20 + k * 20, 'blau'); a.hp = .4 * a.T.hp; }
+      for (let k = 0; k < 6; k++) spawn(world, foes[(i + (k % 2)) % 4], W * .5 + (k % 3) * 16, y + ((k / 3 | 0) - .5) * 16, 'rot');
+    });
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

@@ -103,3 +103,23 @@ test('Fund 5: Schreck trifft weder Frosch noch Asche, und beide zählen nicht f�
     assert.equal(fr.fearT, 0); assert.equal(as.fearT, 0);
   }
 });
+
+test('Fund 6: ein Adler oben oder Asche vor dem Römerblock löst den Block nicht auf', () => {
+  for (const kind of ['adler', 'asche']) {
+    const w = createWorld(1400, 800, 3); w.teamMode = true;
+    const rs = [];
+    for (let k = 0; k < 6; k++) rs.push(spawn(w, 'roemer', 300 - (k % 2) * 22, 400 + ((k / 2) | 0) * 22 - 22, 'blau'));
+    const e = spawn(w, kind === 'adler' ? 'adler' : 'krieger', 330, 400, 'rot');
+    e.cd = 1e9; e.abCd = 1e9; e.hp = 1e9;
+    if (kind === 'asche') e.ashT = 1e9;
+    rebuildHash(w);
+    let charged = false;
+    for (let i = 0; i < 20; i++) {
+      step(w, DT); w.events.length = 0;
+      if (kind === 'adler') { e.x = 330; e.y = 400; e.z = 30; }
+      if (w.formations.some(f => f.state === 'charge')) charged = true;
+    }
+    assert.equal(w.formations.length > 0, true, `${kind}: Block existiert`);
+    assert.equal(charged, false, `${kind}: Block bleibt geschlossen`);
+  }
+});

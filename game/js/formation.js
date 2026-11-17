@@ -33,7 +33,7 @@
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
 // ENGAGE · 2 px um ein Mitglied ist und, nach Festhängen, mindestens STUCK s vergangen sind (holdT); geprüft
 // bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger.
-import { factionOf, query, nearestEnemy, cellIndex, isBat, unseen } from './world.js';
+import { factionOf, query, nearestEnemy, cellIndex, isBat, unseen, aloft } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 import { TERR_SPEED, TERR_HAZ } from './data.js';
 import { isFleeing } from './morale.js';
@@ -110,14 +110,17 @@ function makeForm(id, faction) {
 /* ---------- Gegner in der Nähe ---------- */
 // Rückruf über Modulvariablen (keine Closure je Aufruf)
 let EN_W = null, EN_F = null, EN_X = 0, EN_Y = 0, EN_R2 = 0, EN_HIT = false;
+const EN_P = { x: 0, y: 0 };   // Beobachter für world.unseen (der Prüfpunkt)
 function enemyTest(v) {
-  // Hubschrauber und Vampire in Fledermausform erreichen Nahkämpfer nicht (wie world.nearestEnemy)
-  if (v.type === 'heli' || isBat(v) || factionOf(EN_W, v) === EN_F) return;
+  // Hubschrauber, Vampire in Fledermausform und der Adler oben erreichen Nahkämpfer nicht (wie world.nearestEnemy); Asche
+  // des Phönix und ein verstecktes Krokodil sind kein Gegner (Task 5/6)
+  if (v.type === 'heli' || isBat(v) || aloft(v) || v.ashT > 0 || factionOf(EN_W, v) === EN_F) return;
+  if (v.hidden && unseen(EN_P, v)) return;
   const dx = v.x - EN_X, dy = v.y - EN_Y;
   if (dx * dx + dy * dy <= EN_R2) { EN_HIT = true; return true; }
 }
 function enemyWithin(world, faction, x, y, R) {
-  EN_W = world; EN_F = faction; EN_X = x; EN_Y = y; EN_R2 = R * R; EN_HIT = false;
+  EN_W = world; EN_F = faction; EN_X = x; EN_Y = y; EN_P.x = x; EN_P.y = y; EN_R2 = R * R; EN_HIT = false;
   query(world, x, y, R, enemyTest);
   EN_W = null; EN_F = null;
   return EN_HIT;

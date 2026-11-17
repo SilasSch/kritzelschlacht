@@ -47,6 +47,13 @@ export const SHIELD_SIDE = [-.62, .36, -.18, .78]; // seitlich hinter dem Körpe
 export const THROW_T = .35, THROW_ROT = -1.2, THROW_LIFT = .35;
 const blockPhase = id => frac(id * .6180339887);
 
+/* ---------- Angst (Rückzug, Spez. #27, Task 5) ----------
+   Fliehende (u.flee) zeigen Angstaugen: fear 1 (sonst 0), Pupillen auf pupil = FEAR_PUPIL ihrer Größe (sonst 1),
+   hochgezogene, schräge Brauen (Rig-Teil brow, der Renderer zeichnet es nur bei fear) und einen Schweißtropfen:
+   sweat 0..1 ist die Phase des Tropfens (SWEAT_HZ je s, Versatz u.seed), er rinnt an der Kopfseite herab und
+   verblasst am Ende. Bosse: nur Pupillen und Tropfen. */
+export const FEAR_PUPIL = .55, SWEAT_HZ = .9;
+
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 function frac(v) { return v - Math.floor(v); }
@@ -221,6 +228,8 @@ export function poseUnit(u, t, out = {}, mem) {
   out.frame = frame;
   out.turretFlip = 0; out.turretRot = 0; out.rotorRot = 0; out.tailRotor = 0; out.wingPhase = 0; out.wing = 0; out.tailSwing = 0;
   out.headRot = 0; out.track = 0;
+  const fear = u.flee ? 1 : 0;
+  out.fear = fear; out.pupil = fear ? FEAR_PUPIL : 1; out.sweat = fear ? frac(t * SWEAT_HZ + u.seed) : 0;
   out.shieldFront = 0; out.shieldX = 0; out.shieldY = 0; out.shieldRot = 0; out.shieldSx = 1; out.weaponFrame = 0; out.weaponLift = 0;
   if (roman) {
     const S = inBlock ? SHIELD_FRONT : SHIELD_SIDE;

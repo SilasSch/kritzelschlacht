@@ -6,6 +6,7 @@ import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
 import { createFlow, updateFlow } from './pathing.js';
 import { updateFormations } from './formation.js';
+import { updateCentroids } from './morale.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -28,6 +29,8 @@ export function step(world, dt) {
   t1 = pnow(); M[1] += t1 - t0; t0 = t1;
   // Römerblöcke (formation.js): Plätze und Blockzustand, die think liest
   updateFormations(world, dt);
+  // Schwerpunkt je Fraktion für die Fluchtrichtung (morale.js), gedrosselt
+  updateCentroids(world, dt);
   t1 = pnow(); M[2] += t1 - t0; t0 = t1;
   const units = world.units;
   for (const u of units) u.att = 0;

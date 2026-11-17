@@ -4,10 +4,12 @@ import { createWorld, spawn, frameX, MISSION_ASPECT } from '../game/js/world.js'
 import { step, buildMission, missionResult, sandboxWinner } from '../game/js/sim.js';
 import { placePlan, MISSION_PLANS, COUNTERS } from '../tools/plans.mjs';
 
-test('Mission 1: 9 Ritter gewinnen in 60 s Simulation', () => {
+// Seit dem Rückzug (Spez. #27) ziehen sich geschlagene Krieger zurück, erholen sich und kommen wieder: die
+// Mission dauert länger (Saat 11: 137 s statt unter 60 s). Gewinnen muss sie vor dem Zeitlimit (180 s).
+test('Mission 1: 9 Ritter gewinnen vor dem Zeitlimit (180 s)', () => {
   const w = createWorld(1400, 820, 11); buildMission(w, 0); w.teamMode = true;
   placePlan(w, [['ritter', 9, .3, .4, .34, .6]]);           // Hilfsfunktion aus tools/plans.mjs
-  let t = 0; while (t < 60 && !missionResult(w, t)) { step(w, 1/60); t += 1/60; }
+  let t = 0; while (t < 180 && !missionResult(w, t)) { step(w, 1/60); t += 1/60; }
   assert.equal(missionResult(w, t), 'win'); });
 
 test('buildMission setzt Teammodus, rote Einheiten und Gelände', () => {

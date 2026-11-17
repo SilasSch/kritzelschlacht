@@ -114,13 +114,17 @@ test('Dichter Bienenschwarm (60 Bienen, Radius 40): Feuer erreicht weitere Biene
   for (const seed of [1, 2, 3, 4, 5]) {
     const { w, seen } = swarm(seed);
     const gens = [...seen.values()];
-    assert.ok(seen.size >= 8, `seed ${seed}: nur ${seen.size} Bienen gefangen`);
+    // Seit dem Rückzug (Spez. #27) würfeln fliehende Bienen kein neues Ziel mehr: andere Zufallsfolge, gleiche
+    // Verteilung (Mittel über 12 Saaten 15,3 vorher, 14,6 nachher), aber Saat 2 fängt nur noch 7. Untergrenze je
+    // Saat 6, dazu das Mittel (unten)
+    assert.ok(seen.size >= 6, `seed ${seed}: nur ${seen.size} Bienen gefangen`);
     assert.ok(Math.max(...gens) <= BURN_MAX_GEN, `seed ${seed}: Generation ${Math.max(...gens)}`);
     assert.ok(gens.some(g => g >= 2), `seed ${seed}: Feuer springt mehrfach`);
     assert.ok(w.units.every(u => !u.alive || u.burnT === 0), 'nach 5 s ist alles aus');
     total += seen.size;
   }
   assert.ok(total / 5 < 60, 'nicht der ganze Schwarm in jedem Lauf');
+  assert.ok(total / 5 >= 10, `im Mittel nur ${total / 5} Bienen gefangen`);
 });
 
 test('Verteilte Reihe (Abstand 40 px): Feuer springt nicht über', () => {

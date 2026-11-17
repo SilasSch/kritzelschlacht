@@ -21,6 +21,7 @@ export function createWorld(W, H, seed = 1) {
     terrainVersion: 0,   // zählt jede Geländeänderung (pathing.js berechnet daraufhin neu)
     flow: null,          // Flussfelder der Wegfindung (pathing.js), legt sim.step an
     formations: [], formT: 0, formNext: 1,   // Römerblöcke (formation.js): Liste, Zeit bis zur Neubildung, nächste id
+    cent: new Map(), centT: 0,   // Schwerpunkt je Fraktion ohne Fliehende (morale.updateCentroids) und Zeit bis zur Neuberechnung
     // Von Anfang an da (später angehängte Felder ändern die Form der Welt, V8 verwirft dann optimierten Code)
     dead: 0, contested: false, lastWinT: -9,
   };
@@ -83,6 +84,8 @@ export function spawn(world, type, x, y, team) {
     // s; < 0 noch nicht, formation.march). Für Nicht-Römer bleiben sie auf diesen Startwerten.
     form: 0, formOn: false, slotX: 0, slotY: 0, formAx: 0, formAy: 0, formVx: 0, formVy: 0, formSp: 0, formFree: false, pilum: 1,
     formVol: -1,
+    // Rückzug (morale.js, Spez. #27): flieht, Zeit ohne Gegner in SAFE_R, Zeit mit Gegner in Nahkampfreichweite
+    flee: false, safeT: 0, cornerT: 0,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
@@ -166,4 +169,5 @@ export function clearBattle(world) {
   world.units = []; world.proj = []; world.corpses = []; world.debris = [];
   world.events.length = 0; world.dead = 0;
   world.formations = []; world.formT = 0;
+  world.cent.clear(); world.centT = 0;
 }

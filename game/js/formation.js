@@ -106,7 +106,7 @@ const ROM = [], GRP = [], SEEN = new Set();
 let GR_W = null, GR_F = null, GR_X = 0, GR_Y = 0;
 const LINK2 = FORM.LINK * FORM.LINK;
 function linkTest(v) {
-  if (v.type !== 'roemer' || SEEN.has(v) || factionOf(GR_W, v) !== GR_F) return;
+  if (v.type !== 'roemer' || v.flee || SEEN.has(v) || factionOf(GR_W, v) !== GR_F) return;
   const dx = v.x - GR_X, dy = v.y - GR_Y;
   if (dx * dx + dy * dy > LINK2) return;
   SEEN.add(v); GRP.push(v);
@@ -117,7 +117,12 @@ function rebuild(world) {
   for (let k = 0; k < old.length; k++) oldById.set(old[k].id, old[k]);
   const claimed = new Set(), out = [];
   ROM.length = 0;
-  for (const u of world.units) if (u.alive && u.type === 'roemer') ROM.push(u);
+  // Fliehende (morale.js) gehören zu keinem Block
+  for (const u of world.units) {
+    if (!u.alive || u.type !== 'roemer') continue;
+    if (u.flee) { u.form = 0; u.formOn = false; u.formFree = false; continue; }
+    ROM.push(u);
+  }
   if (ROM.length === 0) { if (old.length) world.formations = []; return; }
   SEEN.clear();
   GR_W = world;
@@ -257,7 +262,7 @@ function march(world, f, dt) {
   let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0, free = 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (!u.alive) continue;
+    if (!u.alive || u.flee) continue;   // Fliehende haben den Block verlassen (bis zur Neubildung noch in m)
     alive++;
     const ox = ax * f.oD[k] + px * f.oL[k], oy = ay * f.oD[k] + py * f.oL[k];
     const pr = (u.x - f.cx) * ax + (u.y - f.cy) * ay;
@@ -282,7 +287,7 @@ function march(world, f, dt) {
   const tick = (world.time * 60) | 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (u.alive && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
+    if (u.alive && !u.flee && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
   }
   // Speerwurf: Uhr ab dem ersten Gegner ≤ PILUM_MAX vor der Front (die Reihen werfen danach gestaffelt)
   if (f.volT >= 0) f.volT += dt;
@@ -310,7 +315,7 @@ function march(world, f, dt) {
   const d0 = f.oD[0], S = FORM.SPACING;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (!u.alive) continue;
+    if (!u.alive || u.flee) continue;
     u.slotX = f.cx + ax * f.oD[k] + px * f.oL[k]; u.slotY = f.cy + ay * f.oD[k] + py * f.oL[k];
     u.formVx = f.vx; u.formVy = f.vy;
     // Reihe nach dem Platz (vorn 0): Freigabe des Wurfs PILUM_RANK_DT s je Reihe später

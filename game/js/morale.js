@@ -17,8 +17,8 @@
 // sofort mit, Tode erst beim nächsten Durchlauf (höchstens CENT_T s später).
 // In die Ecke gedrängt oder eingeholt (u.cornerT): der Gegner ist ohne Unterbrechung höchstens Nahkampfreichweite
 // plus 10 px (CORNER_PAD, Körperränder plus 14 px) entfernt; ab CORNER_T s schlägt die Einheit zurück (combat.think),
-// bleibt aber auf der Flucht. Bricht der Kontakt ab, fällt cornerT über CORNER_T hinaus erst mit der Zeit zurück
-// (danach auf 0). Festgenagelt (fleeSteer findet keine freie Fluchtrichtung, echte Ecke oder Kartenrand): gilt
+// bleibt aber auf der Flucht. cornerT wächst höchstens bis CORNER_T + PIN_HOLD. Bricht der Kontakt ab, fällt
+// cornerT über CORNER_T hinaus erst mit der Zeit zurück (danach auf 0), also höchstens PIN_HOLD s lang. Festgenagelt (fleeSteer findet keine freie Fluchtrichtung, echte Ecke oder Kartenrand): gilt
 // sofort als in die Ecke gedrängt, cornerT = CORNER_T + PIN_HOLD (combat.retreat); sie wehrt sich gegen die
 // Bedrohung, auch gegen einen Fernkämpfer: ist er außer Reichweite, geht sie auf ihn los, PIN_HOLD s lang auch
 // über den Moment hinaus, in dem wieder eine Richtung frei wäre (sonst pendelte sie in der Ecke hin und her).
@@ -126,7 +126,8 @@ export function updateMorale(world, u, dt) {
   if (t) d2 = (t.x - u.x) ** 2 + (t.y - u.y) ** 2;
   if (d2 <= SAFE_R2) u.safeT = 0; else u.safeT += dt;
   const cr = t ? T.r + t.T.r + CORNER_PAD : 0;
-  if (t && d2 <= cr * cr) u.cornerT += dt;
+  // höchstens CORNER_T + PIN_HOLD: nach langem Nahkampf hält das Wehren nicht länger an als nach dem Festnageln
+  if (t && d2 <= cr * cr) { u.cornerT += dt; if (u.cornerT > M.CORNER_T + PIN_HOLD) u.cornerT = M.CORNER_T + PIN_HOLD; }
   else u.cornerT = u.cornerT - dt > M.CORNER_T ? u.cornerT - dt : 0;
   if (u.safeT >= M.SAFE_T) {
     const hp = u.hp + M.REGEN * T.hp * dt;

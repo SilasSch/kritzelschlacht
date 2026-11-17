@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, rebuildHash, cellIndex, setCell, nearestEnemy } from '../game/js/world.js';
 import { think, PRONE_UP_T } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
-import { MORALE, updateMorale, updateCentroids, fleeSteer, CORNER_PAD } from '../game/js/morale.js';
+import { MORALE, updateMorale, updateCentroids, fleeSteer, CORNER_PAD, PIN_HOLD } from '../game/js/morale.js';
 import { poseUnit, FEAR_PUPIL } from '../game/js/render/pose.js';
 import { UNITS } from '../game/js/data.js';
 
@@ -332,4 +332,25 @@ test('Festgenagelt in der Ecke: wehrt sich gegen einen Schützen, statt stehend 
   run(w2, MORALE.CORNER_T + .5);
   assert.equal(h.flee, true);
   assert.ok(s.hp < 1e9 || w2.proj.length > 0, 'schießt zurück');
+});
+
+test('cornerT hat eine Obergrenze: nach 10 s Nahkampf flieht er spätestens PIN_HOLD s später wieder', () => {
+  const w = mkWorld(), u = spawn(w, 'krieger', 700, 400, 'blau');
+  u.hp = 14;
+  allies(w, 100, 700);
+  const a = dummy(w, 'krieger', 720, 400);
+  run(w, 10, () => { a.x = u.x + 18; a.y = u.y; });   // klebt 10 s an ihm
+  assert.equal(u.flee, true);
+  assert.ok(u.cornerT <= MORALE.CORNER_T + PIN_HOLD + 1e-9, `cornerT ${u.cornerT}`);
+  // Angreifer weg, ein Schütze steht 300 px entfernt
+  a.alive = false; a.hp = 0;
+  const sx = u.x + 300, sy = u.y, s = dummy(w, 'schuetze', sx, sy);
+  const hold = () => { s.x = sx; s.y = sy; };
+  run(w, PIN_HOLD + .2, hold);
+  const d1 = dist(u, s);
+  run(w, .3, hold);
+  assert.equal(u.flee, true);
+  assert.ok(u.cornerT <= MORALE.CORNER_T, `cornerT ${u.cornerT}`);
+  assert.ok(dist(u, s) > d1 + 5, `Abstand wächst (${d1} → ${dist(u, s)})`);
+  assert.ok(u.mx * (s.x - u.x) + u.my * (s.y - u.y) < 0, 'läuft weg, nicht auf ihn los');
 });

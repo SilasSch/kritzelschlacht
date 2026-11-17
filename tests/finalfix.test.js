@@ -65,3 +65,41 @@ test('Fund 4: ein versteckt verfluchtes Krokodil ist als Frosch nicht unsichtbar
   assert.equal(c.type, 'frosch');
   assert.equal(c.hidden, false, 'Frosch außerhalb des Wassers bleibt sichtbar');
 });
+
+test('Fund 5: Schreck trifft weder Frosch noch Asche, und beide zählen nicht für Brüllen und Brustklopfen', () => {
+  // scare selbst: ein Frosch läuft vor updateMorale zurück, sein Schreck würde eingefroren und später übernommen
+  {
+    const w = mkWorld(8);
+    const k = spawn(w, 'krieger', 400, 300, 'rot'), g = spawn(w, 'krieger', 420, 300, 'rot');
+    rebuildHash(w);
+    curseFrog(w, k, 5); g.ashT = 1;
+    scare(w, k, 3); scare(w, g, 3);
+    assert.equal(k.fearT, 0, 'Frosch erschrickt nicht');
+    assert.equal(g.fearT, 0, 'Asche erschrickt nicht');
+  }
+  // Bär: ein echter Feind plus Frosch plus Asche sind nur 1 < MIN Opfer, kein Brüllen
+  {
+    const w = mkWorld(9);
+    const b = spawn(w, 'baer', 400, 300, 'blau'); b.abCd = 0; b.cd = 1e9;
+    const real = spawn(w, 'krieger', 420, 300, 'rot'), fr = spawn(w, 'krieger', 400, 330, 'rot'), as = spawn(w, 'krieger', 380, 300, 'rot');
+    for (const e of [real, fr, as]) { e.cd = 1e9; e.hp = 1e9; }
+    rebuildHash(w);
+    curseFrog(w, fr, 50); as.ashT = 5;
+    assert.ok(ROAR.MIN >= 2);
+    step(w, DT);
+    assert.equal(real.fearT, 0, 'Brüllen löst nicht aus');
+    assert.equal(b.abOn, false);
+  }
+  // Gorilla: ohne echtes Opfer (nur Frosch und Asche mit weniger LP) kein Brustklopfen: Wiederholung nach RETRY, nicht CD
+  {
+    const w = mkWorld(10);
+    const g = spawn(w, 'gorilla', 400, 300, 'blau'); g.cd = 1e9;
+    const fr = spawn(w, 'krieger', 420, 300, 'rot'), as = spawn(w, 'krieger', 380, 300, 'rot');
+    for (const e of [fr, as]) { e.cd = 1e9; e.hp = 5; }
+    rebuildHash(w);
+    curseFrog(w, fr, 50); as.ashT = 5;
+    step(w, DT);
+    assert.ok(g.beatCd < CHEST_BEAT.CD / 2, 'kein Brustklopfen: beatCd bleibt bei RETRY');
+    assert.equal(fr.fearT, 0); assert.equal(as.fearT, 0);
+  }
+});

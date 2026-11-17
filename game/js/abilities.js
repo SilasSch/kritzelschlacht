@@ -58,7 +58,7 @@ const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 // Schreckwirkungen treffen nur Feinde: das prüft der Aufrufer.
 // Ghule sind hirnlos (Festlegung 3): sie erschrecken nicht.
 export function scare(world, v, sec) {
-  if (!v.alive || !(sec > 0) || v.type === 'ghul') return;
+  if (!v.alive || !(sec > 0) || v.type === 'ghul' || v.type === 'frosch' || v.ashT > 0) return;   // Frosch und Asche (Task 6) erschrecken nicht: ihr Schreck liefe nie ab (kein updateMorale)
   if (!isFleeing(v)) {
     const c = world.cent.get(factionOf(world, v));
     if (c && c.n > 0) c.n--;
@@ -436,7 +436,7 @@ function howlStart(world, u) {
 export const ROAR = { R: 80, T: 2, MIN: 2 };
 let RO_W = null, RO_U = null, RO_F = null, RO_N = 0, RO_DO = false;
 function roarTest(v) {
-  if (FEARLESS.has(v.type) || isFleeing(v) || factionOf(RO_W, v) === RO_F) return;
+  if (FEARLESS.has(v.type) || v.type === 'frosch' || v.ashT > 0 || isFleeing(v) || factionOf(RO_W, v) === RO_F) return;
   const dx = v.x - RO_U.x, dy = v.y - RO_U.y, R = ROAR.R;
   if (dx * dx + dy * dy > R * R) return;
   RO_N++;
@@ -860,7 +860,7 @@ function beeFear(world, u) {
 export const CHEST_BEAT = { R: 70, T: 1.5, CD: 20, RETRY: .25 };
 let BT_W = null, BT_U = null, BT_F = null, BT_N = 0, BT_DO = false;
 function beatTest(v) {
-  if (FEARLESS.has(v.type) || isFleeing(v) || !(v.hp < BT_U.hp) || factionOf(BT_W, v) === BT_F) return;
+  if (FEARLESS.has(v.type) || v.type === 'frosch' || v.ashT > 0 || isFleeing(v) || !(v.hp < BT_U.hp) || factionOf(BT_W, v) === BT_F) return;
   const dx = v.x - BT_U.x, dy = v.y - BT_U.y, R = CHEST_BEAT.R;
   if (dx * dx + dy * dy > R * R) return;
   BT_N++;

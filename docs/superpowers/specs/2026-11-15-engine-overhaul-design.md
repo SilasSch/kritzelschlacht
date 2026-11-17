@@ -154,6 +154,10 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 - Auf dem Handy darf das Spiel schlechter laufen.
 - Neukalibrierung mit einem Simulations-Prüfstand; die Missionen bleiben inhaltlich gleich.
 
+## Geplant (vom Nutzer gewünscht, noch nicht ausgearbeitet)
+
+- **Battle-Modus:** Man baut zwei Seiten auf, beim Start kämpfen sie gegeneinander, danach gibt es Statistiken. Wird nach Nachtrag 3 im Gespräch ausgearbeitet.
+
 ## Zurückgestellt
 
 - Sound-Overhaul.

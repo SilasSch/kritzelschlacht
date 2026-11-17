@@ -6,7 +6,7 @@ import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
-import { FORM_GAIN, FORM_CATCHUP, hazardAt } from './formation.js';
+import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -33,14 +33,16 @@ const emit = (world, e) => { world.events.push(e); };
 const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 
 // Bögen (arc) fliegen über Köpfe und treffen nur am Zielpunkt; gerade Schüsse treffen das Erste im Weg.
+// pilum: Speer der Römer (Spez. #25), landet wie ein Pfeil, Schaden UNITS.roemer.pilum.
 export const PROJECTILES = {
   arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
   shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
-  fire: { arc: false, speed: 330 },
+  fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 },
 };
 // Je Art: [Grundflugzeit (nur Bögen), Bogenhöhe je Distanz, Streuung, Ton]
 const SHOT = {
   arrow: [.25, .16, 8, 'twang'],
+  pilum: [.2, .2, 6, 'throw'],
   bomb: [.55, .35, 14, 'throw'],
   mortar: [.9, .55, 18, 'thump'],
   shell: [0, .08, 6, 'cannon'],
@@ -426,7 +428,7 @@ export function fire(world, u, t, kind, ax, ay) {
   let mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
   if (boss) { bossMuzzle(u, t.x, t.y, MZ); mx = u.x + MZ.x; my = u.y - (u.z || 0) + MZ.y; }
   u.fireT = 0;   // Rückstoß (rig.js)
-  const f = factionOf(world, u), dmg = T.dmg, R = T.splash || 0;
+  const f = factionOf(world, u), dmg = kind === 'pilum' ? T.pilum : T.dmg, R = T.splash || 0;
   if (P.arc) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
     world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
@@ -571,6 +573,19 @@ function holdSlot(world, u, dt) {
   u.run += dt;
 }
 
+// Speerwurf (Spez. #25): ein Römer im Block (formOn, nicht formFree), dessen Reihe schon werfen darf (formVol ≥ 0,
+// formation.march), wirft seinen einen Speer, sobald sein nächster Gegner PILUM_MIN bis PILUM_MAX px entfernt ist.
+// Ist er schon näher, wirft er nicht. Das Ziel wird nicht gemerkt (u.tg bleibt im Marsch leer).
+const PIL_MIN2 = FORM.PILUM_MIN * FORM.PILUM_MIN, PIL_MAX2 = FORM.PILUM_MAX * FORM.PILUM_MAX;
+function throwPilum(world, u) {
+  const t = nearestEnemy(world, u);
+  if (!t) return;
+  const d2 = (t.x - u.x) ** 2 + (t.y - u.y) ** 2;
+  if (d2 < PIL_MIN2 || d2 > PIL_MAX2) return;
+  fire(world, u, t, 'pilum');
+  u.pilum = 0;
+}
+
 // Richtung von u nach (px, py) in DIR (wiederverwendet, keine Allokation)
 const DIR = { x: 0, y: 0 };
 function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; DIR.x = x / l; DIR.y = y / l; return DIR; }
@@ -590,8 +605,13 @@ export function think(world, u, dt) {
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
-  // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz
-  if (u.formOn) { holdSlot(world, u, dt); return; }
+  // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
+  // einmal den Speer werfen
+  if (u.formOn) {
+    holdSlot(world, u, dt);
+    if (u.pilum === 1 && u.formVol >= 0 && !u.formFree) throwPilum(world, u);
+    return;
+  }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
@@ -930,25 +950,40 @@ export function stepProjectiles(world, dt) {
   }
 }
 
+// Schildblock (Spez. #25): Schaden ×SHIELD_MUL, block-Ereignis am Schild statt hit. a: Abprallwinkel, die
+// Flugrichtung (dx, dy) an der Blickrichtung des Blocks gespiegelt.
+function shieldHit(world, v, a, kind, dx, dy, src) {
+  const ax = v.formAx, ay = v.formAy, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, k = 2 * (ux * ax + uy * ay);
+  hurt(world, v, a * SHIELD_MUL, kind === 'pilum' ? 'arrow' : kind, src);
+  emit(world, { type: 'block', x: v.x + ax * v.T.r, y: v.y + ay * v.T.r, kind, a: Math.atan2(uy - k * ay, ux - k * ax) });
+  sound(world, 'clink');
+}
+
+// Pfeil und Speer treffen den nächsten Körper am Landepunkt (Schaden als 'arrow': Rüstung, Deckung, Liegen
+// wie beim Pfeil); Römer im Block halten sie von vorn mit dem Schild ab (Flugrichtung Start → Landepunkt).
 function landArc(world, p, src) {
-  if (p.kind !== 'arrow') { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
+  if (p.kind !== 'arrow' && p.kind !== 'pilum') { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
     if (v === p.src || Math.abs(v.z - p.tz) >= v.T.r + BODY_Z_PAD) return;
     const d = Math.hypot(v.x - p.x1, v.y - p.y1) - v.T.r; if (d < 8 && d < bd) { bd = d; best = v; }
   });
   if (best) {
-    hurt(world, best, p.dmg * (.85 + world.rng() * .3), 'arrow', src);
-    emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: 'arrow' });
+    const a = p.dmg * (.85 + world.rng() * .3), dx = p.x1 - p.x0, dy = p.y1 - p.y0;
+    if (shieldBlocks(best, p.kind, dx, dy)) { shieldHit(world, best, a, p.kind, dx, dy, src); return; }
+    hurt(world, best, a, 'arrow', src);
+    emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: p.kind });
     sound(world, 'hit');
-  } else emit(world, { type: 'miss', kind: 'arrow', x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });
+  } else emit(world, { type: 'miss', kind: p.kind, x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });
 }
 
 // Gerader Schuss am Ende: v = getroffener Körper, cell = Mauerzelle (−1), (x, y) = Trefferpunkt am Boden
 function impact(world, p, v, cell, x, y, src) {
   if (p.kind === 'bullet') {
     if (v) {
-      hurt(world, v, p.dmg * (.85 + world.rng() * .3), 'bullet', src);
+      const a = p.dmg * (.85 + world.rng() * .3);
+      if (shieldBlocks(v, 'bullet', p.nx, p.ny)) { shieldHit(world, v, a, 'bullet', p.nx, p.ny, src); return; }
+      hurt(world, v, a, 'bullet', src);
       emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'bullet' });
       sound(world, 'hit');
     } else {

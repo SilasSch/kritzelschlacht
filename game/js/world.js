@@ -79,8 +79,10 @@ export function spawn(world, type, x, y, team) {
     px: NaN, py: NaN, bounced: false, impact: 0, fx: 0, fy: 0, follow: false,
     // Römer-Blockformation (formation.js, Spez. #25): Block-id (0 = keiner), im marschierenden Block, Platz
     // (px), Blickrichtung des Blocks, Blocktempo als Geschwindigkeit (formVx/formVy) und Betrag (formSp),
-    // vom Platz freigegeben (Lava/Mauer, formFree), Speere übrig. Für Nicht-Römer bleiben sie auf diesen Startwerten.
+    // vom Platz freigegeben (Lava/Mauer, formFree), Speere übrig, Zeit seit der Freigabe des Speerwurfs (formVol,
+    // s; < 0 noch nicht, formation.march). Für Nicht-Römer bleiben sie auf diesen Startwerten.
     form: 0, formOn: false, slotX: 0, slotY: 0, formAx: 0, formAy: 0, formVx: 0, formVy: 0, formSp: 0, formFree: false, pilum: 1,
+    formVol: -1,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)

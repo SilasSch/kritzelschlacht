@@ -22,8 +22,85 @@ test('PROJECTILES: Bögen und gerade Schüsse mit Tempo', () => {
   assert.deepEqual(PROJECTILES, {
     arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
     shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
-    fire: { arc: false, speed: 330 },
+    fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 },
   });
+});
+
+/* ---------- Speer und Schilde der Römer (Spez. #25) ---------- */
+// Römer in Formation, Blick (ax, ay); die Felder setzt sonst formation.js
+const shielded = (w, x, y, team, ax, ay) => {
+  const u = spawn(w, 'roemer', x, y, team);
+  u.form = 1; u.formOn = true; u.formAx = ax; u.formAy = ay;
+  return u;
+};
+const evs = (w, type) => w.events.filter(e => e.type === type);
+
+test('Speer: Bogen wie ein Pfeil, Schaden UNITS.roemer.pilum, trifft am Landepunkt', () => {
+  const w = mkWorld();
+  const r = spawn(w, 'roemer', 300, 300, 'blau');
+  const ally = spawn(w, 'krieger', 360, 300, 'blau');
+  const t = spawn(w, 'baer', 430, 300, 'rot');
+  rebuildHash(w);
+  fire(w, r, t, 'pilum');
+  const p = w.proj[0];
+  assert.equal(p.kind, 'pilum'); assert.equal(p.arc, true); assert.equal(p.dmg, 16); assert.ok(p.h > 0);
+  assert.ok(evs(w, 'shot').some(e => e.kind === 'pilum'));
+  flyAll(w);
+  assert.ok(full(ally), 'fliegt über Verbündete');
+  const lost = t.T.hp - t.hp;
+  assert.ok(lost >= 16 * .85 - 1e-9 && lost <= 16 * 1.15 + 1e-9, `Schaden ${lost}`);
+  assert.ok(evs(w, 'hit').some(e => e.kind === 'pilum'));
+  assert.equal(evs(w, 'blast').length, 0, 'keine Explosion');
+});
+
+test('Schild: Pfeil, Kugel und Speer von vorn auf Römer in Formation → block, Schaden ×0,1', () => {
+  for (const kind of ['arrow', 'bullet', 'pilum']) {
+    const w = mkWorld();
+    const shooter = spawn(w, kind === 'bullet' ? 'soldat' : kind === 'arrow' ? 'schuetze' : 'roemer', 300, 300, 'blau');
+    const r = shielded(w, 440, 300, 'rot', -1, 0);   // blickt zum Schützen
+    rebuildHash(w);
+    fire(w, shooter, r, kind, 440, 300);
+    flyAll(w);
+    const lost = r.T.hp - r.hp, base = kind === 'pilum' ? 16 : shooter.T.dmg;
+    assert.ok(lost > 0 && lost <= base * 1.15 * .1 + 1e-9, `${kind}: Schaden ${lost}`);
+    const b = evs(w, 'block');
+    assert.equal(b.length, 1, `${kind}: ein block-Ereignis`);
+    assert.equal(b[0].kind, kind);
+    assert.ok(Number.isFinite(b[0].x) && Number.isFinite(b[0].y) && Number.isFinite(b[0].a));
+    // Abprall nach vorn (vom Schild weg, zurück zum Schützen hin)
+    assert.ok(Math.cos(b[0].a) < 0, `${kind}: Abprallwinkel ${b[0].a}`);
+    assert.equal(evs(w, 'hit').length, 0, `${kind}: kein hit`);
+  }
+});
+
+test('Schild: kein Block von hinten, von der Seite, ohne Formation und gegen Rakete/Feuerball', () => {
+  const cases = [
+    ['bullet', 'soldat', 1, 0, true],     // von hinten (Römer blickt vom Schützen weg)
+    ['bullet', 'soldat', 0, 1, true],     // 90° seitlich
+    ['arrow', 'schuetze', -1, 0, false],  // ohne Formation
+    ['rocket', 'panzerfaust', -1, 0, true],
+    ['fire', 'magier', -1, 0, true],
+  ];
+  for (const [kind, type, ax, ay, on] of cases) {
+    const w = mkWorld();
+    const s = spawn(w, type, 300, 300, 'blau');
+    const r = shielded(w, 440, 300, 'rot', ax, ay);
+    r.formOn = on;
+    rebuildHash(w);
+    fire(w, s, r, kind, 440, 300);
+    flyAll(w);
+    assert.equal(evs(w, 'block').length, 0, `${kind} (${ax},${ay}, formOn ${on}): kein Block`);
+    assert.ok(r.T.hp - r.hp > (kind === 'arrow' || kind === 'bullet' ? s.T.dmg * .8 : 5), `${kind}: voller Schaden ${r.T.hp - r.hp}`);
+  }
+});
+
+test('Schild: Explosionen gehen durch', () => {
+  const w = mkWorld();
+  const r = shielded(w, 440, 300, 'rot', -1, 0);
+  rebuildHash(w);
+  blast(w, 430, 300, 40, 20, 'blau', null, 'blast', 0);
+  assert.ok(r.T.hp - r.hp > 10, `Explosion: ${r.T.hp - r.hp}`);
+  assert.equal(evs(w, 'block').length, 0);
 });
 
 test('Pfeil fliegt über einen Verbündeten hinweg und trifft das Ziel', () => {

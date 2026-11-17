@@ -24,6 +24,9 @@
 // davonläuft. Platz = Zentrum + gedrehter Versatz. Liegt ein Platz auf Lava oder Mauer, gibt der Block den Römer
 // frei (FORM_PROBE); freie Römer zählen weder für Zentrum noch Tempo. Sind mehr als die Hälfte frei, zählt das
 // als Festhängen.
+// Speerwurf: Hat der Block zum ersten Mal einen Gegner ≤ PILUM_MAX px vor der vordersten Reihe, läuft seine
+// Uhr volT; jedes Mitglied bekommt formVol = volT − PILUM_RANK_DT · Reihe (Reihe nach dem Platz, vorn 0).
+// combat.think wirft ab formVol ≥ 0 den einen Speer, wenn das eigene Ziel in [PILUM_MIN, PILUM_MAX] px ist.
 // Auflösen (state 'charge'): ein Gegner ≤ ENGAGE px von der vordersten Reihe (Mitglied mit der größten
 // Tiefe), ein Gegner ≤ FORM_FLANK px an irgendeinem Mitglied (Flanke, Prüfung gestaffelt nach id), oder der
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
@@ -56,10 +59,27 @@ const TERR_SP = [1, .4, .8, .85, 1];
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+/* ---------- Schilde und Speerwurf ---------- */
+// Schilde wirken nur in Formation (formOn): Pfeile, Kugeln und Speere, die von vorn kommen (Flugrichtung
+// höchstens 60° gegen die Blickrichtung des Blocks), richten nur SHIELD_MUL des Schadens an (combat.landArc,
+// combat.impact). Explosionen, Feuerbälle, Raketen, Brand und Nahkampf gehen nie über diesen Test.
+export const SHIELD_KINDS = new Set(['arrow', 'bullet', 'pilum']);
+export const SHIELD_MUL = .1, SHIELD_COS = .5;   // cos 60°
+// Speerwurf: Versatz je Reihe (s) ab dem Moment, in dem der Block zum ersten Mal einen Gegner höchstens
+// PILUM_MAX px vor seiner vordersten Reihe hat (march: f.volT, je Mitglied u.formVol = Zeit seit seiner Freigabe)
+export const PILUM_RANK_DT = .15;
+// Hält das Schild von v ein Geschoss der Art kind mit Flugrichtung (dx, dy) ab?
+export function shieldBlocks(v, kind, dx, dy) {
+  if (v.type !== 'roemer' || !v.formOn || !SHIELD_KINDS.has(kind)) return false;
+  const l = Math.hypot(dx, dy);
+  return l > 1e-9 && -(dx * v.formAx + dy * v.formAy) / l >= SHIELD_COS;
+}
+
 function makeForm(id, faction) {
   return {
     id, faction, n: 0, cx: 0, cy: 0, ax: 0, ay: 0, speed: 0, state: 'march', stuckT: 0,
     holdT: 0, sx: 0, sy: 0, vx: 0, vy: 0, tg: null, blocked: false,
+    volT: -1,                // s seit dem ersten Gegner ≤ PILUM_MAX vor der Front (Speerwurf), −1 = noch keiner
     m: [], oD: [], oL: [],   // Mitglieder und ihr Platzversatz (Tiefe entlang ax/ay, Seite entlang −ay/ax)
   };
 }
@@ -137,7 +157,7 @@ function adopt(world, faction, oldById, claimed) {
   if (prev && !claimed.has(best)) { f = prev; claimed.add(best); }
   else {
     f = makeForm(world.formNext++, faction);
-    if (prev) { f.state = prev.state; f.holdT = prev.holdT; f.ax = prev.ax; f.ay = prev.ay; }
+    if (prev) { f.state = prev.state; f.holdT = prev.holdT; f.ax = prev.ax; f.ay = prev.ay; f.volT = prev.volT; }
   }
   const fresh = f !== prev;
   // Schwerpunkt der Gruppe
@@ -147,6 +167,7 @@ function adopt(world, faction, oldById, claimed) {
   f.speed = sp;
   if (f.state === 'charge' && f.holdT <= 0 && !groupNearEnemy(world, faction)) {
     f.state = 'march'; f.stuckT = 0; f.cx = gx; f.cy = gy; f.sx = gx; f.sy = gy;
+    f.volT = -1;   // neuer Anmarsch: wer noch einen Speer hat, wirft beim nächsten Zusammenstoß
   } else if (fresh) { f.cx = gx; f.cy = gy; f.sx = gx; f.sy = gy; f.stuckT = 0; }
   if (f.state === 'march') face(world, f, gx, gy);
   slots(f);
@@ -209,7 +230,7 @@ function slots(f) {
 function charge(f, hold) {
   f.state = 'charge'; f.holdT = hold; f.vx = 0; f.vy = 0;
   const m = f.m;
-  for (let k = 0; k < m.length; k++) { const u = m[k]; u.formOn = false; u.formFree = false; u.formVx = 0; u.formVy = 0; }
+  for (let k = 0; k < m.length; k++) { const u = m[k]; u.formOn = false; u.formFree = false; u.formVx = 0; u.formVy = 0; u.formVol = -1; }
 }
 
 // Platz auf oder bis SLOT_MARGIN px neben Lava/Mauer (der Körper ragte sonst hinein, ein Schubs genügt)
@@ -262,6 +283,9 @@ function march(world, f, dt) {
     const u = m[k];
     if (u.alive && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
   }
+  // Speerwurf: Uhr ab dem ersten Gegner ≤ PILUM_MAX vor der Front (die Reihen werfen danach gestaffelt)
+  if (f.volT >= 0) f.volT += dt;
+  else if (front && enemyWithin(world, f.faction, front.x, front.y, FORM.PILUM_MAX)) f.volT = 0;
   // Richtung: zum Ziel, bei verbauter Linie das Flussfeld im Zentrum
   const t = f.tg && f.tg.alive ? f.tg : null;
   let dx = 0, dy = 0;
@@ -282,11 +306,14 @@ function march(world, f, dt) {
     if (!jammed && Math.hypot(ix - f.sx, iy - f.sy) >= STUCK_PX) { f.sx = ix; f.sy = iy; f.stuckT = 0; }
     else { f.stuckT += dt; if (f.stuckT >= FORM.STUCK) { charge(f, FORM.STUCK); return; } }
   } else { f.sx = ix; f.sy = iy; f.stuckT = 0; }
+  const d0 = f.oD[0], S = FORM.SPACING;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
     if (!u.alive) continue;
     u.slotX = f.cx + ax * f.oD[k] + px * f.oL[k]; u.slotY = f.cy + ay * f.oD[k] + py * f.oL[k];
     u.formVx = f.vx; u.formVy = f.vy;
+    // Reihe nach dem Platz (vorn 0): Freigabe des Wurfs PILUM_RANK_DT s je Reihe später
+    u.formVol = f.volT >= 0 ? f.volT - PILUM_RANK_DT * Math.round((d0 - f.oD[k]) / S) : -1;
   }
 }
 

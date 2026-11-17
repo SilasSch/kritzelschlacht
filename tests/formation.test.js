@@ -1,11 +1,12 @@
 // Römer-Blockformation (Spez. #25): Blöcke ab FORM.MIN Römern, feste Plätze, Gleichschritt, Nachrücken,
-// Auflösen vor dem Feind und an Mauern, Fraktionen getrennt.
+// Auflösen vor dem Feind und an Mauern, Fraktionen getrennt. Speerwurf und Schilde (Task 3).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn, setCell, cellIndex, clearBattle } from '../game/js/world.js';
+import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
-import { hurt } from '../game/js/combat.js';
-import { FORM } from '../game/js/formation.js';
+import { hurt, think, fire, stepProjectiles } from '../game/js/combat.js';
+import { integrate, collide } from '../game/js/physics.js';
+import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT } from '../game/js/formation.js';
 import { CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -210,4 +211,162 @@ test('Lava: sind mehr als die Hälfte der Plätze verbaut, löst sich der Block 
   assert.ok(freeMax > 4, `mehr als die Hälfte frei: ${freeMax}`);
   assert.ok(tCharge > FORM.STUCK, `aufgelöst nach ${tCharge.toFixed(2)} s`);
   assert.ok(rs.every(u => !u.formOn && !u.formFree));
+});
+
+/* ---------- Speerwurf und Schilde (Spez. #25, Task 3) ---------- */
+
+test('Schild: Konstanten laut Spez.', () => {
+  assert.deepEqual([...SHIELD_KINDS].sort(), ['arrow', 'bullet', 'pilum']);
+  assert.equal(SHIELD_MUL, .1);
+  assert.equal(SHIELD_COS, .5);
+  assert.equal(PILUM_RANK_DT, .15);
+});
+
+test('shieldBlocks: nur Pfeil, Kugel, Speer von vorn (±60°) auf Römer in Formation', () => {
+  // Römer blickt nach +x; ein Geschoss "von vorn" fliegt nach −x
+  const v = { type: 'roemer', formOn: true, formAx: 1, formAy: 0 };
+  for (const k of ['arrow', 'bullet', 'pilum']) assert.equal(shieldBlocks(v, k, -1, 0), true, `${k} von vorn`);
+  assert.equal(shieldBlocks(v, 'arrow', -300, 0), true, 'Länge egal');
+  // ±59° hält, ±61° nicht (cos 60° = SHIELD_COS)
+  const at = deg => { const a = (180 + deg) * Math.PI / 180; return [Math.cos(a), Math.sin(a)]; };
+  assert.equal(shieldBlocks(v, 'arrow', ...at(59)), true, '59°');
+  assert.equal(shieldBlocks(v, 'arrow', ...at(-59)), true, '−59°');
+  assert.equal(shieldBlocks(v, 'arrow', ...at(61)), false, '61°');
+  assert.equal(shieldBlocks(v, 'bullet', 1, 0), false, 'von hinten');
+  assert.equal(shieldBlocks(v, 'bullet', 0, 1), false, '90° seitlich');
+  assert.equal(shieldBlocks(v, 'bullet', 0, -1), false, '90° von der anderen Seite');
+  assert.equal(shieldBlocks({ ...v, formOn: false }, 'arrow', -1, 0), false, 'ohne Formation');
+  for (const k of ['fire', 'rocket', 'blast', 'melee']) assert.equal(shieldBlocks(v, k, -1, 0), false, k);
+  assert.equal(shieldBlocks({ ...v, type: 'krieger' }, 'arrow', -1, 0), false, 'nur Römer');
+  assert.equal(shieldBlocks(v, 'arrow', 0, 0), false, 'ohne Richtung');
+  // Blickrichtung schräg (Block blickt nach unten rechts)
+  const s = Math.SQRT1_2, d = { type: 'roemer', formOn: true, formAx: s, formAy: s };
+  assert.equal(shieldBlocks(d, 'arrow', -s, -s), true);
+  assert.equal(shieldBlocks(d, 'arrow', -1, 0), true, '45°');
+  assert.equal(shieldBlocks(d, 'arrow', s, -s), false, '90°');
+});
+
+// Gesamter Schaden je Römer (Tote zählen voll)
+const dmgOf = rs => rs.reduce((s, u) => s + Math.min(u.T.hp, u.T.hp - u.hp), 0) / rs.length;
+// 4 s Beschuss durch 10 Schützen; die Römer waten durch Wasser (×0,4), damit sie in 4 s nicht auflaufen
+function volley(romans) {
+  const w = mk(5);
+  for (let y = 200; y < 600; y += CELL) for (let x = 100; x < 720; x += CELL) setCell(w, cellIndex(w, x, y), 1, 0);
+  const rs = romans(w);
+  for (let i = 0; i < 10; i++) spawn(w, 'schuetze', 620, 310 + i * 20, 'rot');
+  let blocks = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    step(w, DT);
+    for (const e of w.events) if (e.type === 'block') blocks++;
+    w.events.length = 0;
+  }
+  return { rs, dmg: dmgOf(rs), blocks };
+}
+
+test('Block hält Pfeile ab: im Block ≤ 15 % des Schadens einzelner Römer', () => {
+  const inBlock = volley(w => block(w, 10, 400, 400, 'blau', 2));
+  const single = volley(w => [spawn(w, 'roemer', 400, 378, 'blau'), spawn(w, 'roemer', 400, 400, 'blau'), spawn(w, 'roemer', 400, 422, 'blau')]);
+  assert.ok(inBlock.rs.every(u => u.alive && u.formOn), 'der Block steht nach 4 s noch (Beschuss von vorn)');
+  assert.ok(single.rs.every(u => !u.formOn), 'einzeln: keine Formation');
+  assert.ok(inBlock.blocks > 10, `Schilde halten: ${inBlock.blocks} Blocks`);
+  assert.equal(single.blocks, 0, 'einzeln hält kein Schild');
+  assert.ok(single.dmg > 20, `einzeln getroffen: ${single.dmg.toFixed(1)}`);
+  assert.ok(inBlock.dmg <= .15 * single.dmg, `Block ${inBlock.dmg.toFixed(1)} vs. einzeln ${single.dmg.toFixed(1)} je Römer`);
+});
+
+// Nur die Römer denken; der Feind steht still (wie sim.step, ohne Flussfeld)
+function stepRomans(w, dt = DT) {
+  w.time += dt;
+  rebuildHash(w);
+  updateFormations(w, dt);
+  for (const u of w.units) if (u.alive && u.type === 'roemer') think(w, u, dt);
+  integrate(w, dt); collide(w);
+  stepProjectiles(w, dt);
+}
+// Läuft secs s und sammelt die geworfenen Speere: { u, t, d, p } (Werfer, Zeit, Abstand zum Ziel beim Wurf)
+function throws(w, secs, target) {
+  const seen = new Set(), out = [];
+  let shots = 0;
+  for (let i = 0; i < Math.round(secs * 60); i++) {
+    stepRomans(w);
+    for (const e of w.events) if (e.type === 'shot' && e.kind === 'pilum') shots++;
+    w.events.length = 0;
+    for (const p of w.proj) if (p.kind === 'pilum' && !seen.has(p)) {
+      seen.add(p);
+      out.push({ u: p.src, t: w.time, d: Math.hypot(target.x - p.src.x, target.y - p.src.y), p });
+    }
+  }
+  return { out, shots };
+}
+
+test('Speer einmal: Feind 120 px vor einem Römer im Block → genau ein Speer, danach pilum 0; bei 60 px keiner', () => {
+  const w = mk();
+  const rs = block(w, 8, 400, 400, 'blau', 2);
+  const me = rs.find(u => u.x === 400 && u.y === 389);
+  const foe = spawn(w, 'krieger', 520, 389, 'rot');
+  const { out, shots } = throws(w, 1.5, foe);
+  const mine = out.filter(o => o.u === me);
+  assert.equal(mine.length, 1, 'genau ein Speer');
+  assert.equal(me.pilum, 0);
+  assert.equal(shots, out.length, 'ein shot-Ereignis je Speer');
+  assert.equal(new Set(out.map(o => o.u)).size, out.length, 'jeder höchstens einmal');
+  for (const o of out) assert.ok(o.d >= FORM.PILUM_MIN && o.d <= FORM.PILUM_MAX + 1, `Wurf aus ${o.d.toFixed(1)} px`);
+  assert.ok(out.every(o => o.p.dmg === 16), 'Schaden UNITS.roemer.pilum');
+  // Feind steht still: der Speer trifft ihn
+  assert.ok(foe.hp < foe.T.hp, 'Feind getroffen');
+
+  const w2 = mk();
+  const rs2 = block(w2, 8, 400, 400, 'blau', 2);
+  const me2 = rs2.find(u => u.x === 400 && u.y === 389);
+  const foe2 = spawn(w2, 'krieger', 460, 389, 'rot');
+  const r2 = throws(w2, 1, foe2);
+  assert.equal(r2.shots, 0, 'bei 60 px kein Speer');
+  assert.equal(me2.pilum, 1);
+});
+
+test('Speer: einzelne Römer (ohne Block) werfen nicht', () => {
+  const w = mk();
+  const rs = [spawn(w, 'roemer', 400, 378, 'blau'), spawn(w, 'roemer', 400, 400, 'blau'), spawn(w, 'roemer', 400, 422, 'blau')];
+  const foe = spawn(w, 'krieger', 520, 400, 'rot');
+  assert.equal(throws(w, 1, foe).shots, 0);
+  assert.ok(rs.every(u => u.pilum === 1));
+});
+
+test('Speer: die erste Reihe wirft zuerst, die zweite frühestens PILUM_RANK_DT s später', () => {
+  const w = mk();
+  const rs = block(w, 8, 400, 400, 'blau', 2);
+  const firstRow = new Set(rs.filter(u => u.x === 400));
+  const foe = spawn(w, 'krieger', 520, 400, 'rot');
+  const { out } = throws(w, 1.5, foe);
+  const front = out.filter(o => firstRow.has(o.u)), back = out.filter(o => !firstRow.has(o.u));
+  assert.equal(front.length, 4, 'ganze erste Reihe wirft');
+  assert.ok(back.length >= 1, 'zweite Reihe wirft');
+  const t0 = Math.min(...front.map(o => o.t));
+  assert.ok(front.every(o => o.t === t0), 'erste Reihe zugleich');
+  for (const o of back) assert.ok(o.t >= t0 + PILUM_RANK_DT - 1e-9, `zweite Reihe nach ${(o.t - t0).toFixed(3)} s`);
+});
+
+test('Speer über eigene Reihen: aus der dritten Reihe auf ein Ziel in 140 px trifft keinen Römer der ersten Reihe', () => {
+  const w = mk(11);
+  const rs = block(w, 12, 400, 400, 'blau', 3);
+  // ohne Gegner steht der Block; blaue Römer blicken nach rechts (+x)
+  for (let i = 0; i < 40; i++) stepRomans(w);
+  assert.ok(rs.every(u => u.formOn), 'Block steht');
+  const f = formOf(w, rs[0]);
+  assert.ok(f.ax > .99, `Blick nach +x: ${f.ax}`);
+  const depth = u => (u.slotX - f.cx) * f.ax + (u.slotY - f.cy) * f.ay;
+  const maxD = Math.max(...rs.map(depth));
+  const rank = u => Math.round((maxD - depth(u)) / FORM.SPACING);
+  const first = rs.filter(u => rank(u) === 0), third = rs.filter(u => rank(u) === 2);
+  assert.ok(first.length >= 4 && third.length >= 1, `Reihen ${first.length}/${third.length}`);
+  const u = third[0];
+  const foe = spawn(w, 'baer', u.x + 140, u.y, 'rot');
+  rebuildHash(w);
+  for (let k = 0; k < 30; k++) {
+    fire(w, u, foe, 'pilum');
+    for (let i = 0; i < 120 && w.proj.length; i++) stepProjectiles(w, DT);
+  }
+  assert.ok(first.every(v => v.hp === v.T.hp), 'erste Reihe unversehrt');
+  assert.ok(rs.every(v => v.hp === v.T.hp), 'kein Römer getroffen');
+  assert.ok(foe.hp < foe.T.hp, 'Ziel getroffen');
 });

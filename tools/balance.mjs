@@ -1,4 +1,8 @@
-// Headless-Balance: node tools/balance.mjs missions|duels [runs=8] [WxH,WxH,...]
+// Headless-Balance: node tools/balance.mjs missions|duels|newspam [runs=8] [WxH]
+// newspam (Vorgabe 6): je Mission in SPAM_MUST_LOSE und je malbare Einheit, die dort erlaubt ist, ein Spam mit vollem
+// Missionsbudget. Gate für NEW_UNITS: verliert mindestens 6/8 oder gewinnt höchstens so oft wie die Einheit derselben
+// Rolle (SPAM_ROLE, plans.mjs); die übrigen Zeilen sind Auskunft. SPAM_TYPES=a,b (Umgebung) schränkt die Typen ein.
+// missions meldet je Smart-Plan die mittlere Schlachtdauer (t~, Vorgabe 7).
 // Ohne Formen läuft jede Weltform aus SHAPES (tools/plans.mjs) in einem eigenen Prozess (parallel);
 // Exitcode 1, wenn bei irgendeiner Form eine Erwartung verfehlt ist.
 // Pro Zeile "name  wins/runs  spent".
@@ -7,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult } from '../game/js/sim.js';
-import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan, placeDuel, SUPPORT_DUELS, SUPPORT_REAR } from './plans.mjs';
+import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, NEW_UNITS, SPAM_ROLE, SPAM_ANSWER, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan, placeDuel, SUPPORT_DUELS, SUPPORT_REAR } from './plans.mjs';
 
 const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
@@ -23,8 +27,8 @@ const SUPPORT_MAX = 3 / 4;    // Armee aus halb Einheit, halb Helfer (Sanitäter
 
 const [cmd = 'missions', runsArg = '8', shapeArg] = process.argv.slice(2);
 const runs = Math.max(1, parseInt(runsArg, 10) || 8);
-if (cmd !== 'missions' && cmd !== 'duels') {
-  console.error('usage: node tools/balance.mjs missions|duels [runs=8] [WxH,WxH,...]');
+if (cmd !== 'missions' && cmd !== 'duels' && cmd !== 'newspam') {
+  console.error('usage: node tools/balance.mjs missions|duels|newspam [runs=8] [WxH]');
   process.exit(2);
 }
 
@@ -50,8 +54,9 @@ function runMission(i, plan, seed) {
   const spent = placePlan(w, plan);
   let t = 0, res = missionResult(w, t);
   while (!res) { step(w, DT); w.events.length = 0; t += DT; res = missionResult(w, t); }
-  return { res, spent };
+  return { res, spent, t };
 }
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
 
 // helper: Blau bekommt die Hälfte der Punkte in a und die Hälfte im Helfer (SUPPORT_DUELS)
 function runDuel(a, b, pts, seed, helper = null) {
@@ -75,18 +80,19 @@ let ok = true;
 if (cmd === 'missions') {
   for (let i = 0; i < MISSION_PLANS.length; i++) {
     for (const kind of ['smart', 'spam']) {
-      let wins = 0, spent = 0;
-      for (let s = 1; s <= runs; s++) { const r = runMission(i, MISSION_PLANS[i][kind], 1000 * (i + 1) + s); if (r.res === 'win') wins++; spent = r.spent; }
+      let wins = 0, spent = 0; const ts = [];
+      for (let s = 1; s <= runs; s++) { const r = runMission(i, MISSION_PLANS[i][kind], 1000 * (i + 1) + s); if (r.res === 'win') wins++; spent = r.spent; ts.push(r.t); }
       let note = '';
       if (kind === 'smart') {
-        if (wins / runs < SMART_MIN) { ok = false; note = 'FAIL (smart < 6/8 wins)'; }
-        if (spent > MISSIONS[i].par) { ok = false; note += `${note ? ' ' : ''}FAIL (smart costs > par ${MISSIONS[i].par})`; }
+        note = `t~${median(ts).toFixed(1)}s`;
+        if (wins / runs < SMART_MIN) { ok = false; note += ' FAIL (smart < 6/8 wins)'; }
+        if (spent > MISSIONS[i].par) { ok = false; note += ` FAIL (smart costs > par ${MISSIONS[i].par})`; }
       }
       else if (SPAM_MUST_LOSE.includes(i)) { if ((runs - wins) / runs < SPAM_LOSE_MIN) { ok = false; note = 'FAIL (spam < 6/8 losses)'; } }
       else if (i === 0) { if (wins / runs < SPAM_WIN_MIN) { ok = false; note = 'FAIL (M1 spam < 6/8 wins)'; } }
       else if (i === M3) { if (wins / runs > M3_SPAM_MAX) { ok = false; note = 'FAIL (M3 spam > 4/8 wins)'; } }
       else note = '(not checked)';
-      console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
+      console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(Math.round(spent * 100) / 100, 6)}  ${note}`.trimEnd());
     }
   }
   // Spam einer einzelnen neuen Einheit (UNIT_SPAM, volles Budget) muss dort verlieren, wo der Spam-Plan verlieren muss
@@ -98,6 +104,28 @@ if (cmd === 'missions') {
     let note = '';
     if ((runs - wins) / runs < SPAM_LOSE_MIN) { ok = false; note = `FAIL (${type} spam < 6/8 losses)`; }
     console.log(`${pad(`M${i + 1} ${type}x${plan[0][1]} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
+  }
+} else if (cmd === 'newspam') {
+  const only = process.env.SPAM_TYPES ? process.env.SPAM_TYPES.split(',') : null;
+  const types = Object.keys(UNITS).filter(t => UNITS[t].paint && (!only || only.includes(t) || only.some(o => SPAM_ROLE[o] === t)));
+  const spam = (i, type) => {
+    const plan = unitSpamPlan(i, type);
+    let wins = 0, spent = 0;
+    for (let s = 1; s <= runs; s++) { const r = runMission(i, plan, 1000 * (i + 1) + s); if (r.res === 'win') wins++; spent = r.spent; }
+    return { wins, spent, n: plan[0][1] };
+  };
+  for (const i of SPAM_MUST_LOSE) {
+    const res = new Map();
+    for (const type of types) if (unitSpamAllowed(i, type)) res.set(type, spam(i, type));
+    for (const [type, { wins, spent, n }] of res) {
+      const lose = (runs - wins) / runs >= SPAM_LOSE_MIN, ref = SPAM_ROLE[type], rr = ref && res.get(ref);
+      let note = '';
+      if (!NEW_UNITS.includes(type)) note = lose ? '' : '(info: wins)';
+      else if (!lose && (SPAM_ANSWER[i] || []).includes(type)) note = 'ok: Lösung der Mission (SPAM_ANSWER)';
+      else if (!lose && rr && wins <= rr.wins) note = `ok: <= ${ref} ${rr.wins}/${runs}`;
+      else if (!lose) { ok = false; note = `FAIL (${type} spam < 6/8 losses${rr ? `, > ${ref} ${rr.wins}/${runs}` : ''})`; }
+      console.log(`${pad(`M${i + 1} ${type}x${n}`, 22)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(Math.round(spent * 100) / 100, 6)}  ${note}`.trimEnd());
+    }
   }
 } else {
   for (const [a, b, pts] of COUNTERS) {

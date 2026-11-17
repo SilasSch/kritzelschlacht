@@ -132,8 +132,10 @@ test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', as
     assert.deepEqual(Object.keys(L), RIG_PARTS, t);
     assert.ok(L.body && L.shadow, `${t}: Körper und Schatten`);
     assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
-    // Ghul: Lumpen in Teamfarbe; Task 6: Kreaturen mit Akzent in Teamfarbe (rig.T6_ACCENT)
-    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined ? 5 : 1, `${t}: Teamfarbe`);
+    // Ghul: Lumpen in Teamfarbe; Task 6: Kreaturen mit Akzent in Teamfarbe (rig.T6_ACCENT); Task 5: Krokodil, Gorilla,
+    // Adler, Büffel mit Halstuch in Teamfarbe (der Elefant trägt seine Decke als eigenes Boss-Teil, sein Körper bleibt eine Variante)
+    const accent = ['krokodil', 'gorilla', 'adler', 'bueffel'].includes(t);
+    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined || accent ? 5 : 1, `${t}: Teamfarbe`);
     assert.equal(!!L.pupilL, !!L.pupilR, t);
   }
   const L = rigLayout;
@@ -460,7 +462,7 @@ test('Angstaugen (Spez. #27): Brauen als eigenes Teil für Figuren mit Augen, Bo
   const { rigFear, drawRigPart } = await import('../game/js/render/rig.js');
   for (const t of Object.keys(UNITS)) {
     const F = rigFear(t);
-    const eyes = !['ritter', 'biene', 'panzer', 'heli', 'drache'].includes(t);
+    const eyes = !['ritter', 'biene', 'panzer', 'heli', 'drache', 'elefant'].includes(t);   // Task 5: Elefant ist ein Boss
     assert.equal(!!(F && F.brow), eyes, t);
   }
   const c = mockCtx(); drawRigPart(c, 'krieger', 'brow', 0, 0);

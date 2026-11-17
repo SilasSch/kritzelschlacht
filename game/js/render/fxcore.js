@@ -653,6 +653,50 @@ export function createFxCore(hooks = {}, opt = {}) {
         wave(x, e.y, R, ABILITY_FX.waveT, WAVE_COL.dive);
         for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + rnd(-.2, .2), d = R * rnd(.55, .9); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(5, 8)); }
         break;
+      default: animalFx(e, x, y, R);   // Task 5: Tiere
+    }
+  }
+  /* --- Task 5: Tiere (abilities.js, Block "Task 5"), Budget-Art ability ---
+     trample/stampede: Ring und Staubwolken hinter dem Ansturm (Richtung nx, ny); beat (Brustklopfen): braune Welle bis R
+     und Rufstriche nach vorn; snap (Packen): heller Ring am Opfer und Spritzer; throw: Wirbelstriche am Abwurf; thrown:
+     Staubring beim Aufprall; swoop: helle Striche beim Herabstoßen; swoopHit: Ring und Federstaub am Treffer. */
+  function animalFx(e, x, y, R) {
+    const nx = e.nx || 0, ny = e.ny || 0;
+    switch (e.k) {
+      case 'trample': case 'stampede': {
+        add('ring', x, e.y, .3, Math.max(16, R * (e.k === 'trample' ? 1.3 : .6)), OUTLINE);
+        const n = e.k === 'trample' ? 6 : 8, B = e.k === 'trample' ? R : 18;
+        for (let i = 0; i < n; i++) puff('dust', x - nx * B * rnd(.6, 1.4) + rnd(-B * .5, B * .5), e.y - ny * B * rnd(.6, 1.2) + rnd(-4, 4), DUST.life, rnd(4, 7));
+        break;
+      }
+      case 'beat': {
+        wave(x, e.y, R, .45, WAVE_COL.roar);
+        const face = e.face < 0 ? -1 : 1;
+        for (let i = 0; i < 5; i++) {
+          const a = (face > 0 ? 0 : Math.PI) + (i - 2) * .35, s = rnd(90, 120);
+          const p = add('shout', x + Math.cos(a) * 12, y - 10 + Math.sin(a) * 8, .3, 4.5, OUTLINE); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
+        }
+        break;
+      }
+      case 'snap':
+        add('ring', x, e.y, .25, Math.max(10, R * 1.4), 0xf4f4f6);
+        for (let i = 0; i < 4; i++) { const p = add('spark', x + rnd(-4, 4), y - 4, .35, rnd(1.5, 2.5), 0xbfe7f5); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(40, 80); p.ay = 300; }
+        break;
+      case 'throw':
+        for (let i = 0; i < 3; i++) { const p = add('shout', x - nx * (8 + i * 6), y - 6 - ny * (8 + i * 6), .3, 4, OUTLINE); if (!p) break; p.rot = Math.atan2(ny, nx); }
+        break;
+      case 'thrown':
+        add('ring', x, e.y, .3, R, OUTLINE);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU, d = R * rnd(.4, .8); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(3.5, 6)); }
+        break;
+      case 'swoop':
+        for (let i = 0; i < 3; i++) { const p = add('shout', x + rnd(-6, 6), y - 4 + i * 4, .3, 5, 0xffffff); if (!p) break; p.vy = 40; p.rot = Math.PI / 2; }
+        break;
+      case 'swoopHit':
+        add('ring', x, e.y, .25, Math.max(10, R * 1.5), OUTLINE);
+        for (let i = 0; i < 4; i++) puff('dust', x + rnd(-6, 6), e.y + rnd(-3, 3), DUST.life * .7, rnd(3, 4.5));
+        break;
     }
   }
 

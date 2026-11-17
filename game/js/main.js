@@ -495,7 +495,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir', 'kreaturen';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir', 'kreaturen', 'tiere';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -630,6 +630,33 @@ const scenes = {
     spawn(world, 'einhorn', x - 40, row(4), 'blau');
     for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', x + 10, row(4) - 30 + k * 30, 'blau'); a.hp = .4 * a.T.hp; }
     placeRect(world, 'krieger', 5, (x + 300) / W, (row(4) - 30) / H, (x + 320) / W, (row(4) + 30) / H, 'rot');
+  },
+  // --- Task 5: Tiere (Spez. #33) --- fünf Reihen, jede zeigt eine Fähigkeit (Abklingzeiten der Blauen bei 0,5–1,5 s):
+  // ein Elefant trampelt durch rote Krieger, bis rote Bienen von rechts kommen und er flieht; ein Krokodil lauert in einem
+  // Teich vor Schützen (abgetaucht, unsichtbar für sie, packt zu); ein Gorilla klopft sich auf die Brust und wirft Krieger
+  // in ihre Gruppe; ein Adler stößt über Krieger hinweg auf die Schützen dahinter; 4 Büffel stürmen als Herde auf Schützen.
+  tiere() {
+    world.teamMode = true;
+    const W = world.W, H = world.H, row = i => (i + .5) * H / 5, cd = u => { u.abCd = .5 + world.rng(); return u; };
+    let y = row(0);
+    cd(spawn(world, 'elefant', W * .22, y, 'blau'));
+    placeRect(world, 'krieger', 8, .36, (y - 30) / H, .4, (y + 30) / H, 'rot');
+    placeCircle(world, 'biene', 6, .78, y / H, 14 / H, 'rot');
+    y = row(1);
+    tCircle(world, 'wasser', .34, y / H, .075);
+    cd(spawn(world, 'krokodil', W * .3, y, 'blau'));
+    placeRect(world, 'schuetze', 4, .44, (y - 30) / H, .46, (y + 30) / H, 'rot');
+    y = row(2);
+    cd(spawn(world, 'gorilla', W * .28, y, 'blau'));
+    placeRect(world, 'krieger', 4, .36, (y - 20) / H, .38, (y + 20) / H, 'rot');
+    placeRect(world, 'krieger', 6, .46, (y - 25) / H, .5, (y + 25) / H, 'rot');
+    y = row(3);
+    cd(spawn(world, 'adler', W * .26, y, 'blau'));
+    placeRect(world, 'krieger', 3, .38, (y - 25) / H, .39, (y + 25) / H, 'rot');
+    placeRect(world, 'schuetze', 3, .52, (y - 25) / H, .53, (y + 25) / H, 'rot');
+    y = row(4);
+    for (let k = 0; k < 4; k++) cd(spawn(world, 'bueffel', W * .22 - (k % 2) * 20, y - 15 + (k >> 1) * 28 + (k % 2) * 8, 'blau'));
+    placeRect(world, 'schuetze', 5, .48, (y - 30) / H, .5, (y + 30) / H, 'rot');
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

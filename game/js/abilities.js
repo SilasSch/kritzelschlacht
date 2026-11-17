@@ -32,6 +32,10 @@ import { FLY_VZ } from './physics.js';
 import { nearestEnemy } from './world.js';
 import { ignite } from './combat.js';
 import { hazardAt } from './formation.js';
+// --- Task 5: Tiere ---
+import { TERRAIN, RANGED } from './data.js';
+import { cellIndex, unseen, EAGLE_REACH_Z } from './world.js';
+import { applyImpulse, GRAVITY, GROUND_FRICTION } from './physics.js';
 
 /* ---------- Feuer (Festlegung 7) ---------- */
 // Feuerball, Drachenatem, Brand über Zeit, Brandpfeile, Phönixspur: gemeinsames Merkmal Feuer (combat.hurt: Panzer
@@ -113,7 +117,7 @@ export const HELI_SALVO = {
 const CU = new Array(HELI_SALVO.CAND + 1).fill(null), CS = new Float64Array(HELI_SALVO.CAND + 1);
 let CN = 0, Q_W = null, Q_U = null, Q_F = null, Q_R = 0;
 function candTest(v) {
-  if (factionOf(Q_W, v) === Q_F) return;
+  if (factionOf(Q_W, v) === Q_F || (v.hidden && unseen(Q_U, v))) return;   // Task 5: verstecktes Krokodil
   const u = Q_U, dx = v.x - u.x, dy = v.y - u.y, d = dx * dx + dy * dy, r = Q_R + v.T.r, M = HELI_SALVO.CAND;
   if (d > r * r || (CN === M && d >= CS[M - 1])) return;
   let k = CN < M ? CN++ : M - 1;
@@ -603,6 +607,7 @@ export function crumble(world, g) {
 export function releaseUnit(world, v) {
   if (v.owner !== null) { v.owner.ghouls--; v.owner = null; }
   if (v.ghouls > 0) crumbleGhouls(world, v);
+  if (v.grabbed !== null) dropGrabbed(v);   // Task 5: ein Gorilla lässt fallen, was er hält
 }
 // Alle lebenden Ghule des Vampirs v zerfallen (sein Tod, combat.die)
 export function crumbleGhouls(world, v) {
@@ -786,6 +791,369 @@ export function stepAura(world, u, dt) {
   if (AU_N > 0 && (u.id + Math.round(world.time / UNICORN.AURA_DT)) % 4 === 0) emit(world, { type: 'creature', k: 'aura', x: u.x, y: u.y, z: u.z, R: UNICORN.AURA_R });
 }
 
+/* ---------- Task 5: Tiere (Spez. #33; Festlegungen 1, 2, 4, 6, 8) ----------
+   Fünf neue Tiere. Jedes hat höchstens eine ABILITY (Trampeln, Packen, Wurf, Sturzflug, Stampede); dazu kommen
+   passive Teile ohne ABILITY-Platz (Entscheidungen des Controllers):
+   - stepAnimal (combat.think, jeder Schritt, jeder Zustand): eigene Zeiten laufen ab (seenT, herdCd, beatCd, beeCd),
+     das Krokodil ist versteckt (u.hidden), solange es am Boden im Wasser ist.
+   - animalPassive (combat.think, nur im normalen Zustand: nach Schreck und Rückzug, vor der Fähigkeit):
+     Brustklopfen des Gorillas (eigene Zeit beatCd: beim ersten Kontakt, dann alle CHEST_BEAT.CD s) und die Angst des
+     Elefanten vor feindlichen Bienen (eigene Drossel beeCd: höchstens einmal je BEE_FEAR.CD s).
+   - eagleStep (combat.think, normales Verhalten des Adlers mit Ziel): er kreist auf T.flyZ und stößt zum Picken herab.
+   Der Elefant ist furchtlos gegen Brüllen und Spuk (FEARLESS), nie Ghul (NO_GHOUL) und nie Frosch. */
+export const TIERE = new Set(['elefant', 'krokodil', 'gorilla', 'adler', 'bueffel']);
+FEARLESS.add('elefant');
+const WATER_ID = TERRAIN.wasser.id, WET_Z = 4;
+
+// Ein Schritt Zeiten und Versteck (jeder Zustand; auch betäubt und auf der Flucht, die Zielwahl der Feinde liest hidden)
+export function stepAnimal(world, u, dt) {
+  if (u.seenT > 0) u.seenT -= dt;
+  if (u.herdCd > 0) u.herdCd -= dt;
+  if (u.beatCd > 0) u.beatCd -= dt;
+  if (u.beeCd > 0) u.beeCd -= dt;
+  if (u.type === 'krokodil') u.hidden = u.z < WET_Z && world.terr[cellIndex(world, u.x, u.y)] === WATER_ID;
+  // Adler: ohne Sturzflug zurück auf Flughöhe; eagleStep senkt ihn im normalen Verhalten wieder zum Picken (auf der
+  // Flucht und ohne Ziel bleibt er oben)
+  else if (u.type === 'adler' && !u.abOn) u.fz = u.T.flyZ;
+}
+// Passive Teile im normalen Zustand (Vorrang, Festlegung 1: nicht betäubt, nicht in der Luft, nicht auf der Flucht)
+export function animalPassive(world, u) {
+  if (u.type === 'elefant') { if (u.beeCd <= 0) beeFear(world, u); }
+  else if (u.type === 'gorilla') { if (u.beatCd <= 0 && !u.abOn) chestBeat(world, u); }
+}
+
+/* Elefant: Angst vor Bienen. Ist eine feindliche Biene höchstens R px vom Körper entfernt, erschrickt er T s
+   (scare, auch mitten im Trampeln). Danach CD s Ruhe; ohne Biene prüft er alle SCAN s wieder. */
+export const BEE_FEAR = { R: 50, T: 1.5, CD: 6, SCAN: .2 };
+let BF_W = null, BF_U = null, BF_F = null, BF_HIT = false;
+function beeTest(v) {
+  if (v.type !== 'biene' || factionOf(BF_W, v) === BF_F) return;
+  const dx = v.x - BF_U.x, dy = v.y - BF_U.y, R = BEE_FEAR.R + BF_U.T.r;
+  if (dx * dx + dy * dy > R * R) return;
+  BF_HIT = true; return true;
+}
+function beeFear(world, u) {
+  BF_W = world; BF_U = u; BF_F = factionOf(world, u); BF_HIT = false;
+  query(world, u.x, u.y, BEE_FEAR.R + u.T.r, beeTest);
+  BF_W = null; BF_U = null; BF_F = null;
+  if (!BF_HIT) { u.beeCd = BEE_FEAR.SCAN; return; }
+  u.beeCd = BEE_FEAR.CD;
+  scare(world, u, BEE_FEAR.T);
+  emit(world, { type: 'fear', x: u.x, y: u.y - u.T.r, z: u.z });
+  sound(world, 'pop');
+}
+
+/* Gorilla: Brustklopfen. Alle Feinde bis R px (Mitte zu Mitte) mit weniger LP als der Gorilla gerade hat, die nicht
+   furchtlos sind und nicht schon fliehen, erschrecken T s (Schreck trifft nur Feinde, Festlegung 2). Löst aus, sobald
+   es mindestens einen solchen gibt (der erste Kontakt der Schlacht: beatCd startet bei 0), danach alle CD s; ohne
+   Opfer prüft er alle RETRY s wieder. */
+export const CHEST_BEAT = { R: 70, T: 1.5, CD: 20, RETRY: .25 };
+let BT_W = null, BT_U = null, BT_F = null, BT_N = 0, BT_DO = false;
+function beatTest(v) {
+  if (FEARLESS.has(v.type) || isFleeing(v) || !(v.hp < BT_U.hp) || factionOf(BT_W, v) === BT_F) return;
+  const dx = v.x - BT_U.x, dy = v.y - BT_U.y, R = CHEST_BEAT.R;
+  if (dx * dx + dy * dy > R * R) return;
+  BT_N++;
+  if (BT_DO) { scare(BT_W, v, CHEST_BEAT.T); emit(BT_W, { type: 'fear', x: v.x, y: v.y - v.T.r, z: v.z }); }
+}
+function beat(world, u, apply) {
+  BT_W = world; BT_U = u; BT_F = factionOf(world, u); BT_N = 0; BT_DO = apply;
+  query(world, u.x, u.y, CHEST_BEAT.R, beatTest);
+  BT_W = null; BT_U = null; BT_F = null;
+  return BT_N;
+}
+function chestBeat(world, u) {
+  if (!beat(world, u, false)) { u.beatCd = CHEST_BEAT.RETRY; return; }
+  beat(world, u, true);
+  u.beatCd = CHEST_BEAT.CD; u.swingT = .25;
+  emit(world, { type: 'ability', k: 'beat', x: u.x, y: u.y, z: 0, R: CHEST_BEAT.R, face: u.face });
+  sound(world, 'thud');
+}
+
+/* Ansturm (Trampeln des Elefanten, Stampede der Büffel): u läuft mit T.speed · SPEED in Richtung (u.abX, u.abY).
+   Jeder Bodenkörper vorn oder seitlich (Abstand < beide Radien + PAD, nicht hinter u), der nicht schon fliegt und nicht
+   schwerer ist als MAXM, wird quer zur Laufrichtung weggeschleudert (combat.fling, Stoß PUSH · Masse, Anteil FWD nach
+   vorn); nur Feinde nehmen DMG Schaden (Festlegung 2). Wer fliegt, wird nicht noch einmal getroffen. Stürmende
+   Artgenossen (Herde) bleiben unberührt. */
+let CH_W = null, CH_U = null, CH_F = null, CH_C = null;
+function chargeTest(v) {
+  const u = CH_U, C = CH_C;
+  if (v === u || v.T.fly || v.state === 'air' || (v.T.mass || 1) > C.MAXM || (v.type === u.type && v.abOn)) return;
+  const dx = v.x - u.x, dy = v.y - u.y, rr = u.T.r + v.T.r + C.PAD;
+  if (dx * dx + dy * dy > rr * rr) return;
+  const nx = u.abX, ny = u.abY;
+  if (dx * nx + dy * ny < -.3 * u.T.r) return;   // hinter u
+  const c = nx * dy - ny * dx, s = c > 1e-6 ? 1 : c < -1e-6 ? -1 : (v.id % 2 ? 1 : -1);
+  const ex = nx * C.FWD - ny * s, ey = ny * C.FWD + nx * s;
+  fling(v, ex, ey, Math.hypot(ex, ey), (v.T.mass || 1) * C.PUSH);
+  if (factionOf(CH_W, v) !== CH_F) {
+    hurt(CH_W, v, C.DMG, 'melee', u);
+    emit(CH_W, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 2 });
+  }
+}
+function charge(world, u, C) {
+  const sp = u.T.speed * C.SPEED;
+  u.mx = u.abX * sp; u.my = u.abY * sp;
+  u.face = u.abX < 0 ? -1 : 1; u.fx = u.abX; u.fy = u.abY;
+  CH_W = world; CH_U = u; CH_F = factionOf(world, u); CH_C = C;
+  query(world, u.x, u.y, u.T.r + MAX_R + C.PAD, chargeTest);
+  CH_W = null; CH_U = null; CH_F = null; CH_C = null;
+}
+// Strecke L px von u in Richtung (nx, ny) frei von Mauer, Lava und Kartenrand?
+function lineFree(world, u, nx, ny, L) {
+  const { GW, terr, W, H } = world;
+  for (let s = 0; s <= L; s += CELL / 2) {
+    const x = u.x + nx * s, y = u.y + ny * s;
+    if (x < 6 || y < 6 || x > W - 6 || y > H - 6) return false;
+    if (TERR_HAZ[terr[((y / CELL) | 0) * GW + ((x / CELL) | 0)]]) return false;
+  }
+  return true;
+}
+
+/* Elefant: Trampeln. Auf ein Bodenziel bis RANGE px, wenn die ganze Strecke (T s mit SPEED-fachem Tempo) frei ist:
+   T s Ansturm geradeaus (Richtung beim Start fest), Körper fliegen seitlich weg. */
+export const TRAMPLE = { T: 1.5, SPEED: 2.5, DMG: 26, PUSH: 240, FWD: .3, PAD: 4, MAXM: 12, RANGE: 150 };
+function trampleReady(world, u) {
+  const t = foeInReach(world, u, TRAMPLE.RANGE, true);
+  if (!t) return false;
+  const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
+  if (!lineFree(world, u, nx, ny, u.T.speed * TRAMPLE.SPEED * TRAMPLE.T + u.T.r)) return false;
+  u.abX = nx; u.abY = ny;
+  return true;
+}
+function trampleStart(world, u) {
+  emit(world, { type: 'ability', k: 'trample', x: u.x, y: u.y, z: 0, R: u.T.r, nx: u.abX, ny: u.abY });
+  sound(world, 'thud');
+}
+function trampleUpdate(world, u) {
+  if (u.abT >= TRAMPLE.T) return true;
+  charge(world, u, TRAMPLE);
+  return false;
+}
+
+/* Büffel: Stampede (Festlegung 4: Herde über die Gruppierung wie beim Wolfsrudel; combat.GROUP_USERS, groupInfo mit
+   R px). Ab MIN bereiten Büffeln der Fraktion bis R px (er selbst mitgezählt; bereit: steht, flieht nicht, herdCd 0,
+   stürmt nicht schon) und mit einem Bodenziel bis ENGAGE px: alle diese stürmen T s mit SPEED-fachem Tempo in Richtung
+   des Ziels (eine Richtung für alle) und rammen alles beiseite (Ansturm). Die Herde hat danach CD s Abklingzeit als
+   gemeinsamer Wert u.herdCd auf allen Mitgliedern (beim Start CD + T). Die anderen Mitglieder übernehmen die laufende
+   Fähigkeit direkt (abOn), ihr update führt sie. ABILITY.bueffel.cd ist nur die Pause zwischen zwei Versuchen. */
+export const HERD = { R: 60, MIN: 3, T: 2, SPEED: 2.2, CD: 20, ENGAGE: 220, DMG: 12, PUSH: 200, FWD: .4, PAD: 3, MAXM: 6 };
+let HD_W = null, HD_U = null, HD_F = null, HD_N = 0, HD_DO = false, HD_X = 0, HD_Y = 0;
+function herdTest(v) {
+  if (v.type !== 'bueffel' || v.state !== 'ok' || isFleeing(v) || v.herdCd > 0 || (v.abOn && v !== HD_U) || factionOf(HD_W, v) !== HD_F) return;
+  const dx = v.x - HD_U.x, dy = v.y - HD_U.y, R = HERD.R;
+  if (dx * dx + dy * dy > R * R) return;
+  HD_N++;
+  if (HD_DO) {
+    v.herdCd = HERD.CD + HERD.T; v.abX = HD_X; v.abY = HD_Y;
+    if (v !== HD_U) { v.abOn = true; v.abT = 0; v.abK = 0; }
+  }
+}
+function herd(world, u, apply) {
+  HD_W = world; HD_U = u; HD_F = factionOf(world, u); HD_N = 0; HD_DO = apply;
+  query(world, u.x, u.y, HERD.R, herdTest);
+  HD_W = null; HD_U = null; HD_F = null;
+  return HD_N;
+}
+function herdReady(world, u) {
+  return u.herdCd <= 0 && u.gn >= HERD.MIN && !!foeInReach(world, u, HERD.ENGAGE, true) && herd(world, u, false) >= HERD.MIN;
+}
+function herdStart(world, u) {
+  const t = u.tg, dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
+  HD_X = dx / d; HD_Y = dy / d;
+  herd(world, u, true);
+  emit(world, { type: 'ability', k: 'stampede', x: u.x, y: u.y, z: 0, R: HERD.R, nx: HD_X, ny: HD_Y });
+  sound(world, 'thud');
+}
+function herdUpdate(world, u) {
+  if (u.abT >= HERD.T) return true;
+  charge(world, u, HERD);
+  return false;
+}
+
+/* Krokodil: Packen. Ein Bodenziel in Bissweite: Biss mit MUL-fachem Schaden, das Opfer ist STUN s betäubt (stunT;
+   nicht Flieger und nichts ab MAXM Masse), das Krokodil bleibt SEEN s sichtbar (seenT, wie nach jedem Biss:
+   combat.attack). Ersetzt den nächsten normalen Biss (u.cd). */
+export const CROC = { SEEN: 2, MUL: 2, STUN: 1, MAXM: 20, PAD: 2 };
+const snapReady = (world, u) => !!foeInReach(world, u, u.T.range + CROC.PAD, true);
+function snapStart(world, u) {
+  const t = u.tg, T = u.T;
+  faceTo(u, t.x, t.y);
+  u.cd = T.cd; u.swingT = .25; u.seenT = CROC.SEEN;
+  hurt(world, t, T.dmg * CROC.MUL * (.85 + world.rng() * .3), 'melee', u);
+  if (t.alive && !t.T.fly && (t.T.mass || 1) < CROC.MAXM) {
+    if (t.state === 'ok') { t.state = 'stun'; t.stunT = CROC.STUN; t.vx = 0; t.vy = 0; }
+    else if (t.state === 'stun' && t.stunT < CROC.STUN) t.stunT = CROC.STUN;
+  }
+  emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
+  emit(world, { type: 'ability', k: 'snap', x: t.x, y: t.y, z: 0, R: t.T.r });
+  sound(world, 'hit');
+}
+
+/* Gorilla: Wurf. Packt einen Feind in Reichweite (das Ziel, sonst einen anderen) mit Masse ≤ MAXM, der am Boden steht:
+   Schaden wie ein Schlag, HOLD s hochgehoben (betäubt, u.grabbed), dann ein Flug mit Landung (#15: fliegt, bis er
+   landet, dann betäubt) DIST px weit in die dichteste Feindgruppe (unter den CAND nächsten Feinden bis SEARCH px die
+   mit den meisten Feinden minus Eigenen im Umkreis GROUP_R; ohne Gruppe vom Gorilla weg). Der Wurf rechnet Luft-
+   widerstand und Rutschen ein (DRAG wie physics.AIR_DRAG), steigt mit VZ (unter der Abprallschwelle, kein Hüpfer).
+   Beim Aufprall werden Körper bis LAND_R px weggestoßen (Stoß LAND_I), Feinde des Gorillas nehmen LAND_DMG. Bricht
+   der Wurf vor dem Loslassen ab (Schreck, Betäubung, Tod des Gorillas), fällt das Opfer herunter. */
+export const THROW = { MAXM: 2, DIST: 120, VZ: 190, HOLD: .3, LIFT: 12, PAD: 4, CAND: 8, SEARCH: 240, GROUP_R: 50,
+  LAND_R: 26, LAND_I: 150, LAND_DMG: 10, MAX_T: 2, DRAG: .4 };
+const canThrow = (world, u, v) => v.alive && v.state === 'ok' && !v.T.fly && (v.T.mass || 1) <= THROW.MAXM &&
+  factionOf(world, v) !== factionOf(world, u);
+let TV_W = null, TV_U = null, TV_B = null, TV_D = 0;
+function victimTest(v) {
+  if (!canThrow(TV_W, TV_U, v)) return;
+  const dx = v.x - TV_U.x, dy = v.y - TV_U.y, d = dx * dx + dy * dy, r = TV_U.T.range + TV_U.T.r + v.T.r + THROW.PAD;
+  if (d <= r * r && d < TV_D) { TV_D = d; TV_B = v; }
+}
+function throwReady(world, u) {
+  let v = foeInReach(world, u, u.T.range + THROW.PAD, true);
+  if (!v || !canThrow(world, u, v)) {
+    TV_W = world; TV_U = u; TV_B = null; TV_D = Infinity;
+    query(world, u.x, u.y, u.T.range + u.T.r + MAX_R + THROW.PAD, victimTest);
+    v = TV_B; TV_W = null; TV_U = null; TV_B = null;
+  }
+  if (!v) return false;
+  u.grabbed = v;
+  return true;
+}
+function throwStart(world, u) {
+  const v = u.grabbed;
+  faceTo(u, v.x, v.y);
+  leaveBlock(v); cancelAbility(world, v);
+  v.state = 'stun'; v.stunT = THROW.HOLD + .2; v.vx = 0; v.vy = 0; v.mx = 0; v.my = 0;
+  hurt(world, v, u.T.dmg * (.85 + world.rng() * .3), 'melee', u);
+  emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee' });
+  sound(world, 'thud');
+  if (!v.alive) u.grabbed = null;
+}
+// Wohin: Richtung von v zur dichtesten Feindgruppe des Gorillas (sonst vom Gorilla weg)
+function hurl(world, u, v) {
+  const f = factionOf(world, u);
+  CN = 0; Q_W = world; Q_U = u; Q_F = f; Q_R = THROW.SEARCH;
+  query(world, u.x, u.y, THROW.SEARCH + MAX_R, candTest);
+  Q_W = null; Q_U = null; Q_F = null;
+  let best = null, bs = 0;
+  for (let k = 0; k < CN && k < THROW.CAND; k++) {
+    const c = CU[k];
+    if (c === v || (c.x - v.x) ** 2 + (c.y - v.y) ** 2 < 400) continue;
+    const s = groupScore(world, f, c.x, c.y, THROW.GROUP_R);
+    if (s > bs) { bs = s; best = c; }
+  }
+  let dx = best ? best.x - v.x : v.x - u.x, dy = best ? best.y - v.y : v.y - u.y;
+  CU.fill(null);
+  let d = Math.hypot(dx, dy);
+  if (d < 1e-6) { dx = u.face; dy = 0; d = 1; }
+  const vz = THROW.VZ, tf = (vz + Math.sqrt(vz * vz + 2 * GRAVITY * v.z)) / GRAVITY, e = Math.exp(-THROW.DRAG * tf);
+  const sp = THROW.DIST / ((1 - e) / THROW.DRAG + e / GROUND_FRICTION), m = v.T.mass || 1;
+  v.vx = 0; v.vy = 0; v.vz = 0;
+  applyImpulse(v, dx / d * sp * m, dy / d * sp * m, vz * m);
+  emit(world, { type: 'ability', k: 'throw', x: v.x, y: v.y, z: v.z, R: v.T.r, nx: dx / d, ny: dy / d });
+  sound(world, 'whoosh');
+}
+let LK_W = null, LK_U = null, LK_V = null, LK_F = null;
+function landTest(o) {
+  const v = LK_V;
+  if (o === v || o === LK_U || o.T.fly || o.state === 'air') return;
+  const dx = o.x - v.x, dy = o.y - v.y, d = Math.hypot(dx, dy);
+  if (d > THROW.LAND_R + o.T.r) return;
+  fling(o, dx, dy, d, THROW.LAND_I);
+  if (factionOf(LK_W, o) !== LK_F) hurt(LK_W, o, THROW.LAND_DMG, 'melee', LK_U);
+}
+function landKnock(world, u, v) {
+  LK_W = world; LK_U = u; LK_V = v; LK_F = factionOf(world, u);
+  query(world, v.x, v.y, THROW.LAND_R + MAX_R, landTest);
+  LK_W = null; LK_U = null; LK_V = null; LK_F = null;
+  emit(world, { type: 'ability', k: 'thrown', x: v.x, y: v.y, z: 0, R: THROW.LAND_R, shake: 3 });
+}
+function throwUpdate(world, u) {
+  const v = u.grabbed;
+  if (!v || !v.alive) return true;
+  u.mx = 0; u.my = 0;
+  if (u.abK === 0) {
+    if (v.state === 'air') return true;   // wurde ihm aus der Hand geschleudert
+    const s = u.face < 0 ? -1 : 1;
+    v.x = u.x + s * (u.T.r + v.T.r) * .95; v.y = u.y - 1; v.z = THROW.LIFT * Math.min(1, u.abT / THROW.HOLD);
+    v.state = 'stun'; if (v.stunT < .1) v.stunT = .1; v.vx = 0; v.vy = 0;
+    if (u.abT >= THROW.HOLD) { hurl(world, u, v); u.abK = 1; u.abT = 0; }
+    return false;
+  }
+  if (v.state === 'air' && u.abT < THROW.MAX_T) return false;
+  if (v.state !== 'air') landKnock(world, u, v);
+  return true;
+}
+// Abbruch vor dem Loslassen: fallen lassen (aus der Hubhöhe, Landung wie nach einem Flug)
+function throwEnd(world, u) { if (u.abK === 0) dropGrabbed(u); u.grabbed = null; }
+function dropGrabbed(u) {
+  const v = u.grabbed;
+  u.grabbed = null;
+  if (!v || !v.alive || v.state === 'air') return;
+  v.vz = 0; applyImpulse(v, 0, 0, 1e-3 * (v.T.mass || 1));
+}
+
+/* Adler (Festlegung 6, Spez. #33): kreist auf T.flyZ; Nahkämpfer erreichen ihn nur unten (world.aloft, z ≤
+   EAGLE_REACH_Z). Picken (eagleStep, normales Verhalten): ist das Ziel in Reichweite + NEAR px und der nächste Biss
+   höchstens LEAD s entfernt, sinkt er auf LOW; erst unten beißt er (oben wartet er über dem Ziel), nach dem Biss steigt
+   er wieder. Liefert true, wenn der Schritt damit erledigt ist. */
+export const EAGLE = { LOW: 8, NEAR: 24, LEAD: .25 };
+export function eagleStep(world, u, t, d, reach) {
+  u.fz = d <= reach + EAGLE.NEAR && u.cd <= EAGLE.LEAD ? EAGLE.LOW : u.T.flyZ;
+  if (d <= reach && u.z > EAGLE_REACH_Z) { u.mx = 0; u.my = 0; return true; }
+  return false;
+}
+/* Sturzflug: aus der Flughöhe auf einen Bodenfeind bis RANGE px, Fernkämpfer (data.RANGED) vor allen anderen (jeder
+   Fernkämpfer in RANGE schlägt jeden Nahkämpfer), unter ihnen der nächste (Fliehende zählen doppelt so weit; versteckte
+   Krokodile nicht). Fliegt mit SPEED-fachem Tempo hin, sinkt rechtzeitig auf LOW; der erste Treffer
+   unten macht MUL-fachen Schaden. Danach HOLD s unten (erreichbar), dann steigt er wieder (fertig). Ohne Treffer nach
+   MAX_T s oder ohne Ziel bricht er ab. */
+export const SWOOP = { RANGE: 260, SPEED: 1.8, MUL: 3, HOLD: .35, MAX_T: 3, LOW: 6 };
+let SW_W = null, SW_U = null, SW_F = null, SW_B = null, SW_S = 0;
+function swoopTest(v) {
+  if (v.T.fly || v.state === 'air' || factionOf(SW_W, v) === SW_F || (v.hidden && unseen(SW_U, v))) return;
+  const dx = v.x - SW_U.x, dy = v.y - SW_U.y, d2 = dx * dx + dy * dy, R = SWOOP.RANGE;
+  if (d2 > R * R) return;
+  let s = isFleeing(v) ? 4 * d2 : d2;
+  if (!RANGED.has(v.type)) s += 4 * R * R;
+  if (s < SW_S) { SW_S = s; SW_B = v; }
+}
+function swoopReady(world, u) {
+  if (u.z < u.T.flyZ - 2) return false;
+  SW_W = world; SW_U = u; SW_F = factionOf(world, u); SW_B = null; SW_S = Infinity;
+  query(world, u.x, u.y, SWOOP.RANGE, swoopTest);
+  const t = SW_B;
+  SW_W = null; SW_U = null; SW_F = null; SW_B = null;
+  if (!t) return false;
+  u.tg = t;
+  return true;
+}
+function swoopStart(world, u) {
+  emit(world, { type: 'ability', k: 'swoop', x: u.x, y: u.y, z: u.z, R: u.T.r });
+  sound(world, 'whoosh');
+}
+function swoopUpdate(world, u) {
+  const t = u.tg, T = u.T;
+  if (!t || !t.alive || factionOf(world, t) === factionOf(world, u)) return true;
+  if (u.abK === 0) {
+    if (u.abT > SWOOP.MAX_T) return true;
+    const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, V = T.speed * SWOOP.SPEED, reach = T.range + T.r + t.T.r;
+    faceTo(u, t.x, t.y);
+    if (d > reach) { u.mx = dx / d * V; u.my = dy / d * V; } else { u.mx = 0; u.my = 0; }
+    if ((d - reach) / V <= (u.z - SWOOP.LOW) / FLY_VZ + .05) u.fz = SWOOP.LOW;
+    if (d <= reach + 2 && u.z <= EAGLE_REACH_Z) {
+      hurt(world, t, T.dmg * SWOOP.MUL * (.85 + world.rng() * .3), 'melee', u);
+      emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
+      emit(world, { type: 'ability', k: 'swoopHit', x: t.x, y: t.y, z: 0, R: t.T.r });
+      sound(world, 'hit');
+      u.cd = T.cd; u.swingT = .25; u.abK = 1; u.abT = 0;
+    }
+    return false;
+  }
+  u.mx = 0; u.my = 0;
+  return u.abT >= SWOOP.HOLD;
+}
+function swoopEnd(world, u) { u.fz = u.T.flyZ; }
+
 /* ---------- Tabelle ---------- */
 export const ABILITY = {
   heli: { cd: 25, ready: heliReady, start: nothing, update: heliUpdate },
@@ -800,4 +1168,10 @@ export const ABILITY = {
   drache: { cd: 30, ready: diveReady, start: diveStart, update: diveUpdate, end: diveEnd },
   // --- Task 6: Kreaturen ---
   hexe: { cd: FROG.CD, ready: hexReady, start: hexStart, update: done },
+  // --- Task 5: Tiere --- (Büffel: die Herden-Abklingzeit ist u.herdCd, cd hier nur die Pause nach einer Stampede)
+  elefant: { cd: 20, ready: trampleReady, start: trampleStart, update: trampleUpdate },
+  krokodil: { cd: 8, ready: snapReady, start: snapStart, update: done },
+  gorilla: { cd: 12, ready: throwReady, start: throwStart, update: throwUpdate, end: throwEnd },
+  adler: { cd: 10, ready: swoopReady, start: swoopStart, update: swoopUpdate, end: swoopEnd },
+  bueffel: { cd: 1, ready: herdReady, start: herdStart, update: herdUpdate },
 };

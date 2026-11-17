@@ -10,6 +10,7 @@
 import { UNITS } from './data.js';
 
 export const BOSS_VIS = { panzer: 1.35, heli: 1.35, drache: 1.3 };
+BOSS_VIS.elefant = 1.3;   // Task 5: Elefant als Boss-Sticker (rig.js), ohne Mündung (Nahkampf)
 export const TILT_MAX = .12;          // rad Laufneigung bei voller Geschwindigkeit (auch der Drache)
 export const BOSS_SQUASH = .02;       // Boss-Treffer: sx 1 + 0.02, sy 1 − 0.02
 export const HEAD_MAX = .6;           // Drachenkopf: lokaler Winkel zum Ziel höchstens ±0.6 rad

@@ -9,6 +9,7 @@ import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zon
 import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
+import { FORM } from './formation.js';
 import { createUI } from './ui.js';
 import { buildBench } from './bench.js';
 import { createRng } from './rng.js';
@@ -487,7 +488,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -533,6 +534,15 @@ const scenes = {
     for (let i = 0; i < 3; i++) spawn(world, 'sniper', x0 - 70, cy - 70 + i * 70, 'blau');
     placeRect(world, 'schuetze', 8, (x0 + 260) / world.W, .4, (x0 + 290) / world.W, .6, 'rot');
     placeRect(world, 'krieger', 10, Math.min(.95, (x0 + 700) / world.W), .35, Math.min(.98, (x0 + 740) / world.W), .65, 'rot');
+  },
+  // Römer (Spez. #25): 24 Römer (Blau, 6 × 4 im Platzabstand, bilden sofort einen Block) marschieren gegen
+  // 20 Schützen (vorn) und 10 Krieger (dahinter, Rot): die Schilde halten die Pfeile ab (Funken), Speersalve
+  // vor dem Angriff, dann charge
+  roemer() {
+    world.teamMode = true;
+    for (let k = 0; k < 24; k++) spawn(world, 'roemer', world.W * .2 - (k % 4) * FORM.SPACING, world.H * .5 + (((k / 4) | 0) - 2.5) * FORM.SPACING, 'blau');
+    placeRect(world, 'schuetze', 20, .62, .38, .68, .62, 'rot');
+    placeRect(world, 'krieger', 10, .76, .42, .79, .58, 'rot');
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

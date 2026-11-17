@@ -6,7 +6,8 @@
 // Blöcke entstehen alle FORM.REFORM s neu (rebuild): Römer derselben Fraktion, die über Ketten mit Abstand
 // ≤ LINK verbunden sind (Suche über den Spatial Hash), bilden eine Gruppe; ab MIN Römern im Zustand 'ok'
 // wird sie ein Block. Die Gruppe übernimmt id und Zustand des alten Blocks, aus dem die meisten ihrer
-// Mitglieder kommen (bei einer Teilung bekommt der kleinere Teil eine neue id, aber denselben Zustand).
+// Mitglieder kommen (Gruppen nach Größe abgearbeitet: bei einer Teilung behält der größere Teil die id, der
+// kleinere bekommt eine neue, aber denselben Zustand).
 // Plätze: cols = clamp(round(√(n·2,5)), 2, 10) Spalten, Reihen- und Spaltenabstand SPACING, erste Reihe vorn
 // in Blickrichtung (ax, ay). Zuordnung: Mitglieder nach Tiefe entlang der Blickrichtung, dann je Reihe nach
 // Seitenlage; wer gerade nicht steuerbar ist (betäubt, in der Luft), wird nach seinem alten Platz einsortiert.
@@ -20,7 +21,9 @@
 // ≤ FORM_LOOSE[0] px: voll, ≥ FORM_LOOSE[1] px: FORM_LOOSE[2]). So wartet der Block auf Nachzügler und auf den
 // Hintermann, der in eine Lücke rückt. Das Zentrum läuft höchstens FORM_LEAD px vor der Lage, die die
 // Mitglieder tatsächlich einnehmen (Mittel aus Lage minus Platzversatz), damit es an einer Mauer nicht
-// davonläuft. Platz = Zentrum + gedrehter Versatz.
+// davonläuft. Platz = Zentrum + gedrehter Versatz. Liegt ein Platz auf Lava oder Mauer, gibt der Block den Römer
+// frei (FORM_PROBE); freie Römer zählen weder für Zentrum noch Tempo. Sind mehr als die Hälfte frei, zählt das
+// als Festhängen.
 // Auflösen (state 'charge'): ein Gegner ≤ ENGAGE px von der vordersten Reihe (Mitglied mit der größten
 // Tiefe), ein Gegner ≤ FORM_FLANK px an irgendeinem Mitglied (Flanke, Prüfung gestaffelt nach id), oder der
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
@@ -37,6 +40,15 @@ export const FORM_TURN = .14;             // rad (≈ 8°): kleinere Änderungen
 export const FORM_GAIN = 4;               // 1/s: think steuert Blocktempo + Abweichung · FORM_GAIN (combat.think)
 export const FORM_CATCHUP = 1.25;         // think: höchstens speed · 1,25
 const STUCK_PX = 10;
+// Freigabe an Hindernissen: ein Römer, dessen Platz auf oder bis SLOT_MARGIN px neben Lava oder Mauer liegt
+// oder dessen gerader Weg dorthin in den nächsten FORM_PROBE px eine solche Zelle kreuzt, verlässt den Platz
+// (formFree) und läuft wie eine einzelne Bodeneinheit dem Flussfeld nach (combat.think); zurück, sobald der
+// Platz und der ganze Weg (bis FREE_LOOK px) frei sind. Der Block bleibt in Formation.
+export const FORM_PROBE = 20;
+const FREE_LOOK = 400, LOOK_STEP = 5, SLOT_MARGIN = 10;
+const HAZ = [false, false, true, false, true];   // nach Gelände-id: Lava, Mauer
+// Lava oder Mauer unter (x, y)? (combat.think: freie Römer treten nicht hinein)
+export const hazardAt = (world, x, y) => HAZ[world.terr[cellIndex(world, x, y)]];
 const FLANK_EVERY = 6;                    // Flankenprüfung je Mitglied jeden 6. Schritt (nach id versetzt)
 const TURN_COS = Math.cos(FORM_TURN);
 // Geländebremse wie physics.integrate (Wasser, Lava, Wald)
@@ -88,6 +100,7 @@ function rebuild(world) {
   if (ROM.length === 0) { if (old.length) world.formations = []; return; }
   SEEN.clear();
   GR_W = world;
+  const groups = [];
   for (let r = 0; r < ROM.length; r++) {
     const u0 = ROM[r];
     if (SEEN.has(u0)) continue;
@@ -96,8 +109,14 @@ function rebuild(world) {
     for (let k = 0; k < GRP.length; k++) { const a = GRP[k]; GR_X = a.x; GR_Y = a.y; query(world, a.x, a.y, FORM.LINK, linkTest); }
     let ok = 0;
     for (let k = 0; k < GRP.length; k++) if (GRP[k].state === 'ok') ok++;
-    if (ok < FORM.MIN) { for (let k = 0; k < GRP.length; k++) { GRP[k].form = 0; GRP[k].formOn = false; } continue; }
-    out.push(adopt(world, GR_F, oldById, claimed));
+    if (ok < FORM.MIN) { for (let k = 0; k < GRP.length; k++) { GRP[k].form = 0; GRP[k].formOn = false; GRP[k].formFree = false; } continue; }
+    groups.push(GRP.slice());
+  }
+  // größere Gruppen zuerst: bei einer Teilung behält der größere Teil die alte id (sort ist stabil)
+  groups.sort((a, b) => b.length - a.length);
+  for (let g = 0; g < groups.length; g++) {
+    GRP.length = 0; for (const u of groups[g]) GRP.push(u);
+    out.push(adopt(world, factionOf(world, GRP[0]), oldById, claimed));
   }
   GR_W = null; GR_F = null; GRP.length = 0; ROM.length = 0; SEEN.clear();
   world.formations = out;
@@ -190,12 +209,30 @@ function slots(f) {
 function charge(f, hold) {
   f.state = 'charge'; f.holdT = hold; f.vx = 0; f.vy = 0;
   const m = f.m;
-  for (let k = 0; k < m.length; k++) { const u = m[k]; u.formOn = false; u.formVx = 0; u.formVy = 0; }
+  for (let k = 0; k < m.length; k++) { const u = m[k]; u.formOn = false; u.formFree = false; u.formVx = 0; u.formVy = 0; }
+}
+
+// Platz auf oder bis SLOT_MARGIN px neben Lava/Mauer (der Körper ragte sonst hinein, ein Schubs genügt)
+function slotHazard(world, x, y) {
+  const M = SLOT_MARGIN;
+  return hazardAt(world, x, y) || hazardAt(world, x + M, y) || hazardAt(world, x - M, y) || hazardAt(world, x, y + M) || hazardAt(world, x, y - M);
+}
+
+// Lava- oder Mauerzelle auf der Strecke (x0, y0) → (x1, y1), geprüft alle LOOK_STEP px bis höchstens maxL px
+function lineHazard(world, x0, y0, x1, y1, maxL) {
+  const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), terr = world.terr;
+  if (L < 1e-6) return false;
+  const end = L < maxL ? L : maxL;
+  for (let s = LOOK_STEP; s < end + LOOK_STEP; s += LOOK_STEP) {
+    const q = s < end ? s : end;
+    if (HAZ[terr[cellIndex(world, x0 + dx * q / L, y0 + dy * q / L)]]) return true;
+  }
+  return false;
 }
 
 function march(world, f, dt) {
   const m = f.m, ax = f.ax, ay = f.ay, px = -ay, py = ax, terr = world.terr;
-  let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0;
+  let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0, free = 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
     if (!u.alive) continue;
@@ -204,13 +241,20 @@ function march(world, f, dt) {
     const pr = (u.x - f.cx) * ax + (u.y - f.cy) * ay;
     if (pr > fd) { fd = pr; front = u; }
     if (u.state !== 'ok') continue;
+    // Platz auf Lava/Mauer oder Weg dorthin gleich verbaut: frei (Flussfeld); zurück, sobald Platz und ganzer Weg frei
+    const sx = f.cx + ox, sy = f.cy + oy;
+    if (u.formFree) { if (!slotHazard(world, sx, sy) && !lineHazard(world, u.x, u.y, sx, sy, FREE_LOOK)) u.formFree = false; }
+    else if (slotHazard(world, sx, sy) || lineHazard(world, u.x, u.y, sx, sy, FORM_PROBE)) u.formFree = true;
+    if (u.formFree) { free++; continue; }
     n++; ix += u.x - ox; iy += u.y - oy;
     const e = Math.hypot(u.x - f.cx - ox, u.y - f.cy - oy); if (e > worst) worst = e;
     const s = TERR_SP[terr[cellIndex(world, u.x, u.y)]] || 1; if (s < tsp) tsp = s;
   }
   f.n = alive;
-  if (n === 0) { f.vx = 0; f.vy = 0; return; }
-  ix /= n; iy /= n;
+  if (n === 0 && free === 0) { f.vx = 0; f.vy = 0; return; }
+  // Mehr als die Hälfte der Plätze verbaut: zählt als Festhängen (der Block löst sich nach STUCK s auf)
+  const jammed = free * 2 > n + free;
+  if (n > 0) { ix /= n; iy /= n; } else { ix = f.cx; iy = f.cy; }
   // Gegner vor der Front oder an der Flanke: auflösen
   if (front && enemyWithin(world, f.faction, front.x, front.y, FORM.ENGAGE)) { charge(f, 0); return; }
   const tick = (world.time * 60) | 0;
@@ -227,7 +271,7 @@ function march(world, f, dt) {
   }
   const [L0, L1, LMIN] = FORM_LOOSE;
   const loose = worst <= L0 ? 1 : worst >= L1 ? LMIN : 1 - (1 - LMIN) * (worst - L0) / (L1 - L0);
-  const sp = f.speed * tsp * loose;
+  const sp = n > 0 ? f.speed * tsp * loose : 0;
   f.vx = dx * sp; f.vy = dy * sp;
   f.cx += f.vx * dt; f.cy += f.vy * dt;
   // nicht davonlaufen: höchstens FORM_LEAD vor der tatsächlichen Lage
@@ -235,7 +279,7 @@ function march(world, f, dt) {
   if (ll > FORM_LEAD) { f.cx = ix + lx * FORM_LEAD / ll; f.cy = iy + ly * FORM_LEAD / ll; }
   // Festhängen: tatsächliche Lage kommt STUCK s lang keine STUCK_PX weit
   if (t) {
-    if (Math.hypot(ix - f.sx, iy - f.sy) >= STUCK_PX) { f.sx = ix; f.sy = iy; f.stuckT = 0; }
+    if (!jammed && Math.hypot(ix - f.sx, iy - f.sy) >= STUCK_PX) { f.sx = ix; f.sy = iy; f.stuckT = 0; }
     else { f.stuckT += dt; if (f.stuckT >= FORM.STUCK) { charge(f, FORM.STUCK); return; } }
   } else { f.sx = ix; f.sy = iy; f.stuckT = 0; }
   for (let k = 0; k < m.length; k++) {

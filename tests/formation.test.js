@@ -168,3 +168,46 @@ test('gleiche Saat, gleicher Verlauf mit Römern', () => {
   };
   assert.equal(go(), go());
 });
+
+// Lavabecken 200×200 im Weg von 16 Römern: Plätze über Lava geben ihren Römer frei (er läuft dem Flussfeld
+// nach drumherum), statt ihn hineinzuziehen. Vergleich: 16 Krieger am selben Ort.
+function lavaPool(type) {
+  const w = createWorld(1600, 900, 3); w.teamMode = true;
+  for (let y = 300; y < 500; y += CELL) for (let x = 600; x < 800; x += CELL) setCell(w, cellIndex(w, x, y), 2, 0);
+  const us = [];
+  for (let k = 0; k < 16; k++) { const j = k % 3, i = (k / 3) | 0; us.push(spawn(w, type, 400 - j * 22, 400 + (i - 2.5) * 22, 'blau')); }
+  spawn(w, 'krieger', 1300, 400, 'rot');
+  let onLava = 0, lavaDeaths = 0, blockSteps = 0;
+  for (let i = 0; i < 14 * 60; i++) {
+    step(w, DT);
+    for (const e of w.events) if (e.type === 'death' && e.unitType === type && e.killerId === null) lavaDeaths++;
+    w.events.length = 0;
+    for (const u of us) if (u.alive && w.terr[cellIndex(w, u.x, u.y)] === 2) onLava++;
+    if (us.some(u => u.alive && u.formOn)) blockSteps++;
+  }
+  return { lavaS: onLava * DT, lavaDeaths, blockSteps };
+}
+
+test('Lava: ein Block zieht seine Römer nicht durchs Lavabecken', () => {
+  const k = lavaPool('krieger'), r = lavaPool('roemer');
+  assert.equal(r.lavaDeaths, 0, 'kein Römer stirbt in der Lava');
+  assert.ok(r.lavaS <= 2 * k.lavaS, `Einheitensekunden auf Lava: Römer ${r.lavaS.toFixed(1)}, Krieger ${k.lavaS.toFixed(1)}`);
+  assert.ok(r.blockSteps > 5 * 60, `Block bleibt bestehen (${r.blockSteps} Schritte in Formation)`);
+});
+
+test('Lava: sind mehr als die Hälfte der Plätze verbaut, löst sich der Block nach STUCK s auf', () => {
+  // Lavastreifen über die ganze Höhe: kein Umweg, der Fluss führt mitten hindurch
+  const w = mk();
+  for (let y = 0; y < H; y += CELL) for (let x = 520; x < 600; x += CELL) setCell(w, cellIndex(w, x, y), 2, 0);
+  const rs = block(w, 8, 470, 400, 'blau', 2);
+  spawn(w, 'krieger', 1200, 400, 'rot');
+  let freeMax = 0, tCharge = -1, t = 0;
+  run(w, 8, ww => {
+    t += DT;
+    freeMax = Math.max(freeMax, rs.filter(u => u.alive && u.formFree).length);
+    if (tCharge < 0 && formOf(ww, rs[0]).state === 'charge') { tCharge = t; return true; }
+  });
+  assert.ok(freeMax > 4, `mehr als die Hälfte frei: ${freeMax}`);
+  assert.ok(tCharge > FORM.STUCK, `aufgelöst nach ${tCharge.toFixed(2)} s`);
+  assert.ok(rs.every(u => !u.formOn && !u.formFree));
+});

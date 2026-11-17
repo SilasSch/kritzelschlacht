@@ -6,7 +6,7 @@ import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
-import { FORM_GAIN, FORM_CATCHUP } from './formation.js';
+import { FORM_GAIN, FORM_CATCHUP, hazardAt } from './formation.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -542,9 +542,27 @@ function groupInfo(world, u) {
 }
 
 // Römer im Block: Blocktempo plus Abweichung vom Platz · FORM_GAIN, höchstens Blocktempo · FORM_CATCHUP (zum
-// Aufholen). Blickrichtung ist die des Blocks.
-function holdSlot(u, dt) {
+// Aufholen). Blickrichtung ist die des Blocks. Vom Platz freigegeben (formFree: Platz oder Weg auf Lava/Mauer,
+// formation.js): wie eine einzelne Bodeneinheit dem Flussfeld der Fraktion nach. Das Feld führt dicht an der
+// Lava entlang, und im Gedränge schieben die Nachbarn: darum zusätzlich weg von Lava/Mauer, die in FREE_AVOID px
+// (8 Richtungen) liegt. Ohne Weg nur diese Abstoßung (wer auf Lava steht, kommt so herunter).
+const FREE_AVOID = 14;
+const D8X = [1, -1, 0, 0, .7071, .7071, -.7071, -.7071], D8Y = [0, 0, 1, -1, .7071, -.7071, .7071, -.7071];
+function holdSlot(world, u, dt) {
   u.tg = null;
+  if (u.formFree) {
+    const fd = world.flow ? flowDir(world.flow, factionOf(world, u), u.x, u.y) : null, sp = u.T.speed;
+    let dx = 0, dy = 0, rx = 0, ry = 0;
+    if (fd && fd.dist > 0) { dx = fd.dx; dy = fd.dy; }
+    for (let k = 0; k < 8; k++) if (hazardAt(world, u.x + D8X[k] * FREE_AVOID, u.y + D8Y[k] * FREE_AVOID)) { rx -= D8X[k]; ry -= D8Y[k]; }
+    const rl = Math.hypot(rx, ry);
+    if (rl > 1e-6) { dx += rx / rl; dy += ry / rl; }
+    const l = Math.hypot(dx, dy);
+    if (l > 1e-6) { u.mx = dx / l * sp; u.my = dy / l * sp; if (dx < -.2 * l) u.face = -1; else if (dx > .2 * l) u.face = 1; u.run += dt; }
+    else { u.mx = 0; u.my = 0; }
+    u.fx = u.formAx; u.fy = u.formAy;
+    return;
+  }
   let vx = u.formVx + (u.slotX - u.x) * FORM_GAIN, vy = u.formVy + (u.slotY - u.y) * FORM_GAIN;
   const cap = u.formSp * FORM_CATCHUP, l = Math.hypot(vx, vy);
   if (l > cap) { vx *= cap / l; vy *= cap / l; }
@@ -573,7 +591,7 @@ export function think(world, u, dt) {
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz
-  if (u.formOn) { holdSlot(u, dt); return; }
+  if (u.formOn) { holdSlot(world, u, dt); return; }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }

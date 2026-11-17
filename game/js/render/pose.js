@@ -86,6 +86,7 @@ function frac(v) { return v - Math.floor(v); }
    der Drache hält beim Feuerspeien (fireT < BREATH_HOLD) den Kopf ungeglättet zum Ziel und ohne Auf und Ab;
    der Heli neigt sich um seine Mündung. So startet jeder Schuss an der gezeichneten Mündung. */
 export const BOSS = new Set(['panzer', 'heli', 'drache']);
+BOSS.add('elefant');   // Task 5 (elephantPose)
 export { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, DRAGON_GEO, dragonHead };
 export const TURN_T = .15, ELEV_RATE = 10;                            // s Umdrehen des Turms, 1/s Rohr
 // Totbereich (nur Darstellung, zwischen Schüssen): liegt das Ziel weniger als TURN_DEADBAND px seitlich, bleibt
@@ -128,6 +129,7 @@ function bossPose(u, t, out, mem, mx, my) {
   const tg = u.tg, dx = tg ? tg.x - u.x : 0, dy = tg ? tg.y - u.y : 0;
   // fast kein Squash: Treffer drückt nur um BOSS_SQUASH, kein Federn beim Fahren
   out.sx = hit ? 1 + BOSS_SQUASH : 1; out.sy = hit ? 1 - BOSS_SQUASH : 1;
+  if (type === 'elefant') { elephantPose(u, t, out, sp); return; }
   if (type === 'panzer') {
     out.bob = 0; out.frame = 0;
     tankAim(dx, dy, face, TA);
@@ -188,6 +190,26 @@ function bossPose(u, t, out, mem, mx, my) {
       out.headRot = mem.head;
     } else out.headRot = h;
   }
+}
+
+/* ---------- Task 5: Tiere (Spez. #33) ----------
+   Elefant (Boss-Sticker, rig.js): schwere Schritte (frame 0/1, kleines Absinken bob), Ohr wedelt (wing −1..1, mit
+   ELE_EAR_HZ, beim Laufen schneller), Rüssel pendelt (tailSwing, rad um seinen Ansatz; ELE_TRUNK mit ELE_TRUNK_HZ) und
+   hebt sich nach vorn beim Schlag (swingT, bis ELE_TRUNK_SWING) und beim Trampeln (abOn: ELE_TRUNK_UP, trompeten), der
+   Kopf nickt im Schritt (headRot). Kein Quetschen (wie alle Bosse).
+   Krokodil versteckt im Wasser (u.hidden, ohne frischen Biss): bis auf Augen und Rücken abgetaucht, um die Füße auf
+   CROC_SUBMERGE seiner Höhe gestaucht und etwas breiter. */
+export const ELE_EAR_HZ = .6, ELE_TRUNK = .14, ELE_TRUNK_HZ = .8, ELE_TRUNK_SWING = -1.5, ELE_TRUNK_UP = -2.3, ELE_NOD = .04;
+export const CROC_SUBMERGE = .45;
+function elephantPose(u, t, out, sp) {
+  const T = u.T, walking = sp > 1, q = clamp(sp / T.speed, 0, 2), ph = t * (1.2 + T.speed / 40) * (walking ? 1 : 0) + u.seed;
+  out.frame = walking ? Math.floor(ph * 2) % 2 : 0;
+  const s = Math.sin(TAU * ph);
+  out.bob = walking ? 1.2 * Math.abs(s) : 0;
+  out.wing = Math.sin(TAU * ELE_EAR_HZ * (1 + .5 * q) * t + u.seed);
+  const sw = u.swingT > 0 ? Math.min(1, u.swingT / SWING_T) : 0;
+  out.tailSwing = u.abOn ? ELE_TRUNK_UP : ELE_TRUNK * Math.sin(TAU * ELE_TRUNK_HZ * t + u.seed * 1.7) + ELE_TRUNK_SWING * sw;
+  out.headRot = ELE_NOD * s - (u.abOn ? .12 : .1 * sw);
 }
 
 // Anteil des Liegens 0..1 aus Haltung und Restzeit des Übergangs (smoothstep)
@@ -259,6 +281,8 @@ export function poseUnit(u, t, out = {}, mem) {
       out.sy *= RISE_SY0 + (1 - RISE_SY0) * k; out.sx *= 1 + .25 * (1 - k);
     }
   }
+  // Task 5: Krokodil abgetaucht (ohne frischen Biss)
+  if (u.hidden && !(u.seenT > 0)) { out.sy *= CROC_SUBMERGE; out.sx *= 1.1; }
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.
   const st = u.state;

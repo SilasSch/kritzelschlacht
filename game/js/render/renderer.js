@@ -472,6 +472,7 @@ export function createRenderer(canvasHost) {
   // Turm, Augen); Heli Rumpf, Kanone, Heckrotor, Augen, Rotorgruppe (Scheibe, Nachzieh-Blatt, Blätter);
   // Drache hinterer Flügel, Schweif, Rumpf, Hals, Kopfgruppe (Kopf, Augen), vorderer Flügel.
   function drawBoss(Q, u, p, rig, vi, ti, face, inv) {
+    if (u.type === 'elefant') { drawElephant(Q, p, rig, vi, ti, face, inv); return; }   // Task 5
     const type = u.type, R = rig.r, d = nBoss < BOSS_DBG ? bossDbg[nBoss++] : null;
     let tlx = 0, tly = 0;
     // Matrix des Mündungsteils (Eltern P, Lage, Drehung, Maßstab inv) für debugRig
@@ -523,6 +524,19 @@ export function createRenderer(canvasHost) {
       if (u.tg) { bossMuzzle(u, u.tg.x, u.tg.y, d.logic); d.logic.x += u.x; d.logic.y += u.y - (u.z || 0); }
       d.tipLx = tlx * rigs.resolution; d.tipLy = tly * rigs.resolution;
     }
+  }
+
+  // --- Task 5: Elefant (Boss-Sticker, rig.ELE_GEO) --- Körper (Bild = Schritt), Decke in Teamfarbe, Kopfgruppe am
+  // Hals (nickt um headRot) mit Kopf, Ohr (wedelt mit wing: dreht und wird schmaler), Rüssel (tailSwing) und Augen
+  function drawElephant(Q, p, rig, vi, ti, face, inv) {
+    const G = BOSS_GEO.elefant, R = rig.r, w = p.wing;
+    bp(Q, UM, rig, 'body', 0, p.frame, 0, 0, 0, inv);
+    bp(Q, UM, rig, 'blanket', vi, 0, 0, 0, 0, inv);
+    mul(GM, UM, mat(GM, G.head[0] * R, G.head[1] * R, p.headRot, 1, 1));
+    bp(Q, GM, rig, 'head', 0, 0, 0, 0, 0, inv);
+    bp(Q, GM, rig, 'ear', 0, 0, G.ear[0] * R, G.ear[1] * R, .1 * w, inv, inv * (1 - .14 * (1 + w) / 2), inv);
+    bp(Q, GM, rig, 'trunk', 0, 0, G.trunk[0] * R, G.trunk[1] * R, p.tailSwing, inv);
+    bossEyes(Q, GM, rig, p, face, p.headRot, 1, ti, inv);
   }
 
   // Heldenkrone über der lebenden Einheit mit den meisten Siegen (ab 3)

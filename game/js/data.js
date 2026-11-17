@@ -28,6 +28,15 @@ export const UNITS = {
   moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:55,speed:34,cd:4.5,cost:9,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
+  // --- Task 5: Tiere (Spez. #33; Verhalten in abilities.js, Block "Task 5") ---
+  // Elefant: Boss-Sticker (rig.js), furchtlos gegen Brüllen und Spuk, aber Bienen erschrecken ihn; nie Ghul oder Frosch.
+  // Krokodil: swim/land = Tempofaktor im Wasser (statt der Wasserbremse) und an Land (physics.integrate).
+  // tier: 1 = eines der neuen Tiere (combat.think ruft abilities.stepAnimal/animalPassive; ein Feld statt Set.has im heißen Pfad).
+  elefant:{n:'Elefant',cat:'tiere',col:'#9aa0ab',r:20,hp:900,dmg:30,range:4,speed:36,cd:1.6,cost:24,mass:25,tier:1,d:'Langsamer, riesiger Dickhäuter. Trampelt alle 20 s durch die Reihen. Brüllen und Spuk lassen ihn kalt, vor Bienen flieht er.'},
+  krokodil:{n:'Krokodil',cat:'tiere',col:'#5e8a4a',r:11,hp:120,dmg:16,range:3,speed:50,cd:1,cost:4,mass:2,swim:1.6,land:.7,tier:1,d:'Im Wasser schnell und fast unsichtbar, an Land langsam. Packt aus dem Hinterhalt zu.'},
+  gorilla:{n:'Gorilla',cat:'tiere',col:'#4a4552',r:12,hp:200,dmg:18,range:3,speed:52,cd:.95,cost:6,mass:3,tier:1,d:'Starker Nahkämpfer. Wirft Gegner in die Menge und schlägt sich auf die Brust.'},
+  adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:3,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
+  bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
 };
 
 // Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}]. Einzige
@@ -116,6 +125,29 @@ const ABIL = {
     {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
     {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},
   ],
+  // --- Task 5: Tiere ---
+  elefant: [
+    {n:'Trampeln', d:'Alle 20 s stürmt er 1,5 s durch die Reihen und schleudert alles zur Seite. Nur Feinde nehmen Schaden.'},
+    {n:'Dickhäuter', d:'Brüllen, Spuk und Froschfluch wirken nicht auf ihn.'},
+    {n:'Angst vor Bienen', d:'Kommen feindliche Bienen näher als 50 px, flieht er 1,5 s lang. Höchstens alle 6 s.'},
+  ],
+  krokodil: [
+    {n:'Lauern', d:'Im Wasser 1,6-mal so schnell und versteckt: Feinde sehen es erst ab 60 px oder kurz nach einem Biss.'},
+    {n:'Packen', d:'Alle 8 s ein Biss mit doppeltem Schaden, der das Opfer 1 s lang festhält.'},
+    {n:'Schwerfällig', d:'An Land nur 70 % Tempo.'},
+  ],
+  gorilla: [
+    {n:'Wurf', d:'Alle 12 s packt er einen leichten Gegner (bis Ritter) und wirft ihn 120 px weit in die dichteste Feindgruppe.'},
+    {n:'Brustklopfen', d:'Beim ersten Kontakt, dann alle 20 s: Feinde mit weniger Leben als er fliehen 1,5 s lang.'},
+  ],
+  adler: [
+    {n:'Sturzflug', d:'Alle 10 s stößt er auf ein Ziel herab, am liebsten auf Fernkämpfer. Der erste Treffer macht dreifachen Schaden.'},
+    {n:'Hoch oben', d:'Nahkämpfer erreichen ihn nur, wenn er zum Angriff herabstößt.'},
+  ],
+  bueffel: [
+    {n:'Stampede', d:'Ab 3 Büffeln nah beieinander stürmt die Herde 2 s lang los und rammt alles um. Danach 20 s Pause.'},
+    {n:'Herde', d:'Bleibt bei den anderen Büffeln.'},
+  ],
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 
@@ -170,6 +202,8 @@ export const TERR_SPEED = [], TERR_HAZ = [];
 for (const k in TERRAIN) { const T = TERRAIN[k]; TERR_SPEED[T.id] = T.sp ?? 1; TERR_HAZ[T.id] = !!T.haz; }
 
 export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber',vampir:'Vampire',ghul:'Ghule'};
+// --- Task 5: Tiere ---
+Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
 

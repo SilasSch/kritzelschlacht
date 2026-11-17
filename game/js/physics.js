@@ -61,7 +61,9 @@ export function integrate(world, dt) {
     } else {
       if (u.state === 'stun') { u.stunT -= dt; if (u.stunT <= 0) { u.stunT = 0; u.state = 'ok'; } }
       // Gelände bremst die Wunschbewegung (TERRAIN sp); Lava brennt
-      const tt = terr[cellIndex(world, u.x, u.y)], sp = TERR_SPEED[tt];
+      const tt = terr[cellIndex(world, u.x, u.y)];
+      // Task 5: Krokodil (T.swim, T.land) schwimmt im Wasser schneller statt gebremst, an Land langsamer
+      const sp = T.swim ? (tt === WATER ? T.swim : TERR_SPEED[tt] * T.land) : TERR_SPEED[tt];
       if (tt === LAVA) {
         hurt(world, u, 10 * dt, 'fire', null);
         // etwa 6 Flammen pro Sekunde, ohne den Spielzufall zu verbrauchen

@@ -10,6 +10,9 @@ import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } fro
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, releaseUnit, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
 import { castSpell, spellReact, FIREBALL } from './spells.js';
+// --- Task 5: Tiere ---
+import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
+import { aloft, unseen } from './world.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -87,6 +90,7 @@ export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET
 export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5, .3];
 // Nur diese Typen lesen die Gruppenmitte (Rudel, Schwarm, Schildwall, Reihe halten); alle anderen sparen sich groupInfo
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
+GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -131,6 +135,8 @@ export const PARTS = {
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
   panzer: ['turret'], heli: ['headgear', 'weapon'], vampir: [], ghul: [],
 };
+// --- Task 5: Tiere --- (keine wegfliegenden Teile)
+Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
@@ -444,7 +450,7 @@ const NEAR_U = new Array(8).fill(null), NEAR_D = new Float64Array(8);
 function clearTarget(world, u) {
   const f = factionOf(world, u), skip = u.tg; let n = 0;
   query(world, u.x, u.y, u.T.range * 1.5 + 40, v => {
-    if (v === skip || factionOf(world, v) === f) return;
+    if (v === skip || factionOf(world, v) === f || (v.hidden && unseen(u, v))) return;   // Task 5: Krokodil
     const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2;
     if (n === 8 && d >= NEAR_D[7]) return;
     let k = n < 8 ? n++ : 7;
@@ -578,7 +584,7 @@ export function stepBurn(world, u, dt) {
 let GI_W = null, GI_T = '', GI_F = null, GI_X = 0, GI_Y = 0, GI_N = 0;
 function groupTest(v) { if (v.type === GI_T && factionOf(GI_W, v) === GI_F) { GI_X += v.x; GI_Y += v.y; GI_N++; } }
 function groupInfo(world, u) {
-  const R = u.type === 'wolf' ? 170 : u.type === 'biene' ? 60 : 70;
+  const R = u.type === 'wolf' ? 170 : u.type === 'biene' || u.type === 'bueffel' ? 60 : 70;
   GI_W = world; GI_T = u.type; GI_F = factionOf(world, u); GI_X = 0; GI_Y = 0; GI_N = 0;
   query(world, u.x, u.y, R, groupTest);
   const n = GI_N;
@@ -639,7 +645,7 @@ function pilumTarget(world, u) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
-      if (!v.alive || v.type === 'heli') continue;
+      if (!v.alive || v.type === 'heli' || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
       if (d2 <= PIL_MAX2 && d2 < bd && factionOf(world, v) !== f) { bd = d2; best = v; }
     }
@@ -698,6 +704,7 @@ export function think(world, u, dt) {
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
+  if (T.tier) stepAnimal(world, u, dt);   // Task 5: Zeiten der Tiere, Versteck des Krokodils
   if (u.fleeT > 0) u.fleeT -= dt;
   // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
   if (u.fireT < 1) u.fireT += dt;
@@ -717,6 +724,8 @@ export function think(world, u, dt) {
     if (u.type === 'vampir') { if (stepBat(world, u, dt, true) === BAT_FLY) fleeSteer(world, u, dt); return; }
     retreat(world, u, dt); return;
   }
+  // Task 5: passive Teile der Tiere (Brustklopfen, Angst des Elefanten vor Bienen), nur im normalen Zustand
+  if (T.tier) { animalPassive(world, u); if (isFleeing(u)) { retreat(world, u, dt); return; } }
   // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
@@ -735,7 +744,8 @@ export function think(world, u, dt) {
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform)
-  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || (u.tg.batT > 0 && outOfMelee(u, u.tg))) {
+  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || (u.tg.batT > 0 && outOfMelee(u, u.tg)) ||
+      (u.tg.hidden && unseen(u, u.tg))) {   // Task 5: Krokodil taucht ab
     const nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
     // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)
     if (nt && (nt.x - u.x) ** 2 + (nt.y - u.y) ** 2 > RETARGET_FAR * RETARGET_FAR) u.rt *= RETARGET_FAR_MUL;
@@ -757,6 +767,9 @@ export function think(world, u, dt) {
     if (s !== BAT_NONE) return;
   }
   const reach = T.range + T.r + t.T.r;
+  // Task 5: Adler pickt nur unten (abilities.eagleStep); Nahkämpfer am Boden erreichen ihn oben nicht (world.aloft)
+  if (u.type === 'adler' && eagleStep(world, u, t, d, reach)) return;
+  if (d <= reach && aloft(t) && outOfMelee(u, t)) return;
   // Magier: Windstoß und Steinwand auch zwischen den Würfen (spells.spellReact, gedrosselt)
   if (u.type === 'magier' && u.cd > 0 && spellReact(world, u)) return;
   // Reiter reiten nach dem Sturmangriff durch die Reihen und wenden dann
@@ -840,6 +853,13 @@ export function think(world, u, dt) {
       const by = ny + nx * s * o + (u.gy - u.y) * .01 + rnd(world, -.5, .5);
       const l = Math.hypot(bx, by) || 1; ax = bx / l; ay = by / l; break;
     }
+    case 'bueffel':
+      // Task 5: Herde: bleibt bei den anderen Büffeln (zieht zur Gruppenmitte, solange das Ziel nicht ganz nah ist)
+      if (u.gn >= 2 && d > 50) {
+        const bx = nx + (u.gx - u.x) * .02, by = ny + (u.gy - u.y) * .02, l = Math.hypot(bx, by) || 1;
+        ax = bx / l; ay = by / l;
+      }
+      break;
     case 'krieger': case 'roemer': case 'ritter': case 'geist': case 'baer':
       // Einkreisen: ist das Ziel schon umringt, sucht man sich einen freien Platz drumherum
       if (t.att > 3 && d < 130) {
@@ -975,7 +995,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
       query(world, t.x, t.y, T.splash + 20, v => {
-        if (factionOf(world, v) === f || isBat(v)) return;   // Fledermausform: für Nahkämpfer unerreichbar
+        if (factionOf(world, v) === f || isBat(v) || aloft(v)) return;   // Fledermausform, Adler oben (Task 5): für Nahkämpfer unerreichbar
         const ex = v.x - t.x, ey = v.y - t.y;
         if (ex * ex + ey * ey > (T.splash + v.T.r) ** 2) return;
         knock(v, dx / d, dy / d, 140); hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u);
@@ -1001,6 +1021,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'wolf' && v.team === u.team && ++n >= 3) return true; });
         if (n >= 3) a *= 1.4;
       }
+      if (u.type === 'krokodil') u.seenT = CROC.SEEN;   // Task 5: nach dem Biss sichtbar
       const before = t.hp, dealt = hurt(world, t, a, 'melee', u);
       if (u.type === 'geist') u.hp = Math.min(T.hp, u.hp + dealt);
       // Lebensraub des Vampirs (Spez. #32): die Hälfte des Schadens, ohne den Überschuss über die LP des Opfers

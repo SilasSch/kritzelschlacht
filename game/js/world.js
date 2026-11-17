@@ -42,7 +42,16 @@ export const isBat = v => v.batT > 0 && !!v.T.fly;
 // Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
 // Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
 export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
-export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v)) && groundMelee(u);
+export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v) || aloft(v)) && groundMelee(u);
+// --- Task 5: Tiere ---
+// Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist
+// (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Anvisieren dürfen sie ihn immer (nearestEnemy), nur schlagen nicht.
+export const EAGLE_REACH_Z = 14;
+export const aloft = v => v.type === 'adler' && v.z > EAGLE_REACH_Z;
+// Krokodil (Festlegung 8): versteckt im Wasser (u.hidden, abilities.stepAnimal) sehen es Feinde erst ab HIDE_R px oder
+// bis seenT s nach seinem Biss. Gilt für jede Zielwahl (nearestEnemy, Neuwahl in combat.think, Ausweichziel, Salve, Speer).
+export const HIDE_R = 60;
+export const unseen = (u, v) => v.hidden && !(v.seenT > 0) && (v.x - u.x) ** 2 + (v.y - u.y) ** 2 > HIDE_R * HIDE_R;
 
 export const cellIndex = (world, x, y) =>
   clamp((y / CELL) | 0, 0, world.GH - 1) * world.GW + clamp((x / CELL) | 0, 0, world.GW - 1);
@@ -116,11 +125,16 @@ export function spawn(world, type, x, y, team) {
     // Verwandlung) und ihr Ziel (batOn: soll Fledermaus sein); Zahl der lebenden Ghule des Vampirs; beim Ghul sein Vampir
     // (owner) und die Restzeit des Aufstehens (riseT, s).
     batT: .5, batOn: false, ghouls: 0, owner: null, riseT: .5,
+    // --- Task 5: Tiere (abilities.js, Spez. #33) --- Krokodil versteckt im Wasser und Zeit, in der es nach einem Biss
+    // sichtbar bleibt (s); Gorilla: gepackter Gegner beim Wurf; Herden-Abklingzeit der Büffel (gemeinsam, s);
+    // Brustklopfen des Gorillas (s, 0 = beim ersten Kontakt); Drossel der Bienenangst des Elefanten (s).
+    hidden: false, seenT: .5, grabbed: null, herdCd: .5, beatCd: .5, beeCd: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
   u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0;
+  u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
@@ -176,6 +190,7 @@ export function nearestEnemy(world, u) {
           const v = cell[i];
           if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v)))) continue;
           const dx = v.x - u.x, dy = v.y - u.y;
+          if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser
           let d = (dx * dx + dy * dy) * (1 + .12 * (v.tg === u ? 0 : (v.att || 0)));
           if (pref < 1 && (v.T.heal || RANGED.has(v.type))) d *= pref;
           if (isFleeing(v)) d *= FLEE_DIST2;   // Fliehende und Erschreckte zählen doppelt so weit (Spez. #27): erst die, die noch kämpfen

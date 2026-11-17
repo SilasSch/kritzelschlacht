@@ -364,7 +364,9 @@ const arcShot = (w, kind, src, x0, y0, x1, y1) => w.proj.push({ kind, arc: true,
 
 test('Tabelle: neun neue Fähigkeiten mit den Abklingzeiten aus #30, Kartentexte in data.js', () => {
   const cds = { schuetze: 30, sani: 20, soldat: 15, moerser: 30, panzer: 25, wolf: 25, baer: 20, geist: 15, drache: 30, heli: 25 };
-  assert.deepEqual(Object.keys(ABILITY).sort(), Object.keys(cds).sort());
+  // Task 5: die neuen Tiere haben eigene Fähigkeiten (tests/animals.test.js)
+  const TIERE5 = ['elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
+  assert.deepEqual(Object.keys(ABILITY).filter(k => !TIERE5.includes(k)).sort(), Object.keys(cds).sort());
   for (const k in cds) {
     assert.equal(ABILITY[k].cd, cds[k], k);
     assert.ok(UNITS[k].abil.some(a => a.n === ABIL_NAMES[k]), `${k}: Kartentext ${ABIL_NAMES[k]}`);

@@ -635,11 +635,188 @@ const DEF = {
   ...BOSS_DEF,
 };
 
+/* ---------- Task 5: Tiere (Spez. #33) ----------
+   Krokodil, Gorilla, Adler und Büffel als normale Sticker wie Wolf und Bär (Glubschaugen, Umrisse O), dazu ein
+   Halstuch in Teamfarbe (k.shield, wie der Ritterschild; darum je Team gebacken, TEAM_ACCENT). Der Elefant ist ein
+   Boss-Sticker (#23, BOSS_VIS 1,3): Körper mit Beinen (Bild 0/1 = Schritt), Decke in Teamfarbe, Kopfgruppe am Hals
+   (Drehpunkt ELE_GEO.head, nickt um headRot) mit Kopf und Stoßzähnen, Ohr (wedelt: pose.wing) und Rüssel (schwingt:
+   pose.tailSwing, hebt sich beim Schlag und beim Trampeln); Augen in der Kopfgruppe. */
+const TEAM_ACCENT = new Set(['krokodil', 'gorilla', 'adler', 'bueffel', 'elefant']);
+// Halstuch: dreieckiger Zipfel in Teamfarbe vom Knoten (x, y) aus, Richtung a (rad), Länge l (r-Einheiten)
+function scarf(c, r, k, x, y, a, l) {
+  const cx = Math.cos(a), sy = Math.sin(a), px = -sy, py = cx, w = l * .45;
+  poly(c, r, [[x + px * w, y + py * w], [x + cx * l, y + sy * l], [x - px * w, y - py * w]], k.shield, 1.1);
+  E(c, x * r, y * r, r * .11, r * .09, shade(k.shield, -.25), 1);
+}
+Object.assign(DEF, {
+  // Krokodil: lang und flach, Schuppenzacken, lange Schnauze mit Zähnen, Augen oben auf Höckern
+  krokodil: {
+    eyes: eyePair(.95, -.42, .17),
+    body(c, r, k, f) {
+      const l = f ? .16 : -.16;
+      for (const [x, s] of [[-.7, 1], [-.35, -1], [.3, 1], [.62, -1]]) Ln(c, [[x * r, r * .25], [(x + s * l) * r, r * .62]], k.dk, 2.6);
+      poly(c, r, [[-.75, -.22], [-1.6, -.02], [-2.05, .16], [-1.55, .28], [-.75, .38]], k.col);
+      E(c, -.05 * r, r * .08, r * 1.02, r * .44, k.col);
+      E(c, r * .05, r * .3, r * .75, r * .14, '#c9d79a', 0);
+      for (const x of [-1.3, -.95, -.6, -.3, 0, .3]) poly(c, r, [[x - .08, x < -.7 ? -.14 + (x + .7) * .1 : -.3], [x, x < -.7 ? -.3 + (x + .7) * .1 : -.46], [x + .08, x < -.7 ? -.14 + (x + .7) * .1 : -.3]], k.dk, 1);
+      RR(c, r * .75, -r * .2, r * 1.15, r * .34, r * .15, k.col);
+      E(c, r * .85, -r * .1, r * .38, r * .3, k.col, 0);
+      c.beginPath(); c.moveTo(r * .8, r * .06); c.lineTo(r * 1.84, r * .06); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+      for (const x of [1.05, 1.3, 1.55]) poly(c, r, [[x, .06], [x + .05, .17], [x + .1, .06]], '#fff', .6);
+      E(c, r * 1.78, -r * .12, r * .05, r * .04, O, 0);
+      for (const p of [this.eyes.L, this.eyes.R]) E(c, p[0] * r, p[1] * r + r * .08, r * .2, r * .16, k.col, 1.2);
+      scarf(c, r, k, .5, -.1, 1.75, .5);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Gorilla: massiger dunkler Körper, Scheitelkamm, helles Gesicht, lange Arme mit Knöcheln
+  gorilla: {
+    eyes: eyePair(.36, -.4, .19),
+    body(c, r, k, f) {
+      feet(c, r, k.dk, f);
+      Ln(c, [[-r * .45, -r * .2], [-r * .85, r * .72]], shade(k.col, -.2), 3.8);
+      E(c, -r * .86, r * .82, r * .22, r * .17, '#5d5866', 1.2);
+      E(c, 0, -r * .78, r * .46, r * .3, k.col);
+      E(c, 0, 0, r * 1.05, r * 1.0, k.col);
+      E(c, -r * .05, r * .45, r * .48, r * .36, '#5d5866', 0);
+      E(c, r * .38, -r * .24, r * .5, r * .44, '#8d8494');
+      E(c, r * .52, r * .06, r * .3, r * .2, '#a79fae', 1.1);
+      E(c, r * .45, r * .02, r * .05, r * .04, O, 0); E(c, r * .6, r * .02, r * .05, r * .04, O, 0);
+      Ln(c, [[r * .02, -r * .56], [r * .7, -r * .58]], shade(k.col, -.35), 1.6, false);
+      scarf(c, r, k, -.1, .55, 1.9, .45);
+      whites(c, r, this.eyes);
+      Ln(c, [[r * .62, r * .3], [r * 1.0, r * .78]], k.col, 4.2);
+      E(c, r * 1.02, r * .86, r * .23, r * .18, '#5d5866', 1.2);
+    },
+  },
+  // Adler: brauner Körper, weißer Kopf, gelber Hakenschnabel, gelbe Fänge; Bild 0 Flügel oben, Bild 1 unten
+  adler: {
+    eyes: eyePair(.72, -.46, .15),
+    body(c, r, k, f) {
+      const wing = (dx, col) => {
+        if (!f) poly(c, r, [[dx - .3, -.15], [dx - 1.15, -1.3], [dx - .75, -1.02], [dx - .32, -1.3], [dx + .25, -.25]], col);
+        else poly(c, r, [[dx - .3, -.05], [dx - 1.3, .55], [dx - .78, .5], [dx - .35, .8], [dx + .25, .1]], col);
+      };
+      wing(.25, shade(k.col, -.3));
+      poly(c, r, [[-.75, -.08], [-1.45, -.3], [-1.55, .05], [-1.42, .26], [-.75, .25]], k.dk);
+      Ln(c, [[-r * .15, r * .5], [-r * .2, r * .85]], '#e8b33a', 1.5); Ln(c, [[r * .12, r * .5], [r * .16, r * .85]], '#e8b33a', 1.5);
+      E(c, -r * .1, r * .05, r * .9, r * .55, k.col);
+      scarf(c, r, k, .3, -.05, 1.6, .5);
+      wing(-.05, k.col);
+      E(c, r * .7, -r * .42, r * .45, r * .4, '#f4f1ea');
+      poly(c, r, [[1.05, -.5], [1.48, -.34], [1.34, -.04], [1.24, -.2], [1.06, -.2]], '#f2b933', 1.1);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Büffel: dunkler Körper mit Buckel, zottiger Kopf, helle geschwungene Hörner
+  bueffel: {
+    eyes: eyePair(1.0, -.32, .15),
+    body(c, r, k, f) {
+      const l = f ? .18 : -.18;
+      for (const [x, i] of [[-.75, 0], [-.4, 1], [.35, 0], [.7, 1]]) Ln(c, [[x * r, r * .45], [(x + (i ? l : -l)) * r, r * .95]], k.dk, 2.8);
+      Ln(c, [[-r * 1.08, -r * .05], [-r * 1.35, r * .42]], k.dk, 1.6); E(c, -r * 1.36, r * .46, r * .08, r * .1, k.dk, .9);
+      E(c, -r * .05, r * .12, r * 1.15, r * .64, k.col);
+      E(c, r * .35, -r * .22, r * .6, r * .5, shade(k.col, -.18));
+      E(c, r * .98, -r * .12, r * .42, r * .4, k.dk);
+      E(c, r * 1.3, r * .06, r * .21, r * .17, '#8a7462', 1.1);
+      E(c, r * 1.38, r * .02, r * .04, r * .035, O, 0);
+      Ln(c, [[r * .84, -r * .42], [r * .62, -r * .72], [r * .78, -r * .98]], '#eadfc8', 2.2);
+      Ln(c, [[r * 1.12, -r * .44], [r * 1.3, -r * .74], [r * 1.14, -r * .98]], '#eadfc8', 2.2);
+      scarf(c, r, k, .62, .2, 1.65, .5);
+      whites(c, r, this.eyes);
+    },
+  },
+});
+
+// Elefant (Boss-Sticker): Drehpunkte im Rig (r-Einheiten): Kopfgruppe am Hals; Rüssel und Ohr in der Kopfgruppe
+export const ELE_GEO = { head: [.6, -.3], trunk: [.78, .06], ear: [.1, -.14] };
+BOSS_GEO.elefant = ELE_GEO;
+DEF.elefant = {
+  boss: true, eyeGroup: 'head', eyes: eyePair(.5, -.14, .11),
+  shadow: [1.25, .3, .98], ring: [1.4, .4, .95], pivot: [0, 1], top: -1.3, crown: -1.4, iconFit: [3.2, .28, .02],
+  corpseBody: 'corpse',
+  parts: {
+    // Körper: ferne Beine (dunkler), Schwanz, Rumpf mit Falten, nahe Beine mit Zehennägeln; f = Schritt
+    body: {
+      frames: 2,
+      draw(c, r, k, f) {
+        const s = f ? .07 : -.07, leg = (x, col) => {
+          RR(c, (x - .14) * r, r * .28, r * .28, r * .72, r * .1, col);
+          for (let i = -1; i <= 1; i++) E(c, (x + i * .08) * r, r * .96, r * .045, r * .035, '#f3ead8', .7);
+        };
+        leg(-.55 - s, k.dk); leg(.42 + s, k.dk);
+        Ln(c, [[-r * 1.02, -r * .05], [-r * 1.2, r * .48]], k.dk, 1.6); E(c, -r * 1.21, r * .52, r * .06, r * .09, O, 0);
+        E(c, -r * .1, r * .05, r * 1.0, r * .62, k.col);
+        c.strokeStyle = shade(k.col, -.25); c.lineWidth = 1;
+        for (const x of [-.6, -.35]) { c.beginPath(); c.arc(x * r, r * .15, r * .22, -.9, .9); c.stroke(); }
+        leg(-.3 + s, k.col); leg(.68 - s, k.col);
+      },
+    },
+    // Decke in Teamfarbe auf dem Rücken, mit goldenem Saum und Fransen
+    blanket: {
+      team: true,
+      draw(c, r, k) {
+        poly(c, r, [[-.72, -.5], [.32, -.56], [.4, .12], [.0, .26], [-.7, .18]], k.shield, 1.3);
+        Ln(c, [[-r * .66, r * .1], [-r * .02, r * .18], [r * .34, r * .06]], '#ffd25a', 1.4, false);
+        c.strokeStyle = '#ffd25a'; c.lineWidth = .9; c.beginPath();
+        // Fransen am unteren Rand (−0,7|0,18 → 0|0,26 → 0,4|0,12)
+        for (let i = 0; i < 7; i++) { const x = -.64 + i * .14, y = x < 0 ? .18 + (x + .7) * .08 / .7 : .26 - x * .35; c.moveTo(x * r, y * r); c.lineTo(x * r, (y + .1) * r); }
+        c.stroke();
+        E(c, -r * .18, -r * .18, r * .1, r * .1, '#ffd25a', 1);
+      },
+    },
+    // Kopf (Drehpunkt am Hals): Schädel mit Stirnbuckel, Mund, Stoßzähne, Augenweiß
+    head: {
+      draw(c, r, k) { this.base(c, r, k); whites(c, r, DEF.elefant.eyes); },
+      base(c, r, k) {
+        E(c, r * .36, -r * .02, r * .5, r * .48, k.col);
+        E(c, r * .3, -r * .38, r * .3, r * .16, k.col, 0);
+        c.beginPath(); c.moveTo(r * .5, r * .3); c.quadraticCurveTo(r * .62, r * .4, r * .72, r * .3); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+        c.beginPath(); c.moveTo(r * .62, r * .26); c.quadraticCurveTo(r * .95, r * .52, r * 1.08, r * .26);
+        c.lineWidth = 4.4; c.strokeStyle = O; c.stroke(); c.lineWidth = 2.4; c.strokeStyle = '#f6f0e0'; c.stroke();
+      },
+    },
+    // Rüssel (Drehpunkt am Ansatz, hängt nach unten, Spitze nach vorn eingerollt), mit Ringfalten
+    trunk: {
+      draw(c, r, k) {
+        const P = [[0, 0], [.12, .38], [.08, .72], [.24, .88]], W = [.24, .19, .13];
+        for (let i = 0; i < 3; i++) { c.lineWidth = W[i] * r + 2.4; c.strokeStyle = O; c.beginPath(); c.moveTo(P[i][0] * r, P[i][1] * r); c.lineTo(P[i + 1][0] * r, P[i + 1][1] * r); c.stroke(); }
+        for (let i = 0; i < 3; i++) { c.lineWidth = W[i] * r; c.strokeStyle = k.col; c.beginPath(); c.moveTo(P[i][0] * r, P[i][1] * r); c.lineTo(P[i + 1][0] * r, P[i + 1][1] * r); c.stroke(); }
+        c.strokeStyle = shade(k.col, -.3); c.lineWidth = .9; c.beginPath();
+        for (const q of [.25, .45, .62]) { const y = q * r, x = (q < .4 ? q * .3 : .12 - (q - .4) * .12) * r; c.moveTo(x - r * .08, y); c.lineTo(x + r * .08, y + r * .02); }
+        c.stroke();
+        E(c, r * .25, r * .9, r * .07, r * .05, shade(k.col, -.3), .9);
+      },
+    },
+    // Ohr (Drehpunkt am Ansatz): großer Lappen nach hinten unten, innen rosa
+    ear: {
+      draw(c, r, k) {
+        c.beginPath(); c.moveTo(r * .05, -r * .3); c.quadraticCurveTo(-r * .45, -r * .55, -r * .6, -r * .05);
+        c.quadraticCurveTo(-r * .62, r * .42, -r * .12, r * .48); c.quadraticCurveTo(r * .08, r * .2, r * .05, -r * .3); c.closePath();
+        c.fillStyle = shade(k.col, -.06); c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+        E(c, -r * .27, r * .05, r * .22, r * .26, '#e2b3b0', 0, null, -.2);
+      },
+    },
+    // liegende Leiche: ganze Figur (keine Pupillen)
+    corpse: { team: true, draw(c, r, k) { DEF.elefant.compose(c, r, k, false); } },
+  },
+  compose(c, r, k, pupils) {
+    const P = this.parts, G = ELE_GEO;
+    P.body.draw(c, r, k, 0); P.blanket.draw(c, r, k);
+    c.save(); c.translate(G.head[0] * r, G.head[1] * r);
+    P.head.draw(c, r, k);
+    c.save(); c.translate(G.ear[0] * r, G.ear[1] * r); P.ear.draw(c, r, k); c.restore();
+    c.save(); c.translate(G.trunk[0] * r, G.trunk[1] * r); P.trunk.draw(c, r, k); c.restore();
+    if (pupils) for (const p of [this.eyes.L, this.eyes.R]) pupil(c, r, this.eyes, p);
+    c.restore();
+  },
+};
+
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
 // deren Körper die Teamfarbe trägt (TINT), der Ritter (Schild in Teamfarbe) und der Ghul (Lumpen in Teamfarbe, k.shield).
 export const TEAM_KEYS = ['', 'blau', 'rot', 'gruen', 'gelb'];
 export const TEAM_INDEX = { blau: 1, rot: 2, gruen: 3, gelb: 4 };
-const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul';
+const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul' || TEAM_ACCENT.has(t);   // Task 5: Halstuch, Decke
 
 function colors(t, vi) {
   const tc = vi ? TEAMS[TEAM_KEYS[vi]].body : null;

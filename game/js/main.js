@@ -176,6 +176,7 @@ function enterSandbox() {
     world.teamMode = s.teamMode;
     for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {
       const a = y * s.GW + x, b = y * world.GW + x;
+      if (s.towner[a] === 2) continue;   // Steinwände der Magier (spells.js) gehörten zur Schlacht
       world.terr[b] = s.terr[a]; world.towner[b] = s.towner[a]; world.whp[b] = s.whp[a];
     }
     for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = u.hp; }
@@ -490,7 +491,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -575,6 +576,23 @@ const scenes = {
       if (type === 'sani') for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', W * .3 + 26, y - 20 + k * 20, 'blau'); a.hp = .4 * a.T.hp; }
       for (let k = 0; k < 6; k++) spawn(world, foes[(i + (k % 2)) % 4], W * .5 + (k % 3) * 16, y + ((k / 3 | 0) - .5) * 16, 'rot');
     });
+  },
+  // Zauberbuch (Spez. #31, Task 3): sechs blaue Magier. Oben drei dicht beieinander gegen einen dichten Kriegerblock
+  // (Feuerball, dann Meteor mit Kanalstrahlen); darunter je ein einzelner gegen einen Bienenschwarm (Blitz, Windstoß),
+  // gegen zwei Ritter (Blitz, dann Windstoß und Steinwand, wenn sie heran sind) und gegen einen Geist (Blitz auf
+  // einen Flieger). Die Magier zaubern ab der ersten Sekunde.
+  magier() {
+    world.teamMode = true;
+    const W = world.W, H = world.H, x = W * .26;
+    for (let k = 0; k < 3; k++) spawn(world, 'magier', x - (k === 1 ? 18 : 0), H * .22 + (k - 1) * 22, 'blau');
+    placeRect(world, 'krieger', 12, (x + 190) / W, .17, (x + 240) / W, .27, 'rot');
+    spawn(world, 'magier', x, H * .48, 'blau');
+    placeCircle(world, 'biene', 14, (x + 210) / W, .48, 22 / H, 'rot');
+    spawn(world, 'magier', x, H * .68, 'blau');
+    spawn(world, 'ritter', x + 200, H * .66, 'rot'); spawn(world, 'ritter', x + 215, H * .7, 'rot');
+    spawn(world, 'magier', x, H * .88, 'blau');
+    spawn(world, 'geist', x + 210, H * .88, 'rot');
+    for (const u of world.units) if (u.type === 'magier') u.cd = .3 + world.rng() * .5;
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

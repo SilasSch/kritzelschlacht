@@ -260,10 +260,32 @@ function slots(f) {
 }
 
 /* ---------- Marsch ---------- */
-function charge(f, hold) {
+// Auflösen. Verteilte Ziele (Nachtrag 4, #35): jedes Mitglied (vorn zuerst) bekommt den Gegner bis CHARGE_R px mit dem
+// kleinsten Abstand² · (1 + CHARGE_CLAIM · k), k = Römer dieses Blocks, die ihn schon gewählt haben (Fliehende zählen
+// vierfach so weit wie in world.nearestEnemy; Hubschrauber und Fledermausform nie). Das Ziel hält CHARGE_HOLD s
+// (u.rt), danach sucht combat.think wie sonst. Ohne Gegner in CHARGE_R bleibt u.tg leer (think sucht sofort).
+export const CHARGE_R = 160, CHARGE_CLAIM = 1, CHARGE_HOLD = 1;
+const CLAIMS = new Map();
+let CH_W = null, CH_F = null, CH_U = null, CH_B = null, CH_S = 0;
+function chargeTest(v) {
+  if (v.type === 'heli' || isBat(v) || factionOf(CH_W, v) === CH_F) return;
+  const dx = v.x - CH_U.x, dy = v.y - CH_U.y, d2 = dx * dx + dy * dy;
+  if (d2 > CHARGE_R * CHARGE_R) return;
+  const s = d2 * (isFleeing(v) ? 4 : 1) * (1 + CHARGE_CLAIM * (CLAIMS.get(v) || 0));
+  if (s < CH_S) { CH_S = s; CH_B = v; }
+}
+function charge(world, f, hold) {
   f.state = 'charge'; f.holdT = hold; f.vx = 0; f.vy = 0;
   const m = f.m;
-  for (let k = 0; k < m.length; k++) { const u = m[k]; u.formOn = false; u.formFree = false; u.formVx = 0; u.formVy = 0; u.formVol = -1; }
+  CH_W = world; CH_F = f.faction;
+  for (let k = 0; k < m.length; k++) {
+    const u = m[k]; u.formOn = false; u.formFree = false; u.formVx = 0; u.formVy = 0; u.formVol = -1;
+    if (!u.alive || isFleeing(u)) continue;
+    CH_U = u; CH_B = null; CH_S = Infinity;
+    query(world, u.x, u.y, CHARGE_R, chargeTest);
+    if (CH_B) { u.tg = CH_B; u.rt = CHARGE_HOLD; u.pathT = 0; u.lofWait = 0; CLAIMS.set(CH_B, (CLAIMS.get(CH_B) || 0) + 1); }
+  }
+  CH_W = null; CH_F = null; CH_U = null; CH_B = null; CLAIMS.clear();
 }
 
 // Platz auf oder bis SLOT_MARGIN px neben Lava/Mauer (der Körper ragte sonst hinein, ein Schubs genügt)
@@ -312,11 +334,11 @@ function march(world, f, dt) {
   const jammed = free * 2 > n + free;
   if (n > 0) { ix /= n; iy /= n; } else { ix = f.cx; iy = f.cy; }
   // Gegner vor der Front oder an der Flanke: auflösen
-  if (front && enemyWithin(world, f.faction, front.x, front.y, FORM.ENGAGE)) { charge(f, 0); return; }
+  if (front && enemyWithin(world, f.faction, front.x, front.y, FORM.ENGAGE)) { charge(world, f, 0); return; }
   const tick = (world.time * 60) | 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (u.alive && !isFleeing(u) && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
+    if (u.alive && !isFleeing(u) && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(world, f, 0); return; }
   }
   // Speerwurf: Uhr ab dem ersten Gegner ≤ PILUM_MAX vor der Front (die Reihen werfen danach gestaffelt)
   if (f.volT >= 0) f.volT += dt;
@@ -345,7 +367,7 @@ function march(world, f, dt) {
   // Festhängen: tatsächliche Lage kommt STUCK s lang keine STUCK_PX weit
   if (t) {
     if (!jammed && Math.hypot(ix - f.sx, iy - f.sy) >= STUCK_PX) { f.sx = ix; f.sy = iy; f.stuckT = 0; }
-    else { f.stuckT += dt; if (f.stuckT >= FORM.STUCK) { charge(f, FORM.STUCK); return; } }
+    else { f.stuckT += dt; if (f.stuckT >= FORM.STUCK) { charge(world, f, FORM.STUCK); return; } }
   } else { f.sx = ix; f.sy = iy; f.stuckT = 0; }
   const d0 = f.oD[0], S = FORM.SPACING;
   for (let k = 0; k < m.length; k++) {

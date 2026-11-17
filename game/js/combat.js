@@ -629,22 +629,47 @@ function holdSlot(world, u, dt) {
 // Schritt, in dem die Reihe werfen darf (die Reihe wirft zugleich), danach alle PILUM_SCAN_T s (+ id % 4 · PILUM_STAGGER,
 // gestaffelt wie morale.FLEE_SCAN). Takt über u.rt: im Block braucht der Römer es nicht (holdSlot hält u.tg leer,
 // nach dem Auflösen sucht think wegen u.tg = null sofort ein Ziel).
-export const PILUM_SCAN_T = .1, PILUM_STAGGER = .02;
+// Verteilte Ziele (Nachtrag 4, #35): ist der nächste Gegner mindestens PILUM_MIN entfernt, wählt der Römer unter den
+// Gegnern in [PILUM_MIN, PILUM_MAX] den mit dem kleinsten Abstand² · (1 + PILUM_CLAIM · k), k = Speere seiner Fraktion,
+// die gerade fliegen und höchstens PILUM_CLAIM_R px neben dem Gegner landen. So verteilt sich die Salve, statt dass
+// alle auf den nächsten Gegner werfen (die Reihen werfen nacheinander und sehen die Speere der Reihe davor).
+export const PILUM_SCAN_T = .1, PILUM_STAGGER = .02, PILUM_CLAIM = 1.5, PILUM_CLAIM_R = 20;
 export const PILUM_SCAN = { calls: 0, cells: 0 };
+const PC_N = 16, PC_U = new Array(PC_N).fill(null), PC_D = new Float64Array(PC_N);
+const PL_N = 64, PL_X = new Float64Array(PL_N), PL_Y = new Float64Array(PL_N);
 function pilumTarget(world, u) {
   const { HW, HH, hash } = world, f = factionOf(world, u), R = FORM.PILUM_MAX, ux = u.x, uy = u.y, PIL_MAX2 = R * R;
+  const MIN2 = FORM.PILUM_MIN * FORM.PILUM_MIN;
   const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
   const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
   PILUM_SCAN.calls++; PILUM_SCAN.cells += (gx1 - gx0 + 1) * (gy1 - gy0 + 1);
-  let best = null, bd = Infinity;
+  let best = null, bd = Infinity, n = 0;
   for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
       if (!v.alive || v.type === 'heli') continue;
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
-      if (d2 <= PIL_MAX2 && d2 < bd && factionOf(world, v) !== f) { bd = d2; best = v; }
+      if (d2 > PIL_MAX2 || factionOf(world, v) === f) continue;
+      if (d2 < bd) { bd = d2; best = v; }
+      if (d2 >= MIN2 && n < PC_N) { PC_U[n] = v; PC_D[n] = d2; n++; }
     }
+  }
+  // zu nah (nächster unter PILUM_MIN: kein Wurf, throwPilum) oder nur einer in Wurfweite
+  if (!best || bd < MIN2 || n < 2) { for (let k = 0; k < n; k++) PC_U[k] = null; return best; }
+  // Landepunkte der fliegenden Speere der eigenen Fraktion
+  let np = 0;
+  const proj = world.proj;
+  for (let k = 0; k < proj.length && np < PL_N; k++) { const p = proj[k]; if (p.kind === 'pilum' && p.f === f) { PL_X[np] = p.x1; PL_Y[np] = p.y1; np++; } }
+  const CR2 = PILUM_CLAIM_R * PILUM_CLAIM_R;
+  let bs = Infinity;
+  for (let k = 0; k < n; k++) {
+    const v = PC_U[k];
+    let c = 0;
+    for (let j = 0; j < np; j++) if ((PL_X[j] - v.x) ** 2 + (PL_Y[j] - v.y) ** 2 <= CR2) c++;
+    const s = PC_D[k] * (1 + PILUM_CLAIM * c);
+    if (s < bs) { bs = s; best = v; }
+    PC_U[k] = null;
   }
   return best;
 }

@@ -495,3 +495,26 @@ test('Verfolgung: 12 Römer holen 10 zurückweichende Schützen schneller ein al
     assert.ok(after < 13 && after < before * .8, `Saat ${seed}: Zusammenstoß nach ${after.toFixed(2)} s statt ${before.toFixed(2)} s`);
   }
 });
+
+// Nachtrag 4 (#35): im Block wählt jeder Römer ein eigenes Ziel, beim Speerwurf (fliegende Speere zählen als vergeben,
+// combat.PILUM_CLAIM) und beim ersten Ziel nach dem Auflösen (formation.CHARGE_CLAIM), statt dass alle denselben treffen
+test('Verteilte Ziele: 12 Römer gegen 10 verteilte Gegner treffen mit Speeren ≥ 4 und greifen nach dem Auflösen ≥ 4 an', () => {
+  for (const seed of [1, 2, 3]) {
+    const w = mk(seed);
+    const rs = block(w, 12, 300, 400);
+    const es = [];
+    for (let k = 0; k < 10; k++) {
+      // 2 Glieder × 5, 40 px Abstand (vorher: 3 verschiedene Speerziele und 3 Ziele nach dem Auflösen)
+      const e = spawn(w, 'krieger', 640 + (k % 2) * 40, 400 + ((k >> 1) - 2) * 40, 'rot');
+      e.T = { ...UNITS.krieger, speed: 0 }; e.hp = 1e6; e.cd = 1e9; es.push(e);
+    }
+    let speared = -1, targets = -1;
+    run(w, 20, () => {
+      const f = w.formations.find(q => rs.some(u => u.form === q.id));
+      if (speared < 0 && f && f.state === 'charge') speared = es.filter(e => e.hp < 1e6).length;
+      else if (speared >= 0) { targets = new Set(rs.filter(u => u.alive && u.tg).map(u => u.tg)).size; return true; }
+    });
+    assert.ok(speared >= 4, `Saat ${seed}: Speere trafen ${speared} verschiedene Gegner`);
+    assert.ok(targets >= 4, `Saat ${seed}: nach dem Auflösen ${targets} verschiedene Ziele`);
+  }
+});

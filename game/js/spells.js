@@ -1,6 +1,7 @@
 // Zauberbuch der Magier und Gruppenzauber Meteor (Spez. #31, Nachtrag 3, Festlegungen 2, 4, 5). Rein: kein DOM, kein
 // PIXI, Zufall nur über world.rng(). Kein ABILITY-Eintrag: das Zauberbuch ersetzt den normalen Wurf des Magiers
-// (combat.think ruft castSpell, sobald er laden darf und ein Ziel in Reichweite hat). Eigene Felder je Einheit
+// (combat.think ruft castSpell, sobald er werfen darf und ein Ziel in Reichweite hat; während er nachlädt, prüft
+// spellReact Windstoß und Steinwand). Eigene Felder je Einheit
 // (world.spawn): windCd, wallCd, meteorCd (Abklingzeiten in s, laufen in combat.think ab), chanId (Kanal des Meteors,
 // 0 = keiner). Name und Text der Zauber stehen in data.js (ABIL.magier), die Karten lesen nur dort.
 //
@@ -21,9 +22,9 @@ const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 // plus sein Radius) → Windstoß, lädt der noch → Steinwand. Sonst nach dem Ziel: dichte Gruppe (mindestens DENSE_N
 // Feinde bis DENSE_R px ums Ziel, das Ziel mitgezählt; auch ein dichter Bienenschwarm) → Feuerball vor Blitz; Flieger
 // oder Einzelziel (kein weiterer Feind bis DENSE_R) → Blitz vor Feuerball; dazwischen (2 bis 3 Feinde am Boden)
-// Feuerball vor Blitz. Kein Feuerball, wenn im Einschlagkreis (Splash
-// des Magiers) mehr Eigene als Feinde stehen (Festlegung 2). Mit SECOND_P (world.rng) nimmt er den zweitbesten
-// passenden Zauber; mit nur einem passenden wird nicht gewürfelt.
+// Feuerball vor Blitz. Kein Feuerball, wenn im Einschlagkreis (Splash des Magiers) mehr Eigene als Feinde stehen
+// (Festlegung 2). Mit SECOND_P (world.rng) nimmt er den zweitbesten passenden Zauber; mit nur einem passenden wird
+// nicht gewürfelt.
 // REACT_T: Takt der Abwehrprüfung zwischen den Würfen (spellReact); RETRY: s bis zum nächsten Versuch einer Steinwand
 // ohne Platz
 export const SPELL = { MELEE_R: 60, DENSE_R: 45, DENSE_N: 4, SECOND_P: .2, RETRY: 2, REACT_T: .2 };
@@ -106,10 +107,11 @@ function rank(world, u, t) {
   if (foes < SPELL.DENSE_N && (t.T.fly || foes <= 1)) { OPT[OPT_N++] = 'lightning'; if (fireOk) OPT[OPT_N++] = 'fireball'; }
   else { if (fireOk) OPT[OPT_N++] = 'fireball'; OPT[OPT_N++] = 'lightning'; }
 }
-export function chooseSpell(world, u, t) {
+function pick(world, u, t) {
   rank(world, u, t);
   return OPT_N > 1 && world.rng() < SPELL.SECOND_P ? OPT[1] : OPT[0];
 }
+export function chooseSpell(world, u, t) { const s = pick(world, u, t); THREAT = null; return s; }
 
 /* ---------- Wurf ---------- */
 // Ein Wurf des Magiers auf das Ziel t in Reichweite (combat.think, wenn u.cd ≤ 0): erst der Meteor (Gruppe bereit?),
@@ -117,7 +119,7 @@ export function chooseSpell(world, u, t) {
 // Platz werden zum Blitz. Danach lädt er wie nach dem alten Feuerball (u.cd).
 export function castSpell(world, u, t) {
   if (!(u.meteorCd > 0) && tryMeteor(world, u)) return 'meteor';
-  let s = chooseSpell(world, u, t);
+  let s = pick(world, u, t);
   const threat = THREAT;
   THREAT = null;
   const T = u.T;

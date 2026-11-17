@@ -578,9 +578,9 @@ const scenes = {
     });
   },
   // Zauberbuch (Spez. #31, Task 3): sechs blaue Magier. Oben drei dicht beieinander gegen einen dichten Kriegerblock
-  // (Feuerball, dann Meteor mit Kanalstrahlen); darunter je ein einzelner gegen einen Bienenschwarm (Blitz, Windstoß),
-  // gegen zwei Ritter (Blitz, dann Windstoß und Steinwand, wenn sie heran sind) und gegen einen Geist (Blitz auf
-  // einen Flieger). Die Magier zaubern ab der ersten Sekunde.
+  // (Feuerball, dann Meteor mit Kanalstrahlen); darunter je ein einzelner gegen einen dichten Bienenschwarm (Feuerball,
+  // Blitz, Windstoß, wenn sie heran sind), gegen zwei Ritter (Blitz, dann Windstoß und Steinwand, wenn sie heran sind)
+  // und gegen einen Geist (Blitz auf einen Flieger, Windstoß). Die Magier zaubern ab der ersten Sekunde.
   magier() {
     world.teamMode = true;
     const W = world.W, H = world.H, x = W * .26;

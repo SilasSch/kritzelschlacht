@@ -436,3 +436,24 @@ test('Gelände: Gefahr und Tempo nach TERRAIN, gleich wie physics.integrate', ()
     assert.ok(Math.abs((u.x - x) / DT - 50 * TERR_SPEED[TERRAIN[k].id]) < 1e-6, `${k}: ${((u.x - x) / DT).toFixed(2)}`);
   }
 });
+
+// Finale Prüfung: LINK 110 (Task 7) festhalten. Zwei Gruppen aus je 4 Römern (2 × 2, Abstand 22) übereinander;
+// ihre nächsten Mitglieder liegen gap px auseinander. Bis LINK verbindet die Kette sie zu einem Block.
+test('LINK: Gruppen 100 px auseinander bilden einen Block, 120 px auseinander zwei', () => {
+  const blocks = gap => {
+    const w = mk();
+    const a = block(w, 4, 300, 400, 'blau', 2), b = block(w, 4, 300, 400 + 22 + gap, 'blau', 2);
+    spawn(w, 'krieger', 1300, 400, 'rot');
+    run(w, .05);
+    return { w, a, b };
+  };
+  const one = blocks(100);
+  assert.equal(one.w.formations.length, 1);
+  assert.equal(one.w.formations[0].n, 8);
+  assert.ok([...one.a, ...one.b].every(u => u.formOn && u.form === one.a[0].form));
+  const two = blocks(120);
+  assert.equal(two.w.formations.length, 2);
+  assert.ok(two.w.formations.every(f => f.n === 4));
+  assert.notEqual(two.a[0].form, two.b[0].form);
+  assert.ok(FORM.LINK > 100 && FORM.LINK < 120, `LINK ${FORM.LINK}`);
+});

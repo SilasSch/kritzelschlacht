@@ -454,3 +454,14 @@ test('roemer: Schild vorn im Block, seitlich bei charge; Speer in der Hand bis z
   const k = poseUnit(mk('krieger'), 1);
   assert.equal(k.shieldFront, 0); assert.equal(k.weaponFrame, 0); assert.equal(k.weaponLift, 0);
 });
+
+test('Angstaugen (Spez. #27): Brauen als eigenes Teil für Figuren mit Augen, Bosse nur Pupillen und Tropfen', async () => {
+  const { rigFear, drawRigPart } = await import('../game/js/render/rig.js');
+  for (const t of Object.keys(UNITS)) {
+    const F = rigFear(t);
+    const eyes = !['ritter', 'biene', 'panzer', 'heli', 'drache'].includes(t);
+    assert.equal(!!(F && F.brow), eyes, t);
+  }
+  const c = mockCtx(); drawRigPart(c, 'krieger', 'brow', 0, 0);
+  assert.ok(c.log.strokes.includes('#2a2a33'), 'Brauen als Striche');
+});

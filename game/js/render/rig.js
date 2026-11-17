@@ -587,6 +587,17 @@ function drawLid(c, r, e) {
   }
 }
 
+// Angstbrauen (Rückzug, Spez. #27): je Auge ein Strich darüber, innen (zur Mitte zwischen den Augen) höher
+// gezogen als außen. Ein Teil für beide Augen wie das Lid; der Renderer zeichnet es nur bei pose.fear.
+function drawBrow(c, r, e) {
+  const mid = (e.L[0] + e.R[0]) / 2;
+  for (const p of [e.L, e.R]) {
+    const x = p[0] * r, y = p[1] * r, s = e.s * r, inn = p[0] < mid ? 1 : -1;
+    c.beginPath(); c.moveTo(x - inn * s * .85, y - s * .8); c.quadraticCurveTo(x, y - s * 1.1, x + inn * s * .75, y - s * 1.3);
+    c.lineWidth = 1.5; c.strokeStyle = O; c.stroke();
+  }
+}
+
 // Zeichenradius: Bosse größer (BOSS_VIS), alle anderen r
 export const drawR = t => U[t].r * (BOSS_VIS[t] || 1);
 const EYE_PARTS = new Set(['shadow', 'pupilL', 'pupilR', 'lid']);
@@ -606,6 +617,7 @@ function drawPart(c, t, part, vi, f) {
     case 'body': D.body(c, r, k, f); break;
     case 'pupilL': case 'pupilR': E(c, 0, 0, D.eyes.prx * r, D.eyes.pry * r, O, 0); break;
     case 'lid': if (D.lid) D.lid(c, r, D.eyes); else drawLid(c, r, D.eyes); break;
+    case 'brow': drawBrow(c, r, D.eyes); break;
     case 'headgear': D.headgear(c, r, k, f); break;
     case 'weapon': D.weapon.draw(c, r, k, f); break;
     case 'shield': D.shield.draw(c, r, k, f); break;
@@ -629,6 +641,8 @@ function partSpec(t, part) {
     case 'lid': return D.eyes && D.lid !== false ? { nv: 1, nf: 1, scanV: 0, pivot: [0, 0] } : null;
     case 'headgear': return D.headgear ? { nv: tv, nf: D.hgFrames || 1, scanV: 0, pivot: [0, 0] } : null;
     case 'weapon': return D.weapon ? { nv: tv, nf: D.weapon.frames || 1, scanV: 0, pivot: [D.weapon.grip[0] * r, D.weapon.grip[1] * r] } : null;
+    // Angstbrauen normaler Figuren mit Augen (FEAR_PARTS)
+    case 'brow': return D.eyes && !D.boss ? { nv: 1, nf: 1, scanV: 0, pivot: [0, 0] } : null;
     // Zusatzteil (EXTRA_PARTS) normaler Figuren, um seine Mitte gezeichnet (Lage aus der Pose)
     case 'shield': return D.shield ? { nv: tv, nf: 1, scanV: 0, pivot: [0, 0] } : null;
   }
@@ -637,8 +651,11 @@ function partSpec(t, part) {
 // Zusatzteile normaler Figuren über RIG_PARTS hinaus (Römer: Schild); ohne bleibt rig[name] leer
 export const EXTRA_PARTS = ['shield'];
 const extraNames = t => (DEF[t].parts ? [] : EXTRA_PARTS.filter(n => DEF[t][n]));
-// alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile, sonst die vorhandenen Zusatzteile
-const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : [...RIG_PARTS, ...extraNames(t)]);
+// Angstteile (Spez. #27): Brauen für normale Figuren mit Augen; Bosse zeigen nur kleine Pupillen und den Tropfen
+export const FEAR_PARTS = ['brow'];
+const fearNames = t => (DEF[t].parts || !DEF[t].eyes ? [] : FEAR_PARTS);
+// alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile, sonst die vorhandenen Zusatz- und Angstteile
+const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : [...RIG_PARTS, ...extraNames(t), ...fearNames(t)]);
 
 export const spriteSize = r => r * 4.6 + 14;
 
@@ -792,6 +809,14 @@ export function rigExtras(t) {
   if (!names.length) return null;
   const out = {};
   for (const part of names) { const sp = partSpec(t, part); out[part] = { variants: sp.nv, frames: sp.nf }; }
+  return out;
+}
+// Angstteile (FEAR_PARTS) eines Typs, { brow: true } bzw. null ohne
+export function rigFear(t) {
+  const names = DEF[t] ? fearNames(t) : [];
+  if (!names.length) return null;
+  const out = {};
+  for (const part of names) out[part] = !!partSpec(t, part);
   return out;
 }
 // Boss-Teile (alle Teile aus DEF.parts) mit Varianten und Bildern; null für normale Figuren

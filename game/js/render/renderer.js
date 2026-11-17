@@ -200,6 +200,23 @@ export function createRenderer(canvasHost) {
     c.closePath(); c.fillStyle = k === 1 ? '#8d929c' : '#a3a8b2'; c.fill();
     c.lineWidth = 1; c.lineJoin = 'round'; c.strokeStyle = '#5b5f69'; c.stroke();
   }));
+  // Schweißtropfen der Fliehenden (Spez. #27): hellblauer Tropfen mit Umriss und Glanzpunkt, DROP_H Welt-px hoch
+  // (Spitze oben), Drehpunkt in der Mitte
+  const DROP_RES = 4, DROP_H = 5;
+  const dropTex = canvasTex(Math.ceil((DROP_H * .7 + 2) * DROP_RES), Math.ceil((DROP_H + 2) * DROP_RES), c => {
+    c.setTransform(DROP_RES, 0, 0, DROP_RES, c.canvas.width / 2, c.canvas.height / 2);
+    const h = DROP_H / 2, w = DROP_H * .33;
+    c.beginPath(); c.moveTo(0, -h); c.quadraticCurveTo(w * .9, h * .05, w, h * .35); c.arc(0, h * .35, w, 0, Math.PI);
+    c.quadraticCurveTo(-w * .9, h * .05, 0, -h); c.closePath();
+    c.fillStyle = '#8fd3ff'; c.fill(); c.lineWidth = .8; c.lineJoin = 'round'; c.strokeStyle = O; c.stroke();
+    c.beginPath(); c.ellipse(-w * .35, h * .3, w * .22, w * .32, 0, 0, TAU); c.fillStyle = '#fff'; c.fill();
+  });
+  // Tropfen der Höhe hgt an (x, y) in der Matrix P, rinnt über die Phase q (pose.sweat) um slide herab, blendet
+  // am Anfang ein und am Ende aus
+  function sweatDrop(Q, P, x, y, hgt, slide, q) {
+    const a = q < .12 ? q / .12 : q > .75 ? (1 - q) / .25 : 1, k = hgt / DROP_H / DROP_RES;
+    Q.addPart(dropTex, P, x, y + slide * q, 0, k, k, .5, .5, 0xffffff, a);
+  }
   // Stein je Brocken bleibt fest (die Liste wird verdichtet, Indizes wandern)
   const stoneOf = new WeakMap();
   let stoneNext = 0;
@@ -331,13 +348,18 @@ export function createRenderer(canvasHost) {
       if (rig.shield && !p.shieldFront) shieldPart(Q, rig, p, vi, inv);
       let f = X.body[vi]; part(Q, UM, f[fr] || f[0], A.body, 0, 0, inv);
       if (rig.pupilL) {
-        // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
-        const e = rig.eyes, ox = p.lookX * face * rig.eyeR, oy = p.lookY * rig.eyeR;
-        part(Q, UM, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
-        part(Q, UM, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+        // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung (Angst: kleiner)
+        const e = rig.eyes, ox = p.lookX * face * rig.eyeR, oy = p.lookY * rig.eyeR, k = inv * p.pupil;
+        part(Q, UM, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv, 0, 0xffffff, 1, k, k);
+        part(Q, UM, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv, 0, 0xffffff, 1, k, k);
       }
       if (rig.lid && p.blink) part(Q, UM, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[tm ? TEAM_INDEX[u.team] || 0 : 0]);
       if (rig.headgear) { f = X.headgear[vi]; part(Q, UM, f[fr] || f[0], A.headgear, 0, 0, inv); }
+      // Angst (Flucht): hochgezogene Brauen über der Kopfbedeckung, Schweißtropfen am Hinterkopf
+      if (p.fear) {
+        if (rig.brow) part(Q, UM, rig.brow, A.brow, 0, 0, inv);
+        sweatDrop(Q, UM, -rig.r * .85, -rig.r * .6, rig.r * .65, rig.r * .5, p.sweat);
+      }
       if (rig.weapon && !back) weaponPart(Q, rig, p, vi, pr, inv);
       // Römer im Block: Schild vor dem Körper, über der Waffe
       if (rig.shield && p.shieldFront) shieldPart(Q, rig, p, vi, inv);
@@ -399,10 +421,12 @@ export function createRenderer(canvasHost) {
   // (Weltrichtung lookX/lookY) wird in die Gruppe zurückgerechnet
   function bossEyes(Q, P, rig, p, face, rot, fx, ti, inv) {
     const lx = p.lookX * face, ly = p.lookY, c = Math.cos(rot), s = Math.sin(rot), e = rig.eyes, A = rig.anchors;
-    const ox = (lx * c + ly * s) * fx * rig.eyeR, oy = (-lx * s + ly * c) * rig.eyeR;
-    part(Q, P, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv);
-    part(Q, P, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv);
+    const ox = (lx * c + ly * s) * fx * rig.eyeR, oy = (-lx * s + ly * c) * rig.eyeR, k = inv * p.pupil;
+    part(Q, P, rig.pupilL, A.pupilL, e.L[0] + ox, e.L[1] + oy, inv, 0, 0xffffff, 1, k, k);
+    part(Q, P, rig.pupilR, A.pupilR, e.R[0] + ox, e.R[1] + oy, inv, 0, 0xffffff, 1, k, k);
     if (p.blink) part(Q, P, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[ti]);
+    // Angst (Flucht): nur kleine Pupillen und ein Schweißtropfen neben dem hinteren Auge, keine Brauen
+    if (p.fear) sweatDrop(Q, P, e.L[0] - rig.eyeR * 1.6, e.L[1] - rig.eyeR * .5, rig.eyeR * 1.4, rig.eyeR * 1.2, p.sweat);
   }
   // Teile von hinten nach vorn: Panzer Wanne, Ketten, Turmgruppe (Rohr,
   // Turm, Augen); Heli Rumpf, Kanone, Heckrotor, Augen, Rotorgruppe (Scheibe, Nachzieh-Blatt, Blätter);

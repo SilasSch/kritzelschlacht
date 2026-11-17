@@ -869,8 +869,9 @@ export function think(world, u, dt) {
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
   if (u.tg !== null && u.tg.ashT > 0) u.tg = null;   // Task 6: Asche des Phönix ist kein Ziel
-  // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform)
-  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || (u.tg.batT > 0 && outOfMelee(u, u.tg)) ||
+  // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
+  // Adler oben)
+  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || ((u.tg.batT > 0 || aloft(u.tg)) && outOfMelee(u, u.tg)) ||
       (u.tg.hidden && unseen(u, u.tg))) {   // Task 5: Krokodil taucht ab
     const nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
     // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)

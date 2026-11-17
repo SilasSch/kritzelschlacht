@@ -45,7 +45,8 @@ export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampi
 export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v) || aloft(v)) && groundMelee(u);
 // --- Task 5: Tiere ---
 // Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist
-// (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Anvisieren dürfen sie ihn immer (nearestEnemy), nur schlagen nicht.
+// (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
+// combat.think) wie den Hubschrauber; Fernkämpfer schon.
 export const EAGLE_REACH_Z = 14;
 export const aloft = v => v.type === 'adler' && v.z > EAGLE_REACH_Z;
 // Krokodil (Festlegung 8): versteckt im Wasser (u.hidden, abilities.stepAnimal) sehen es Feinde erst ab HIDE_R px oder
@@ -202,7 +203,8 @@ export function nearestEnemy(world, u) {
         const cell = hash[gy * HW + gx];
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
-          if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v)))) continue;
+          // Nahkämpfer am Boden: kein Hubschrauber, keine Fledermausform, kein Adler oben (Review Task 5: sonst stehen sie unter ihm)
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v) || aloft(v)))) continue;
           if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser

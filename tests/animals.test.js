@@ -265,6 +265,22 @@ test('Adler: Nahkämpfer erreichen ihn oben nicht, unten schon', () => {
   assert.ok(!outOfMelee(s, a));
 });
 
+// Review Task 5, Punkt 1: Nahkämpfer am Boden visieren einen kreisenden Adler nicht an (sonst standen sie untätig unter
+// ihm), wie Hubschrauber und Fledermausform; Fernkämpfer schon
+test('Adler oben: Nahkämpfer wählen ihn nicht als Ziel und lassen ihn bei der Neuwahl fallen, Schützen nicht', () => {
+  const w = mkWorld(), a = spawn(w, 'adler', 300, 400, 'rot'), k = spawn(w, 'krieger', 330, 400, 'blau');
+  const far = dummy(w, 'krieger', 700, 400), s = spawn(w, 'schuetze', 200, 400, 'blau');
+  a.hp = 1e6; a.cd = 1e9; a.abCd = 1e9; k.cd = 1e9;
+  rebuildHash(w);
+  assert.ok(aloft(a));
+  assert.equal(nearestEnemy(w, k), far, 'Krieger: der Adler oben zählt nicht');
+  assert.equal(nearestEnemy(w, s), a, 'Schütze: schon');
+  k.tg = a; k.rt = 5; think(w, k, DT);
+  assert.equal(k.tg, far, 'Neuwahl: Adler oben fällt weg');
+  a.z = 10; rebuildHash(w);
+  assert.equal(nearestEnemy(w, k), a, 'unten wieder ein Ziel');
+});
+
 test('Adler pickt: sinkt zum Biss unter die Reichweite der Nahkämpfer und steigt danach wieder', () => {
   const w = mkWorld(), a = spawn(w, 'adler', 300, 400, 'blau'), k = dummy(w, 'krieger', 330, 400);
   a.abCd = 1e9; rebuildHash(w);

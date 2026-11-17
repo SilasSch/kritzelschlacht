@@ -156,6 +156,10 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 
 ## Geplant (vom Nutzer gewünscht, noch nicht ausgearbeitet)
 
+- **UI-Fehler bei den Römern** in der unteren Leiste (vom Nutzer gemeldet, Details offen).
+- **Bomben ausweichen:** Einheiten weichen geworfenen Bomben mit einer gewissen Wahrscheinlichkeit aus.
+- **Schöneres Wasser.**
+- **Weitere Verbesserungen** an Verhalten, Grafik und Physik: Vorschläge von Claude, Auswahl durch den Nutzer offen.
 - **Battle-Modus:** Man baut zwei Seiten auf, beim Start kämpfen sie gegeneinander, danach gibt es Statistiken. Wird nach Nachtrag 3 im Gespräch ausgearbeitet.
 
 ## Zurückgestellt

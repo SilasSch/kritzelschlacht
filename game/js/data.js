@@ -123,6 +123,10 @@ export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter',
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
 
+// M5 (Die Festung): Budget 110 → 80 und 26 statt 16 Schützen (finale Prüfung der Römer-Runde). Die Schilde halten die
+// Pfeile von vorn, die Feuerbälle der Magier treffen innen oft die eigene Mauer und die eigenen Schützen: 36 Römer
+// gewannen 6–8/8, schon 23 (unter par) holten drei Sterne. Mit den Römerwerten allein nicht zu trennen (gleiche
+// Stärke je Punkt wie in den Duellen roemer > schuetze und roemer > krieger). Smart (14 Magier) gewinnt weiter 8/8.
 // Placement: ['rect',type,n,x0,y0,x1,y1] | ['circle',type,n,cx,cy,rr] | ['unit',type,x,y]
 //          | ['tRect',terKey,x0,y0,x1,y1] | ['tCircle',terKey,cx,cy,rr,inner?]
 // Koordinaten: x in Anteilen des Missionsrahmens (world.frameX), y in Anteilen von H, Radien in Anteilen
@@ -132,7 +136,7 @@ export const MISSIONS = [
   {n:'Pfeilregen',budget:100,par:70,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
   {n:'Eiserne Front',budget:110,par:85,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
-  {n:'Die Festung',budget:110,par:70,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',16,.8,.5,.19]]},
+  {n:'Die Festung',budget:80,par:70,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},
   {n:'Wilde Jagd',budget:120,par:90,cats:['tiere','gelaende'],hint:'Nur Tiere und Gelände. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',18,.68,.26,.76,.74],['rect','ritter',14,.8,.3,.86,.7]]},
   {n:'Lavafeld',budget:110,par:85,hint:'Die Lava lässt nur eine Lücke. Bären und Wölfe stürmen durch. Halte sie mit Schützen weit hinten und breit verteilt auf Abstand.',place:[['tRect','lava',.5,0,.56,.42],['tRect','lava',.5,.58,.56,1],['rect','baer',6,.7,.35,.76,.65],['rect','wolf',16,.8,.3,.86,.7]]},
   {n:'Drachenhort',budget:170,par:120,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',80,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},

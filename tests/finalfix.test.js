@@ -49,3 +49,19 @@ test('Fund 3: eine Fähigkeit trifft keine Asche (das Ziel wird vor stepAbility 
   assert.equal(c.seenT <= 0, true, 'kein Packen (seenT bliebe sonst gesetzt)');
   assert.equal(a.state, 'ok');
 });
+
+test('Fund 4: ein versteckt verfluchtes Krokodil ist als Frosch nicht unsichtbar', () => {
+  const w = mkWorld(3);
+  for (let gy = 0; gy < w.GH; gy++) for (let gx = 0; gx < w.GW; gx++) if (gx * CELL < 300) setCell(w, gy * w.GW + gx, TERRAIN.wasser.id);
+  const c = spawn(w, 'krokodil', 290, 300, 'rot');
+  for (let k = 0; k < 4; k++) spawn(w, 'krieger', 100, 100 + k * 20, 'rot');
+  const s = spawn(w, 'schuetze', 700, 300, 'blau'); s.cd = 99;
+  rebuildHash(w); step(w, DT);
+  assert.equal(c.hidden, true, 'Aufbau: Krokodil ist im Wasser versteckt');
+  curseFrog(w, c, 5);
+  assert.equal(c.hidden, false, 'Frosch ist nicht versteckt');
+  c.x = 500;
+  for (let i = 0; i < 30; i++) step(w, DT);
+  assert.equal(c.type, 'frosch');
+  assert.equal(c.hidden, false, 'Frosch außerhalb des Wassers bleibt sichtbar');
+});

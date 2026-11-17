@@ -666,6 +666,7 @@ export function curseFrog(world, v, sec = FROG.T) {
   v.stance = 'stand'; v.stanceT = 0; v.st = 0; v.buffT = 0; v.spdMul = 1; v.dmgMul = 1;
   if (v.T.fly && v.z > 0 && v.state === 'ok') { v.state = 'air'; v.vz = 0; v.peakZ = v.z; v.bounced = true; v.impact = 0; }
   v.frogFrom = v.type; v.frogT = sec; v.type = 'frosch'; v.T = UNITS.frosch; v.fz = 0;
+  v.hidden = false;   // ein verstecktes Krokodil (stepAnimal setzt hidden nur für Krokodile) bliebe sonst als Frosch unsichtbar
   v.tg = null; v.rt = 0; v.mx = 0; v.my = 0; v.swingT = 0;
   emit(world, { type: 'creature', k: 'frog', x: v.x, y: v.y, z: v.z });
   return true;

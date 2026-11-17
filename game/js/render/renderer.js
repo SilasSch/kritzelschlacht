@@ -551,7 +551,8 @@ export function createRenderer(canvasHost) {
         shadowParams(p.z, SH);
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
-      if (p.kind === 'arrow') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+      // pilum (Römerspeer): vorläufig wie ein Pfeil, eigene Zeichnung folgt mit den Römer-Visuals (Task 4)
+      if (p.kind === 'arrow' || p.kind === 'pilum') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
       else if (p.kind === 'bomb' || p.kind === 'mortar') {
         disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
         if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);

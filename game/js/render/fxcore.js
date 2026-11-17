@@ -472,7 +472,8 @@ export function createFxCore(hooks = {}, opt = {}) {
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
       case 'miss':
         if (!take('misc')) break;
-        if (e.kind === 'arrow') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
+        // pilum: vorläufig der steckende Pfeil (eigene Optik in Task 4)
+        if (e.kind === 'arrow' || e.kind === 'pilum') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
         else dots(e.x, e.y, 1, 20, .25, 1.5, 1.5, 0xb8a98a);
         break;
       case 'ignite': {

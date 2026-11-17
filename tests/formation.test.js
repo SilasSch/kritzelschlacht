@@ -227,7 +227,7 @@ test('Lava: sind mehr als die Hälfte der Plätze verbaut, löst sich der Block 
 /* ---------- Speerwurf und Schilde (Spez. #25, Task 3) ---------- */
 
 test('Schild: Konstanten laut Spez.', () => {
-  assert.deepEqual([...SHIELD_KINDS].sort(), ['arrow', 'bullet', 'pilum']);
+  assert.deepEqual([...SHIELD_KINDS].sort(), ['arrow', 'bullet', 'firearrow', 'pilum']);   // Brandpfeil: Vorgabe 5
   assert.equal(SHIELD_MUL, .1);
   assert.equal(SHIELD_COS, .5);
   assert.equal(PILUM_RANK_DT, .15);

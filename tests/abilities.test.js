@@ -5,13 +5,17 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createWorld, spawn, rebuildHash, nearestEnemy } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
-import { think, ignite, PRONE_UP_T } from '../game/js/combat.js';
+import { think, ignite, attack, PRONE_UP_T } from '../game/js/combat.js';
+import { integrate } from '../game/js/physics.js';
 import { MORALE, isFleeing, updateCentroids } from '../game/js/morale.js';
-import { shieldBlocks } from '../game/js/formation.js';
+import { shieldBlocks, SHIELD_KINDS } from '../game/js/formation.js';
 import { poseUnit, projScreen } from '../game/js/render/pose.js';
 import { createFxCore } from '../game/js/render/fxcore.js';
 import { UNITS } from '../game/js/data.js';
-import { ABILITY, stepAbility, scare, cancelAbility, FIRE_KINDS, isFire, HELI_SALVO } from '../game/js/abilities.js';
+import {
+  ABILITY, stepAbility, scare, cancelAbility, FIRE_KINDS, isFire, HELI_SALVO,
+  FIRE_ARROWS, HEAL_WAVE, GRENADE, BARRAGE, RAM, HOWL, ROAR, SPOOK, DIVE, FEARLESS,
+} from '../game/js/abilities.js';
 
 const DT = 1 / 60;
 const mkWorld = (seed = 7) => { const w = createWorld(1400, 800, seed); w.teamMode = true; return w; };
@@ -346,4 +350,298 @@ test('Importkreise: jedes Logikmodul lädt als Einstieg', () => {
     const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(url)});`], { encoding: 'utf8' });
     assert.equal(r.status, 0, `${m}: ${r.stderr}`);
   }
+});
+
+/* ---------- Task 2: Fähigkeiten der bestehenden Einheiten (#30) ---------- */
+const shots = (evs, kind) => evs.filter(e => e.type === 'shot' && e.kind === kind).length;
+const ABIL_NAMES = {
+  heli: 'Raketensalve', schuetze: 'Brandpfeile', sani: 'Heilwelle', soldat: 'Handgranate', moerser: 'Sperrfeuer',
+  panzer: 'Ramme', wolf: 'Heulen', baer: 'Brüllen', geist: 'Spuk', drache: 'Sturzflug',
+};
+// Pfeil im Bogen, der im nächsten Schritt bei (x1, y1) landet
+const arcShot = (w, kind, src, x0, y0, x1, y1) => w.proj.push({ kind, arc: true, x0, y0, x1, y1, t: 0, dur: .01, h: 0,
+  x: x0, y: y0, z: 0, tz: 0, f: src.team, src, dmg: 12, R: 0 });
+
+test('Tabelle: neun neue Fähigkeiten mit den Abklingzeiten aus #30, Kartentexte in data.js', () => {
+  const cds = { schuetze: 20, sani: 20, soldat: 15, moerser: 30, panzer: 25, wolf: 25, baer: 20, geist: 15, drache: 30, heli: 25 };
+  assert.deepEqual(Object.keys(ABILITY).sort(), Object.keys(cds).sort());
+  for (const k in cds) {
+    assert.equal(ABILITY[k].cd, cds[k], k);
+    assert.ok(UNITS[k].abil.some(a => a.n === ABIL_NAMES[k]), `${k}: Kartentext ${ABIL_NAMES[k]}`);
+  }
+  // ohne Fähigkeit bleiben Krieger, Ritter, Reiter, Grenadier, Bienen, MG, Scharfschütze, Panzerfaust (#30)
+  for (const k of ['krieger', 'ritter', 'reiter', 'grenadier', 'biene', 'mg', 'sniper', 'panzerfaust']) assert.equal(ABILITY[k], undefined, k);
+});
+
+test('stepAbility: Typ ohne Fähigkeit (Typwechsel, Froschfluch) setzt ein hängendes abOn zurück', () => {
+  const w = mkWorld(), k = spawn(w, 'krieger', 100, 100, 'blau');
+  k.abOn = true; k.abT = .4; k.abK = 2;
+  assert.equal(stepAbility(w, k, DT), false);
+  assert.equal(k.abOn, false); assert.equal(k.abT, 0); assert.equal(k.abK, 0);
+});
+
+test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an (Generation 0), dann abCd ≈ 20', () => {
+  const w = mkWorld(), s = spawn(w, 'schuetze', 400, 400, 'blau');
+  const K = [];
+  for (let k = 0; k < 5; k++) { const e = dummy(w, 'krieger', 560, 380 + k * 10); e.state = 'stun'; e.stunT = 1e9; K.push(e); }
+  s.abCd = 0; s.cd = 1e9; s.tg = K[0]; s.rt = 5;
+  let n = 0, ign = 0;
+  run(w, 1.5, evs => { n += shots(evs, 'firearrow'); ign += evs.filter(e => e.type === 'ignite').length; });
+  assert.equal(n, FIRE_ARROWS.N); assert.equal(FIRE_ARROWS.N, 3);
+  assert.ok(ign >= 1, `ignite ${ign}`);
+  assert.equal(s.abOn, false);
+  assert.ok(Math.abs(s.abCd - 20) < 1.6, `abCd ${s.abCd}`);
+});
+
+test('Brandpfeile: Römerschild hält den Brandpfeil ab, er zündet nicht; sonst Treffer wie ein Pfeil, dann Brand', () => {
+  assert.ok(SHIELD_KINDS.has('firearrow'));
+  assert.ok(isFire('firearrow'));
+  const w = mkWorld(), R = [];
+  for (let k = 0; k < 8; k++) R.push(spawn(w, 'roemer', 300 - (k % 4) * 26, 400 + ((k / 4 | 0) - .5) * 26, 'blau'));
+  const s = dummy(w, 'schuetze', 1200, 400);
+  run(w, .6);
+  const u = R[0];
+  assert.equal(u.formOn, true);
+  // von vorn auf den Block (Flugrichtung gegen die Blickrichtung): geblockt, kein Feuer
+  arcShot(w, 'firearrow', s, u.x + u.formAx * 200, u.y + u.formAy * 200, u.x, u.y);
+  const evs = [];
+  step(w, DT); evs.push(...w.events); w.events.length = 0;
+  assert.ok(evs.some(e => e.type === 'block' && e.kind === 'firearrow'), 'Schildblock');
+  assert.equal(evs.filter(e => e.type === 'ignite').length, 0);
+  assert.equal(u.burnT, 0);
+  // Ritter ohne Schild: Schaden wie ein Pfeil (×0,35), dann brennt er (Generation 0)
+  const w2 = mkWorld(), s2 = dummy(w2, 'schuetze', 100, 400), r = dummy(w2, 'ritter', 300, 400);
+  r.hp = 200;
+  arcShot(w2, 'firearrow', s2, 100, 400, 300, 400);
+  w2.rng = () => .5;
+  step(w2, DT);
+  assert.ok(w2.events.some(e => e.type === 'ignite'), 'zündet');
+  assert.equal(r.burnGen, 0); assert.ok(r.burnT > 0);
+  assert.ok(Math.abs(200 - r.hp - 12 * .35) < 1e-6, `Schaden ${200 - r.hp}`);
+});
+
+test('Heilwelle: Verbündete in 90 px +25 % ihrer max. LP (gedeckelt), Feinde und Ferne nicht', () => {
+  const w = mkWorld(), s = spawn(w, 'sani', 400, 400, 'blau');
+  s.cd = 1e9;
+  const a = spawn(w, 'krieger', 440, 400, 'blau'), b = spawn(w, 'ritter', 400, 460, 'blau'), c = spawn(w, 'krieger', 340, 420, 'blau');
+  const far = spawn(w, 'krieger', 600, 400, 'blau'), foe = dummy(w, 'krieger', 420, 350);
+  a.hp = .3 * UNITS.krieger.hp; b.hp = .5 * UNITS.ritter.hp; c.hp = .9 * UNITS.krieger.hp; far.hp = 10; foe.hp = 10;
+  rebuildHash(w); updateCentroids(w, DT);
+  s.abCd = 0;
+  think(w, s, DT);
+  assert.equal(HEAL_WAVE.R, 90); assert.equal(HEAL_WAVE.FRAC, .25);
+  assert.ok(Math.abs(a.hp - .55 * UNITS.krieger.hp) < 1e-9, `a ${a.hp}`);
+  assert.ok(Math.abs(b.hp - .75 * UNITS.ritter.hp) < 1e-9, `b ${b.hp}`);
+  assert.equal(c.hp, UNITS.krieger.hp, 'gedeckelt');
+  assert.equal(far.hp, 10); assert.equal(foe.hp, 10);
+  assert.ok(w.events.some(e => e.type === 'ability' && e.k === 'heal'), 'Effekt');
+  assert.ok(Math.abs(s.abCd - 20) < 1e-9);
+  // nur ein Verletzter: keine Welle, neuer Versuch bald
+  const w2 = mkWorld(), s2 = spawn(w2, 'sani', 400, 400, 'blau'), d = spawn(w2, 'krieger', 440, 400, 'blau');
+  d.hp = 20; s2.cd = 1e9; rebuildHash(w2); s2.abCd = 0;
+  think(w2, s2, DT);
+  assert.equal(d.hp, 20); assert.ok(s2.abCd > 0 && s2.abCd < 1);
+});
+
+test('Handgranate: ein Bogenwurf bomb (R 36, Schaden 24) vom Soldaten, nicht in eine Gruppe mit mehr Eigenen', () => {
+  const w = mkWorld(), s = spawn(w, 'soldat', 400, 400, 'blau');
+  s.tg = dummy(w, 'krieger', 530, 400); s.rt = 5;
+  s.abCd = 0; s.cd = 1e9;
+  let n = 0; const bombs = [];
+  run(w, .3, evs => { n += shots(evs, 'bomb'); for (const p of w.proj) if (p.kind === 'bomb' && !bombs.includes(p)) bombs.push(p); });
+  assert.equal(n, 1);
+  assert.equal(bombs.length, 1);
+  assert.equal(bombs[0].src, s); assert.equal(bombs[0].arc, true);
+  assert.equal(bombs[0].dmg, GRENADE.DMG); assert.equal(bombs[0].R, GRENADE.R);
+  assert.equal(GRENADE.DMG, 24); assert.equal(GRENADE.R, 36);
+  // mehr Eigene als Feinde am Ziel: kein Wurf
+  const w2 = mkWorld(), s2 = spawn(w2, 'soldat', 400, 400, 'blau');
+  s2.tg = dummy(w2, 'krieger', 530, 400); s2.rt = 5;
+  for (let k = 0; k < 2; k++) { const a = dummy(w2, 'krieger', 525 + k * 10, 420, 'blau'); a.state = 'stun'; a.stunT = 1e9; }
+  s2.abCd = 0; s2.cd = 1e9;
+  let n2 = 0; run(w2, .3, evs => { n2 += shots(evs, 'bomb'); });
+  assert.equal(n2, 0);
+});
+
+test('Sperrfeuer: 3 Mörsergranaten im Abstand von 0,4 s rund um das Ziel', () => {
+  const w = mkWorld(), m = spawn(w, 'moerser', 300, 400, 'blau');
+  const e = dummy(w, 'krieger', 620, 400); e.state = 'stun'; e.stunT = 1e9;
+  m.abCd = 0; m.cd = 1e9; m.tg = e; m.rt = 5;
+  const times = [], pts = [];
+  let t = 0;
+  run(w, 1.2, evs => { t += DT; for (const v of evs) if (v.type === 'shot' && v.kind === 'mortar') { times.push(t); pts.push([v.tx, v.ty]); } });
+  assert.equal(times.length, 3);
+  for (let k = 1; k < 3; k++) assert.ok(Math.abs(times[k] - times[k - 1] - BARRAGE.GAP) < 2 * DT, `Abstand ${times[k] - times[k - 1]}`);
+  for (const [x, y] of pts) assert.ok(Math.hypot(x - e.x, y - e.y) <= BARRAGE.SPREAD + 1e-6, 'um das Ziel');
+  assert.equal(m.abOn, false);
+});
+
+test('Ramme: 1,2 s mit dreifachem Tempo aufs Ziel, schiebt Eigene weg ohne Schaden, 20 Schaden an Feinden', () => {
+  const w = mkWorld(), p = spawn(w, 'panzer', 300, 400, 'blau');
+  p.cd = 1e9;
+  const foe = dummy(w, 'krieger', 440, 400); foe.state = 'stun'; foe.stunT = 1e9;
+  const own = [spawn(w, 'krieger', 345, 404, 'blau'), spawn(w, 'krieger', 380, 395, 'blau')];
+  for (const a of own) { a.cd = 1e9; a.state = 'stun'; a.stunT = 1e9; }
+  const pos = own.map(a => [a.x, a.y]);
+  rebuildHash(w); updateCentroids(w, DT);
+  p.abCd = 0; p.tg = foe; p.rt = 5;
+  let maxSp = 0;
+  const x0 = p.x;
+  for (let k = 0; k < 90; k++) { step(w, DT); w.events.length = 0; if (p.abOn) maxSp = Math.max(maxSp, Math.hypot(p.mx, p.my)); }
+  assert.ok(Math.abs(maxSp - UNITS.panzer.speed * RAM.SPEED) < 1e-6, `Tempo ${maxSp}`);
+  assert.equal(RAM.T, 1.2); assert.equal(RAM.DMG, 20);
+  assert.ok(p.x - x0 > 80, `gefahren ${p.x - x0}`);
+  own.forEach((a, i) => {
+    assert.equal(a.hp, UNITS.krieger.hp, 'Eigene unverletzt');
+    assert.ok(Math.hypot(a.x - pos[i][0], a.y - pos[i][1]) > 15, `verschoben ${Math.hypot(a.x - pos[i][0], a.y - pos[i][1])}`);
+  });
+  const lost = 1e9 - foe.hp;
+  assert.ok(Math.abs(lost - RAM.DMG) < 1e-6, `Feind ${lost}`);
+  assert.equal(p.abOn, false);
+});
+
+test('Heulen: Rudelmitglieder in 120 px 5 s Tempo und Biss ×1,3, Fremde nicht; das ganze Rudel lädt neu', () => {
+  const w = mkWorld(), W = [];
+  for (let k = 0; k < 4; k++) W.push(spawn(w, 'wolf', 400 + k * 18, 400, 'blau'));
+  const lone = spawn(w, 'wolf', 700, 700, 'blau'), red = spawn(w, 'wolf', 420, 440, 'rot'), kr = spawn(w, 'krieger', 420, 370, 'blau');
+  red.cd = 1e9; red.state = 'stun'; red.stunT = 1e9;
+  const prey = dummy(w, 'krieger', 560, 400);
+  for (const u of [...W, lone, kr, red]) u.abCd = 100;
+  W[0].abCd = 0; W[0].tg = prey;
+  rebuildHash(w); updateCentroids(w, DT);
+  think(w, W[0], DT);
+  for (const u of W) {
+    assert.equal(u.buffT, HOWL.T); assert.equal(u.spdMul, HOWL.SPEED); assert.equal(u.dmgMul, HOWL.DMG);
+    assert.ok(u.abCd >= ABILITY.wolf.cd - 1e-9, `Rudel lädt neu: ${u.abCd}`);
+  }
+  for (const u of [lone, red, kr]) { assert.equal(u.buffT, 0); assert.equal(u.spdMul, 1); assert.equal(u.dmgMul, 1); }
+  assert.equal(HOWL.R, 120); assert.equal(HOWL.T, 5);
+  assert.ok(w.events.some(e => e.type === 'ability' && e.k === 'howl'));
+  // Tempo: die Wunschbewegung wirkt ×1,3
+  const u = W[1]; u.mx = 50; u.my = 0; u.vx = 0; u.vy = 0;
+  for (const v of w.units) if (v !== u) v.alive = false;
+  const xa = u.x; integrate(w, DT);
+  assert.ok(Math.abs(u.x - xa - 50 * 1.3 * DT) < 1e-9, `Tempo ${(u.x - xa) / DT}`);
+  // Biss: ×1,3 (dazu der Rudelbonus ×1,4)
+  const w2 = mkWorld(), P = [];
+  for (let k = 0; k < 3; k++) P.push(spawn(w2, 'wolf', 400 + k * 12, 400, 'blau'));
+  const t = dummy(w2, 'krieger', 430, 420); t.fx = 0; t.fy = 0;
+  rebuildHash(w2); w2.rng = () => .5;
+  P[0].buffT = 1; P[0].spdMul = HOWL.SPEED; P[0].dmgMul = HOWL.DMG; P[0].cd = 0;
+  const hp0 = t.hp;
+  attack(w2, P[0], t, 30, 30, 20);
+  assert.ok(Math.abs(hp0 - t.hp - UNITS.wolf.dmg * 1.4 * 1.3) < 1e-6, `Biss ${hp0 - t.hp}`);
+  // nach 5 s vorbei
+  const w3 = mkWorld(), x = spawn(w3, 'wolf', 100, 100, 'blau');
+  x.buffT = HOWL.T; x.spdMul = HOWL.SPEED; x.dmgMul = HOWL.DMG; x.abCd = 100;
+  rebuildHash(w3);
+  for (let k = 0; k < Math.ceil(HOWL.T / DT) + 1; k++) think(w3, x, DT);
+  assert.equal(x.buffT, 0); assert.equal(x.spdMul, 1); assert.equal(x.dmgMul, 1);
+});
+
+test('Brüllen: Feinde in 80 px erschrecken 2 s, außerhalb, Eigene und Panzer nicht', () => {
+  const w = mkWorld(), b = spawn(w, 'baer', 400, 400, 'blau');
+  b.cd = 1e9;
+  const in1 = dummy(w, 'krieger', 440, 400), in2 = dummy(w, 'krieger', 400, 460);
+  const out = dummy(w, 'krieger', 400, 520), own = spawn(w, 'krieger', 350, 400, 'blau');
+  const tank = dummy(w, 'panzer', 330, 450);
+  rebuildHash(w); updateCentroids(w, DT);
+  b.abCd = 0;
+  think(w, b, DT);
+  assert.equal(in1.fearT, ROAR.T); assert.equal(in2.fearT, ROAR.T);
+  assert.equal(isFleeing(in1), true);
+  assert.equal(out.fearT, 0); assert.equal(own.fearT, 0); assert.equal(tank.fearT, 0);
+  assert.ok(FEARLESS.has('panzer') && FEARLESS.has('heli') && FEARLESS.has('drache'));
+  assert.equal(ROAR.R, 80); assert.equal(ROAR.T, 2);
+  assert.ok(w.events.some(e => e.type === 'ability' && e.k === 'roar'));
+  assert.equal(w.events.filter(e => e.type === 'fear').length, 2);
+});
+
+test('Spuk: genau eine feindliche Einheit (das Ziel) erschrickt 2,5 s', () => {
+  const w = mkWorld(), g = spawn(w, 'geist', 400, 400, 'blau');
+  g.cd = 1e9;
+  const E = [dummy(w, 'krieger', 440, 400), dummy(w, 'krieger', 460, 420), dummy(w, 'krieger', 470, 380)];
+  rebuildHash(w); updateCentroids(w, DT);
+  g.tg = E[0]; g.rt = 1; g.abCd = 0;
+  think(w, g, DT);
+  assert.equal(E.filter(e => e.fearT > 0).length, 1);
+  assert.equal(E[0].fearT, SPOOK.T); assert.equal(SPOOK.T, 2.5);
+  assert.ok(Math.abs(g.abCd - 15) < 1e-9);
+  assert.ok(w.events.some(e => e.type === 'ability' && e.k === 'spook'));
+});
+
+test('Sturzflug: sinkt auf z 6, landet, schleudert alle Körper im Kreis weg, 30 Schaden nur an Feinden, steigt wieder', () => {
+  const w = mkWorld(), d = spawn(w, 'drache', 400, 400, 'blau');
+  d.cd = 1e9;
+  const F = [];
+  for (let k = 0; k < 4; k++) { const e = dummy(w, 'krieger', 480 + (k % 2) * 14, 392 + (k >> 1) * 14); e.state = 'stun'; e.stunT = 1e9; F.push(e); }
+  const own = spawn(w, 'krieger', 500, 440, 'blau'); own.cd = 1e9; own.state = 'stun'; own.stunT = 1e9;
+  const pos = [...F, own].map(u => [u.x, u.y]);
+  rebuildHash(w); updateCentroids(w, DT);
+  d.abCd = 0; d.tg = F[0]; d.rt = 5;
+  let minZ = Infinity, steps = 0, started = false;
+  const evs = [];
+  while (steps < 300) {
+    step(w, DT); evs.push(...w.events); w.events.length = 0; steps++;
+    if (d.abOn) started = true;
+    minZ = Math.min(minZ, d.z);
+    if (started && !d.abOn) break;
+  }
+  assert.ok(started, 'ausgelöst');
+  assert.ok(minZ <= DIVE.Z + 1e-6, `tiefster Punkt ${minZ}`);
+  assert.equal(d.z, UNITS.drache.flyZ, 'wieder auf Flughöhe');
+  assert.equal(DIVE.R, 90); assert.equal(DIVE.DMG, 30); assert.equal(DIVE.Z, 6);
+  [...F, own].forEach((u, i) => assert.ok(Math.hypot(u.x - pos[i][0], u.y - pos[i][1]) > 10, `weggeschleudert ${i}`));
+  for (const e of F) assert.ok(Math.abs(1e9 - e.hp - DIVE.DMG) < 1e-6, `Schaden ${1e9 - e.hp}`);
+  assert.equal(own.hp, UNITS.krieger.hp, 'Eigene unverletzt');
+  assert.ok(evs.some(e => e.type === 'ability' && e.k === 'dive'));
+  assert.ok(steps * DT < 2.5, `Dauer ${steps * DT}`);
+});
+
+test('Sturzflug: Abbruch (Schreck) bringt den Drachen weich zurück auf die Flughöhe', () => {
+  const w = mkWorld(), d = spawn(w, 'drache', 400, 400, 'blau');
+  d.cd = 1e9;
+  let e0 = null;
+  for (let k = 0; k < 4; k++) { const e = dummy(w, 'krieger', 480 + (k % 2) * 14, 392 + (k >> 1) * 14); e.state = 'stun'; e.stunT = 1e9; e0 = e0 || e; }
+  d.abCd = 0; d.tg = e0; d.rt = 5;
+  for (let k = 0; k < 12; k++) { step(w, DT); w.events.length = 0; }
+  assert.equal(d.abOn, true); assert.ok(d.z < UNITS.drache.flyZ);
+  const z0 = d.z;
+  scare(w, d, .1);
+  step(w, DT); w.events.length = 0;
+  assert.equal(d.abOn, false);
+  assert.ok(d.z >= z0 && d.z < UNITS.drache.flyZ, 'kein Sprung');
+  run(w, 1);
+  assert.equal(d.z, UNITS.drache.flyZ);
+});
+
+test('Fähigkeiten-Effekte: kurz (unter 1,5 s), im Budget, ohne Dauerflackern', () => {
+  for (const k of ['heal', 'roar', 'howl', 'spook', 'ram', 'dive']) {
+    const fx = createFxCore({}, { rand: () => .5 });
+    fx.consume([{ type: 'ability', k, x: 300, y: 300, z: 0, R: 90 }, { type: 'fear', x: 300, y: 300, z: 0 }]);
+    assert.ok(fx.store.count > 0, `${k}: Partikel`);
+    assert.ok(fx.store.count < 60, `${k}: ${fx.store.count} Partikel`);
+    for (let t = 0; t < 1.5; t += DT) fx.update(DT, null);
+    assert.equal(fx.store.count, 0, `${k}: nach 1,5 s vorbei`);
+  }
+  // Brandpfeil im Flug: kleine Flammenspur
+  const w = mkWorld(), s = spawn(w, 'schuetze', 400, 400, 'blau');
+  s.tg = dummy(w, 'krieger', 560, 400); s.rt = 5;
+  s.abCd = 0; s.cd = 1e9;
+  const fx = createFxCore({});
+  let fl = 0;
+  for (let k = 0; k < 30; k++) { step(w, DT); fx.consume(w.events); w.events.length = 0; fx.update(DT, w); fl = Math.max(fl, fx.store.countByKind().fire || 0); }
+  assert.ok(fl >= 1, 'Flammenspur');
+  // Bildschirmlage wie beim Pfeil: steigt zur Zielhöhe
+  const p = { kind: 'firearrow', arc: true, x0: 0, y0: 0, x1: 100, y1: 0, t: 1, dur: 1, h: 0, tz: 40 }, o = projScreen(p, {});
+  assert.ok(Math.abs(o.y + 40) < 1e-9, `Zielhöhe ${o.y}`);
+});
+
+test('Erschreckte lösen auch die neuen Fähigkeiten nicht aus', () => {
+  const w = mkWorld(), b = spawn(w, 'baer', 400, 400, 'blau');
+  const e1 = dummy(w, 'krieger', 440, 400), e2 = dummy(w, 'krieger', 400, 440);
+  rebuildHash(w); updateCentroids(w, DT);
+  scare(w, b, 1); b.abCd = 0; b.cd = 1e9;
+  think(w, b, DT);
+  assert.equal(e1.fearT, 0); assert.equal(e2.fearT, 0); assert.equal(b.abOn, false);
 });

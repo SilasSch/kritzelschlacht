@@ -44,14 +44,18 @@ const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 
 // Bögen (arc) fliegen über Köpfe und treffen nur am Zielpunkt; gerade Schüsse treffen das Erste im Weg.
 // pilum: Speer der Römer (Spez. #25), landet wie ein Pfeil, Schaden UNITS.roemer.pilum.
+// firearrow: Brandpfeil des Schützen (abilities.js), fliegt und trifft wie ein Pfeil und zündet dann an.
 export const PROJECTILES = {
   arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
   shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
-  fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 },
+  fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
 };
+// Bögen, die wie ein Pfeil den nächsten Körper am Landepunkt treffen (alle anderen Bögen explodieren)
+export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow']);
 // Je Art: [Grundflugzeit (nur Bögen), Bogenhöhe je Distanz, Streuung, Ton]
 const SHOT = {
   arrow: [.25, .16, 8, 'twang'],
+  firearrow: [.25, .16, 8, 'twang'],
   pilum: [.2, .2, 6, 'throw'],
   bomb: [.55, .35, 14, 'throw'],
   mortar: [.9, .55, 18, 'thump'],
@@ -181,8 +185,9 @@ function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 // Schubs, keine Betäubung). Leichte Körper werden auf MAX_FLING gedeckelt. Der Impuls wirkt vor dem
 // Schaden, damit die Leiche einer getöteten Einheit mitfliegt.
 const BLAST_PUSH = 9, BLAST_LIFT = .6;
-// Stoß I vom Punkt weg (dx, dy: Abstand, d: Länge), gedeckelt auf MAX_FLING · Masse; hebt nur ab LAUNCH_VZ ab
-function fling(v, dx, dy, d, I) {
+// Stoß I vom Punkt weg (dx, dy: Abstand, d: Länge), gedeckelt auf MAX_FLING · Masse; hebt nur ab LAUNCH_VZ ab.
+// Auch für Fähigkeiten (Ramme, Sturzflug, abilities.js).
+export function fling(v, dx, dy, d, I) {
   const m = v.T.mass || 1;
   if (I > MAX_FLING * m) I = MAX_FLING * m;
   const iz = BLAST_LIFT * I;
@@ -669,6 +674,8 @@ export function think(world, u, dt) {
   const T = u.T;
   u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
   if (u.abCd > 0 && !u.abOn) u.abCd -= dt;
+  // Verstärkung (Heulen, abilities.js) läuft ab
+  if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.fleeT > 0) u.fleeT -= dt;
@@ -937,7 +944,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     }
     default: {
       u.swingT = .25;
-      let a = T.dmg * (.85 + world.rng() * .3);
+      let a = T.dmg * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen)
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
@@ -1048,15 +1055,16 @@ export function stepProjectiles(world, dt) {
 // Flugrichtung (dx, dy) an der Blickrichtung des Blocks gespiegelt.
 function shieldHit(world, v, a, kind, dx, dy, src) {
   const ax = v.formAx, ay = v.formAy, l = Math.hypot(dx, dy) || 1, ux = dx / l, uy = dy / l, k = 2 * (ux * ax + uy * ay);
-  hurt(world, v, a * SHIELD_MUL, kind === 'pilum' ? 'arrow' : kind, src);
+  hurt(world, v, a * SHIELD_MUL, kind === 'pilum' || kind === 'firearrow' ? 'arrow' : kind, src);
   emit(world, { type: 'block', x: v.x + ax * v.T.r, y: v.y + ay * v.T.r, kind, a: Math.atan2(uy - k * ay, ux - k * ax) });
   sound(world, 'clink');
 }
 
-// Pfeil und Speer treffen den nächsten Körper am Landepunkt (Schaden als 'arrow': Rüstung, Deckung, Liegen
-// wie beim Pfeil); Römer im Block halten sie von vorn mit dem Schild ab (Flugrichtung Start → Landepunkt).
+// Pfeil, Speer und Brandpfeil treffen den nächsten Körper am Landepunkt (Schaden als 'arrow': Rüstung, Deckung,
+// Liegen wie beim Pfeil); Römer im Block halten sie von vorn mit dem Schild ab (Flugrichtung Start → Landepunkt).
+// Der Brandpfeil zündet danach an (Generation 0, Verursacher der Schütze); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
-  if (p.kind !== 'arrow' && p.kind !== 'pilum') { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
+  if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
     if (v === p.src || Math.abs(v.z - p.tz) >= v.T.r + BODY_Z_PAD) return;
@@ -1066,6 +1074,7 @@ function landArc(world, p, src) {
     const a = p.dmg * (.85 + world.rng() * .3), dx = p.x1 - p.x0, dy = p.y1 - p.y0;
     if (shieldBlocks(best, p.kind, dx, dy)) { shieldHit(world, best, a, p.kind, dx, dy, src); return; }
     hurt(world, best, a, 'arrow', src);
+    if (p.kind === 'firearrow' && best.alive) ignite(world, best, 0, src);
     emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: p.kind });
     sound(world, 'hit');
   } else emit(world, { type: 'miss', kind: p.kind, x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });

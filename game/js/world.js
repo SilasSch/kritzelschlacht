@@ -93,6 +93,10 @@ export function spawn(world, type, x, y, team) {
     // Abklingzeit beim Spawn ABILITY.cd · (0,3 + 0,7 · rng), damit nicht alle zugleich auslösen; world.rng() nur für
     // Typen mit Fähigkeit (die Folge der Zufallszahlen aller anderen bleibt gleich).
     abCd: 0, abOn: false, abT: 0, abK: 0, abX: 0, abY: 0, fearT: 0,
+    // Verstärkung (abilities.js, Heulen): Restdauer (s) und Faktoren auf Wunschtempo (physics.integrate) und
+    // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
+    // fz: Flughöhe der Flieger (physics.integrate führt z mit höchstens FLY_VZ px/s dorthin; Sturzflug senkt sie).
+    buffT: 0, spdMul: 1, dmgMul: 1, fz: T.flyZ || 0,
   };
   const A = ABILITY[type];
   if (A) u.abCd = A.cd * (.3 + .7 * world.rng());

@@ -13,7 +13,7 @@ import { shade } from './rig.js';
 import { projScreen, BOSS, BOSS_VIS } from './pose.js';
 
 export const FX_CAP = 3000;
-export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48 };
+export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24 };
 
 /* ---------- Wackeln ---------- */
 // Explosion: max(shake, min(12, R/6)). Abklingen je Sekunde wie früher ×0.85 je Bild bei 60 fps.
@@ -85,7 +85,7 @@ export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10)
    Wann gesenkt wird, entscheidet der Regler createLodGovernor aus der Arbeitszeit je Bild. */
 export const LOD_MAX = 1;
 export const LOD_OFF = new Set(['smoke', 'dust', 'wisp', 'exhaust', 'wash']);
-export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow', 'pilum']);
+export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow', 'pilum', 'wave', 'bang']);
 // Regler: update(workMs, frameMs). Gewertet wird die gemessene Arbeitszeit je Bild (Simulation, Effekte,
 // Zeichnen; ms), nicht der Bildabstand: ein auf 30 Hz begrenzter Browser hat 33 ms Abstand, aber wenig Arbeit.
 // Gleitendes Mittel der Arbeitszeit (Gewicht LOD_EMA); länger als LOD_SLOW_T s (Echtzeit aus frameMs) über
@@ -181,9 +181,10 @@ export function createParticles(cap = FX_CAP) {
 
 /* ---------- Aussehen ---------- */
 // Bildteile des Atlas in fx.js
-export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7, streak: 8, pilum: 9 };
+// wave: dünner Ring (Wellen der Fähigkeiten), note: Achtelnote (Heulen), bang: Ausrufezeichen (Schreck)
+export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7, streak: 8, pilum: 9, wave: 10, note: 11, bang: 12 };
 // Einheitsradius je Bildteil (F) in Atlas-px: ein Partikel mit r = FRAME_R[f] wird in Originalgröße gezeichnet
-export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32];
+export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32, 28, 30, 30];
 export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame']);
 export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
@@ -264,6 +265,12 @@ export function look(p, o) {
     // Schildblock: heller Querstrich (wächst kurz), Splitter (dreht sich, in p.col)
     case 'glint': o.frame = F.streak; o.tint = 0xfff6c8; o.r = p.r * (1 + q * .5); o.alpha = a; break;
     case 'shard': o.frame = F.streak; o.alpha = Math.min(1, a * 3); break;
+    // Fähigkeiten (abilities.js): Welle wächst schnell auf ihren Radius p.r und blendet aus; Note schwankt beim
+    // Steigen; Ausrufezeichen springt kurz auf und blendet am Ende aus; Rufstrich (Brüllen) fliegt nach außen
+    case 'wave': o.frame = F.wave; o.r = p.r * (.2 + .8 * (1 - a * a)); o.alpha = a * .75; break;
+    case 'note': o.frame = F.note; o.x = p.x + Math.sin(p.age * 9 + p.rot) * 2.5; o.rot = 0; o.alpha = Math.min(1, a * 2.5); break;
+    case 'bang': o.frame = F.bang; o.r = p.r * (q < .12 ? 1.35 - q / .12 * .35 : 1); o.alpha = Math.min(1, a * 3); break;
+    case 'shout': o.frame = F.streak; o.r = p.r * (.6 + q * .6); o.alpha = a * .9; break;
     // 'dot', 'drop': Scheibe in p.col
   }
   return o;
@@ -275,7 +282,16 @@ export function look(p, o) {
    Pfeil und Speer, grau bei Kugeln), der in Richtung a abprallt, mit kleinem Hüpfer nach oben (shardUp px/s).
    Budget-Art misc. */
 export const BLOCK_FX = { sparks: 2, shardUp: 40, shardV: [80, 130], sparkV: [50, 110] };
-const SHARD_COL = { bullet: 0x9aa0aa, arrow: 0xa5692f, pilum: 0xc9a26b };
+const SHARD_COL = { bullet: 0x9aa0aa, arrow: 0xa5692f, pilum: 0xc9a26b, firearrow: 0xa5692f };
+
+/* ---------- Fähigkeiten (Spez. #30, Task 2) ----------
+   ability-Ereignis (abilities.js: k, x, y, z, R): je Art ein kurzes Zeichen, alles unter ABILITY_FX.life s, Budget-Art
+   ability. heal: grüne Welle bis R und Pluszeichen; roar: braune Welle und 8 Rufstriche nach außen; howl: zarte graue
+   Welle und 3 steigende Noten; spook: fahle Welle um das Opfer und Wölkchen; ram: dunkler Ring und Staub hinter dem
+   Panzer (dazu Staub an den Ketten, solange er rammt: bossFx); dive: Staubwelle bis R und Staub am Rand.
+   fear-Ereignis (Erschreckter): rotes Ausrufezeichen über dem Kopf (Budget misc). */
+export const ABILITY_FX = { life: 1, waveT: .5, notes: 3, shouts: 8, ramDust: 18 };
+const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
 
 /* ---------- Ereignisse → Effekte ---------- */
 const TAU = Math.PI * 2;
@@ -386,6 +402,8 @@ export function createFxCore(hooks = {}, opt = {}) {
   function bossFx(u, dt) {
     const r = u.T.r * (BOSS_VIS[u.type] || 1), face = u.face < 0 ? -1 : 1;
     if (u.type === 'panzer') {
+      // Ramme (abilities.js): Staub an den Ketten, solange sie läuft
+      if (u.abOn) for (let n = count(ABILITY_FX.ramDust, dt); n > 0; n--) puff('dust', u.x - face * r * rnd(.4, 1.1), u.y + r * rnd(.3, .6), DUST.life * .8, rnd(3, 5));
       const moving = Math.abs(u.mx || 0) + Math.abs(u.my || 0) > 1;
       let st = drive.get(u);
       if (st === undefined) st = -1;   // zuerst gesehen (Aufstellen): gilt als stehend, das erste Losfahren pufft
@@ -427,6 +445,53 @@ export function createFxCore(hooks = {}, opt = {}) {
     for (let i = 0; i < ns; i++) {
       const a = (i / ns) * TAU + rnd(-.4, .4), d = rnd(.1, .45) * R;
       puff('smoke', x + Math.cos(a) * d, y + Math.sin(a) * d * .6, smokeLife, Math.max(5, rnd(.28, .42) * R));
+    }
+  }
+
+  // Effekt einer Fähigkeit (siehe ABILITY_FX)
+  function wave(x, y, R, life, col) { add('wave', x, y, life, R, col); }
+  function ability(e) {
+    const z = e.z || 0, x = e.x, y = e.y - z, R = e.R > 0 ? e.R : 30;
+    switch (e.k) {
+      case 'heal':
+        wave(x, e.y, R, ABILITY_FX.waveT, WAVE_COL.heal);
+        for (let i = 0; i < 6; i++) {
+          const a = i / 6 * TAU + rnd(-.3, .3), d = R * rnd(.35, .7);
+          const p = add('plus', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6 - 6, rnd(.5, .75), rnd(3.5, 5)); if (!p) break;
+          p.vy = -rnd(22, 34);
+        }
+        break;
+      case 'roar':
+        wave(x, e.y, R, .4, WAVE_COL.roar);
+        for (let i = 0; i < ABILITY_FX.shouts; i++) {
+          const a = i / ABILITY_FX.shouts * TAU + rnd(-.15, .15), s = rnd(110, 150);
+          const p = add('shout', x + Math.cos(a) * 16, y - 8 + Math.sin(a) * 12, .35, 5, OUTLINE); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
+        }
+        break;
+      case 'howl': {
+        wave(x, e.y, R, .6, WAVE_COL.howl);
+        const face = e.face < 0 ? -1 : 1;
+        for (let i = 0; i < ABILITY_FX.notes; i++) {
+          const p = add('note', x + face * rnd(4, 10), y - 4 - i * 5, rnd(.8, .95), rnd(5, 6.5), OUTLINE); if (!p) break;
+          p.vx = face * rnd(10, 22); p.vy = -rnd(28, 40); p.rot = rand() * TAU;
+        }
+        break;
+      }
+      case 'spook':
+        wave(x, y, Math.max(18, R * 2.6), .45, WAVE_COL.spook);
+        for (let i = 0; i < 3; i++) wisp(x + rnd(-6, 6), y - rnd(0, 8), rnd(2.5, 3.5), 0xdde3f0);
+        break;
+      case 'ram': {
+        add('ring', x, e.y, .3, Math.max(16, R * 1.2), OUTLINE);
+        const nx = e.nx || 0, ny = e.ny || 0;
+        for (let i = 0; i < 4; i++) puff('dust', x - nx * R * rnd(.8, 1.3) + rnd(-5, 5), e.y - ny * R + rnd(-3, 3), DUST.life, rnd(4, 6));
+        break;
+      }
+      case 'dive':
+        wave(x, e.y, R, ABILITY_FX.waveT, WAVE_COL.dive);
+        for (let i = 0; i < 10; i++) { const a = i / 10 * TAU + rnd(-.2, .2), d = R * rnd(.55, .9); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(5, 8)); }
+        break;
     }
   }
 
@@ -508,10 +573,16 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
+      case 'ability': if (take('ability')) ability(e); break;
+      case 'fear': if (take('misc')) { const p = add('bang', e.x + rnd(-2, 2), e.y - (e.z || 0) - 10, .7, 7, 0xe5574f); if (p) p.vy = -14; } break;
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
       case 'miss':
         if (!take('misc')) break;
-        if (e.kind === 'arrow') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
+        if (e.kind === 'arrow' || e.kind === 'firearrow') {
+          const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0;
+          // Brandpfeil: kurzes Flämmchen an der Einschlagstelle
+          if (e.kind === 'firearrow') for (let i = 0; i < 2; i++) { const f = add('flame', e.x + rnd(-2, 2), e.y - rnd(0, 3), rnd(.3, .45), rnd(1.8, 2.6)); if (f) { f.vy = -rnd(20, 35); f.drag = 1; } }
+        }
         // Speer: steckt schräg im Boden (Spitze nach unten, Schaft zeigt zurück zum Werfer)
         else if (e.kind === 'pilum') { const p = add('pilum', e.x, e.y, 2.5, 8), a = e.a || 0; if (p) p.rot = Math.atan2(Math.abs(Math.sin(a)) * .5 + .6, Math.cos(a)); }
         else dots(e.x, e.y, 1, 20, .25, 1.5, 1.5, 0xb8a98a);
@@ -553,9 +624,11 @@ export function createFxCore(hooks = {}, opt = {}) {
       const proj = world.proj;
       for (let i = 0; i < proj.length; i++) {
         const p = proj[i];
-        if (p.kind !== 'fire' && p.kind !== 'rocket') continue;
+        if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow') continue;
         projScreen(p, TR);
-        if (p.kind === 'fire') {
+        if (p.kind === 'firearrow') {
+          if (rand() < dt * 24) { const f = add('fire', TR.x, TR.y, .18, rnd(1.4, 2.2)); if (f) { f.vx = rnd(-8, 8); f.vy = -rnd(5, 15); f.drag = DRAG; } }
+        } else if (p.kind === 'fire') {
           if (rand() < dt * 30) { const f = add('fire', TR.x, TR.y, .25, rnd(2, 4)); if (f) { f.vx = rnd(-15, 15); f.vy = rnd(-15, 15); f.drag = DRAG; } }
         } else if (rand() < dt * 36) puff('smoke', TR.x - Math.cos(TR.a) * 6, TR.y - Math.sin(TR.a) * 6, 1, rnd(2, 3.5));
       }

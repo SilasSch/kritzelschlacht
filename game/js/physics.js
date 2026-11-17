@@ -3,7 +3,9 @@
 //
 // Geschwindigkeiten: u.mx/u.my = Wunschbewegung (setzt think), u.vx/u.vy/u.vz = Fremdgeschwindigkeit
 // (Impulse). Zustände: 'ok' (läuft), 'air' (fliegt nach Impuls mit iz > 0), 'stun' (gelandet, betäubt).
-// Flieger (T.fly) halten immer T.flyZ, ignorieren iz und werden nie 'air' oder 'stun'.
+// Flieger (T.fly) halten ihre Flughöhe u.fz (sonst T.flyZ; der Sturzflug des Drachen senkt sie, abilities.js) und
+// steigen oder sinken dorthin mit höchstens FLY_VZ px/s, ignorieren iz und werden nie 'air' oder 'stun'.
+// u.spdMul (Verstärkung, abilities.js) wirkt auf die Wunschbewegung.
 // Leichen (world.corpses, angelegt von combat.die) fliegen, drehen sich, prallen auf und rutschen aus
 // (stepCorpses); sie sind für Einheiten und untereinander kein Hindernis. Mauerbrocken (world.debris,
 // angelegt von combat.hitWall) fliegen genauso, berühren aber nur Boden und Mauern (stepDebris).
@@ -21,6 +23,7 @@ const UNSTICK_RINGS = 6;             // Suche nach freier Zelle in Ringen bis 6 
 const EDGE = 6;                      // Kartenrand
 export const LAUNCH_VZ = 60;         // Explosionen heben erst ab dieser Steiggeschwindigkeit ab (px/s)
 export const MAX_FLING = 700;        // Explosionen beschleunigen waagrecht höchstens um so viel (px/s)
+export const FLY_VZ = 120;           // Flieger steigen und sinken zu ihrer Flughöhe u.fz mit höchstens so viel (px/s)
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -47,8 +50,9 @@ export function integrate(world, dt) {
     u.px = u.x; u.py = u.y;        // für die Mauerprüfung in collideWalls
     let wx = 0, wy = 0, f = fr;
     if (T.fly) {
-      u.z = T.flyZ; u.vz = 0;
-      wx = u.mx; wy = u.my;
+      if (u.z !== u.fz) { const dz = u.fz - u.z, s = FLY_VZ * dt; u.z = dz > s ? u.z + s : dz < -s ? u.z - s : u.fz; }
+      u.vz = 0;
+      wx = u.mx * u.spdMul; wy = u.my * u.spdMul;
     } else if (u.state === 'air') {
       f = drag;
       u.vz -= GRAVITY * dt; u.z += u.vz * dt;
@@ -64,7 +68,7 @@ export function integrate(world, dt) {
         if (u.alive && ((world.time * 60 | 0) + u.id) % 10 === 0) world.events.push({ type: 'burn', x: u.x, y: u.y });
       }
       if (!u.alive) continue;
-      if (u.state === 'ok') { wx = u.mx * sp; wy = u.my * sp; }
+      if (u.state === 'ok') { wx = u.mx * sp * u.spdMul; wy = u.my * sp * u.spdMul; }
     }
     const vx = wx + u.vx, vy = wy + u.vy;
     u.vx *= f; u.vy *= f;

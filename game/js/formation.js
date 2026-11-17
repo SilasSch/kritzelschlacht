@@ -69,8 +69,8 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 /* ---------- Schilde und Speerwurf ---------- */
 // Schilde wirken nur in Formation (formOn, nicht vom Platz freigegeben: formFree): Pfeile, Kugeln und Speere, die von vorn kommen (Flugrichtung
 // höchstens 60° gegen die Blickrichtung des Blocks), richten nur SHIELD_MUL des Schadens an (combat.landArc,
-// combat.impact). Explosionen, Feuerbälle, Raketen, Brand und Nahkampf gehen nie über diesen Test.
-export const SHIELD_KINDS = new Set(['arrow', 'bullet', 'pilum']);
+// combat.impact). Brandpfeile (Schütze, abilities.js) zählen wie Pfeile; ein abgeblockter zündet nicht an. Explosionen, Feuerbälle, Raketen, Brand und Nahkampf gehen nie über diesen Test.
+export const SHIELD_KINDS = new Set(['arrow', 'bullet', 'pilum', 'firearrow']);
 export const SHIELD_MUL = .1, SHIELD_COS = .5;   // cos 60°
 // Speerwurf: Versatz je Reihe (s) ab dem Moment, in dem der Block zum ersten Mal einen Gegner höchstens
 // PILUM_MAX px vor seiner vordersten Reihe hat (march: f.volT, je Mitglied u.formVol = Zeit seit seiner Freigabe)

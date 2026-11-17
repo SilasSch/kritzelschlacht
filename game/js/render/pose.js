@@ -315,12 +315,12 @@ export function corpseLook(c, t, out = {}) {
 
 /* ---------- Geschosse ---------- */
 // Bildschirmlage (x, y − z) und Flugwinkel a eines Geschosses aus combat.js.
-// Bögen: Logiklage p.x/p.y/p.z (Mündung → Zielpunkt, Höhe sin(q·π)·h); Pfeile und Speere auf Flieger steigen dazu
+// Bögen: Logiklage p.x/p.y/p.z (Mündung → Zielpunkt, Höhe sin(q·π)·h); Pfeile, Brandpfeile und Speere auf Flieger steigen dazu
 // linear zur Zielhöhe tz. Gerade Schüsse: Logiklage am Boden plus Mündungsversatz (x0 − sx, y0 − sy),
 // Höhe über der Laufhöhe MUZZLE_Z hebt sie an (Flieger schießen aus ihrer Höhe schräg nach unten).
 export function projScreen(p, out = {}) {
   if (p.arc) {
-    const q = p.t < p.dur ? p.t / p.dur : 1, tz = p.kind === 'arrow' || p.kind === 'pilum' ? p.tz || 0 : 0;
+    const q = p.t < p.dur ? p.t / p.dur : 1, tz = p.kind === 'arrow' || p.kind === 'pilum' || p.kind === 'firearrow' ? p.tz || 0 : 0;
     const x = p.x0 + (p.x1 - p.x0) * q, y = p.y0 + (p.y1 - p.y0) * q;
     out.x = x; out.y = y - Math.sin(q * Math.PI) * p.h - q * tz;
     out.a = Math.atan2(p.y1 - p.y0 - Math.PI * Math.cos(q * Math.PI) * p.h - tz, p.x1 - p.x0);

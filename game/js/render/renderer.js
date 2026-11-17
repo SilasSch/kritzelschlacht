@@ -570,7 +570,7 @@ export function createRenderer(canvasHost) {
      Lage auf dem Bildschirm (y − z) und Flugwinkel aus pose.projScreen; Bögen werfen einen Schatten am
      Bodenpunkt ihrer Bahn, der mit der Höhe kleiner und weicher wird. */
   const PS = {};
-  const PROJ_SHADOW = { arrow: 3, pilum: 5, bomb: 4, mortar: 4.5, shell: 3.5 };
+  const PROJ_SHADOW = { arrow: 3, firearrow: 3, pilum: 5, bomb: 4, mortar: 4.5, shell: 3.5 };
   // Gezeichnet aus Strichen (weiße Textur, gedreht) und Scheiben (softTex[0], Radius 31 px) in projQ wie
   // früher mit Graphics: Pfeil, Speer, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
   function disc(x, y, r, col) { projQ.addPart(softTex[0], null, x, y, 0, r / 31, r / 31, .5, .5, col, 1); }
@@ -587,6 +587,11 @@ export function createRenderer(canvasHost) {
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
       if (p.kind === 'arrow') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+      else if (p.kind === 'firearrow') {
+        // Brandpfeil: Pfeil mit glühender Spitze (die Flammenspur kommt aus fxcore.update)
+        projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+        disc(x + ca * 5, y + sa * 5, 2.6, 0xff8a3d); disc(x + ca * 5, y + sa * 5, 1.4, 0xffe066);
+      }
       else if (p.kind === 'pilum') {
         // Römerspeer: dünner Holzschaft, langer Eisenschaft und helle Spitze, mit Umriss; entlang der Bahn
         // geneigt wie der Pfeil, aber fast doppelt so lang

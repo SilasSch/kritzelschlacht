@@ -75,6 +75,17 @@ function paintAtlas(c) {
   c.strokeStyle = '#9aa3ae'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(x + 2, cy); c.lineTo(x + 21, cy); c.stroke();
   c.fillStyle = '#e6ebf0'; c.strokeStyle = O; c.lineWidth = 2; c.lineJoin = 'round';
   c.beginPath(); c.moveTo(x + 18, cy - 5); c.lineTo(x + 30.5, cy); c.lineTo(x + 18, cy + 5); c.closePath(); c.fill(); c.stroke();
+  // wave: dünner Ring für die großen Wellen der Fähigkeiten (bleibt auch bei 90 px Radius ein feiner Strich)
+  c.strokeStyle = '#fff'; c.lineWidth = 1.8; c.beginPath(); c.arc(cx(F.wave), cy, 28, 0, TAU); c.stroke();
+  // note: Achtelnote (Kopf, Hals, Fähnchen), per tint gefärbt
+  x = cx(F.note); c.fillStyle = '#fff'; c.strokeStyle = '#fff'; c.lineCap = 'round';
+  c.beginPath(); c.ellipse(x - 7, cy + 17, 10, 7.5, -.45, 0, TAU); c.fill();
+  c.lineWidth = 5; c.beginPath(); c.moveTo(x + 2, cy + 15); c.lineTo(x + 2, cy - 27); c.stroke();
+  c.lineWidth = 6; c.beginPath(); c.moveTo(x + 2, cy - 27); c.quadraticCurveTo(x + 20, cy - 18, x + 15, cy - 4); c.stroke();
+  // bang: Ausrufezeichen (Schreck), per tint gefärbt
+  x = cx(F.bang); c.fillStyle = '#fff';
+  c.beginPath(); c.moveTo(x - 7, cy - 28); c.lineTo(x + 7, cy - 28); c.lineTo(x + 4, cy + 10); c.lineTo(x - 4, cy + 10); c.closePath(); c.fill();
+  c.beginPath(); c.arc(x, cy + 22, 6, 0, TAU); c.fill();
 }
 
 export function createFx(renderer) {

@@ -32,7 +32,10 @@ export const UNITS = {
 // abil direkt im UNITS-Eintrag; die Karten lesen nur UNITS[t].abil. Rückzug ab 25 % gilt für alle (cards.RETREAT_NOTE).
 const ABIL = {
   krieger: [{n:'Von hinten', d:'Kreist Gegner ein. Angriffe von hinten machen +35 % Schaden.'}],
-  schuetze: [{n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
+  schuetze: [
+    {n:'Brandpfeile', d:'Alle 20 s schießt er 3 Brandpfeile kurz hintereinander. Getroffene fangen Feuer. Römerschilde halten sie ab.'},
+    {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'},
+  ],
   ritter: [
     {n:'Schildwall', d:'Ab 3 Rittern nah beieinander: kaum Schaden durch Pfeile und Schwerter.'},
     {n:'Rüstung', d:'Hält Pfeile, Schwerter und Kugeln gut ab. Bomben, Feuer und Raketen treffen ihn dafür besonders hart.'},
@@ -47,28 +50,48 @@ const ABIL = {
     {n:'Speersalve', d:'Vor dem Zusammenstoß wirft der Block Reihe für Reihe seine Speere.'},
     {n:'Schilde', d:'Nur in Formation: Pfeile, Kugeln und Speere von vorn prallen fast wirkungslos ab.'},
   ],
-  sani: [{n:'Heilen', d:'Heilt Verbündete, Fliehende zuerst. Hält sich aus dem Getümmel heraus.'}],
-  wolf: [{n:'Rudel', d:'Ab 3 Wölfen fächert das Rudel auf, greift von der Seite an und beißt 40 % härter.'}],
-  baer: [{n:'Prankenhieb', d:'Trifft alle Feinde vor sich und stößt sie zurück.'}],
+  sani: [
+    {n:'Heilwelle', d:'Alle 20 s heilt er alle Verbündeten im Umkreis um ein Viertel ihrer Lebenspunkte.'},
+    {n:'Heilen', d:'Heilt Verbündete, Fliehende zuerst. Hält sich aus dem Getümmel heraus.'},
+  ],
+  wolf: [
+    {n:'Heulen', d:'Ab 3 Wölfen heult das Rudel alle 25 s: 5 s lang 30 % schneller und 30 % stärkerer Biss.'},
+    {n:'Rudel', d:'Ab 3 Wölfen fächert das Rudel auf, greift von der Seite an und beißt 40 % härter.'},
+  ],
+  baer: [
+    {n:'Brüllen', d:'Alle 20 s brüllt er nahe Feinde an, die dann 2 s lang fliehen. Panzer, Hubschrauber und Drachen lässt das kalt.'},
+    {n:'Prankenhieb', d:'Trifft alle Feinde vor sich und stößt sie zurück.'},
+  ],
   biene: [{n:'Schwarm', d:'Umkreist das Ziel und sticht von allen Seiten. Stark in großer Zahl.'}],
   magier: [{n:'Feuerball', d:'Flächenschaden aus der Ferne. Feuer trifft auch Geister voll.'}],
   geist: [
+    {n:'Spuk', d:'Alle 15 s erschreckt er sein Ziel, das dann 2,5 s lang in Panik flieht.'},
     {n:'Körperlos', d:'Nur Feuer trifft voll, alles andere macht halben Schaden.'},
     {n:'Lebensraub', d:'Jeder Treffer heilt ihn um den angerichteten Schaden.'},
   ],
   drache: [
+    {n:'Sturzflug', d:'Alle 30 s stürzt er sich in eine Feindgruppe und schleudert alles im Kreis weg. Nur Feinde nehmen Schaden.'},
     {n:'Feueratem', d:'Speit Feuer in einem Kegel. Getroffene brennen, und das Feuer springt auf Nachbarn über.'},
     {n:'Feuerfest', d:'Fängt selbst kein Feuer.'},
   ],
-  soldat: [{n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
+  soldat: [
+    {n:'Handgranate', d:'Alle 15 s wirft er eine Granate in eine Feindgruppe. Die Explosion trifft auch Eigene.'},
+    {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'},
+  ],
   mg: [{n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'}],
   sniper: [
     {n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'},
     {n:'Geduldig', d:'Rückt nur bis auf Schussweite vor, bleibt hinter der eigenen Front und weicht zurück, wenn Feinde nahe kommen.'},
   ],
   panzerfaust: [{n:'Rakete', d:'Trifft Panzer und Hubschrauber besonders hart.'}],
-  moerser: [{n:'Steilfeuer', d:'Schießt im hohen Bogen über Mauern hinweg.'}],
-  panzer: [{n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'}],
+  moerser: [
+    {n:'Sperrfeuer', d:'Alle 30 s feuert er 3 Granaten kurz hintereinander rund um das Ziel. Die Einschläge treffen auch Eigene.'},
+    {n:'Steilfeuer', d:'Schießt im hohen Bogen über Mauern hinweg.'},
+  ],
+  panzer: [
+    {n:'Ramme', d:'Alle 25 s fährt er mit dreifachem Tempo in die Reihen und schleudert alles weg. Nur Feinde nehmen Schaden.'},
+    {n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'},
+  ],
   heli: [
     {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
     {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},

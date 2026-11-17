@@ -25,3 +25,15 @@ test('Fund 1: ein Froschfluch, der mitten im Schritt endet, gibt dem Sanitäter 
     for (const u of w.units) assert.ok(Number.isFinite(u.hp), 'keine NaN-LP');
   }
 });
+
+test('Fund 2: ein Phönix, der an Gift zu Asche wird, handelt in diesem Schritt nicht mehr', () => {
+  const w = mkWorld(5);
+  const p = spawn(w, 'phoenix', 400, 300, 'blau');
+  const e = spawn(w, 'krieger', 405, 300, 'rot'); e.cd = 1e9; e.hp = 1e9; e.abCd = 99;
+  rebuildHash(w);
+  p.cd = 0; p.hp = .001; p.poisonT = 5;
+  step(w, DT);
+  assert.ok(p.ashT > 0, 'Phönix ist zu Asche geworden');
+  assert.equal(e.hp, 1e9, 'Asche schlägt nicht zu');
+  assert.ok(p.cd <= 0, 'Asche löst keinen Angriff aus');
+});

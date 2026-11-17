@@ -825,9 +825,9 @@ export function think(world, u, dt) {
   // Task 6: Asche des Phönix liegt still und steht nach 2 s wieder auf (abilities.stepAsh), sonst nichts
   if (u.ashT > 0) { stepAsh(world, u, dt); return; }
   // Brand läuft in jedem Zustand (kann töten)
-  if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
+  if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive || u.ashT > 0) return; }
   // Gift läuft ebenso in jedem Zustand (kann töten)
-  if (u.poisonT > 0) { stepPoison(world, u, dt); if (!u.alive) return; }
+  if (u.poisonT > 0) { stepPoison(world, u, dt); if (!u.alive || u.ashT > 0) return; }   // Phönix: zu Asche geworden, handelt erst im nächsten Schritt wieder (stepAsh)
   // Task 6: Froschfluch läuft ab, Troll heilt, Phönix zieht seine Feuerspur, Einhorn heilt (in jedem Zustand)
   // endet der Fluch hier, ist u wieder es selbst; T (oben) gehört noch dem Frosch, also dieser Schritt nicht weiter
   if (u.frogT > 0) { stepFrogCurse(world, u, dt); if (u.frogFrom === null) return; }

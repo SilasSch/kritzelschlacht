@@ -946,6 +946,8 @@ function herdTest(v) {
   if (v.type !== 'bueffel' || v.state !== 'ok' || isFleeing(v) || v.herdCd > 0 || (v.abOn && v !== HD_U) || factionOf(HD_W, v) !== HD_F) return;
   const dx = v.x - HD_U.x, dy = v.y - HD_U.y, R = HERD.R;
   if (dx * dx + dy * dy > R * R) return;
+  // wie beim Trampeln: nur wer auf der ganzen Strecke keine Mauer, keine Lava und keinen Kartenrand vor sich hat (Review Task 5)
+  if (!lineFree(HD_W, v, HD_X, HD_Y, herdRun(v))) return;
   HD_N++;
   if (HD_DO) {
     v.herdCd = HERD.CD + HERD.T; v.abX = HD_X; v.abY = HD_Y;
@@ -958,12 +960,19 @@ function herd(world, u, apply) {
   HD_W = null; HD_U = null; HD_F = null;
   return HD_N;
 }
+// Länge der Stampede (T s mit SPEED-fachem Tempo) plus Radius, die frei sein muss (lineFree)
+const herdRun = v => v.T.speed * HERD.SPEED * HERD.T + v.T.r;
+// gemeinsame Richtung der Herde: zum Ziel des Auslösers (HD_X, HD_Y)
+function herdDir(u, t) { const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1; HD_X = dx / d; HD_Y = dy / d; }
 function herdReady(world, u) {
-  return u.herdCd <= 0 && u.gn >= HERD.MIN && !!foeInReach(world, u, HERD.ENGAGE, true) && herd(world, u, false) >= HERD.MIN;
+  if (u.herdCd > 0 || u.gn < HERD.MIN) return false;
+  const t = foeInReach(world, u, HERD.ENGAGE, true);
+  if (!t) return false;
+  herdDir(u, t);
+  return herd(world, u, false) >= HERD.MIN;   // zählt nur Büffel mit freier Strecke (herdTest), u selbst eingeschlossen
 }
 function herdStart(world, u) {
-  const t = u.tg, dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
-  HD_X = dx / d; HD_Y = dy / d;
+  herdDir(u, u.tg);
   herd(world, u, true);
   emit(world, { type: 'ability', k: 'stampede', x: u.x, y: u.y, z: 0, R: HERD.R, nx: HD_X, ny: HD_Y });
   sound(world, 'thud');

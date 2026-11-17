@@ -317,6 +317,23 @@ test('Stampede rammt Feinde und Eigene beiseite, Schaden nur an Feinden', () => 
   assert.ok(friendAir && friend.hp === 1e9, 'Eigener nur geschoben');
 });
 
+// Review Task 5, Punkt 2: die Stampede läuft 2 s geradeaus; wie beim Trampeln (lineFree) nur mit freier Strecke
+test('Stampede: keine Herde stürmt in Lava oder gegen eine Mauer', () => {
+  for (const terr of ['lava', 'mauer']) {
+    const w = mkWorld(), bs = [];
+    for (let i = 0; i < 3; i++) { const b = spawn(w, 'bueffel', 300 + (i % 2) * 18, 380 + i * 18, 'blau'); b.abCd = 0; bs.push(b); }
+    dummy(w, 'schuetze', 480, 400);
+    for (let gy = (300 / CELL) | 0; gy <= (500 / CELL) | 0; gy++) for (let gx = (420 / CELL) | 0; gx <= (440 / CELL) | 0; gx++) setCell(w, gy * w.GW + gx, TERRAIN[terr].id);
+    rebuildHash(w);
+    let stampede = 0;
+    run(w, 1.5, () => { for (const b of bs) if (b.abOn) stampede++; });
+    assert.equal(stampede, 0, `${terr}: keine Stampede`);
+    assert.ok(bs.every(b => b.alive && b.herdCd === 0), `${terr}: Herde unversehrt`);
+  }
+  // Gegenprobe ohne Hindernis: die Herde stürmt
+  assert.ok(herdTest(3).together > 30);
+});
+
 /* ---------- Form ---------- */
 test('Form bleibt gleich: neue Felder für alle Einheiten, eine Schlacht mit allen neuen Tieren ändert keine Form', () => {
   const keys = Object.keys(spawn(createWorld(400, 300, 1), 'krieger', 50, 50, 'blau')).join();

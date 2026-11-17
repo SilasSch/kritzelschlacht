@@ -52,6 +52,11 @@ export const FORM_LOOSE = [6, 30, .3];    // Sammelfaktor: größte Platzabweich
 export const FORM_TURN = .14;             // rad (≈ 8°): kleinere Änderungen der Blickrichtung zählen nicht
 export const FORM_GAIN = 4;               // 1/s: think steuert Blocktempo + Abweichung · FORM_GAIN (combat.think)
 export const FORM_CATCHUP = 1.25;         // think: höchstens speed · 1,25
+// Verfolgung (Nachtrag 4, #35): weicht das Blockziel zurück (Wunschtempo vom Block weg > V px/s) oder hat ein Mitglied
+// in den letzten HIT_T s einen Pfeil oder eine Kugel abbekommen (u.rangedT, combat.hurt; auch abgeblockt), marschiert der
+// Block HOLD s lang mit MUL · Römertempo, und der Sammelfaktor bremst ihn dabei höchstens auf LOOSE. Sonst ließ er sich von
+// Schützen, die zurückweichen und schießen, im Tempo des Langsamsten zerpflücken.
+export const FORM_CHASE = { MUL: 1.1, LOOSE: .8, V: 8, HIT_T: .5, HOLD: 1.5 };
 const STUCK_PX = 10;
 // Freigabe an Hindernissen: ein Römer, dessen Platz auf oder bis SLOT_MARGIN px neben Lava oder Mauer liegt
 // oder dessen gerader Weg dorthin in den nächsten FORM_PROBE px eine solche Zelle kreuzt, verlässt den Platz
@@ -96,6 +101,7 @@ function makeForm(id, faction) {
   return {
     id, faction, n: 0, cx: 0, cy: 0, ax: 0, ay: 0, speed: 0, state: 'march', stuckT: 0,
     holdT: 0, sx: 0, sy: 0, vx: 0, vy: 0, tg: null, blocked: false,
+    chaseT: 0,               // s Verfolgung übrig (FORM_CHASE)
     volT: -1,                // s seit dem ersten Gegner ≤ PILUM_MAX vor der Front (Speerwurf), −1 = noch keiner
     m: [], oD: [], oL: [],   // Mitglieder und ihr Platzversatz (Tiefe entlang ax/ay, Seite entlang −ay/ax)
   };
@@ -280,11 +286,13 @@ function lineHazard(world, x0, y0, x1, y1, maxL) {
 
 function march(world, f, dt) {
   const m = f.m, ax = f.ax, ay = f.ay, px = -ay, py = ax, terr = world.terr;
-  let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0, free = 0;
+  let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0, free = 0, shot = false;
+  const hitT = world.time - FORM_CHASE.HIT_T;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
     if (!u.alive || isFleeing(u)) continue;   // Fliehende und Erschreckte haben den Block verlassen (bis zur Neubildung noch in m)
     alive++;
+    if (u.rangedT > hitT) shot = true;
     const ox = ax * f.oD[k] + px * f.oL[k], oy = ay * f.oD[k] + py * f.oL[k];
     const pr = (u.x - f.cx) * ax + (u.y - f.cy) * ay;
     if (pr > fd) { fd = pr; front = u; }
@@ -320,9 +328,15 @@ function march(world, f, dt) {
     if (f.blocked && world.flow) { const d = flowDir(world.flow, f.faction, f.cx, f.cy); if (d && d.dist > 0) { dx = d.dx; dy = d.dy; } }
     if (dx === 0 && dy === 0) { const ex = t.x - f.cx, ey = t.y - f.cy, l = Math.hypot(ex, ey); if (l > 1e-6) { dx = ex / l; dy = ey / l; } }
   }
+  // Verfolgung: Ziel weicht zurück oder der Block steht unter Beschuss (FORM_CHASE)
+  const C = FORM_CHASE;
+  if (shot || (t && t.mx * ax + t.my * ay > C.V)) f.chaseT = C.HOLD;
+  else if (f.chaseT > 0) f.chaseT -= dt;
+  const chase = f.chaseT > 0, bsp = chase ? f.speed * C.MUL : f.speed;
   const [L0, L1, LMIN] = FORM_LOOSE;
-  const loose = worst <= L0 ? 1 : worst >= L1 ? LMIN : 1 - (1 - LMIN) * (worst - L0) / (L1 - L0);
-  const sp = n > 0 ? f.speed * tsp * loose : 0;
+  let loose = worst <= L0 ? 1 : worst >= L1 ? LMIN : 1 - (1 - LMIN) * (worst - L0) / (L1 - L0);
+  if (chase && loose < C.LOOSE) loose = C.LOOSE;
+  const sp = n > 0 ? bsp * tsp * loose : 0;
   f.vx = dx * sp; f.vy = dy * sp;
   f.cx += f.vx * dt; f.cy += f.vy * dt;
   // nicht davonlaufen: höchstens FORM_LEAD vor der tatsächlichen Lage
@@ -338,7 +352,7 @@ function march(world, f, dt) {
     const u = m[k];
     if (!u.alive || isFleeing(u)) continue;
     u.slotX = f.cx + ax * f.oD[k] + px * f.oL[k]; u.slotY = f.cy + ay * f.oD[k] + py * f.oL[k];
-    u.formVx = f.vx; u.formVy = f.vy;
+    u.formVx = f.vx; u.formVy = f.vy; u.formSp = bsp;   // Aufholen (FORM_CATCHUP) auch bei Verfolgung
     // Reihe nach dem Platz (vorn 0): Freigabe des Wurfs PILUM_RANK_DT s je Reihe später
     u.formVol = f.volT >= 0 ? f.volT - PILUM_RANK_DT * Math.round((d0 - f.oD[k]) / S) : -1;
   }

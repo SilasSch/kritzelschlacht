@@ -115,6 +115,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
   const d = a * m; v.hp -= d;
+  // Römer im Block unter Beschuss (auch abgeblockt, shieldHit): der Block verfolgt schneller (formation.FORM_CHASE)
+  if (v.formOn && (kind === 'arrow' || kind === 'bullet')) v.rangedT = world.time;
   if (!dot && (src || !isFire(kind))) v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
   if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src, kind); }

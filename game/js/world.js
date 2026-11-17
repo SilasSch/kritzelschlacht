@@ -97,6 +97,8 @@ export function spawn(world, type, x, y, team) {
     // s; < 0 noch nicht, formation.march). Für Nicht-Römer bleiben sie auf diesen Startwerten.
     form: 0, formOn: false, slotX: 0, slotY: 0, formAx: 0, formAy: 0, formVx: 0, formVy: 0, formSp: 0, formFree: false, pilum: 1,
     formVol: -1,
+    // world.time des letzten Pfeil- oder Kugeltreffers im Block (combat.hurt, formation.FORM_CHASE); −9 = keiner
+    rangedT: .5,
     // Rückzug (morale.js, Spez. #27): flieht, Zeit ohne Gegner in SAFE_R, Zeit mit Gegner in Nahkampfreichweite
     flee: false, safeT: 0, cornerT: 0,
     // Fähigkeiten (abilities.js, Spez. #30): Abklingzeit (s), läuft gerade, Zeit seit dem Start, Zähler (z. B.
@@ -120,7 +122,7 @@ export function spawn(world, type, x, y, team) {
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
-  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0;
+  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0; u.rangedT = -9;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;

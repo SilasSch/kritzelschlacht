@@ -6,7 +6,7 @@ import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from
 import { step } from '../game/js/sim.js';
 import { hurt, think, fire, stepProjectiles, PILUM_SCAN, PILUM_SCAN_T } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
-import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT, blockCols, COLS_MAX, hazardAt } from '../game/js/formation.js';
+import { FORM, FORM_CHASE, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT, blockCols, COLS_MAX, hazardAt } from '../game/js/formation.js';
 import { CELL, HASH_CELL, UNITS, TERRAIN, TERR_SPEED, TERR_HAZ } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -467,4 +467,31 @@ test('LINK: Gruppen 40 px auseinander bilden einen Block, 60 px auseinander zwei
   assert.ok(two.w.formations.every(f => f.n === 4));
   assert.notEqual(two.a[0].form, two.b[0].form);
   assert.ok(FORM.LINK > 40 && FORM.LINK < 60, `LINK ${FORM.LINK}`);
+});
+
+// Nachtrag 4 (#35): Schützen, die zurückweichen und schießen, zerpflückten den Block, der im Tempo des Langsamsten
+// marschierte. Unter Beschuss oder bei zurückweichendem Ziel marschiert er mit FORM_CHASE.MUL · Römertempo.
+test('Verfolgung: 12 Römer holen 10 zurückweichende Schützen schneller ein als ohne FORM_CHASE', () => {
+  assert.deepEqual(FORM_CHASE, { MUL: 1.1, LOOSE: .8, V: 8, HIT_T: .5, HOLD: 1.5 });
+  const trial = (seed, on) => {
+    const save = { ...FORM_CHASE };
+    if (!on) Object.assign(FORM_CHASE, { MUL: 1, LOOSE: 0, V: Infinity, HIT_T: -Infinity });
+    try {
+      const w = mk(seed);
+      block(w, 12, 300, 400);
+      // unsterbliche Schützen, die 22 px/s zurückweichen (wie beim Ausweichen) und dabei schießen
+      const es = []; for (let k = 0; k < 10; k++) { const e = spawn(w, 'schuetze', 640, 220 + k * 40, 'rot'); e.hp = 1e9; es.push(e); }
+      let t = 0;
+      for (let i = 0; i < 60 * 25; i++) {
+        step(w, DT); w.events.length = 0; t += DT;
+        for (const e of es) e.x = Math.min(W - 10, e.x + 22 * DT);
+        if (w.formations[0] && w.formations[0].state === 'charge') return t;
+      }
+      return Infinity;
+    } finally { Object.assign(FORM_CHASE, save); }
+  };
+  for (const seed of [1, 2]) {
+    const before = trial(seed, false), after = trial(seed, true);
+    assert.ok(after < 13 && after < before * .8, `Saat ${seed}: Zusammenstoß nach ${after.toFixed(2)} s statt ${before.toFixed(2)} s`);
+  }
 });

@@ -16,14 +16,13 @@
 //   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile, Hitzeflimmern
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
-import { createFxCore, createLodGovernor, createDecalAger, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
+import { createFxCore, createLodGovernor, createDecalAger, look, F, FRAME_R, FX_CAP, LOD_MAX } from './fxcore.js';
 import { createQuadBatch } from './quads.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const TAU = Math.PI * 2;
 const O = '#2a2a33';
 const CELL = 64, STRIDE = 68;                       // Atlas: 64-px-Felder mit 4 px Abstand
-const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32];   // Einheitsradius je Bildteil (F) in Atlas-px
 const N_FRAMES = FRAME_R.length;
 const DECAL_UPLOAD = .1;                            // Decal-Upload höchstens alle 0,1 s
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -66,6 +65,16 @@ function paintAtlas(c) {
   c.beginPath(); c.moveTo(x - 27, cy); c.lineTo(x + 29, cy); c.stroke();
   c.strokeStyle = '#c9c2b2'; c.lineWidth = 6;
   c.beginPath(); c.moveTo(x - 27, cy - 8); c.lineTo(x - 18, cy); c.lineTo(x - 27, cy + 8); c.stroke();
+  // streak: weißer Strich mit runden Enden (Querstrich und Splitter beim Schildblock, per tint gefärbt)
+  x = cx(F.streak); c.strokeStyle = '#fff'; c.lineWidth = 9;
+  c.beginPath(); c.moveTo(x - 25, cy); c.lineTo(x + 25, cy); c.stroke();
+  // pilum: steckender Speer mit Umriss, Spitze rechts (Anker x = 1): Holzschaft, Eisenschaft, Spitze
+  x = cx(F.pilum); c.lineCap = 'butt';
+  c.strokeStyle = O; c.lineWidth = 9; c.beginPath(); c.moveTo(x - 30, cy); c.lineTo(x + 22, cy); c.stroke();
+  c.strokeStyle = '#c9a26b'; c.lineWidth = 5; c.beginPath(); c.moveTo(x - 28.5, cy); c.lineTo(x + 2, cy); c.stroke();
+  c.strokeStyle = '#9aa3ae'; c.lineWidth = 3.5; c.beginPath(); c.moveTo(x + 2, cy); c.lineTo(x + 21, cy); c.stroke();
+  c.fillStyle = '#e6ebf0'; c.strokeStyle = O; c.lineWidth = 2; c.lineJoin = 'round';
+  c.beginPath(); c.moveTo(x + 18, cy - 5); c.lineTo(x + 30.5, cy); c.lineTo(x + 18, cy + 5); c.closePath(); c.fill(); c.stroke();
 }
 
 export function createFx(renderer) {

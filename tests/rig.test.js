@@ -356,3 +356,101 @@ test('Boss: eigene Teile im Atlas (rigLayout bleibt, bossLayout zeigt die Zusatz
   assert.ok(pz.turretWreck);
   assert.equal(rigLayout('heli').headgear, null);
 });
+
+/* ---------- Römer (Spez. #25, Task 4): Scutum, Helm mit Querkamm, Kurzschwert, Gleichschritt ---------- */
+// Zeichen-Aufrufe mitschreiben (kein Canvas in Node): Füllfarben bei fill/fillRect, Strichfarben bei stroke
+function mockCtx() {
+  const log = { fills: [], strokes: [] }, st = {};
+  return new Proxy(st, {
+    get(t, k) {
+      if (k === 'log') return log;
+      if (k in t) return t[k];
+      if (k === 'fill' || k === 'fillRect') return () => log.fills.push(t.fillStyle);
+      if (k === 'stroke' || k === 'strokeRect') return () => log.strokes.push(t.strokeStyle);
+      return () => {};
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+}
+
+test('roemer hat Schild, Helm, Schwert', async () => {
+  const { rigLayout, rigExtras, drawRigPart, shade, TEAM_KEYS } = await import('../game/js/render/rig.js');
+  const { TEAMS } = await import('../game/js/data.js');
+  const L = rigLayout('roemer');
+  assert.ok(L.headgear && L.weapon && L.body, 'Helm, Waffe, Körper');
+  assert.equal(L.headgear.variants, 5); assert.equal(L.weapon.variants, 5);
+  // Waffe: Bild 0 Kurzschwert, Bild 1 Speer in der Hand (vor dem Wurf)
+  assert.equal(L.weapon.frames, 2);
+  const X = rigExtras('roemer');
+  assert.ok(X && X.shield, 'Schild als eigenes Teil');
+  assert.equal(X.shield.variants, 5, 'Schild in Teamfarbe');
+  assert.equal(rigExtras('krieger'), null); assert.equal(rigExtras('ritter'), null);
+  // Schild: Fläche in Teamfarbe (etwas dunkler als der Körper), heller Rand, Buckel, Umriss #2a2a33
+  for (let vi = 1; vi <= 4; vi++) {
+    const c = mockCtx(); drawRigPart(c, 'roemer', 'shield', vi, 0);
+    const face = shade(TEAMS[TEAM_KEYS[vi]].body, -.1);
+    assert.ok(c.log.fills.includes(face), `${TEAM_KEYS[vi]}: ${c.log.fills}`);
+    assert.ok(c.log.strokes.includes('#2a2a33'), 'Umriss');
+    assert.ok(c.log.strokes.includes('#ffe08a') || c.log.fills.includes('#ffe08a'), 'heller Rand');
+  }
+  const n = mockCtx(); drawRigPart(n, 'roemer', 'shield', 1, 0);
+  const m = mockCtx(); drawRigPart(m, 'roemer', 'shield', 2, 0);
+  assert.notDeepEqual(n.log.fills, m.log.fills, 'je Team anders');
+  // Helm mit rotem Querkamm; Körper in Teamfarbe
+  const h = mockCtx(); drawRigPart(h, 'roemer', 'headgear', 1, 0);
+  assert.ok(h.log.fills.includes('#e5574f'), 'roter Kamm');
+  const b = mockCtx(); drawRigPart(b, 'roemer', 'body', 3, 0);
+  assert.ok(b.log.fills.includes(TEAMS.gruen.body), 'Körper in Teamfarbe');
+  // Schwert und Speer sehen verschieden aus
+  const s0 = mockCtx(), s1 = mockCtx(); drawRigPart(s0, 'roemer', 'weapon', 1, 0); drawRigPart(s1, 'roemer', 'weapon', 1, 1);
+  assert.notDeepEqual(s0.log.strokes, s1.log.strokes);
+});
+
+const rom = (o = {}) => mk('roemer', { form: 0, formOn: false, formFree: false, formVx: 0, formVy: 0, formAx: 1, formAy: 0, pilum: 1, ...o });
+
+test('roemer: im Block alle im gleichen Takt (Block-id, nicht eigene Phase)', () => {
+  const sp = UNITS.roemer.speed;
+  const a = rom({ form: 3, formOn: true, formVx: sp, seed: .2, mx: sp }), b = rom({ form: 3, formOn: true, formVx: sp, seed: 7.9, mx: sp * .8, my: 4 });
+  const c = rom({ form: 4, formOn: true, formVx: sp, seed: .2, mx: sp });
+  let diff = 0;
+  samples(0, 2, .013, t => {
+    const p = poseUnit(a, t), q = poseUnit(b, t), r = poseUnit(c, t);
+    near(p.sy, q.sy); near(p.bob, q.bob); assert.equal(p.frame, q.frame);
+    if (Math.abs(p.sy - r.sy) > 1e-3) diff++;
+  });
+  assert.ok(diff > 20, 'anderer Block, anderer Takt');
+  // ohne Block (oder freigegeben) wieder die eigene Phase
+  const s1 = rom({ seed: .2, mx: sp }), s2 = rom({ seed: 2.9, mx: sp });
+  const f1 = rom({ form: 3, formOn: true, formFree: true, seed: .2, mx: sp }), f2 = rom({ form: 3, formOn: true, formFree: true, seed: 2.9, mx: sp });
+  let own = 0, free = 0;
+  samples(0, 2, .013, t => {
+    if (Math.abs(poseUnit(s1, t).sy - poseUnit(s2, t).sy) > 1e-3) own++;
+    if (Math.abs(poseUnit(f1, t).sy - poseUnit(f2, t).sy) > 1e-3) free++;
+  });
+  assert.ok(own > 20 && free > 20);
+});
+
+test('roemer: Schild vorn im Block, seitlich bei charge; Speer in der Hand bis zum Wurf, Arm hebt sich beim Wurf', async () => {
+  const P = await import('../game/js/render/pose.js');
+  const blk = poseUnit(rom({ form: 2, formOn: true }), 1), chg = poseUnit(rom({ form: 2, formOn: false, pilum: 0 }), 1);
+  assert.equal(blk.shieldFront, 1); assert.equal(chg.shieldFront, 0);
+  assert.ok(blk.shieldX > 0 && blk.shieldSx === 1, 'vor dem Körper, ganz zu sehen');
+  assert.ok(chg.shieldSx < blk.shieldSx, 'seitlich: schmal gedreht');
+  assert.equal(poseUnit(rom({ form: 2, formOn: true, formFree: true }), 1).shieldFront, 0, 'freigegeben: kein Schildwall');
+  assert.equal(poseUnit(rom(), 1).shieldFront, 0, 'allein: seitlich');
+  // Speer in der Hand (Bild 1) nur im Block vor dem Wurf; danach und bei charge das Schwert
+  assert.equal(blk.weaponFrame, 1); assert.equal(chg.weaponFrame, 0);
+  assert.equal(poseUnit(rom({ form: 2, formOn: true, pilum: 0 }), 1).weaponFrame, 0);
+  assert.equal(poseUnit(rom({ formOn: false, pilum: 1 }), 1).weaponFrame, 0);
+  // Wurf: kurz nach dem Abwurf (fireT klein, pilum 0) hebt sich der Arm und sinkt in THROW_T zurück
+  const T = P.THROW_T;
+  assert.ok(T >= .2 && T <= .5, `${T}`);
+  const up = poseUnit(rom({ form: 2, formOn: true, pilum: 0, fireT: T / 2 }), 1);
+  assert.ok(up.weaponLift > 0 && up.weaponRot < 0, `Arm oben ${up.weaponLift} ${up.weaponRot}`);
+  for (const f of [T, 1]) { const q = poseUnit(rom({ form: 2, formOn: true, pilum: 0, fireT: f }), 1); near(q.weaponLift, 0); near(q.weaponRot, 0); }
+  // kein Rückstoß wie bei Schusswaffen
+  near(poseUnit(rom({ pilum: 0, fireT: 0 }), 1).recoil, 0);
+  // andere Einheiten: keine Schild-Pose
+  const k = poseUnit(mk('krieger'), 1);
+  assert.equal(k.shieldFront, 0); assert.equal(k.weaponFrame, 0); assert.equal(k.weaponLift, 0);
+});

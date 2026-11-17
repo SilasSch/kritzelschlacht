@@ -31,9 +31,24 @@ export const PRONE_TILT = .25;    // rad Neigung in Blickrichtung
 export const PRONE_DROP = .1;     // liegend zusätzlich r · 0.1 tiefer
 export const PRONE_GUN = [.25, .3];    // liegend: Waffe in r-Einheiten (lokal) nach vorn und zum Boden verschoben
 
+/* ---------- Römer (Spez. #25, Task 4) ----------
+   Im marschierenden Block (formOn, nicht formFree) wippen alle im gleichen Takt: die Schrittphase kommt aus
+   der Zeit t und der Block-id (blockPhase), nicht aus u.seed. t ist die eine Uhr, mit der der Renderer alle
+   Einheiten eines Bilds stellt; so laufen alle Mitglieder eines Blocks gleich und jeder Block hat seinen Takt.
+   Schild (eigenes Rig-Teil, um seine Mitte gezeichnet): Lage shieldX/shieldY (r-Einheiten, lokal in
+   Blickrichtung), Drehung shieldRot, Breite shieldSx. shieldFront 1: im Block vor dem Körper (über Körper und
+   Waffe, die Augen schauen über den Rand); 0: seitlich am Rücken, hinter dem Körper und etwas schmaler
+   (charge, allein, freigegeben), Kurzschwert frei. weaponFrame 1: Speer in der Hand (im Block, solange er nicht geworfen ist), sonst 0 (Kurzschwert).
+   Wurf (pilum 0, fireT < THROW_T): der Arm (die Waffe) hebt sich um THROW_LIFT · r und dreht um THROW_ROT,
+   Verlauf sin(π · fireT / THROW_T). Kein Schusswaffen-Rückstoß. Alle anderen: 0. */
+export const SHIELD_FRONT = [.72, .5, 0, 1];   // x, y (r), Drehung, Breite: vor dem Körper
+export const SHIELD_SIDE = [-.62, .36, -.18, .78]; // seitlich hinter dem Körper, etwas gedreht
+export const THROW_T = .35, THROW_ROT = -1.2, THROW_LIFT = .35;
+const blockPhase = id => frac(id * .6180339887);
+
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const frac = v => v - Math.floor(v);
+function frac(v) { return v - Math.floor(v); }
 
 /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
    Panzer, Hubschrauber und Drache: gleicher Sticker-Stil, aber größer gezeichnet (BOSS_VIS × r; Logik-
@@ -176,13 +191,15 @@ export function poseUnit(u, t, out = {}, mem) {
   const mx = u.mx || 0, my = u.my || 0;
   const walking = !fly && Math.abs(mx) + Math.abs(my) > 1;
   let sx = 1, sy = 1, bob = 0, frame = 0;
+  const roman = u.type === 'roemer', inBlock = roman && u.form > 0 && u.formOn && !u.formFree;
   if (fly) {
     // Flieger schweben und flattern (Flügel, Rotor) immer
     bob = Math.sin(TAU * 1.3 * t + u.seed) * 1.5;
     frame = ((t * 10 + u.seed) | 0) % 2;
   } else if (walking) {
     // Schrittfrequenz wächst mit dem Tempo des Typs; ein Federn je Schritt, Füße wechseln je Schritt
-    const q = t * (2 + T.speed / 30) + u.seed, s = Math.sin(TAU * q);
+    // (Römer im Block: Phase des Blocks, Gleichschritt)
+    const q = t * (2 + T.speed / 30) + (inBlock ? blockPhase(u.form) : u.seed), s = Math.sin(TAU * q);
     sy = 1 + WALK_SQUASH * s;
     sx = 1 / sy;
     bob = -1.5 * (s > 0 ? s : 0);
@@ -203,6 +220,18 @@ export function poseUnit(u, t, out = {}, mem) {
   out.frame = frame;
   out.turretFlip = 0; out.turretRot = 0; out.rotorRot = 0; out.tailRotor = 0; out.wingPhase = 0; out.wing = 0; out.tailSwing = 0;
   out.headRot = 0; out.track = 0;
+  out.shieldFront = 0; out.shieldX = 0; out.shieldY = 0; out.shieldRot = 0; out.shieldSx = 1; out.weaponFrame = 0; out.weaponLift = 0;
+  if (roman) {
+    const S = inBlock ? SHIELD_FRONT : SHIELD_SIDE;
+    out.shieldFront = inBlock ? 1 : 0; out.shieldX = S[0]; out.shieldY = S[1]; out.shieldRot = S[2]; out.shieldSx = S[3];
+    out.weaponFrame = u.formOn && u.pilum === 1 ? 1 : 0;
+    out.recoil = 0;
+    const q = u.fireT / THROW_T;
+    if (u.pilum === 0 && q >= 0 && q < 1) {
+      const k = Math.sin(Math.PI * q);
+      out.weaponLift = THROW_LIFT * k; out.weaponRot = THROW_ROT * k;
+    }
+  }
   if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.

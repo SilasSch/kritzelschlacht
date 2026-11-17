@@ -104,10 +104,11 @@ export function hurt(world, v, a, kind, src, dot = false) {
 }
 
 // Teile, die beim Sterben als eigene Leichenteile wegfliegen (Rig-Teil headgear/weapon; beim Ritter ist
-// die "Waffe" der Schild, beim Panzer der Turm, beim Hubschrauber die Kopfbedeckung der Rotor)
+// die "Waffe" der Schild, beim Panzer der Turm, beim Hubschrauber die Kopfbedeckung der Rotor; der Römer
+// verliert Helm, Scutum (eigenes Rig-Teil 'shield') und Kurzschwert)
 export const PARTS = {
   krieger: ['headgear', 'weapon'], schuetze: ['headgear', 'weapon'], ritter: ['headgear', 'shield'],
-  grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
+  grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'shield', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
   panzer: ['turret'], heli: ['headgear', 'weapon'],

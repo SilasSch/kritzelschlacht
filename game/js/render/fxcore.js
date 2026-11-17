@@ -85,7 +85,7 @@ export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10)
    Wann gesenkt wird, entscheidet der Regler createLodGovernor aus der Arbeitszeit je Bild. */
 export const LOD_MAX = 1;
 export const LOD_OFF = new Set(['smoke', 'dust', 'wisp', 'exhaust', 'wash']);
-export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow']);
+export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow', 'pilum']);
 // Regler: update(workMs, frameMs). Gewertet wird die gemessene Arbeitszeit je Bild (Simulation, Effekte,
 // Zeichnen; ms), nicht der Bildabstand: ein auf 30 Hz begrenzter Browser hat 33 ms Abstand, aber wenig Arbeit.
 // Gleitendes Mittel der Arbeitszeit (Gewicht LOD_EMA); länger als LOD_SLOW_T s (Echtzeit aus frameMs) über
@@ -171,7 +171,9 @@ export function createParticles(cap = FX_CAP) {
 
 /* ---------- Aussehen ---------- */
 // Bildteile des Atlas in fx.js
-export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7 };
+export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7, streak: 8, pilum: 9 };
+// Einheitsradius je Bildteil (F) in Atlas-px: ein Partikel mit r = FRAME_R[f] wird in Originalgröße gezeichnet
+export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32];
 export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame']);
 export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
@@ -247,10 +249,23 @@ export function look(p, o) {
     case 'plus': o.frame = F.plus; o.tint = 0x2fbf6b; break;
     case 'soul': o.frame = F.soul; o.x = p.x + Math.sin(p.age * 6) * 2; o.tint = 0xffffff; o.alpha = a * .85; break;
     case 'arrow': o.frame = F.arrow; o.ax = 1; o.tint = 0xffffff; o.alpha = Math.min(1, a * 2); o.r = 8; break;
+    // steckender Römerspeer: länger als der Pfeil, Spitze am Landepunkt (Anker rechts)
+    case 'pilum': o.frame = F.pilum; o.ax = 1; o.tint = 0xffffff; o.alpha = Math.min(1, a * 2); o.r = 8; break;
+    // Schildblock: heller Querstrich (wächst kurz), Splitter (dreht sich, in p.col)
+    case 'glint': o.frame = F.streak; o.tint = 0xfff6c8; o.r = p.r * (1 + q * .5); o.alpha = a; break;
+    case 'shard': o.frame = F.streak; o.alpha = Math.min(1, a * 3); break;
     // 'dot', 'drop': Scheibe in p.col
   }
   return o;
 }
+
+/* ---------- Schildblock der Römer (Spez. #25) ----------
+   block-Ereignis (combat.shieldHit: x, y am Schild, kind, a = Abprallwinkel): ein heller Querstrich quer zu a
+   ('glint'), BLOCK_FX.sparks kleine Funken ('spark', glühen und fallen) und ein Splitter ('shard': Holz bei
+   Pfeil und Speer, grau bei Kugeln), der in Richtung a abprallt, mit kleinem Hüpfer nach oben (shardUp px/s).
+   Budget-Art misc. */
+export const BLOCK_FX = { sparks: 2, shardUp: 40, shardV: [80, 130], sparkV: [50, 110] };
+const SHARD_COL = { bullet: 0x9aa0aa, arrow: 0xa5692f, pilum: 0xc9a26b };
 
 /* ---------- Ereignisse → Effekte ---------- */
 const TAU = Math.PI * 2;
@@ -468,12 +483,27 @@ export function createFxCore(hooks = {}, opt = {}) {
       case 'hit':
         if (e.flank && take('misc')) { const p = add('dot', e.x, e.y - 10, .35, 2.6, 0xffb800); if (p) { p.vx = rnd(-20, 20); p.vy = -40; p.drag = DRAG; } }
         break;
+      case 'block': {
+        if (!take('misc')) break;
+        const a = e.a || 0, ca = Math.cos(a), sa = Math.sin(a);
+        const g = add('glint', e.x, e.y, .14, 4.5); if (g) g.rot = a + Math.PI / 2;
+        for (let i = 0; i < BLOCK_FX.sparks; i++) {
+          const b = a + rnd(-.6, .6), s = rnd(BLOCK_FX.sparkV[0], BLOCK_FX.sparkV[1]);
+          const p = add('spark', e.x, e.y, rnd(.15, .28), rnd(.9, 1.3)); if (!p) break;
+          p.vx = Math.cos(b) * s; p.vy = Math.sin(b) * s - 30; p.ay = 220; p.drag = 2;
+        }
+        const s = rnd(BLOCK_FX.shardV[0], BLOCK_FX.shardV[1]);
+        const p = add('shard', e.x, e.y, .45, 2.4, SHARD_COL[e.kind] || SHARD_COL.arrow);
+        if (p) { p.vx = ca * s; p.vy = sa * s - BLOCK_FX.shardUp; p.ay = 380; p.drag = 1; p.rot = a; p.vrot = (rand() < .5 ? -1 : 1) * rnd(10, 18); }
+        break;
+      }
       case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
       case 'miss':
         if (!take('misc')) break;
-        // pilum: vorläufig der steckende Pfeil (eigene Optik in Task 4)
-        if (e.kind === 'arrow' || e.kind === 'pilum') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
+        if (e.kind === 'arrow') { const p = add('arrow', e.x, e.y, 2.5, 8); if (p) p.rot = e.a || 0; }
+        // Speer: steckt schräg im Boden (Spitze nach unten, Schaft zeigt zurück zum Werfer)
+        else if (e.kind === 'pilum') { const p = add('pilum', e.x, e.y, 2.5, 8), a = e.a || 0; if (p) p.rot = Math.atan2(Math.abs(Math.sin(a)) * .5 + .6, Math.cos(a)); }
         else dots(e.x, e.y, 1, 20, .25, 1.5, 1.5, 0xb8a98a);
         break;
       case 'ignite': {

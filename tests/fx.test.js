@@ -331,3 +331,55 @@ test('Decal-Generationen', () => {
   a.tick(10); a.reset();
   assert.equal(a.oldAlpha(), 0); assert.equal(a.tick(29), false); assert.equal(a.tick(2), true);
 });
+
+/* ---------- Römer (Spez. #25, Task 4) ---------- */
+test('block erzeugt Funken innerhalb des misc-Budgets', async () => {
+  const { BLOCK_FX, F } = await import('../game/js/render/fxcore.js');
+  const { core } = mkCore();
+  const a = .7;
+  core.consume([{ type: 'block', x: 10, y: 20, kind: 'arrow', a }]);
+  const k = kinds(core);
+  assert.equal(k.spark, BLOCK_FX.sparks, 'kleiner Funke');
+  assert.equal(k.glint, 1, 'Querstrich am Schild');
+  assert.equal(k.shard, 1, 'Splitter');
+  const live = core.store.live, o = {};
+  const g = live.find(p => p.k === 'glint'), s = live.find(p => p.k === 'shard');
+  near(g.x, 10); near(g.y, 20);
+  near(g.rot, a + Math.PI / 2);   // quer zur Abprallrichtung
+  // Splitter fliegt in Richtung a (dazu ein kleiner Hüpfer nach oben)
+  const sp = s.vx / Math.cos(a);
+  assert.ok(sp > 0, 'in Richtung a');
+  near(s.vy + BLOCK_FX.shardUp, sp * Math.sin(a), 1e-6);
+  // Funke glüht wie Funken sonst; Querstrich und Splitter sind normal gemischt und sichtbar
+  look(g, o); assert.equal(o.frame, F.streak); assert.equal(o.gAlpha, 0); assert.ok(o.alpha > 0);
+  look(s, o); assert.equal(o.frame, F.streak); assert.equal(o.gAlpha, 0);
+  // Kugeln geben graue Splitter, Pfeil und Speer Holz
+  core.clear();
+  core.consume([{ type: 'block', x: 0, y: 0, kind: 'bullet', a: 0 }, { type: 'block', x: 0, y: 0, kind: 'pilum', a: 0 }]);
+  const cols = core.store.live.filter(p => p.k === 'shard').map(p => p.col);
+  assert.equal(cols.length, 2); assert.notEqual(cols[0], cols[1]);
+  // Budget misc: 500 Blocks in einem Bild
+  core.clear();
+  const ev = [];
+  for (let i = 0; i < 500; i++) ev.push({ type: 'block', x: i, y: 0, kind: 'arrow', a: 0 });
+  core.consume(ev);
+  assert.equal(core.stats().skipped.misc, 500 - FRAME_LIMITS.misc);
+  assert.equal(kinds(core).glint, FRAME_LIMITS.misc);
+  assert.ok(core.store.count <= FRAME_LIMITS.misc * (BLOCK_FX.sparks + 2));
+});
+
+test('Speer: steckt nach dem Fehlwurf als eigener Speer im Boden (nicht als Pfeil)', async () => {
+  const { F, FRAME_R } = await import('../game/js/render/fxcore.js');
+  const { core } = mkCore();
+  core.consume([{ type: 'miss', kind: 'pilum', x: 5, y: 6, a: 0 }, { type: 'miss', kind: 'arrow', x: 5, y: 6, a: 0 }]);
+  const k = kinds(core);
+  assert.equal(k.pilum, 1); assert.equal(k.arrow, 1);
+  const p = core.store.live.find(q => q.k === 'pilum'), o = {};
+  look(p, o);
+  assert.equal(o.frame, F.pilum); assert.equal(o.ax, 1, 'Spitze am Landepunkt');
+  assert.ok(o.rot > 0 && o.rot < Math.PI / 2, `steckt schräg im Boden ${o.rot}`);
+  // gezeichnete Länge (Maßstab r / FRAME_R, beide Bilder füllen ihr Feld fast ganz): deutlich länger als der Pfeil
+  const ar = look(core.store.live.find(q => q.k === 'arrow'), {});
+  assert.ok(o.r / FRAME_R[F.pilum] > 1.6 * ar.r / FRAME_R[F.arrow], 'länger als der Pfeil');
+  assert.equal(FRAME_R.length, Object.keys(F).length);
+});

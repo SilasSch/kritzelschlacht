@@ -22,6 +22,7 @@ test('Konstanten', () => {
   assert.equal(CORPSE_CAP, 1500); assert.equal(PART_CAP, 500); assert.equal(LAUNCH_VZ, 60);
   assert.deepEqual(PARTS.krieger, ['headgear', 'weapon']);
   assert.deepEqual(PARTS.ritter, ['headgear', 'shield']);
+  assert.deepEqual(PARTS.roemer, ['headgear', 'shield', 'weapon']);
   assert.deepEqual(PARTS.panzer, ['turret']);
 });
 

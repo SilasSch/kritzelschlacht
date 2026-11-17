@@ -297,7 +297,8 @@ export function createRenderer(canvasHost) {
   // Liegen (p.prone 0..1): platt um die Füße gestaucht (p.sx, p.sy), r · PRONE_DROP tiefer, um p.lie
   // vorgeneigt; die Waffe dreht um p.weaponLie zurück (flach nach vorn) und rückt nach vorn unten
   // (PRONE_GUN), der Rückstoß folgt ihrer Achse. Teile in Rig-Reihenfolge: Waffe hinten (BACK_WEAPON),
-  // Körper, Pupillen, Lid (nur beim Blinzeln), Kopfbedeckung, Waffe vorn.
+  // Körper, Pupillen, Lid (nur beim Blinzeln), Kopfbedeckung, Waffe vorn (Römer: Schild im Block zuletzt, vor
+  // dem Körper; sonst als Erstes, seitlich hinter dem Körper).
   function bodies(list, Q, bars, t, tm, inv) {
     Q.clear(); bars.clear();
     for (const u of list) {
@@ -326,6 +327,8 @@ export function createRenderer(canvasHost) {
       }
       const back = rig.weapon && BACK_WEAPON.has(u.type);
       if (back) weaponPart(Q, rig, p, vi, pr, inv);
+      // Römer ohne Block: Schild seitlich hinter dem Körper
+      if (rig.shield && !p.shieldFront) shieldPart(Q, rig, p, vi, inv);
       let f = X.body[vi]; part(Q, UM, f[fr] || f[0], A.body, 0, 0, inv);
       if (rig.pupilL) {
         // Pupillen in Augenradien versetzt; lokal ungespiegelt, daher Blick-x mal Blickrichtung
@@ -336,14 +339,21 @@ export function createRenderer(canvasHost) {
       if (rig.lid && p.blink) part(Q, UM, rig.lid, A.lid, 0, 0, inv, 0, rig.lidTint[tm ? TEAM_INDEX[u.team] || 0 : 0]);
       if (rig.headgear) { f = X.headgear[vi]; part(Q, UM, f[fr] || f[0], A.headgear, 0, 0, inv); }
       if (rig.weapon && !back) weaponPart(Q, rig, p, vi, pr, inv);
+      // Römer im Block: Schild vor dem Körper, über der Waffe
+      if (rig.shield && p.shieldFront) shieldPart(Q, rig, p, vi, inv);
       bar(bars, u, T, rig, sy, pr);
     }
   }
-  // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff
+  // Rückstoß entlang der Waffenachse nach hinten, Schwung um den Griff; Bild p.weaponFrame (Römer: Speer in
+  // der Hand), beim Wurf um p.weaponLift · r angehoben
   function weaponPart(Q, rig, p, vi, pr, inv) {
-    const a = rig.anchors.weapon, k = p.recoil;
-    const ax = rig.axis + p.weaponLie, gx = pr * PRONE_GUN[0] * rig.r, gy = pr * PRONE_GUN[1] * rig.r;
-    part(Q, UM, rig.tex.weapon[vi][0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv, p.weaponRot * rig.swing + p.weaponLie);
+    const a = rig.anchors.weapon, k = p.recoil, set = rig.tex.weapon[vi];
+    const ax = rig.axis + p.weaponLie, gx = pr * PRONE_GUN[0] * rig.r, gy = pr * PRONE_GUN[1] * rig.r - p.weaponLift * rig.r;
+    part(Q, UM, set[p.weaponFrame] || set[0], a, a.x + gx - Math.cos(ax) * k, a.y + gy - Math.sin(ax) * k, inv, p.weaponRot * rig.swing + p.weaponLie);
+  }
+  // Schild (Römer) um seine Mitte: Lage, Drehung und Breite aus der Pose (pose.SHIELD_FRONT / SHIELD_SIDE)
+  function shieldPart(Q, rig, p, vi, inv) {
+    part(Q, UM, rig.tex.shield[vi][0], rig.anchors.shield, p.shieldX * rig.r, p.shieldY * rig.r, inv, p.shieldRot, 0xffffff, 1, inv * p.shieldSx, inv);
   }
 
   // HP-Leiste über der Figur (rig.barTop: Oberkante der Zeichnung, Bosse höher und breiter); liegend tiefer
@@ -488,9 +498,10 @@ export function createRenderer(canvasHost) {
       if (c.x < V.x0 || c.x > V.x1 || c.y < V.y0 || c.y > V.y1) continue;
       const rig = rigs.get(c.type); if (!rig) continue;
       const body = c.kind === 'body';
-      // Teile: Kopfbedeckung bzw. Waffen-Teil des Rigs (Schild des Ritters); Bosse über rig.partMap
-      // (Panzerturm mit Rohr, Heli-Rotor), die liegende Leiche aus rig.corpseBody (Drache: ganze Figur)
-      const name = body ? rig.corpseBody : (rig.partMap && rig.partMap[c.part]) || (c.part === 'headgear' ? 'headgear' : 'weapon');
+      // Teile: Kopfbedeckung bzw. Waffen-Teil des Rigs (Schild des Ritters), eigenes Rig-Teil gleichen Namens
+      // (Schild des Römers); Bosse über rig.partMap (Panzerturm mit Rohr, Heli-Rotor), die liegende Leiche aus
+      // rig.corpseBody (Drache: ganze Figur)
+      const name = body ? rig.corpseBody : (rig.partMap && rig.partMap[c.part]) || (c.part === 'headgear' ? 'headgear' : c.part === 'shield' && rig.shield ? 'shield' : 'weapon');
       const set = rig.tex[name];
       if (!set) continue;
       const vi = tm && rig.teamed ? TEAM_INDEX[c.team] || 0 : 0, tex = (set[vi] || set[0])[0];
@@ -535,9 +546,9 @@ export function createRenderer(canvasHost) {
      Lage auf dem Bildschirm (y − z) und Flugwinkel aus pose.projScreen; Bögen werfen einen Schatten am
      Bodenpunkt ihrer Bahn, der mit der Höhe kleiner und weicher wird. */
   const PS = {};
-  const PROJ_SHADOW = { arrow: 3, bomb: 4, mortar: 4.5, shell: 3.5 };
+  const PROJ_SHADOW = { arrow: 3, pilum: 5, bomb: 4, mortar: 4.5, shell: 3.5 };
   // Gezeichnet aus Strichen (weiße Textur, gedreht) und Scheiben (softTex[0], Radius 31 px) in projQ wie
-  // früher mit Graphics: Pfeil, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
+  // früher mit Graphics: Pfeil, Speer, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
   function disc(x, y, r, col) { projQ.addPart(softTex[0], null, x, y, 0, r / 31, r / 31, .5, .5, col, 1); }
   function drawProjectiles(world) {
     projQ.clear();
@@ -551,8 +562,15 @@ export function createRenderer(canvasHost) {
         shadowParams(p.z, SH);
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
-      // pilum (Römerspeer): vorläufig wie ein Pfeil, eigene Zeichnung folgt mit den Römer-Visuals (Task 4)
-      if (p.kind === 'arrow' || p.kind === 'pilum') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+      if (p.kind === 'arrow') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
+      else if (p.kind === 'pilum') {
+        // Römerspeer: dünner Holzschaft, langer Eisenschaft und helle Spitze, mit Umriss; entlang der Bahn
+        // geneigt wie der Pfeil, aber fast doppelt so lang
+        projQ.line(x - ca * 9.6, y - sa * 9.6, x + ca * 9.6, y + sa * 9.6, 2.8, OC);
+        projQ.line(x - ca * 9, y - sa * 9, x + ca * 1.5, y + sa * 1.5, 1.3, 0xc9a26b);
+        projQ.line(x + ca * 1.5, y + sa * 1.5, x + ca * 7, y + sa * 7, 1, 0x9aa3ae);
+        projQ.line(x + ca * 6.6, y + sa * 6.6, x + ca * 9.2, y + sa * 9.2, 1.7, 0xe6ebf0);
+      }
       else if (p.kind === 'bomb' || p.kind === 'mortar') {
         disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
         if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);

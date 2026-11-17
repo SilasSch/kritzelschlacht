@@ -181,4 +181,6 @@ test('eventSound: land/impact nach Aufprall, splash, crash; sonst nichts', () =>
   assert.equal(eventSound({ type: 'sound', k: 'boom' }), 'boom');
   assert.equal(eventSound({ type: 'blast' }), null);
   assert.equal(eventSound({ type: 'death' }), null);
+  // Schildblock: der Ton kommt als sound-Ereignis 'clink' aus combat.shieldHit, nicht doppelt über block
+  assert.equal(eventSound({ type: 'block', kind: 'arrow', a: 0 }), null);
 });

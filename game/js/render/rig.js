@@ -8,7 +8,7 @@
 // (Blick nach rechts). Spiegeln, Neigen und Quetschen macht der Renderer am Container.
 /* global PIXI */
 import { UNITS, TEAMS, TINT } from '../data.js';
-import { RIG_PARTS, BOSS_VIS, DRAGON_GEO, TRACK_PITCH, TRACK_FRAMES, dragonHead } from './pose.js';
+import { RIG_PARTS, BOSS_VIS, DRAGON_GEO, TRACK_PITCH, TRACK_FRAMES, SHIELD_FRONT, dragonHead } from './pose.js';
 import { TANK_GEO, HELI_GEO } from '../muzzle.js';
 export { poseUnit, RIG_PARTS } from './pose.js';
 
@@ -262,7 +262,9 @@ const BOSS_DEF = {
    eyes                Augen für Pupillen und Lid (fehlt: keine Pupillen)
    lid(c,r,e)          eigenes Lid statt des Standardlids; lid:false = kein Lid
    headgear(c,r,k,f)   Kopfbedeckung; hgFrames: Anzahl Bilder
-   weapon              {draw(c,r,k), grip:[x,y] Drehpunkt in r, axis: Richtung des Rückstoßes (rad), swing: Anteil am Schwung}
+   weapon              {draw(c,r,k,f), grip:[x,y] Drehpunkt in r, axis: Richtung des Rückstoßes (rad), swing: Anteil am Schwung,
+                       frames: Anzahl Bilder (Römer: Schwert, Speer in der Hand)}
+   shield              {draw(c,r,k)} Zusatzteil (EXTRA_PARTS) um seine Mitte, Lage aus der Pose (Römer)
    k = {col, dk, shield} der Variante (neutral oder Team).
    Panzer, Hubschrauber und Drache kommen aus BOSS_DEF (eigene Teile, siehe oben). */
 const DEF = {
@@ -485,10 +487,84 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .95, r * .95], [r * 1.4, -r * .35]], '#3a3f4a', 4.2); },
     },
   },
+  // Römer (Spez. #25): Tunika in Teamfarbe mit Gürtel, Stahlhelm mit rotem Querkamm, Wangen- und
+  // Nackenschutz; Waffe Bild 0 Kurzschwert (Gladius), Bild 1 Speer (Pilum) in der Hand, bis er geworfen ist.
+  // shield: großes, leicht gewölbtes Scutum in Teamfarbe (etwas dunkler als der Körper) mit hellem Rand,
+  // Mittelrippe und Buckel, um seine Mitte gezeichnet; Lage, Drehung und Breite kommen aus der Pose
+  // (pose.SHIELD_FRONT / SHIELD_SIDE). Die Augen sitzen hoch, damit sie über den Schildrand schauen.
+  roemer: {
+    eyes: eyePair(.12, -.4, .25),
+    body(c, r, k, f) {
+      feet(c, r, '#8a5a2b', f); E(c, 0, 0, r, r * 1.05, k.col);
+      // Gürtel (Cingulum) mit Beschlägen, auf den Körper beschnitten
+      c.save(); c.beginPath(); c.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2); c.clip();
+      c.fillStyle = '#7a4f2a'; c.fillRect(-r, r * .3, r * 2, r * .16);
+      c.restore();
+      for (const x of [-.45, -.1, .25]) E(c, r * x, r * .38, r * .06, r * .06, '#ffd25a', 0);
+      E(c, 0, 0, r, r * 1.05, null, 1.4);
+      whites(c, r, this.eyes);
+    },
+    headgear(c, r) {
+      // Querkamm: Bürste quer über den Helm (von vorn gesehen breit), mit dunklen Strähnen
+      c.beginPath(); c.ellipse(0, -r * 1.1, r * .74, r * .46, 0, Math.PI, 0); c.closePath();
+      c.fillStyle = '#e5574f'; c.fill(); c.lineWidth = 1.3; c.strokeStyle = O; c.stroke();
+      c.strokeStyle = '#b8352f'; c.lineWidth = .9; c.beginPath();
+      for (const a of [-2.6, -2.1, -1.57, -1.05, -.55]) { c.moveTo(Math.cos(a) * r * .22, -r * 1.1 + Math.sin(a) * r * .14); c.lineTo(Math.cos(a) * r * .62, -r * 1.1 + Math.sin(a) * r * .38); }
+      c.stroke();
+      // Nackenschutz (hinten) und Kalotte
+      poly(c, r, [[-.8, -.74], [-1.16, -.5], [-1.02, -.38], [-.72, -.58]], '#9aa3ae', 1.2);
+      c.beginPath(); c.ellipse(0, -r * .64, r * .99, r * .54, 0, Math.PI, 0); c.closePath();
+      c.fillStyle = '#c3cad3'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+      E(c, -r * .3, -r * .94, r * .28, r * .1, 'rgba(255,255,255,.55)', 0, null, -.25);
+      // Stirnreif in Bronze, Wangenklappe vorn
+      Ln(c, [[-r * .96, -r * .66], [r * .96, -r * .66]], '#d9a441', 1.6);
+      poly(c, r, [[.66, -.68], [.96, -.68], [.92, -.3], [.76, -.26]], '#c3cad3', 1.2);
+      E(c, r * .83, -r * .5, r * .05, r * .05, '#d9a441', 0);
+    },
+    weapon: {
+      grip: [.85, .3], axis: Math.atan2(-1, .7), swing: 1, frames: 2,
+      draw(c, r, k, f) {
+        if (f === 1) {
+          // Pilum senkrecht in der Hand: Holzschaft, langer Eisenschaft, kleine Spitze
+          Ln(c, [[r * .72, r * 1.0], [r * 1.02, -r * .6]], '#c9a26b', 1.9);
+          Ln(c, [[r * 1.02, -r * .6], [r * 1.26, -r * 1.85]], '#8d96a3', 1.2);
+          poly(c, r, [[1.18, -1.82], [1.36, -2.25], [1.36, -1.8]], '#e6ebf0', 1);
+          return;
+        }
+        // Gladius: kurze breite Klinge mit Spitze, Parierstange, Griff, Knauf
+        poly(c, r, [[.92, .1], [1.4, -.6], [1.56, -.92], [1.46, -.52], [1.06, .2]], '#eef2f6', 1.2);
+        Ln(c, [[r * 1.02, r * .1], [r * 1.42, -r * .62]], '#aab3be', .8, false);
+        Ln(c, [[r * .82, r * .06], [r * 1.16, r * .28]], '#d9a441', 1.6);
+        Ln(c, [[r * .99, r * .17], [r * .85, r * .4]], '#7a4f2a', 1.6);
+        E(c, r * .82, r * .45, r * .08, r * .08, '#d9a441', 1);
+      },
+    },
+    shield: {
+      draw(c, r, k) {
+        const w = r * .6, h = r * .78, bx = r * .09;   // halbe Breite und Höhe, Wölbung der Seiten
+        const face = shade(k.col, -.1);
+        const path = (sw, sh, b) => {
+          c.beginPath(); c.moveTo(-sw, -sh + r * .1);
+          c.quadraticCurveTo(-sw, -sh, -sw + r * .1, -sh); c.lineTo(sw - r * .1, -sh); c.quadraticCurveTo(sw, -sh, sw, -sh + r * .1);
+          c.quadraticCurveTo(sw + b, 0, sw, sh - r * .1); c.quadraticCurveTo(sw, sh, sw - r * .1, sh); c.lineTo(-sw + r * .1, sh);
+          c.quadraticCurveTo(-sw, sh, -sw, sh - r * .1); c.quadraticCurveTo(-sw - b, 0, -sw, -sh + r * .1); c.closePath();
+        };
+        path(w, h, bx); c.fillStyle = face; c.fill(); c.lineWidth = 1.5; c.strokeStyle = O; c.stroke();
+        // Wölbung: heller Streifen links, dunkler rechts
+        c.save(); path(w, h, bx); c.clip();
+        c.fillStyle = shade(k.col, .28); c.fillRect(-w - bx, -h, w * .55, h * 2);
+        c.fillStyle = shade(k.col, -.32); c.fillRect(w * .62, -h, w * .5 + bx, h * 2);
+        c.restore();
+        // heller Rand, Mittelrippe, Buckel mit Glanz
+        path(w - r * .1, h - r * .1, bx * .6); c.lineWidth = 1.1; c.strokeStyle = '#ffe08a'; c.stroke();
+        Ln(c, [[0, -h + r * .14], [0, h - r * .14]], '#ffe08a', 1.1, false);
+        E(c, 0, 0, r * .25, r * .23, '#d9dde3', 1.2);
+        E(c, -r * .06, -r * .06, r * .07, r * .05, '#fff', 0);
+      },
+    },
+  },
   ...BOSS_DEF,
 };
-// Platzhalter: Römer zeichnen sich wie Krieger, bis Task 4 (Spez. #25) ein eigenes Rig bringt
-DEF.roemer = DEF.krieger;
 
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
 // deren Körper die Teamfarbe trägt (TINT), und der Ritter (Schild in Teamfarbe).
@@ -531,9 +607,12 @@ function drawPart(c, t, part, vi, f) {
     case 'pupilL': case 'pupilR': E(c, 0, 0, D.eyes.prx * r, D.eyes.pry * r, O, 0); break;
     case 'lid': if (D.lid) D.lid(c, r, D.eyes); else drawLid(c, r, D.eyes); break;
     case 'headgear': D.headgear(c, r, k, f); break;
-    case 'weapon': D.weapon.draw(c, r, k); break;
+    case 'weapon': D.weapon.draw(c, r, k, f); break;
+    case 'shield': D.shield.draw(c, r, k, f); break;
   }
 }
+// Für Tests: ein Teil in Variante vi, Bild f auf einen beliebigen 2D-Kontext zeichnen
+export const drawRigPart = drawPart;
 
 // Welche Teile ein Typ hat, wie viele Varianten und Bilder; Drehpunkt in Welt-Einheiten.
 // Boss-Teile (DEF.parts) sind um ihren Drehpunkt gezeichnet (Anker = Ursprung).
@@ -549,12 +628,17 @@ function partSpec(t, part) {
     case 'pupilL': case 'pupilR': return D.eyes ? { nv: 1, nf: 1, scanV: 0, pivot: [0, 0] } : null;
     case 'lid': return D.eyes && D.lid !== false ? { nv: 1, nf: 1, scanV: 0, pivot: [0, 0] } : null;
     case 'headgear': return D.headgear ? { nv: tv, nf: D.hgFrames || 1, scanV: 0, pivot: [0, 0] } : null;
-    case 'weapon': return D.weapon ? { nv: tv, nf: 1, scanV: 0, pivot: [D.weapon.grip[0] * r, D.weapon.grip[1] * r] } : null;
+    case 'weapon': return D.weapon ? { nv: tv, nf: D.weapon.frames || 1, scanV: 0, pivot: [D.weapon.grip[0] * r, D.weapon.grip[1] * r] } : null;
+    // Zusatzteil (EXTRA_PARTS) normaler Figuren, um seine Mitte gezeichnet (Lage aus der Pose)
+    case 'shield': return D.shield ? { nv: tv, nf: 1, scanV: 0, pivot: [0, 0] } : null;
   }
   return null;
 }
-// alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile
-const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : RIG_PARTS);
+// Zusatzteile normaler Figuren über RIG_PARTS hinaus (Römer: Schild); ohne bleibt rig[name] leer
+export const EXTRA_PARTS = ['shield'];
+const extraNames = t => (DEF[t].parts ? [] : EXTRA_PARTS.filter(n => DEF[t][n]));
+// alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile, sonst die vorhandenen Zusatzteile
+const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : [...RIG_PARTS, ...extraNames(t)]);
 
 export const spriteSize = r => r * 4.6 + 14;
 
@@ -680,7 +764,10 @@ export function iconURL(t){
     const at=(tx,ty)=>{x.setTransform(s,0,0,s,44,52);if(U[t].fly)x.translate(0,-r*.3);x.translate(tx,ty);};
     at(0,0);drawPart(x,t,'body',0,0);
     if(D.eyes)for(const p of[D.eyes.L,D.eyes.R]){at(p[0]*r+D.eyes.s*r*.35,p[1]*r+D.eyes.s*r*.15);drawPart(x,t,'pupilL',0,0);}
-    at(0,0);if(D.headgear)drawPart(x,t,'headgear',0,0);if(D.weapon)drawPart(x,t,'weapon',0,0);
+    at(0,0);if(D.headgear)drawPart(x,t,'headgear',0,0);
+    // Römer: Speer in der Hand, Schild vor dem Körper (wie im Block)
+    if(D.shield){drawPart(x,t,'weapon',0,1);at(SHIELD_FRONT[0]*r,SHIELD_FRONT[1]*r);drawPart(x,t,'shield',0,0);}
+    else if(D.weapon)drawPart(x,t,'weapon',0,0);
   }
   else{
     const blob=(c1,c2)=>{x.fillStyle=c1;x.beginPath();x.ellipse(48,50,36,28,-.2,0,7);x.fill();x.fillStyle=c2;x.beginPath();x.ellipse(48,50,27,20,-.2,0,7);x.fill();};
@@ -697,6 +784,14 @@ export function iconURL(t){
 export function rigLayout(t) {
   const out = {};
   for (const part of RIG_PARTS) { const sp = partSpec(t, part); out[part] = sp ? { variants: sp.nv, frames: sp.nf } : null; }
+  return out;
+}
+// Zusatzteile (EXTRA_PARTS) mit Varianten und Bildern; null ohne
+export function rigExtras(t) {
+  const names = DEF[t] ? extraNames(t) : [];
+  if (!names.length) return null;
+  const out = {};
+  for (const part of names) { const sp = partSpec(t, part); out[part] = { variants: sp.nv, frames: sp.nf }; }
   return out;
 }
 // Boss-Teile (alle Teile aus DEF.parts) mit Varianten und Bildern; null für normale Figuren

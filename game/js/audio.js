@@ -4,6 +4,9 @@
 // (harte Landung ab IMPACT_SOUND_V px/s Aufprall), splash (Wasser), crash (abgestürzter Flieger). Eine in Lava
 // versinkende Leiche (terrain-Ereignis kind 'ash', Spez. #17) zischt mit demselben Rauschen wie splash.
 // Gedrosselt wird in play() wie alle anderen Geräusche.
+// Schildblock der Römer (block-Ereignis, Spez. #25): kein eigener Ton hier. combat.shieldHit schickt dazu das
+// sound-Ereignis 'clink' (das 'hit'-Rauschen höher und leiser: Bandpass 3200 statt 1300 Hz, .06 statt .07);
+// ein zweiter Ton über block würde nur doppelt zählen.
 export const IMPACT_SOUND_V = 320;
 export function eventSound(e) {
   switch (e.type) {

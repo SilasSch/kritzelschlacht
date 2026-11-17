@@ -22,7 +22,8 @@ export const UNITS = {
   // Ghul (Festlegung 3): nicht malbar, entsteht nur durch den tödlichen Biss eines Vampirs; langsam, schwach, zerfällt
   ghul:{n:'Ghul',cat:'mythisch',col:'#8f9c84',r:9,hp:40,dmg:7,range:3,speed:32,cd:1.1,cost:1,mass:1,paint:false,d:'Entsteht durch den Biss eines Vampirs. Langsam, schwach und hirnlos. Zerfällt mit der Zeit und mit seinem Vampir.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
-  mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.13,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
+  // MG (Nachtrag 5, #40): Abklingzeit .13 → .11 s (18 % mehr Kugeln, sichtbar dichteres Dauerfeuer); Reiter, Scharfschütze und Panzerfaust schlagen es weiter
+  mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.11,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
   // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
   panzerfaust:{n:'Panzerfaust',cat:'modern',col:'#b59060',r:9,hp:85,dmg:70,range:230,splash:22,speed:44,cd:3.5,cost:6,mass:1,d:'Rakete gegen Panzer und Hubschrauber. Lange Nachladezeit.'},

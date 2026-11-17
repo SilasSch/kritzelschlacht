@@ -357,3 +357,16 @@ test('cornerT hat eine Obergrenze: nach 10 s Nahkampf flieht er spätestens PIN_
   assert.ok(dist(u, s) > d1 + 5, `Abstand wächst (${d1} → ${dist(u, s)})`);
   assert.ok(u.mx * (s.x - u.x) + u.my * (s.y - u.y) < 0, 'läuft weg, nicht auf ihn los');
 });
+
+// Finale Prüfung: das u.tg eines Fliehenden ist die Bedrohung, kein Angriffsziel. Er zählt nicht in deren att
+// (Zielverteilung in world.nearestEnemy, Einkreisen in combat.think).
+test('att: Fliehende zählen nicht als Angreifer ihrer Bedrohung', () => {
+  const w = mkWorld(), e = dummy(w, 'krieger', 700, 400);
+  allies(w, 200, 700);
+  const fl = spawn(w, 'krieger', 650, 400, 'blau'); fl.hp = 10;
+  const fi = spawn(w, 'krieger', 750, 400, 'blau');
+  run(w, .2);
+  assert.equal(fl.flee, true); assert.equal(fl.tg, e, 'Bedrohung gemerkt');
+  assert.equal(fi.flee, false); assert.equal(fi.tg, e);
+  assert.equal(e.att, 1, 'nur der Kämpfer zählt');
+});

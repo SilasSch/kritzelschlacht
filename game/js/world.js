@@ -90,8 +90,9 @@ export function spawn(world, type, x, y, team) {
     flee: false, safeT: 0, cornerT: 0,
     // Fähigkeiten (abilities.js, Spez. #30): Abklingzeit (s), läuft gerade, Zeit seit dem Start, Zähler (z. B.
     // abgefeuerte Raketen), Zielpunkt bzw. Richtung; Schreck: Restdauer (s, Festlegung 1, morale.isFleeing).
-    // Abklingzeit beim Spawn ABILITY.cd · (0,3 + 0,7 · rng), damit nicht alle zugleich auslösen; world.rng() nur für
-    // Typen mit Fähigkeit (die Folge der Zufallszahlen aller anderen bleibt gleich).
+    // Abklingzeit beim Spawn ABILITY.cd · (0,3 + 0,7 · q), damit nicht alle zugleich auslösen; q nach id gestreut
+    // (goldener Schnitt) statt aus world.rng(): bekommt ein Typ eine Fähigkeit, bleibt die Zufallsfolge der ganzen
+    // Schlacht gleich (Task 2: sonst verschob jede neue Fähigkeit alle Saaten des Prüfstands).
     abCd: 0, abOn: false, abT: 0, abK: 0, abX: 0, abY: 0, fearT: 0,
     // Verstärkung (abilities.js, Heulen): Restdauer (s) und Faktoren auf Wunschtempo (physics.integrate) und
     // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
@@ -99,7 +100,7 @@ export function spawn(world, type, x, y, team) {
     buffT: 0, spdMul: 1, dmgMul: 1, fz: T.flyZ || 0,
   };
   const A = ABILITY[type];
-  if (A) u.abCd = A.cd * (.3 + .7 * world.rng());
+  if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);

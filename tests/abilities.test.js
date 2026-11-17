@@ -363,7 +363,7 @@ const arcShot = (w, kind, src, x0, y0, x1, y1) => w.proj.push({ kind, arc: true,
   x: x0, y: y0, z: 0, tz: 0, f: src.team, src, dmg: 12, R: 0 });
 
 test('Tabelle: neun neue Fähigkeiten mit den Abklingzeiten aus #30, Kartentexte in data.js', () => {
-  const cds = { schuetze: 20, sani: 20, soldat: 15, moerser: 30, panzer: 25, wolf: 25, baer: 20, geist: 15, drache: 30, heli: 25 };
+  const cds = { schuetze: 30, sani: 20, soldat: 15, moerser: 30, panzer: 25, wolf: 25, baer: 20, geist: 15, drache: 30, heli: 25 };
   assert.deepEqual(Object.keys(ABILITY).sort(), Object.keys(cds).sort());
   for (const k in cds) {
     assert.equal(ABILITY[k].cd, cds[k], k);
@@ -390,7 +390,25 @@ test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an (Generation 0)
   assert.equal(n, FIRE_ARROWS.N); assert.equal(FIRE_ARROWS.N, 3);
   assert.ok(ign >= 1, `ignite ${ign}`);
   assert.equal(s.abOn, false);
-  assert.ok(Math.abs(s.abCd - 20) < 1.6, `abCd ${s.abCd}`);
+  assert.ok(Math.abs(s.abCd - 30) < 1.6, `abCd ${s.abCd}`);
+  // die Salve ersetzt die nächsten Pfeile: danach lädt er für sie nach
+  assert.ok(s.cd >= 1e9 - 2, 'cd bleibt hoch');
+});
+
+test('Brandpfeile: eigene Schützen bis SHARE px laden mit neu, die Salve kostet die nächsten Pfeile', () => {
+  const w = mkWorld(), s = spawn(w, 'schuetze', 400, 400, 'blau');
+  const near = spawn(w, 'schuetze', 400 + FIRE_ARROWS.SHARE - 20, 400, 'blau'), far = spawn(w, 'schuetze', 400, 400 + FIRE_ARROWS.SHARE + 20, 'blau');
+  const foe = spawn(w, 'schuetze', 560, 380, 'rot');
+  const e = dummy(w, 'krieger', 560, 400);
+  for (const u of [near, far, foe]) { u.abCd = 2; u.cd = 1e9; }
+  rebuildHash(w); updateCentroids(w, DT);
+  s.abCd = 0; s.tg = e; s.rt = 5; s.cd = 0;
+  think(w, s, DT);
+  assert.equal(s.abOn, true);
+  assert.equal(near.abCd, ABILITY.schuetze.cd); assert.equal(far.abCd, 2); assert.equal(foe.abCd, 2);
+  run(w, .5);
+  assert.equal(s.abOn, false);
+  assert.ok(s.cd > (FIRE_ARROWS.N - 1) * UNITS.schuetze.cd - .6, `Nachladen ${s.cd}`);
 });
 
 test('Brandpfeile: Römerschild hält den Brandpfeil ab, er zündet nicht; sonst Treffer wie ein Pfeil, dann Brand', () => {

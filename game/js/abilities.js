@@ -10,7 +10,7 @@
 //   start   Beginn (einmal). Gleich danach läuft update mit dt = 0 im selben Schritt.
 //   update  Jeder Schritt, solange sie läuft; u.abT = Zeit seit dem Start, u.abK = Zähler (z. B. Raketen). true:
 //           fertig, dann läuft im selben Schritt das normale Verhalten weiter.
-//   end     (optional) Aufräumen, beim regulären Ende wie beim Abbruch.
+//   end     (optional) Aufräumen, beim regulären Ende wie beim Abbruch; läuft vor dem Zurücksetzen (sieht abT, abK).
 // Nach dem Ende und nach jedem Abbruch beginnt die Abklingzeit neu (u.abCd = cd); während sie läuft, steht sie.
 //
 // Vorrang der Zustände (Festlegung 1), geführt in combat.think: tot > betäubt oder in der Luft > Schreck > Rückzug
@@ -86,9 +86,10 @@ export function cancelAbility(world, u) {
   if (A !== undefined && u.abOn) finish(world, u, A);
 }
 
+// end läuft vor dem Zurücksetzen: es sieht noch u.abT und u.abK (z. B. wie viele Brandpfeile schon flogen)
 function finish(world, u, A) {
-  u.abOn = false; u.abT = 0; u.abK = 0; u.abCd = A.cd;
   if (A.end) A.end(world, u);
+  u.abOn = false; u.abT = 0; u.abK = 0; u.abCd = A.cd;
 }
 
 /* ---------- Hubschrauber: Raketensalve ---------- */
@@ -205,12 +206,28 @@ function faceTo(u, x, y) {
 
 /* ---------- Schütze: Brandpfeile ---------- */
 // N Brandpfeile im Abstand GAP s auf das aktuelle Ziel in Reichweite (Bogen wie der Pfeil, Schaden des Schützen).
-// Ein Treffer zündet an (combat.landArc, Generation 0); ein Römerschild hält ihn ab und er zündet nicht (Vorgabe 5).
-// Kein Drache als Ziel (feuerfest). Verlässt das Ziel die Reichweite oder fällt es, endet die Salve.
-export const FIRE_ARROWS = { N: 3, GAP: .2 };
+// Ein Treffer zündet an (combat.landArc, Generation GEN = 0); ein Römerschild hält ihn ab und er zündet nicht
+// (Vorgabe 5). Kein Drache als Ziel (feuerfest). Verlässt das Ziel die Reichweite oder fällt es, endet die Salve.
+// Balance (Task 2, Prüfstand): in Masse kippten die Brandpfeile die Konter ritter > schuetze und roemer > schuetze
+// sowie M2 und M5 (ein Brand macht am Ritter ×1,5 gut 36 Schaden, etwa 8 normale Pfeile). Darum: Abklingzeit 30 s
+// statt des Richtwerts 20 s; eigene Schützen bis SHARE px laden beim Auslösen mit neu (eine Salve je Gruppe, wie das
+// Rudel beim Heulen); und die Salve ersetzt die nächsten Pfeile (archerEnd: danach Nachladen für sie).
+export const FIRE_ARROWS = { N: 3, GAP: .2, GEN: 0, SHARE: 300 };
 function archerReady(world, u) {
   const t = foeInReach(world, u, u.T.range, false);
   return !!t && t.type !== 'drache';
+}
+// Eigene Schützen bis SHARE px laden mit neu (wie das Rudel beim Heulen): seltene Salven statt Dauerfeuer
+let SH_W = null, SH_U = null, SH_F = null;
+function shareTest(v) {
+  if (v === SH_U || v.type !== 'schuetze' || v.abOn || factionOf(SH_W, v) !== SH_F) return;
+  const dx = v.x - SH_U.x, dy = v.y - SH_U.y, R = FIRE_ARROWS.SHARE, cd = ABILITY.schuetze.cd;
+  if (dx * dx + dy * dy <= R * R && v.abCd < cd) v.abCd = cd;
+}
+function archerStart(world, u) {
+  SH_W = world; SH_U = u; SH_F = factionOf(world, u);
+  query(world, u.x, u.y, FIRE_ARROWS.SHARE, shareTest);
+  SH_W = null; SH_U = null; SH_F = null;
 }
 function archerUpdate(world, u) {
   const S = FIRE_ARROWS, t = foeInReach(world, u, u.T.range, false);
@@ -219,6 +236,8 @@ function archerUpdate(world, u) {
   while (u.abK < S.N && u.abT >= u.abK * S.GAP - 1e-9) { fire(world, u, t, 'firearrow'); u.abK++; }
   return u.abK >= S.N;
 }
+// Die Salve ersetzt die nächsten Pfeile: danach lädt er für sie nach (sonst kämen N Pfeile obendrauf)
+function archerEnd(world, u) { const c = (u.abK - 1) * u.T.cd; if (u.cd < c) u.cd = c; }
 
 /* ---------- Sanitäter: Heilwelle ---------- */
 // Alle Verbündeten (auch er selbst) bis R px um den Sanitäter bekommen FRAC ihrer max. LP (gedeckelt). Löst aus,
@@ -485,7 +504,7 @@ function diveEnd(world, u) { u.fz = u.T.flyZ; }
 /* ---------- Tabelle ---------- */
 export const ABILITY = {
   heli: { cd: 25, ready: heliReady, start: nothing, update: heliUpdate },
-  schuetze: { cd: 20, ready: archerReady, start: nothing, update: archerUpdate },
+  schuetze: { cd: 30, ready: archerReady, start: archerStart, update: archerUpdate, end: archerEnd },
   sani: { cd: 20, ready: saniReady, start: saniStart, update: done },
   soldat: { cd: 15, ready: grenadeReady, start: grenadeStart, update: done },
   moerser: { cd: 30, ready: barrageReady, start: nothing, update: barrageUpdate, end: barrageEnd },

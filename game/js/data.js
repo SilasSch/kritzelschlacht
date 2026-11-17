@@ -33,7 +33,7 @@ export const UNITS = {
 const ABIL = {
   krieger: [{n:'Von hinten', d:'Kreist Gegner ein. Angriffe von hinten machen +35 % Schaden.'}],
   schuetze: [
-    {n:'Brandpfeile', d:'Alle 20 s schießt er 3 Brandpfeile kurz hintereinander. Getroffene fangen Feuer. Römerschilde halten sie ab.'},
+    {n:'Brandpfeile', d:'Alle 30 s schießt eine Schützengruppe 3 Brandpfeile kurz hintereinander. Getroffene fangen Feuer. Römerschilde halten sie ab.'},
     {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'},
   ],
   ritter: [

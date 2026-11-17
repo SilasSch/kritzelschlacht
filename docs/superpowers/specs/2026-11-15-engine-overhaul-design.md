@@ -145,6 +145,21 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 - die Sticker-Gestaltung der neuen Figuren;
 - welche vorhandenen Geräusche für die neuen Effekte genutzt werden.
 
+## Nachtrag 4 (2026-11-18, Rückmeldung des Nutzers nach dem Spielen)
+
+| # | Entscheidung |
+|---|---|
+| 35 | **Römer:**<ul><li>Es entstehen keine Riesenblöcke mehr aus allen Römern der Karte. Ein Block bildet sich nur aus Römern, die nah beieinander gemalt wurden, mit einer Obergrenze an Mitgliedern.</li><li>Weicht der Gegner zurück und schießt dabei, marschiert der Block schneller oder stürmt früher.</li><li>Im Block wählen die Römer verteilte Ziele statt alle dasselbe, auch bei der Speersalve.</li></ul> |
+| 36 | **Scharfschützen** schießen nur im Liegen, mit mehr Schaden, langsamerer Feuerrate und mehr Reichweite. Im Stehen bewegen sie sich, schießen aber nicht. Das ersetzt den Teil von #22, nach dem auch Stehende schießen. |
+| 37 | **Bienen:** Der erste Stich vergiftet (Schaden über Zeit). Bienen werden minimal teurer. |
+| 38 | **Sanitäter:** Viele Sanitäter zusammen sind zu stark. Ihre Heilung wird gedämpft, wenn mehrere dasselbe Ziel heilen. Die Heilwelle nutzt eine gemeinsame Abklingzeit wie die Brandpfeile. Bei Bedarf werden sie teurer. |
+| 39 | **Panzer:** bekommt zusätzlich ein MG, das gegen Infanterie feuert, während die Kanone nachlädt. |
+
+**Arbeitsweise (vom Nutzer gewünscht: schneller):**
+- Kleinere Rückmeldungen werden gebündelt in einer Aufgabe umgesetzt, mit einer Prüfung statt mehrerer Runden.
+- Die vollen Balance-Prüfungen mit 6 Fensterformen laufen in den Zwischenschritten nur noch auf einer Form. Alle 6 Formen werden erst vor dem Veröffentlichen geprüft.
+- Unabhängige Aufgaben laufen parallel.
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

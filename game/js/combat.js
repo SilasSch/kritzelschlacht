@@ -104,7 +104,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
 // die "Waffe" der Schild, beim Panzer der Turm, beim Hubschrauber die Kopfbedeckung der Rotor)
 export const PARTS = {
   krieger: ['headgear', 'weapon'], schuetze: ['headgear', 'weapon'], ritter: ['headgear', 'shield'],
-  grenadier: ['headgear', 'weapon'], reiter: ['weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
+  grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
   panzer: ['turret'], heli: ['headgear', 'weapon'],

@@ -487,6 +487,8 @@ const DEF = {
   },
   ...BOSS_DEF,
 };
+// Platzhalter: Römer zeichnen sich wie Krieger, bis Task 4 (Spez. #25) ein eigenes Rig bringt
+DEF.roemer = DEF.krieger;
 
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
 // deren Körper die Teamfarbe trägt (TINT), und der Ritter (Schild in Teamfarbe).

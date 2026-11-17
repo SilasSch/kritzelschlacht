@@ -9,6 +9,7 @@ export const UNITS = {
   ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:15,range:3,speed:34,cd:1,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Anfällig für Bomben, Feuer und MG-Dauerfeuer.'},
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
+  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:80,dmg:13,range:3,speed:46,cd:.9,cost:3,mass:1.4,pilum:16,d:'Marschiert als Block im Gleichschritt und wirft vor dem Angriff Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:10,range:90,speed:50,cd:1,cost:3,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
@@ -25,6 +26,15 @@ export const UNITS = {
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
 };
 
+// Leistung: alle Einträge in eine gemeinsame Form bringen (dieselben Schlüssel in derselben Reihenfolge, fehlende
+// als undefined, Werte unverändert). Mit dem Römer (pilum) hätte u.T sonst fünf Formen, und Zugriffe wie u.T.r
+// in physics.collide würden megamorph (V8 merkt sich höchstens vier Formen je Zugriff): Kollision 0,33 → 0,67 ms
+// je Schritt in tools/bench.mjs mixed. Ein Konstruktor statt {} hält die Felder im Objekt selbst (schneller als
+// nachträglich angehängte), mixed 1,7 → 1,5 ms.
+const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
+function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
+for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);
+
 export const TERRAIN = {
   wasser:{n:'Wasser',id:1,cost:.04,d:'Bremst Bodentruppen auf 40 % Tempo.'},
   lava:{n:'Lava',id:2,cost:.12,d:'Verbrennt alles, was nicht fliegt.'},
@@ -33,14 +43,14 @@ export const TERRAIN = {
   radierer:{n:'Radierer',id:0,cost:0,d:'Entfernt Einheiten und Gelände unter dem Pinsel.'},
 };
 
-export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber'};
+export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber'};
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
 
 export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:'#ff4d4d',body:'#ef5d55'},gruen:{n:'Grün',c:'#2fbf6b',body:'#4fc07a'},gelb:{n:'Gelb',c:'#ffb800',body:'#ffc533'}};
 
 // Typen, deren Körper die Teamfarbe trägt
-export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','soldat','mg','sniper','panzerfaust','moerser','panzer','heli']);
+export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli']);
 
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);

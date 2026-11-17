@@ -7,7 +7,7 @@
 // Leichen (world.corpses, angelegt von combat.die) fliegen, drehen sich, prallen auf und rutschen aus
 // (stepCorpses); sie sind für Einheiten und untereinander kein Hindernis. Mauerbrocken (world.debris,
 // angelegt von combat.hitWall) fliegen genauso, berühren aber nur Boden und Mauern (stepDebris).
-import { CELL, HASH_CELL } from './data.js';
+import { CELL, HASH_CELL, TERRAIN, TERR_SPEED } from './data.js';
 import { cellIndex } from './world.js';
 import { hurt, crash } from './combat.js';
 
@@ -24,7 +24,7 @@ export const MAX_FLING = 700;        // Explosionen beschleunigen waagrecht höc
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const WATER = 1, LAVA = 2, WALL = 4;
+const WATER = TERRAIN.wasser.id, LAVA = TERRAIN.lava.id, WALL = TERRAIN.mauer.id;
 
 /* ---------- Impuls ---------- */
 // v += I / Masse. Bei iz > 0 hebt der Körper ab; peakZ wird ab hier gemessen.
@@ -56,14 +56,13 @@ export function integrate(world, dt) {
       if (u.z <= 0 && u.vz < 0) land(world, u);
     } else {
       if (u.state === 'stun') { u.stunT -= dt; if (u.stunT <= 0) { u.stunT = 0; u.state = 'ok'; } }
-      // Gelände bremst die Wunschbewegung; Lava brennt
-      let sp = 1; const tt = terr[cellIndex(world, u.x, u.y)];
-      if (tt === 1) sp = .4;
-      else if (tt === 2) {
-        sp = .8; hurt(world, u, 10 * dt, 'fire', null);
+      // Gelände bremst die Wunschbewegung (TERRAIN sp); Lava brennt
+      const tt = terr[cellIndex(world, u.x, u.y)], sp = TERR_SPEED[tt];
+      if (tt === LAVA) {
+        hurt(world, u, 10 * dt, 'fire', null);
         // etwa 6 Flammen pro Sekunde, ohne den Spielzufall zu verbrauchen
         if (u.alive && ((world.time * 60 | 0) + u.id) % 10 === 0) world.events.push({ type: 'burn', x: u.x, y: u.y });
-      } else if (tt === 3) sp = .85;
+      }
       if (!u.alive) continue;
       if (u.state === 'ok') { wx = u.mx * sp; wy = u.my * sp; }
     }

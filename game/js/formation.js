@@ -34,6 +34,7 @@
 // bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger.
 import { factionOf, query, nearestEnemy, cellIndex } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
+import { TERR_SPEED, TERR_HAZ } from './data.js';
 
 // SPACING: 26 statt 22 (Task 4): Platz für das Scutum vor jedem Körper, der Block bleibt lesbar
 // LINK: 110 statt 46 (Task 7): gemalte Römer liegen ohnehin dichter (Pinsel: nächster Nachbar meist 21–30 px), aber
@@ -54,13 +55,13 @@ const STUCK_PX = 10;
 // Platz und der ganze Weg (bis FREE_LOOK px) frei sind. Der Block bleibt in Formation.
 export const FORM_PROBE = 20;
 const FREE_LOOK = 400, LOOK_STEP = 5, SLOT_MARGIN = 10;
-const HAZ = [false, false, true, false, true];   // nach Gelände-id: Lava, Mauer
+const HAZ = TERR_HAZ;   // nach Gelände-id: Lava, Mauer (data.js)
 // Lava oder Mauer unter (x, y)? (combat.think: freie Römer treten nicht hinein)
 export const hazardAt = (world, x, y) => HAZ[world.terr[cellIndex(world, x, y)]];
 const FLANK_EVERY = 6;                    // Flankenprüfung je Mitglied jeden 6. Schritt (nach id versetzt)
 const TURN_COS = Math.cos(FORM_TURN);
-// Geländebremse wie physics.integrate (Wasser, Lava, Wald)
-const TERR_SP = [1, .4, .8, .85, 1];
+// Geländebremse wie physics.integrate (Wasser, Lava, Wald; data.js)
+const TERR_SP = TERR_SPEED;
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 

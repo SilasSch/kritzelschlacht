@@ -6,8 +6,8 @@ import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from
 import { step } from '../game/js/sim.js';
 import { hurt, think, fire, stepProjectiles, PILUM_SCAN, PILUM_SCAN_T } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
-import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT, blockCols, COLS_MAX } from '../game/js/formation.js';
-import { CELL, HASH_CELL, UNITS } from '../game/js/data.js';
+import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT, blockCols, COLS_MAX, hazardAt } from '../game/js/formation.js';
+import { CELL, HASH_CELL, UNITS, TERRAIN, TERR_SPEED, TERR_HAZ } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
 const mk = (seed = 3) => { const w = createWorld(W, H, seed); w.teamMode = true; return w; };
@@ -419,4 +419,20 @@ test('Breite: große Blöcke marschieren als Front, kleine wie bisher', () => {
   assert.equal(f.n, 200);
   assert.equal(cols, COLS_MAX); assert.equal(rows, Math.ceil(200 / COLS_MAX));
   assert.ok(cols > rows, `breiter als tief: ${cols} × ${rows}`);
+});
+
+// Finale Prüfung: Gefahr und Geländebremse kommen aus TERRAIN (data.js), nicht aus Zahlen in formation.js
+test('Gelände: Gefahr und Tempo nach TERRAIN, gleich wie physics.integrate', () => {
+  assert.deepEqual(TERR_HAZ, [false, false, true, false, true]);
+  assert.deepEqual(TERR_SPEED, [1, .4, .8, .85, 1]);
+  for (const k in TERRAIN) {
+    const w = mk(), x = 300, y = 300;
+    if (TERRAIN[k].id) setCell(w, cellIndex(w, x, y), TERRAIN[k].id, 0);
+    assert.equal(hazardAt(w, x, y), k === 'lava' || k === 'mauer', k);
+    if (k === 'mauer') continue;
+    // eine Bodeneinheit läuft mit TERR_SPEED · Wunschtempo
+    const u = spawn(w, 'krieger', x, y, 'blau'); u.mx = 50; u.my = 0;
+    integrate(w, DT);
+    assert.ok(Math.abs((u.x - x) / DT - 50 * TERR_SPEED[TERRAIN[k].id]) < 1e-6, `${k}: ${((u.x - x) / DT).toFixed(2)}`);
+  }
 });

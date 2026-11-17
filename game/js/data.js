@@ -96,13 +96,20 @@ export const COUNTERS = [
   ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier', 'roemer', 60],
 ];
 
+// sp: Tempofaktor für Bodentruppen auf der Zelle (ohne: 1); haz: Lava und Mauer, die Bodentruppen meiden
+// (freie Römer, Flucht). Daraus TERR_SPEED und TERR_HAZ nach id (unten).
 export const TERRAIN = {
-  wasser:{n:'Wasser',id:1,cost:.04,d:'Bremst Bodentruppen auf 40 % Tempo.'},
-  lava:{n:'Lava',id:2,cost:.12,d:'Verbrennt alles, was nicht fliegt.'},
-  wald:{n:'Wald',id:3,cost:.04,d:'Deckung: halber Schaden durch Pfeile und Explosionen.'},
-  mauer:{n:'Mauer',id:4,cost:.1,d:'Blockiert Bodentruppen, bis sie zerschlagen wird.'},
+  wasser:{n:'Wasser',id:1,cost:.04,sp:.4,d:'Bremst Bodentruppen auf 40 % Tempo.'},
+  lava:{n:'Lava',id:2,cost:.12,sp:.8,haz:true,d:'Verbrennt alles, was nicht fliegt.'},
+  wald:{n:'Wald',id:3,cost:.04,sp:.85,d:'Deckung: halber Schaden durch Pfeile und Explosionen.'},
+  mauer:{n:'Mauer',id:4,cost:.1,haz:true,d:'Blockiert Bodentruppen, bis sie zerschlagen wird.'},
   radierer:{n:'Radierer',id:0,cost:0,d:'Entfernt Einheiten und Gelände unter dem Pinsel.'},
 };
+// Nach Gelände-id (0 = frei): Tempofaktor (physics.integrate, formation.march) und Gefahr (formation.hazardAt).
+// Hier statt in physics.js, weil formation.js physics.js nicht importieren kann (Kreis über combat.js, das FORM
+// schon beim Laden liest).
+export const TERR_SPEED = [], TERR_HAZ = [];
+for (const k in TERRAIN) { const T = TERRAIN[k]; TERR_SPEED[T.id] = T.sp ?? 1; TERR_HAZ[T.id] = !!T.haz; }
 
 export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber'};
 

@@ -13,6 +13,11 @@ const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
 const SPAM_LOSE_MIN = 6 / 8;  // gelisteter Spam-Plan verliert mindestens 6/8
 const SPAM_WIN_MIN = 6 / 8;   // Spam-Plan der Einstiegsmission M1 gewinnt mindestens 6/8
+// M3 (Eiserne Front) steht nicht in SPAM_MUST_LOSE: schon in der alten Engine gewann der Krieger-Spam dort
+// manchmal gegen den Ritter-Schildwall. Die Mission lehrt aber, dass Bienen (und Bomben, Feuer) den Wall knacken;
+// gewänne die Krieger-Masse fast immer, wäre sie trivial. Darum: M3-Spam gewinnt höchstens 4/8.
+const M3 = 2;
+const M3_SPAM_MAX = 4 / 8;
 const DUEL_MIN = 3 / 4;       // Konter gewinnt mindestens 3/4
 
 const [cmd = 'missions', runsArg = '8', shapeArg] = process.argv.slice(2);
@@ -75,6 +80,7 @@ if (cmd === 'missions') {
       }
       else if (SPAM_MUST_LOSE.includes(i)) { if ((runs - wins) / runs < SPAM_LOSE_MIN) { ok = false; note = 'FAIL (spam < 6/8 losses)'; } }
       else if (i === 0) { if (wins / runs < SPAM_WIN_MIN) { ok = false; note = 'FAIL (M1 spam < 6/8 wins)'; } }
+      else if (i === M3) { if (wins / runs > M3_SPAM_MAX) { ok = false; note = 'FAIL (M3 spam > 4/8 wins)'; } }
       else note = '(not checked)';
       console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
     }

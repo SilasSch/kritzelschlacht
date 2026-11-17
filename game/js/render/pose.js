@@ -38,7 +38,8 @@ export const PRONE_GUN = [.25, .3];    // liegend: Waffe in r-Einheiten (lokal) 
    Schild (eigenes Rig-Teil, um seine Mitte gezeichnet): Lage shieldX/shieldY (r-Einheiten, lokal in
    Blickrichtung), Drehung shieldRot, Breite shieldSx. shieldFront 1: im Block vor dem Körper (über Körper und
    Waffe, die Augen schauen über den Rand); 0: seitlich am Rücken, hinter dem Körper und etwas schmaler
-   (charge, allein, freigegeben), Kurzschwert frei. weaponFrame 1: Speer in der Hand (im Block, solange er nicht geworfen ist), sonst 0 (Kurzschwert).
+   (charge, allein, freigegeben), Kurzschwert frei. weaponFrame 1: Speer in der Hand (im Block, solange er
+   nicht geworfen ist), sonst 0 (Kurzschwert).
    Wurf (pilum 0, fireT < THROW_T): der Arm (die Waffe) hebt sich um THROW_LIFT · r und dreht um THROW_ROT,
    Verlauf sin(π · fireT / THROW_T). Kein Schusswaffen-Rückstoß. Alle anderen: 0. */
 export const SHIELD_FRONT = [.72, .5, 0, 1];   // x, y (r), Drehung, Breite: vor dem Körper

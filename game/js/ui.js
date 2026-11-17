@@ -3,6 +3,7 @@
 import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS, MSG_NO_PAINT } from './data.js';
 import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
+import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -85,24 +86,28 @@ export function createUI(game) {
     });
     updateInfo();
     // Neue Auswahl (Klick, Taste, Kategorie): Karte kurz zeigen; nicht beim allerersten Aufbau
-    if (lastSel !== null && game.sel !== lastSel) { selUntil = performance.now() + SEL_SHOW_MS; clearTimeout(selTimer); selTimer = setTimeout(cardUpdate, SEL_SHOW_MS + 30); }
+    if (lastSel !== null && game.sel !== lastSel) selected(hov, performance.now());
     lastSel = game.sel;
     cardUpdate();
   }
 
   /* ---------- Karte bei Hover und Auswahl ---------- */
-  // Schwebt über der Leiste, nimmt keine Zeiger-Ereignisse an (pointer-events: none) und verschwindet, sobald
-  // auf dem Feld gemalt wird. Hover hat Vorrang; sonst zeigt sie nach einer Auswahl SEL_SHOW_MS lang die Auswahl.
-  const SEL_SHOW_MS = 4500;
+  // Schwebt über der Leiste und nimmt keine Zeiger-Ereignisse an (pointer-events: none). Wann sie welche Einheit zeigt,
+  // entscheidet cardhover.js (rein, getestet): Hover hat Vorrang, Lücken halten sie kurz, sonst zeigt sie nach einer
+  // Auswahl SEL_SHOW_MS lang die Auswahl. Ein Zeitgeber weckt cardUpdate zur nächsten Änderung (nextChange).
   const ucard = $('ucard'), unitsBox = $('units');
-  let hoverK = null, selUntil = 0, selTimer = 0, lastSel = null, shownId = '';
+  const hov = createCardHover();
+  let lastSel = null, shownId = '', cardTimer = 0;
   const btnFor = k => unitsBox.querySelector(`.ub[data-k="${k}"]`);
   function cardUpdate() {
     let k = null, btn = null;
-    if ($('ovLex').hidden) {
-      if (hoverK && UNITS[hoverK]) { btn = btnFor(hoverK); if (btn) k = hoverK; }
-      if (!k && UNITS[game.sel] && performance.now() < selUntil) { btn = btnFor(game.sel); if (btn) k = game.sel; }
-    }
+    const now = performance.now();
+    clearTimeout(cardTimer);
+    const want = cardKey(hov, game.sel, now), wait = nextChange(hov, now);
+    if (wait >= 0) cardTimer = setTimeout(cardUpdate, wait + 30);
+    if ($('ovLex').hidden && want && UNITS[want]) { btn = btnFor(want); if (btn) k = want; }
+    // Hover auf einem Knopf, der nicht (mehr) in der Leiste ist (Kategorie gewechselt): dann die Auswahl, wenn sie läuft
+    if (!k && $('ovLex').hidden && want === hov.hoverK && UNITS[game.sel] && now < hov.selUntil) { btn = btnFor(game.sel); if (btn) k = game.sel; }
     if (!k) { ucard.hidden = true; shownId = ''; return; }
     const id = k + '|' + teamVi() + '|' + accent() + '|' + btn.dataset.slot;
     if (id !== shownId) {
@@ -120,18 +125,29 @@ export function createUI(game) {
     ucard.style.bottom = (app.bottom - pal.top + 12) + 'px';
     ucard.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
   }
-  unitsBox.addEventListener('pointerover', e => {
-    // Lücken zwischen den Knöpfen behalten die Karte (kein Flackern); erst das Verlassen der Leiste blendet aus
-    const b = e.target.closest && e.target.closest('.ub');
-    if (b && b.dataset.k !== hoverK) { hoverK = b.dataset.k; cardUpdate(); }
-  });
-  unitsBox.addEventListener('pointerleave', () => { hoverK = null; cardUpdate(); });
+  // Knopf unter dem Zeiger (oder null: Lücke, kein Knopf)
+  const ubAt = el => { const b = el && el.closest ? el.closest('.ub') : null; return b && unitsBox.contains(b) ? b.dataset.k : null; };
+  const over = e => { const k = ubAt(e.target); if (k ? k !== hov.hoverK || hov.gapUntil : hov.hoverK && !hov.gapUntil) { hoverOver(hov, k, performance.now()); cardUpdate(); } };
+  const end = () => { if (hov.hoverK || hov.gapUntil) { hoverEnd(hov); cardUpdate(); } };
+  // pointermove auch: über einer Lücke kommt kein neues pointerover, wenn der Knopf darunter neu gebaut wurde
+  unitsBox.addEventListener('pointerover', over);
+  unitsBox.addEventListener('pointermove', over);
+  unitsBox.addEventListener('pointerleave', end);
+  unitsBox.addEventListener('pointercancel', end);
+  // Sicherheitsnetz, falls pointerleave fehlt (schnelles Verlassen des Fensters oder Rahmens, neu gebaute Leiste):
+  // jede Zeigerbewegung außerhalb der Leiste, das Verlassen der Seite, Fokusverlust, Scrollen und Größenänderung
+  document.addEventListener('pointermove', e => { if (hov.hoverK && !unitsBox.contains(e.target)) end(); }, { passive: true });
+  document.addEventListener('pointerout', e => { if (!e.relatedTarget) end(); });
+  document.documentElement.addEventListener('pointerleave', end);
+  window.addEventListener('blur', end);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) end(); });
+  window.addEventListener('scroll', end, { capture: true, passive: true });
+  window.addEventListener('resize', () => { end(); if (!ucard.hidden) cardUpdate(); });
   // Tastatur (Tab auf einen Einheitenknopf) zeigt die Karte wie Hover
-  unitsBox.addEventListener('focusin', e => { const b = e.target.closest('.ub'); if (b && b.matches(':focus-visible')) { hoverK = b.dataset.k; cardUpdate(); } });
-  unitsBox.addEventListener('focusout', () => { if (hoverK && !unitsBox.matches(':hover')) { hoverK = null; cardUpdate(); } });
+  unitsBox.addEventListener('focusin', e => { const b = e.target.closest('.ub'); if (b && b.matches(':focus-visible')) { hoverOver(hov, b.dataset.k, performance.now()); cardUpdate(); } });
+  unitsBox.addEventListener('focusout', () => { if (hov.hoverK && !unitsBox.matches(':hover')) end(); });
   // Malen auf dem Feld blendet die Karte sofort aus (Ereignis nur lesen, nichts verhindern)
-  $('cv').addEventListener('pointerdown', () => { hoverK = null; selUntil = 0; cardUpdate(); });
-  window.addEventListener('resize', () => { if (!ucard.hidden) cardUpdate(); });
+  $('cv').addEventListener('pointerdown', () => { paint(hov); cardUpdate(); });
 
   /* ---------- Lexikon ---------- */
   // Alle Karten nach Kategorie, auch Einheiten, die die laufende Mission nicht erlaubt (gedimmt).

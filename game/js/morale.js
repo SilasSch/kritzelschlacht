@@ -27,7 +27,9 @@ import { factionOf } from './world.js';
 import { HASH_CELL } from './data.js';
 import { hazardAt } from './formation.js';
 
-export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5, MIN_ALLIES: 3 };
+// CORNER_T: .3 statt 1,5 s (Task 7): wer eingeholt wird, wehrt sich fast sofort. Mit 1,5 s standen Fliehende im
+// Bienenschwarm wehrlos und langsame Nahkämpfer verloren gegen schnelle (krieger > biene, mg > biene, ritter > reiter).
+export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: .3, MIN_ALLIES: 3 };
 // Nahkampfreichweite (höchstens 4 px bei allen Nahkämpfern) plus 10 px, zusätzlich zu den beiden Radien
 export const CORNER_PAD = 14;
 export const PIN_HOLD = 3;

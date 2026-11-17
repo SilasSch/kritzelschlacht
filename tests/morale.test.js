@@ -25,8 +25,9 @@ const allies = (w, x, y, team = 'blau', n = MORALE.MIN_ALLIES) => {
   return A;
 };
 
+// CORNER_T 1,5 → 0,3 s (Task 7, Balance): Eingeholte wehren sich fast sofort (Grund in morale.js)
 test('Rückzug: Werte laut Spez. #27 und neue Felder in spawn', () => {
-  assert.deepEqual(MORALE, { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5, MIN_ALLIES: 3 });
+  assert.deepEqual(MORALE, { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: .3, MIN_ALLIES: 3 });
   const u = spawn(mkWorld(), 'krieger', 100, 100, 'blau');
   assert.equal(u.flee, false); assert.equal(u.safeT, 0); assert.equal(u.cornerT, 0);
 });
@@ -104,8 +105,10 @@ test('cornerT: Feind in Nahkampfreichweite + 10 px zählt, Abstand setzt zurück
   const e = dummy(w, 'krieger', 600 + 9 + 9 + CORNER_PAD - 1, 400);
   allies(w, 100, 700);
   rebuildHash(w); updateCentroids(w, DT);
-  for (let k = 0; k < 30; k++) { w.time += DT; u.rt -= DT; updateMorale(w, u, DT); }
-  assert.ok(Math.abs(u.cornerT - 30 * DT) < 1e-9, `cornerT ${u.cornerT}`);
+  // weniger Schritte als CORNER_T: darüber fiele cornerT nach dem Kontaktabbruch erst mit der Zeit zurück
+  const steps = Math.floor(MORALE.CORNER_T / DT) - 2;
+  for (let k = 0; k < steps; k++) { w.time += DT; u.rt -= DT; updateMorale(w, u, DT); }
+  assert.ok(Math.abs(u.cornerT - steps * DT) < 1e-9, `cornerT ${u.cornerT}`);
   e.x = 600 + 9 + 9 + CORNER_PAD + 5;
   updateMorale(w, u, DT);
   assert.equal(u.cornerT, 0);

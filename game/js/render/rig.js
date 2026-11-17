@@ -576,11 +576,11 @@ const DEF = {
       for (let i = 0; i < 4; i++) { const x0 = -r * 1.3 + i * r * .55; c.quadraticCurveTo(x0 + r * .27, r * .78, x0 + r * .55, r * (i % 2 ? 1.02 : .96)); }
       c.quadraticCurveTo(r * 1.1, r * .3, r * .7, -r * .45); c.closePath();
       c.fillStyle = k.col; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
-      // Kragen: zwei hohe Spitzen hinter dem Kopf, innen rot
-      poly(c, r, [[-.62, -.25], [-1.12, -1.25], [-.2, -.72]], k.dk, 1.3);
-      poly(c, r, [[-.62, -.38], [-.95, -1.02], [-.36, -.7]], '#b3243a', 0);
-      poly(c, r, [[.62, -.25], [1.0, -1.25], [.2, -.72]], k.dk, 1.3);
-      poly(c, r, [[.6, -.38], [.86, -1.02], [.36, -.7]], '#b3243a', 0);
+      // Stehkragen: links und rechts ein breiter Fächer, der den Kopf von hinten einrahmt, innen rot
+      for (const s of [-1, 1]) {
+        poly(c, r, [[s * .45, -.1], [s * 1.28, -.98], [s * 1.12, -.55], [s * 1.02, -.2]], k.dk, 1.3);
+        poly(c, r, [[s * .62, -.22], [s * 1.12, -.8], [s * .98, -.32]], '#b3243a', 0);
+      }
       feet(c, r, '#2f2638', f);
       E(c, 0, 0, r, r * 1.05, '#ece6f0');
       // Haar: dunkle Kappe mit Spitze in der Stirn (Blick nach rechts)

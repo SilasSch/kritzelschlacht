@@ -217,6 +217,40 @@ export function createRenderer(canvasHost) {
     const a = q < .12 ? q / .12 : q > .75 ? (1 - q) / .25 : 1, k = hgt / DROP_H / DROP_RES;
     Q.addPart(dropTex, P, x, y + slide * q, 0, k, k, .5, .5, 0xffffff, a);
   }
+  // Fledermausform des Vampirs (Spez. #32, abilities.stepBat): 5 bis 7 kleine Fledermäuse (BAT_W Welt-px Spannweite) im
+  // Sticker-Stil, zwei Bilder (Flügel oben, unten), Drehpunkt in der Mitte. batSwarm setzt sie um die Lage der Einheit:
+  // jede auf einer eigenen flachen Bahn (Radius BAT_ORBIT, gegeneinander versetzt), die um die Mitte kreist und auf und
+  // ab flattert. Teamfarbe zeigt der Teamring am Boden (shadows). Beim Verwandeln (0 < batT < 1) blenden sie mit batT ein
+  // bzw. aus, und der Körper schrumpft (bodies).
+  const BAT_RES = 4, BAT_W = 9, BAT_ORBIT = 11, BAT_HZ = .35, BAT_FLAP = 9;
+  const batTex = [0, 1].map(f => canvasTex(Math.ceil((BAT_W + 3) * BAT_RES), Math.ceil((BAT_W * .75 + 3) * BAT_RES), c => {
+    c.setTransform(BAT_RES, 0, 0, BAT_RES, c.canvas.width / 2, c.canvas.height / 2);
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    const h = BAT_W / 2, up = f === 0, ty = up ? -2.6 : 1.6;
+    // Flügel: Haut mit drei Bögen am unteren Rand, links und rechts gespiegelt
+    for (const s of [-1, 1]) {
+      c.beginPath(); c.moveTo(0, -.6); c.quadraticCurveTo(s * h * .55, ty - .4, s * h, ty);
+      c.quadraticCurveTo(s * h * .8, ty + 1.2, s * h * .62, ty + 1.1); c.quadraticCurveTo(s * h * .45, ty + 1.6, s * h * .3, ty + 1.3);
+      c.quadraticCurveTo(s * h * .15, ty + 1.7, 0, .8); c.closePath();
+      c.fillStyle = '#3d3150'; c.fill(); c.lineWidth = .7; c.strokeStyle = O; c.stroke();
+    }
+    // Körper mit Ohren, Glubschaugen
+    c.beginPath(); c.moveTo(-.9, -1.1); c.lineTo(-.7, -2.1); c.lineTo(-.25, -1.3); c.lineTo(.25, -1.3); c.lineTo(.7, -2.1); c.lineTo(.9, -1.1); c.closePath();
+    c.fillStyle = '#4a3c5e'; c.fill(); c.lineWidth = .6; c.strokeStyle = O; c.stroke();
+    E(c, 0, 0, 1.25, 1.55, '#4a3c5e', .7);
+    for (const s of [-1, 1]) { E(c, s * .48, -.45, .5, .55, '#fff', .45); E(c, s * .48 + .12, -.35, .24, .27, O, 0); }
+  }));
+  // Schwarm des Vampirs u in die QuadBatch Q (Welt-Koordinaten), Deckkraft a
+  function batSwarm(Q, u, t, a) {
+    const n = 5 + u.id % 3, cx = u.x, cy = u.y - u.z - 4, k = 1 / BAT_RES, dir = u.id % 2 ? 1 : -1;
+    for (let i = 0; i < n; i++) {
+      const q = u.seed + i * 2.399, ang = TAU * (BAT_HZ * t * dir) + q, rr = BAT_ORBIT * (.55 + .45 * ((i * .618) % 1));
+      const x = cx + Math.cos(ang) * rr + (u.mx || 0) * .02 * i, y = cy + Math.sin(ang) * rr * .55 + Math.sin(BAT_FLAP * t + q * 3) * 2.2;
+      const fr = ((t * BAT_FLAP * 1.6 + i * .5) | 0) % 2;
+      Q.addPart(batTex[fr], null, x, y, Math.sin(t * 3 + q) * .25, k, k, .5, .5, 0xffffff, a);
+    }
+    stats.bats++;
+  }
   // Stein je Brocken bleibt fest (die Liste wird verdichtet, Indizes wandern)
   const stoneOf = new WeakMap();
   let stoneNext = 0;
@@ -231,7 +265,7 @@ export function createRenderer(canvasHost) {
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
-  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
+  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
     debris: 0, debrisFlying: 0, projShadows: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
@@ -260,7 +294,7 @@ export function createRenderer(canvasHost) {
       (u.T.fly ? airList : groundList).push(u);
     }
     groundList.sort(byY); airList.sort(byY);
-    stats.drawn = groundList.length + airList.length; stats.culled = culled; stats.airUnits = 0; stats.stunned = 0;
+    stats.drawn = groundList.length + airList.length; stats.culled = culled; stats.airUnits = 0; stats.stunned = 0; stats.bats = 0;
     const inv = 1 / rigs.resolution;
     // Schatten und Teamringe liegen unter allen Körpern (shadowQ, danach Leichen, Brocken und Geschosse)
     stats.shadowLevels[0] = stats.shadowLevels[1] = stats.shadowLevels[2] = 0;
@@ -320,6 +354,12 @@ export function createRenderer(canvasHost) {
     Q.clear(); bars.clear();
     for (const u of list) {
       const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
+      // Vampir in Fledermausform (ganz: nur der Schwarm; beim Verwandeln schrumpft der Körper, der Schwarm blendet ein)
+      if (u.batT > 0) {
+        batSwarm(Q, u, t, u.batT);
+        if (u.batT >= 1) { bar(bars, u, T, rig, u.y - u.z, 0); continue; }
+        const k = 1 - .6 * u.batT; p.sx *= k; p.sy *= k;
+      }
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
       const A = rig.anchors, X = rig.tex, sy = u.y - u.z;
       const pr = p.prone;

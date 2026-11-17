@@ -29,19 +29,8 @@ export const MISSION_PLANS = [
 // M3 (Eiserne Front) und M6 (Wilde Jagd) sind ausgenommen; der M1-Spam (Einstieg) muss gewinnen.
 export const SPAM_MUST_LOSE = [1, 3, 4, 6, 7, 8];
 
-// [a, b, Punkte]: a schlägt b bei gleichen Punkten
-export const COUNTERS = [
-  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60], ['ritter', 'reiter', 60],
-  ['biene', 'ritter', 60], ['biene', 'schuetze', 60], ['krieger', 'biene', 60],
-  ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
-  ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
-  ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
-  ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90],
-  ['panzer', 'krieger', 105], ['panzer', 'soldat', 105],
-  ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90],
-  ['roemer', 'schuetze', 60], ['roemer', 'krieger', 60],
-  ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier', 'roemer', 60],
-];
+// [a, b, Punkte]: a schlägt b bei gleichen Punkten. Liegt in game/js/data.js (die Charakterkarten lesen sie).
+export { COUNTERS } from '../game/js/data.js';
 
 // Weltformen, an denen das Balance-Gate gelten muss (Welt = Viewport / Grundzoom, main.js baseZoomFor).
 // 1400×875 = 1280×800-Laptop; die anderen sind typische Laptop-Viewports; 1400×1050 = 1024×768.

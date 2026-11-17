@@ -1,4 +1,4 @@
-// Reine Daten: Einheiten, Gelände, Kategorien, Teams, Missionen. Kein DOM, kein Math.random.
+// Reine Daten: Einheiten, Fähigkeiten, Konter, Gelände, Kategorien, Teams, Missionen. Kein DOM, kein Math.random.
 export const CELL = 10;
 export const HASH_CELL = 40;
 export const PATH_RECHECK = .25;   // s zwischen zwei Linienprüfungen der Wegfindung je Einheit (combat.think)
@@ -6,10 +6,10 @@ export const PATH_RECHECK = .25;   // s zwischen zwei Linienprüfungen der Wegfi
 export const UNITS = {
   krieger:{n:'Krieger',cat:'armee',col:'#5b8def',r:9,hp:60,dmg:12,range:3,speed:52,cd:.8,cost:2,mass:1,d:'Marschiert in Reihe und umzingelt Gegner. Treffer von hinten machen +35 %.'},
   schuetze:{n:'Schütze',cat:'armee',col:'#6cc067',r:9,hp:40,dmg:12,range:210,speed:44,cd:1.2,cost:2.5,mass:1,d:'Schießt Pfeile und weicht Nahkämpfern aus.'},
-  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:20,range:3,speed:34,cd:1.05,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Anfällig für Bomben, Feuer und MG-Dauerfeuer.'},
+  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:20,range:3,speed:34,cd:1.05,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Stark gegen Krieger, Schützen und Reiter. Bienenschwärme, Scharfschützen, Bomben und Feuer setzen ihm zu.'},
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
-  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:95,dmg:15,range:3,speed:46,cd:.9,cost:3,mass:1.4,pilum:40,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Feuerbälle und Reiter über die Flanke brechen den Block.'},
+  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:95,dmg:15,range:3,speed:46,cd:.9,cost:3,mass:1.4,pilum:40,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:10,range:90,speed:50,cd:1,cost:3,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
@@ -31,9 +31,70 @@ export const UNITS = {
 // in physics.collide würden megamorph (V8 merkt sich höchstens vier Formen je Zugriff): Kollision 0,33 → 0,67 ms
 // je Schritt in tools/bench.mjs mixed. Ein Konstruktor statt {} hält die Felder im Objekt selbst (schneller als
 // nachträglich angehängte), mixed 1,7 → 1,5 ms.
+// Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}].
+// Kurz halten (Name ≤ 24, Text ≤ 140 Zeichen, tests/cards.test.js). Neue Einheiten tragen hier ein oder setzen
+// abil direkt im UNITS-Eintrag; die Karten lesen nur UNITS[t].abil. Rückzug ab 25 % gilt für alle (cards.RETREAT_NOTE).
+const ABIL = {
+  krieger: [{n:'Von hinten', d:'Kreist Gegner ein. Angriffe von hinten machen +35 % Schaden.'}],
+  schuetze: [{n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
+  ritter: [
+    {n:'Schildwall', d:'Ab 3 Rittern nah beieinander: kaum Schaden durch Pfeile und Schwerter.'},
+    {n:'Rüstung', d:'Hält Pfeile, Schwerter und Kugeln gut ab. Bomben, Feuer und Raketen treffen ihn dafür besonders hart.'},
+  ],
+  grenadier: [{n:'Mauerbrecher', d:'Bomben mit Flächenschaden sprengen auch Mauern.'}],
+  reiter: [
+    {n:'Flankenritt', d:'Reitet seitlich am Ziel vorbei, statt frontal anzugreifen.'},
+    {n:'Sturmangriff', d:'Im vollen Galopp macht der Stoß fast dreifachen Schaden. Danach reitet er durch und wendet.'},
+  ],
+  roemer: [
+    {n:'Blockformation', d:'Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.'},
+    {n:'Speersalve', d:'Vor dem Zusammenstoß wirft der Block Reihe für Reihe seine Speere.'},
+    {n:'Schilde', d:'Nur in Formation: Pfeile, Kugeln und Speere von vorn prallen fast wirkungslos ab.'},
+  ],
+  sani: [{n:'Heilen', d:'Heilt Verbündete, Fliehende zuerst. Hält sich aus dem Getümmel heraus.'}],
+  wolf: [{n:'Rudel', d:'Ab 3 Wölfen fächert das Rudel auf, greift von der Seite an und beißt 40 % härter.'}],
+  baer: [{n:'Prankenhieb', d:'Trifft alle Feinde vor sich und stößt sie zurück.'}],
+  biene: [{n:'Schwarm', d:'Umkreist das Ziel und sticht von allen Seiten. Stark in großer Zahl.'}],
+  magier: [{n:'Feuerball', d:'Flächenschaden aus der Ferne. Feuer trifft auch Geister voll.'}],
+  geist: [
+    {n:'Körperlos', d:'Nur Feuer trifft voll, alles andere macht halben Schaden.'},
+    {n:'Lebensraub', d:'Jeder Treffer heilt ihn um den angerichteten Schaden.'},
+  ],
+  drache: [
+    {n:'Feueratem', d:'Speit Feuer in einem Kegel. Getroffene brennen, und das Feuer springt auf Nachbarn über.'},
+    {n:'Feuerfest', d:'Fängt selbst kein Feuer.'},
+  ],
+  soldat: [{n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
+  mg: [{n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'}],
+  sniper: [
+    {n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'},
+    {n:'Geduldig', d:'Rückt nur bis auf Schussweite vor, bleibt hinter der eigenen Front und weicht zurück, wenn Feinde nahe kommen.'},
+  ],
+  panzerfaust: [{n:'Rakete', d:'Trifft Panzer und Hubschrauber besonders hart.'}],
+  moerser: [{n:'Steilfeuer', d:'Schießt im hohen Bogen über Mauern hinweg.'}],
+  panzer: [{n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'}],
+  heli: [{n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'}],
+};
+for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
+
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
 for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);
+
+// [a, b, Punkte]: a schlägt b bei gleichen Punkten. Quelle für tools/balance.mjs (über tools/plans.mjs) und die
+// Charakterkarten (stark/schwach gegen, cards.js).
+export const COUNTERS = [
+  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60], ['ritter', 'reiter', 60],
+  ['biene', 'ritter', 60], ['biene', 'schuetze', 60], ['krieger', 'biene', 60],
+  ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
+  ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
+  ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
+  ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90],
+  ['panzer', 'krieger', 105], ['panzer', 'soldat', 105],
+  ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90],
+  ['roemer', 'schuetze', 60], ['roemer', 'krieger', 60],
+  ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier', 'roemer', 60],
+];
 
 export const TERRAIN = {
   wasser:{n:'Wasser',id:1,cost:.04,d:'Bremst Bodentruppen auf 40 % Tempo.'},

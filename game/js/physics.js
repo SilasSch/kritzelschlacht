@@ -70,13 +70,68 @@ export function integrate(world, dt) {
         if (u.alive && ((world.time * 60 | 0) + u.id) % 10 === 0) world.events.push({ type: 'burn', x: u.x, y: u.y });
       }
       if (!u.alive) continue;
-      if (u.state === 'ok') { wx = u.mx * sp * u.spdMul; wy = u.my * sp * u.spdMul; }
+      if (u.state === 'ok') {
+        // Lava (Nachtrag 5, #42): die eine Stelle, an der jede Wunschbewegung am Boden ankommt (Marsch, Fluss, Flucht,
+        // Schreck, Sturm, Block, Ausweichen, Fähigkeiten, Sanitäter). In der Lava: auf kürzestem Weg hinaus, vor allem
+        // anderen; sonst kein Schritt hinein (lavaGuard).
+        let mx = u.mx, my = u.my;
+        if (tt === LAVA) { if (lavaEscape(world, u)) { mx = LV.x * T.speed; my = LV.y * T.speed; if (LV.x < -.2) u.face = -1; else if (LV.x > .2) u.face = 1; } }
+        else if ((mx !== 0 || my !== 0) && lavaGuard(world, u, mx, my)) { mx = LV.x; my = LV.y; }
+        wx = mx * sp * u.spdMul; wy = my * sp * u.spdMul;
+      }
     }
     const vx = wx + u.vx, vy = wy + u.vy;
     u.vx *= f; u.vy *= f;
     u.x += vx * dt; u.y += vy * dt;
     clampEdge(u, W, H);
   }
+}
+
+/* ---------- Lava (Nachtrag 5, #42) ---------- */
+// Niemand läuft freiwillig in Lava: liegt LAVA_PROBE (Anteil des Radius plus px) vor dem Mittelpunkt in Wunschrichtung
+// eine Lavazelle, gleitet die Bewegung an der Kante entlang (nur die x- oder nur die y-Komponente, die größere freie)
+// oder steht. Fremdgeschwindigkeit (Explosion, Schieben, Wurf) bleibt unberührt. Wer in Lava steht (Mittelpunkt),
+// läuft mit vollem Tempo zur nächsten Zelle ohne Lava und Mauer (bis LAVA_RINGS Zellen), über die Wunschbewegung,
+// das Ziel, die Fähigkeit, den Schreck und den Block hinweg; geschleudert ('air') oder betäubt nicht.
+export const LAVA_PROBE = [.6, 3], LAVA_RINGS = 8, LAVA_SHOVE_V = 60;
+const LV = { x: 0, y: 0 };
+const lavaAt = (world, x, y) => world.terr[cellIndex(world, x, y)] === LAVA;
+// true: LV = erlaubte Wunschbewegung (px/s)
+export function lavaGuard(world, u, mx, my) {
+  const l = Math.hypot(mx, my), p = u.T.r * LAVA_PROBE[0] + LAVA_PROBE[1];
+  if (!lavaAt(world, u.x + mx / l * p, u.y + my / l * p)) return false;
+  const ax = Math.abs(mx), ay = Math.abs(my);
+  const okX = ax > 1e-6 && !lavaAt(world, u.x + Math.sign(mx) * p, u.y);
+  const okY = ay > 1e-6 && !lavaAt(world, u.x, u.y + Math.sign(my) * p);
+  LV.x = 0; LV.y = 0;
+  if (okX && (!okY || ax >= ay)) LV.x = mx; else if (okY) LV.y = my;
+  return true;
+}
+// true: LV = Einheitsvektor zur nächsten Zelle ohne Lava und Mauer
+export function lavaEscape(world, u) {
+  const { GW, GH, terr } = world;
+  const gx = clamp(u.x / CELL | 0, 0, GW - 1), gy = clamp(u.y / CELL | 0, 0, GH - 1);
+  let bx = 0, by = 0, bd = Infinity;
+  for (let r = 1; r <= LAVA_RINGS; r++) {
+    if ((r - 1) * CELL > Math.sqrt(bd)) break;
+    for (let yy = gy - r; yy <= gy + r; yy++) {
+      if (yy < 0 || yy >= GH) continue;
+      const edge = yy === gy - r || yy === gy + r, stp = edge ? 1 : 2 * r;
+      for (let xx = gx - r; xx <= gx + r; xx += stp) {
+        if (xx < 0 || xx >= GW) continue;
+        const t = terr[yy * GW + xx];
+        if (t === LAVA || t === WALL) continue;
+        // nächster Punkt der Zelle (etwas hinein), nicht ihr Mittelpunkt: kürzester Weg hinaus
+        const x = clamp(u.x, xx * CELL + 2, xx * CELL + CELL - 2), y = clamp(u.y, yy * CELL + 2, yy * CELL + CELL - 2);
+        const d = (x - u.x) ** 2 + (y - u.y) ** 2;
+        if (d < bd) { bd = d; bx = x; by = y; }
+      }
+    }
+  }
+  if (bd === Infinity) return false;
+  const l = Math.sqrt(bd) || 1;
+  LV.x = (bx - u.x) / l; LV.y = (by - u.y) / l;
+  return true;
 }
 
 // Erster Bodenkontakt im Wasser (vor einem Abpraller oder beim direkten Landen): splash
@@ -176,6 +231,14 @@ export function collideWalls(world, u, dt = 1 / 60) {
       if (by) u.vy = 0;
       blocked = bx || by;
       if (terr[cellIndex(world, u.x, u.y)] === WALL) unstick(world, u);
+      // Lavakante (Nachtrag 5, #42): wer läuft oder nur vom Gedränge geschoben wird (Fremdgeschwindigkeit unter
+      // LAVA_SHOVE_V), tritt nicht über die Kante; je Achse zurück wie an einer Mauer. Geschleuderte landen darin.
+      else if (u.state === 'ok' && terr[cellIndex(world, u.x, u.y)] === LAVA && terr[cellIndex(world, px, py)] !== LAVA &&
+               u.vx * u.vx + u.vy * u.vy < LAVA_SHOVE_V * LAVA_SHOVE_V) {
+        if (terr[cellIndex(world, u.x, py)] !== LAVA) u.y = py;
+        else if (terr[cellIndex(world, px, u.y)] !== LAVA) u.x = px;
+        else { u.x = px; u.y = py; }
+      }
     }
   }
   u.blk = blocked ? u.blk + dt : Math.max(0, u.blk - dt * 2);

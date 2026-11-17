@@ -444,6 +444,8 @@ test('Gelände: Gefahr und Tempo nach TERRAIN, gleich wie physics.integrate', ()
     // eine Bodeneinheit läuft mit TERR_SPEED · Wunschtempo
     const u = spawn(w, 'krieger', x, y, 'blau'); u.mx = 50; u.my = 0;
     integrate(w, DT);
+    // Lava (Nachtrag 5, #42): wer drinsteht, läuft mit vollem Tempo (gebremst) auf kürzestem Weg hinaus, nicht weiter
+    if (k === 'lava') { assert.ok(Math.abs(Math.hypot(u.x - x, u.y - y) / DT - u.T.speed * TERR_SPEED[2]) < 1e-6 && u.x < x, `${k}: ${((u.x - x) / DT).toFixed(2)}`); continue; }
     assert.ok(Math.abs((u.x - x) / DT - 50 * TERR_SPEED[TERRAIN[k].id]) < 1e-6, `${k}: ${((u.x - x) / DT).toFixed(2)}`);
   }
 });

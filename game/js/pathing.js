@@ -2,7 +2,8 @@
 // Rein: kein DOM, kein Zufall. sim.step ruft updateFlow, combat.think liest flowDir und directBlocked.
 //
 // Raster PATH_CELL = 20 px (je 2×2 Geländezellen). Ein Feld ist Mauer (unpassierbar), wenn mindestens
-// 2 seiner 4 Geländezellen Mauer sind; sonst kostet es so viel wie seine teuerste Zelle (frei 1, Wald 1,3,
+// 2 seiner 4 Geländezellen Mauer oder Lava sind (Nachtrag 5, #42: niemand läuft freiwillig in Lava, also führt
+// auch kein Weg hindurch; physics.lavaGuard hält die Körper an der Kante); sonst kostet es so viel wie seine teuerste Zelle (frei 1, Wald 1,3,
 // Wasser 2,5, Lava 12; ganzzahlig ×10). Je Fraktion ein Distanzfeld per Dijkstra mit Bucket-Queue
 // (Dial, ringförmig), mehrere Quellen: alle lebenden Gegner-Bodeneinheiten dieser Fraktion. Schritt zum
 // Nachbarn: Mittel der beiden Feldkosten, diagonal ×√½·2 (≈ ×1,41), diagonal nicht an Mauerecken vorbei.
@@ -20,7 +21,7 @@ export const PATH_REFRESH = .8;          // s je Fraktion (Task 13: .5 → .8)
 export const PATH_MAX_PER_STEP = 2;      // Felder je Schritt höchstens
 export const PATH_BASH_DETOUR = 2.5;     // think: einschlagen erst, wenn der Flussweg länger ist als 2,5× Luftlinie
 export const PATH_BASH_MIN = 80;         // think: … und mindestens so viele px länger (kurze Wege um eine Ecke)
-export const PATH_LAVA_CELLS = 2;        // think: gerade Linie über so viele Lavazellen folgt auch dem Fluss
+export const PATH_LAVA_CELLS = 1;        // think: gerade Linie über so viele Lavazellen folgt auch dem Fluss (#42: schon eine)
 export const PATH_BLOCK_WALL = 1, PATH_BLOCK_LAVA = 2;   // directBlocked: Art der Sperre (0 frei)
 
 const WALL = 4, LAVA = 2;
@@ -62,15 +63,15 @@ function rebuildCost(world, flow) {
   let hazards = 0;
   for (let i = 0; i < terr.length; i++) if (terr[i] === WALL || terr[i] === LAVA) hazards++;
   for (let py = 0; py < PH; py++) for (let px = 0; px < PW; px++) {
-    let walls = 0, c = 0;
+    let walls = 0, lava = 0, c = 0;
     for (let k = 0; k < 4; k++) {
       const gx = 2 * px + (k & 1), gy = 2 * py + (k >> 1);
       if (gx >= GW || gy >= GH) continue;
       const t = terr[gy * GW + gx];
       if (t === WALL) walls++;
-      else { const tc = TCOST[t] || PATH_COST.free; if (tc > c) c = tc; }
+      else { if (t === LAVA) lava++; const tc = TCOST[t] || PATH_COST.free; if (tc > c) c = tc; }
     }
-    cost[py * PW + px] = walls >= 2 || c === 0 ? 0 : c;
+    cost[py * PW + px] = walls + lava >= 2 || c === 0 ? 0 : c;
   }
   flow.hazards = hazards;
 }

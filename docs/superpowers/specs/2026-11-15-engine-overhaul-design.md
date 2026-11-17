@@ -38,6 +38,21 @@ Das Spielprinzip bleibt: Einheiten malen, zuschauen, Missionen mit Punktebudget.
 | 23 | Panzer, Drache und Hubschrauber bekommen ein eigenes „Boss-Sticker“-Design im gleichen Stil, aber größer und detaillierter: Panzer mit Ketten, drehbarem Turm und Rückstoß; Hubschrauber mit sichtbar kreisendem Rotor und Kufen; Drache mit Hals, Flügelschlag und Schweif. Dazu eigene Bewegungen statt Hüpfen. |
 | 24 | Pathfinding: Bodentruppen umgehen Mauern über ein geteiltes Flussfeld pro Fraktion, statt sofort einzuschlagen. Wasser kostet mehr, Lava wird stark gemieden, Wald kostet etwas mehr. Eingeschlagen wird nur, wenn es keinen sinnvollen Umweg gibt. Flieger ignorieren das Gelände. |
 
+## Nachtrag 2 (2026-11-17, vom Nutzer gewünscht)
+
+Ziel: Die Römer sollen vor allem cool aussehen: ein disziplinierter Block gegen chaotische Horden. Der Boden soll nach großen Schlachten nicht zugemüllt wirken.
+
+| # | Entscheidung |
+|---|---|
+| 25 | Neue Einheit **Römer** (Legionär, Kategorie Armee): großes rechteckiges Schild in Teamfarbe, Helm mit Kamm, Kurzschwert. Römer marschieren als geschlossener Block im Gleichschritt, alle im Tempo des Langsamsten; fällt einer, rückt der Hintermann in die Lücke. Kurz vor dem Zusammenstoß wirft jeder Römer einmal einen Speer (Bogenwurf), dann löst sich die Formation und sie stürmen. Die Schilde wirken **nur in Formation**: In einem Block aus mindestens 4 Römern halten sie fast alle Pfeile, Kugeln und Speere ab, die von vorn kommen, und die Geschosse prallen sichtbar ab. Einzeln, nach dem Auflösen, bei Treffern von der Seite oder von hinten und gegen Explosionen, Feuerbälle und Feuer schützt das Schild nicht. Konter: Grenadiere, Magier, Mörser, Reiter über die Flanke. |
+| 26 | **Bodenmüll verblasst** mit der Zeit (ersetzt das dauerhafte Liegenbleiben aus #11 und #12): Krater und Flecken nach etwa 60 s, Gefallene nach etwa 30 s, Mauertrümmer nach etwa 10 s. Die Deckel aus #11 bleiben als Obergrenze. |
+
+Ansätze, die erwogen wurden:
+- Römerformation: (a) feste Plätze in einem Block je Römergruppe, der als Ganzes zum Feind marschiert. Gewählt, weil der Nutzer „streng in Formation“ will. (b) Die bestehende lockere Reihenglättung der Krieger verstärken. Verworfen: sie hält keinen Block mit Reihen und Gliedern.
+- Krater und Flecken: (a) Die gesammelte Decal-Fläche wird regelmäßig ein Stück blasser. Gewählt, weil es nichts kostet und alte Spuren zuerst verschwinden. (b) Jeden Fleck einzeln speichern und neu zeichnen. Verworfen: teuer bei vielen Flecken und ohne sichtbaren Vorteil.
+
+Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten allgemein (zum Beispiel 4 Raketen des Hubschraubers alle 25 s), mehr Magier-Fähigkeiten, Vampire, mehr Tiere.
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

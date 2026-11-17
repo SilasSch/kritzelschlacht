@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
-import { hurt, think, fire, stepProjectiles, PILUM_SCAN } from '../game/js/combat.js';
+import { hurt, think, fire, stepProjectiles, PILUM_SCAN, PILUM_SCAN_T } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
 import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT } from '../game/js/formation.js';
 import { CELL, HASH_CELL, UNITS } from '../game/js/data.js';
@@ -400,7 +400,8 @@ test('Speer: Zielsuche bleibt auf PILUM_MAX begrenzt, auch wenn der Feind weit w
   for (let i = 0; i < N; i++) { stepRomans(w); for (const f of w.formations) f.volT = 1; }
   const calls = PILUM_SCAN.calls - c0, cells = PILUM_SCAN.cells - z0;
   const box = (2 * Math.ceil(FORM.PILUM_MAX / HASH_CELL) + 1) ** 2;
-  assert.ok(calls > 0 && calls <= 40 * N, `Suchen ${calls}`);
+  // gedrosselt (finale Prüfung): je Römer höchstens eine Suche je PILUM_SCAN_T s (plus die erste beim Freigeben)
+  assert.ok(calls > 0 && calls <= 40 * (Math.ceil(N * DT / PILUM_SCAN_T) + 1), `Suchen ${calls}`);
   assert.ok(cells <= calls * box, `höchstens ${box} Hash-Zellen je Suche: ${(cells / calls).toFixed(1)}`);
   assert.ok(rs.every(u => u.pilum === 1), 'kein Wurf ohne Ziel in Reichweite');
 });

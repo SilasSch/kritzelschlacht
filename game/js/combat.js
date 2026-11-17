@@ -588,6 +588,11 @@ function holdSlot(world, u, dt) {
 // der unbegrenzten Ringsuche nearestEnemy: volT läuft weiter, auch wenn der Gegner, der die Uhr gestartet hat, fällt
 // oder abzieht, und dann sucht jeder Römer mit Speer jeden Schritt. Hubschrauber nicht (wie nearestEnemy für
 // Nahkämpfer). PILUM_SCAN zählt Suchen und besuchte Zellen (Tests, Messungen).
+// Gedrosselt (finale Prüfung; sonst bis zu 81 Zellen je Römer mit Speer in jedem Schritt): die erste Suche im
+// Schritt, in dem die Reihe werfen darf (die Reihe wirft zugleich), danach alle PILUM_SCAN_T s (+ id % 4 · PILUM_STAGGER,
+// gestaffelt wie morale.FLEE_SCAN). Takt über u.rt: im Block braucht der Römer es nicht (holdSlot hält u.tg leer,
+// nach dem Auflösen sucht think wegen u.tg = null sofort ein Ziel).
+export const PILUM_SCAN_T = .1, PILUM_STAGGER = .02;
 const PIL_MIN2 = FORM.PILUM_MIN * FORM.PILUM_MIN, PIL_MAX2 = FORM.PILUM_MAX * FORM.PILUM_MAX;
 export const PILUM_SCAN = { calls: 0, cells: 0 };
 function pilumTarget(world, u) {
@@ -665,7 +670,10 @@ export function think(world, u, dt) {
   // einmal den Speer werfen
   if (u.formOn) {
     holdSlot(world, u, dt);
-    if (u.pilum === 1 && u.formVol >= 0 && !u.formFree) throwPilum(world, u);
+    // erste Suche im Schritt der Freigabe (formVol wächst um dt je Schritt), danach gedrosselt
+    if (u.pilum === 1 && u.formVol >= 0 && !u.formFree && (u.formVol < dt || u.rt <= 0)) {
+      u.rt = PILUM_SCAN_T + (u.id % 4) * PILUM_STAGGER; throwPilum(world, u);
+    }
     return;
   }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);

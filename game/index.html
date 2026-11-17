@@ -148,6 +148,70 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 @media (prefers-reduced-motion:reduce){
   .banner,.stars i.on{animation:none}
 }
+/* Charakterkarten (Spez. #29): Hover- und Auswahlkarte über der Leiste, Lexikon als Sammlung */
+.uc{--tc:var(--selb);position:relative;box-sizing:border-box;width:300px;background:#fff;border:2px solid var(--ink);border-radius:18px;
+  padding:0 14px 12px;display:flex;flex-direction:column;gap:9px;text-align:left;font:700 12.5px/1.35 var(--f-ui);color:var(--ink);
+  box-shadow:0 12px 30px rgba(30,35,60,.16)}
+.uc-hd{position:relative;display:flex;gap:12px;align-items:center;margin:0 -14px;padding:12px 14px 10px;border-radius:16px 16px 0 0;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--tc) 24%,#fff),color-mix(in srgb,var(--tc) 7%,#fff));
+  border-bottom:1.5px dashed color-mix(in srgb,var(--tc) 50%,#fff)}
+.uc-pic{flex:0 0 auto;width:76px;height:76px;border-radius:50%;background:#fff;border:2px solid var(--ink);box-shadow:2px 3px 0 var(--ink);
+  display:grid;place-items:center;transform:rotate(-4deg)}
+.uc-pic img{width:72px;height:72px;display:block}
+.uc-tt{min-width:0;display:flex;flex-direction:column;gap:6px}
+.uc-nm{font-family:var(--f-logo);font-weight:400;line-height:1;letter-spacing:.5px;color:#fff;-webkit-text-stroke:1.2px var(--ink);
+  paint-order:stroke fill;text-shadow:1.5px 2px 0 var(--ink);white-space:nowrap}
+.uc-tags{display:flex;flex-wrap:wrap;gap:4px}
+.uc-tags span{font-size:10.5px;font-weight:800;padding:1px 7px;border-radius:99px;background:#fff;border:1px solid var(--line);color:var(--muted)}
+.uc-tags .cat{background:var(--ink);border-color:var(--ink);color:#fff}
+.uc-key{position:absolute;top:9px;right:10px;min-width:20px;height:20px;box-sizing:border-box;padding:0 5px;border-radius:6px;background:#fff;
+  border:1.5px solid var(--ink);box-shadow:0 2px 0 var(--ink);font:800 11.5px/17px var(--f-ui);text-align:center;color:var(--ink)}
+.uc-d{color:#5d616d;font-size:12.5px;line-height:1.4}
+.uc-st{display:flex;flex-direction:column;gap:4px}
+.uc-st .s{display:grid;grid-template-columns:70px 1fr 42px;gap:8px;align-items:center}
+.uc-st span{color:var(--muted);font-size:12px}
+.uc-st i{display:block;height:9px;border-radius:99px;background:var(--soft);border:1.5px solid var(--ink);overflow:hidden}
+.uc-st u{display:block;height:100%;background:var(--tc);border-radius:99px}
+.uc-st b{min-width:40px;text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.uc-ab{display:flex;flex-direction:column;gap:4px}
+.uc-ab div{background:var(--soft);border-radius:10px;padding:5px 8px;color:#4c505c;line-height:1.35}
+.uc-ab b{color:var(--ink);font-weight:800}
+.uc-ab b::before{content:"✦ ";color:var(--tc)}
+.uc-vs{display:flex;flex-direction:column;gap:5px}
+.uc-vs > div{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px}
+.uc-vs .l{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:99px;color:#fff;white-space:nowrap;justify-self:start}
+.uc-vs .l.s{background:#2a9d5c}
+.uc-vs .l.w{background:#e5574f}
+.uc-vs .u{display:contents}
+.uc-vs .u span{display:inline-flex;align-items:center;gap:1px;font-weight:800;font-size:12px;white-space:nowrap}
+.uc-vs img{width:24px;height:24px}
+.uc-vs .none{color:var(--muted);font-style:normal}
+/* breite Karte über der Leiste: Werte als Kacheln, stark und schwach nebeneinander (niedriger) */
+.uc.wide{width:440px}
+.uc.wide .uc-st{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.uc.wide .uc-st .s{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0}
+.uc.wide .uc-st span{font-size:11px;white-space:nowrap}
+.uc.wide .uc-st b{order:-1;font-size:16px;line-height:1.1;text-align:left;min-width:0;white-space:nowrap}
+.uc.wide .uc-st i{margin-top:3px}
+.uc.wide .uc-vs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.uc.wide .uc-vs > div{flex-direction:column;flex-wrap:nowrap;align-items:flex-start;gap:4px}
+.uc.wide .uc-vs .u{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}
+.uc-note{font-size:11.5px;color:#c0443c;font-weight:800}
+.ucard{position:absolute;z-index:4;pointer-events:none}
+.ucard .uc::after{content:"";position:absolute;bottom:-9px;left:var(--ax,50%);width:14px;height:14px;background:#fff;
+  border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateX(-50%) rotate(45deg)}
+.ucard.pop .uc{animation:ucpop .14s ease-out both}
+@keyframes ucpop{from{transform:translateY(6px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.ib.lexb{display:inline-flex;align-items:center;gap:6px;font-size:14px}
+.card.lex{max-width:1240px;max-height:92%;gap:12px}
+.lexhead{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.lex h3{font-family:var(--f-logo);font-weight:400;font-size:21px;letter-spacing:.5px;margin:6px 0 8px;color:var(--ink)}
+.lexgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;align-items:start}
+.lexc{width:auto;cursor:pointer;box-shadow:none;transition:transform .12s,box-shadow .12s}
+.lexc:hover{transform:translateY(-2px);box-shadow:3px 5px 0 var(--ink)}
+.lexc.off{opacity:.5;cursor:default}
+.lexc.off:hover{transform:none;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.ucard.pop .uc{animation:none}.lexc{transition:none}}
 .fps{position:absolute;left:8px;top:8px;z-index:5;background:var(--ink);color:#fff;font:800 12px/1 var(--f-ui);padding:5px 8px;border-radius:8px;pointer-events:none;font-variant-numeric:tabular-nums}
 </style>
 </head>
@@ -162,6 +226,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
         <button id="mMis" role="tab">Missionen</button>
       </div>
       <div class="icons p">
+        <button class="ib shadow txt lexb" id="bLex" title="Lexikon: alle Einheiten mit Werten, Fähigkeiten und Kontern" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>Lexikon</button>
         <button class="ib shadow" id="bDice" title="Zufallsschlacht" aria-label="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button>
         <button class="ib shadow txt" id="bSpeed" title="Tempo">1×</button>
         <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
@@ -199,6 +264,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
     </div>
   </div>
 
+  <div class="ucard" id="ucard" hidden aria-hidden="true"></div>
   <div class="banner" id="banner" hidden></div>
   <div class="toast" id="toast" hidden></div>
 
@@ -221,6 +287,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
       <p>Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.</p>
       <div class="lvgrid" id="lvGrid"></div>
       <div class="btnrow"><button class="btn" id="listClose">Zurück zum Sandkasten</button></div>
+    </div>
+  </div>
+
+  <div class="ov" id="ovLex" hidden>
+    <div class="card lex shadow" id="lexCard" role="dialog" aria-modal="true" aria-labelledby="lexTitle">
+      <div class="lexhead"><h2 id="lexTitle">Lexikon</h2><button class="btn" id="lexClose">Schließen <span style="color:var(--muted)">(Esc)</span></button></div>
+      <p id="lexNote"></p>
+      <div id="lexBody"></div>
     </div>
   </div>
 </div>

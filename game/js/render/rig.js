@@ -767,24 +767,27 @@ export function bakeRigTextures(renderer, resolution) {
   return rigs;
 }
 
-// Symbolbild (data-URL) für Palette und Zählerliste: das Rig in Ruhepose (Pupillen leicht nach vorn unten)
-export function iconURL(t){
-  const c=document.createElement('canvas');c.width=c.height=96;const x=c.getContext('2d');
+// Symbolbild (data-URL) für Palette, Zählerliste und Charakterkarten: das Rig in Ruhepose (Pupillen leicht nach
+// vorn unten), mit denselben Zeichenfunktionen wie der Rig-Atlas. px: Kantenlänge (Layout in 96er-Einheiten,
+// skaliert), vi: Teamvariante wie im Atlas (0 = Grundfarbe, sonst TEAM_KEYS-Index).
+export function iconURL(t,px=96,vi=0){
+  const c=document.createElement('canvas');c.width=c.height=px;const x=c.getContext('2d'),k=px/96;
+  x.setTransform(k,0,0,k,0,0);
   if(U[t]&&DEF[t].boss){
     // Boss-Sticker: ganze Figur in Ruhepose, auf die Breite iconFit[0] (r-Einheiten) eingepasst
     const D=DEF[t],r=drawR(t),f=D.iconFit,s=84/(f[0]*r);
-    x.setTransform(s,0,0,s,48-f[1]*r*s,52-f[2]*r*s);x.lineCap='round';x.lineJoin='round';
-    D.compose(x,r,colors(t,0),true);
+    x.setTransform(s*k,0,0,s*k,(48-f[1]*r*s)*k,(52-f[2]*r*s)*k);x.lineCap='round';x.lineJoin='round';
+    D.compose(x,r,colors(t,vi),true);
   }
   else if(U[t]){
     const r=U[t].r,s=Math.min(42/(r*2.3),4.4),D=DEF[t];
-    const at=(tx,ty)=>{x.setTransform(s,0,0,s,44,52);if(U[t].fly)x.translate(0,-r*.3);x.translate(tx,ty);};
-    at(0,0);drawPart(x,t,'body',0,0);
+    const at=(tx,ty)=>{x.setTransform(s*k,0,0,s*k,44*k,52*k);if(U[t].fly)x.translate(0,-r*.3);x.translate(tx,ty);};
+    at(0,0);drawPart(x,t,'body',vi,0);
     if(D.eyes)for(const p of[D.eyes.L,D.eyes.R]){at(p[0]*r+D.eyes.s*r*.35,p[1]*r+D.eyes.s*r*.15);drawPart(x,t,'pupilL',0,0);}
-    at(0,0);if(D.headgear)drawPart(x,t,'headgear',0,0);
+    at(0,0);if(D.headgear)drawPart(x,t,'headgear',vi,0);
     // Römer: Speer in der Hand, Schild vor dem Körper (wie im Block)
-    if(D.shield){drawPart(x,t,'weapon',0,1);at(SHIELD_FRONT[0]*r,SHIELD_FRONT[1]*r);drawPart(x,t,'shield',0,0);}
-    else if(D.weapon)drawPart(x,t,'weapon',0,0);
+    if(D.shield){drawPart(x,t,'weapon',vi,1);at(SHIELD_FRONT[0]*r,SHIELD_FRONT[1]*r);drawPart(x,t,'shield',vi,0);}
+    else if(D.weapon)drawPart(x,t,'weapon',vi,0);
   }
   else{
     const blob=(c1,c2)=>{x.fillStyle=c1;x.beginPath();x.ellipse(48,50,36,28,-.2,0,7);x.fill();x.fillStyle=c2;x.beginPath();x.ellipse(48,50,27,20,-.2,0,7);x.fill();};

@@ -1,7 +1,8 @@
-// HUD: Palette, Zähler, Missionsleiste, Dialoge, Banner, Toasts. Markup kommt aus index.html.
+// HUD: Palette, Zähler, Missionsleiste, Dialoge, Banner, Toasts, Charakterkarten und Lexikon. Markup kommt aus index.html.
 // Liest den Spielzustand aus `game` (main.js) und ruft dessen Aktionen auf.
 import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS } from './data.js';
-import { iconURL } from './render/rig.js';
+import { iconURL, TEAM_KEYS } from './render/rig.js';
+import { unitCard, cardTypes, RETREAT_NOTE } from './cards.js';
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -9,9 +10,47 @@ const ICON_PLAY = '<path d="M7 5l12 7-12 7z"/>';
 const ICON_MUTED = '<path d="M4 9h4l5-4v14l-5-4H4zM17 9l4 6M21 9l-4 6"/>';
 const ICON_SOUND = '<path d="M4 9h4l5-4v14l-5-4H4zM17 8a5 5 0 010 8M19.5 5.5a9 9 0 010 13"/>';
 
+/* ---------- Charakterkarten (Spez. #29) ---------- */
+// Markup einer Karte aus unitCard (cards.js). pic(t) liefert das Sticker-Porträt (iconURL, gleiche Zeichnung
+// wie der Rig-Atlas), mini(t) die kleinen Symbole für stark/schwach. Nur bei Bedarf gebaut, nie je Bild.
+const fmt = v => String(v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).replace('.', ',');
+const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const CAT_NAME = Object.fromEntries(CATEGORIES);
+function cardHTML(t, pic, mini, opt = {}) {
+  const c = unitCard(t); if (!c) return '';
+  const r = c.raw, st = c.stats;
+  const row = (label, v, txt) => `<div class="s"><span>${label}</span><i><u style="width:${Math.max(3, v * 100).toFixed(1)}%"></u></i><b>${txt}</b></div>`;
+  const vs = (cls, label, list) => `<div><span class="l ${cls}">${label}</span><span class="u">${list.length
+    ? list.map(k => `<span><img src="${mini(k)}" alt="">${esc(UNITS[k].n)}</span>`).join('')
+    : '<em class="none">—</em>'}</span></div>`;
+  const nameSize = c.name.length > 11 ? 20 : c.name.length > 8 ? 22 : 25;
+  return `<div class="uc-hd">
+    <div class="uc-pic"><img src="${pic(t)}" alt=""></div>
+    <div class="uc-tt"><div class="uc-nm" style="font-size:${nameSize}px">${esc(c.name)}</div>
+      <div class="uc-tags"><span class="cat">${esc(CAT_NAME[c.cat] || c.cat)}</span>${c.tags.map(x => `<span>${x}</span>`).join('')}</div></div>
+    ${opt.key ? `<kbd class="uc-key" title="Taste">${opt.key}</kbd>` : ''}
+  </div>
+  <div class="uc-d">${esc(c.desc)}</div>
+  <div class="uc-st">
+    ${row('Leben', st.hp, r.hp)}
+    ${row(r.heal ? 'Heilung' : 'Schaden', st.dmg, fmt(r.dps) + '/s')}
+    ${row('Tempo', st.speed, r.speed)}
+    ${row('Reichweite', st.range, r.melee ? 'nah' : r.range)}
+    ${row('Kosten', st.cost, fmt(r.cost))}
+  </div>
+  ${c.abil.length ? `<div class="uc-ab">${c.abil.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
+  <div class="uc-vs">${vs('s', 'Stark gegen', c.strong)}${vs('w', 'Schwach gegen', c.weak)}</div>
+  ${opt.note ? `<div class="uc-note">${opt.note}</div>` : ''}`;
+}
+
 export function createUI(game) {
   const icons = {};
   const icon = k => icons[k] || (icons[k] = iconURL(k));
+  // Porträts der Karten: größer gezeichnet (scharf auf HiDPI) und in der Teamvariante des Atlas, wenn Teamkampf läuft
+  const portraits = {};
+  const teamVi = () => (game.world.teamMode && !game.mission ? Math.max(0, TEAM_KEYS.indexOf(game.curTeam)) : 0);
+  const portrait = k => { const vi = teamVi(), id = k + '|' + vi; return portraits[id] || (portraits[id] = iconURL(k, 176, vi)); };
+  const accent = () => TEAMS[game.mission ? 'blau' : game.curTeam].c;
   // Kampfstatistik einer Mission, aus death-Ereignissen abgeleitet
   const stats = { lostBlue: 0, lostRed: 0, heroK: 0, heroType: null };
 
@@ -35,7 +74,8 @@ export function createUI(game) {
       const D = UNITS[k] || TERRAIN[k];
       const b = document.createElement('button');
       b.className = 'ub' + (k === game.sel ? ' on' : '');
-      b.title = D.n + ' (Taste ' + (idx + 1) + ')';
+      b.dataset.k = k; b.dataset.slot = idx + 1;
+      if (!UNITS[k]) b.title = D.n + ' (Taste ' + (idx + 1) + ')';
       b.setAttribute('aria-label', D.n);
       const img = document.createElement('img'); img.src = icon(k); img.alt = ''; b.append(img);
       if (mis && UNITS[k]) { const s = document.createElement('small'); s.textContent = UNITS[k].cost; b.append(s); }
@@ -43,7 +83,92 @@ export function createUI(game) {
       box.append(b);
     });
     updateInfo();
+    // Neue Auswahl (Klick, Taste, Kategorie): Karte kurz zeigen; nicht beim allerersten Aufbau
+    if (lastSel !== null && game.sel !== lastSel) { selUntil = performance.now() + SEL_SHOW_MS; clearTimeout(selTimer); selTimer = setTimeout(cardUpdate, SEL_SHOW_MS + 30); }
+    lastSel = game.sel;
+    cardUpdate();
   }
+
+  /* ---------- Karte bei Hover und Auswahl ---------- */
+  // Schwebt über der Leiste, nimmt keine Zeiger-Ereignisse an (pointer-events: none) und verschwindet, sobald
+  // auf dem Feld gemalt wird. Hover hat Vorrang; sonst zeigt sie nach einer Auswahl SEL_SHOW_MS lang die Auswahl.
+  const SEL_SHOW_MS = 4500;
+  const ucard = $('ucard'), unitsBox = $('units');
+  let hoverK = null, selUntil = 0, selTimer = 0, lastSel = null, shownId = '';
+  const btnFor = k => unitsBox.querySelector(`.ub[data-k="${k}"]`);
+  function cardUpdate() {
+    let k = null, btn = null;
+    if ($('ovLex').hidden) {
+      if (hoverK && UNITS[hoverK]) { btn = btnFor(hoverK); if (btn) k = hoverK; }
+      if (!k && UNITS[game.sel] && performance.now() < selUntil) { btn = btnFor(game.sel); if (btn) k = game.sel; }
+    }
+    if (!k) { ucard.hidden = true; shownId = ''; return; }
+    const id = k + '|' + teamVi() + '|' + accent() + '|' + btn.dataset.slot;
+    if (id !== shownId) {
+      ucard.innerHTML = `<div class="uc wide">${cardHTML(k, portrait, icon, { key: btn.dataset.slot })}</div>`;
+      ucard.style.setProperty('--tc', accent());
+      ucard.classList.remove('pop'); void ucard.offsetWidth; ucard.classList.add('pop');
+      shownId = id;
+    }
+    ucard.hidden = false;
+    // Über der Leiste, waagrecht am Knopf ausgerichtet (im Bild gehalten), Pfeil zeigt auf den Knopf
+    const app = $('app').getBoundingClientRect(), pal = unitsBox.closest('.palette').getBoundingClientRect();
+    const b = btn.getBoundingClientRect(), w = ucard.offsetWidth, cx = b.left + b.width / 2 - app.left;
+    const left = Math.max(8, Math.min(app.width - w - 8, cx - w / 2));
+    ucard.style.left = left + 'px';
+    ucard.style.bottom = (app.bottom - pal.top + 12) + 'px';
+    ucard.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
+  }
+  unitsBox.addEventListener('pointerover', e => {
+    const b = e.target.closest && e.target.closest('.ub');
+    const k = b ? b.dataset.k : null;
+    if (k !== hoverK) { hoverK = k; cardUpdate(); }
+  });
+  unitsBox.addEventListener('pointerleave', () => { hoverK = null; cardUpdate(); });
+  // Tastatur (Tab auf einen Einheitenknopf) zeigt die Karte wie Hover
+  unitsBox.addEventListener('focusin', e => { const b = e.target.closest('.ub'); if (b && b.matches(':focus-visible')) { hoverK = b.dataset.k; cardUpdate(); } });
+  unitsBox.addEventListener('focusout', () => { if (hoverK && !unitsBox.matches(':hover')) { hoverK = null; cardUpdate(); } });
+  // Malen auf dem Feld blendet die Karte sofort aus (Ereignis nur lesen, nichts verhindern)
+  $('cv').addEventListener('pointerdown', () => { hoverK = null; selUntil = 0; cardUpdate(); });
+  window.addEventListener('resize', () => { if (!ucard.hidden) cardUpdate(); });
+
+  /* ---------- Lexikon ---------- */
+  // Alle Karten nach Kategorie, auch Einheiten, die die laufende Mission nicht erlaubt (gedimmt).
+  // Klick auf eine erlaubte Karte wählt die Einheit. Schließt mit Esc, Knopf oder Klick daneben.
+  let lexId = '';
+  function openLexicon() {
+    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.idx : '-');
+    if (id !== lexId) {
+      $('lexNote').textContent = RETREAT_NOTE;
+      $('lexBody').innerHTML = cardTypes().map(g => {
+        const ok = game.catAllowed(g.cat);
+        return `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t =>
+          `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : 'In dieser Mission nicht erlaubt' })}</button>`).join('')}</div></section>`;
+      }).join('');
+      $('lexCard').style.setProperty('--tc', accent());
+      lexId = id;
+    }
+    $('ovLex').hidden = false; $('bLex').classList.add('on');
+    cardUpdate();
+    $('lexClose').focus();
+  }
+  function closeLexicon() {
+    if ($('ovLex').hidden) return;
+    $('ovLex').hidden = true; $('bLex').classList.remove('on');
+    $('bLex').focus();
+  }
+  $('lexBody').addEventListener('click', e => {
+    const b = e.target.closest('.lexc'); if (!b) return;
+    if (b.classList.contains('off')) { toast('In dieser Mission nicht erlaubt.'); return; }
+    closeLexicon();
+    if (game.cat !== b.dataset.cat) game.setCat(b.dataset.cat);
+    game.select(b.dataset.k);
+  });
+  $('ovLex').addEventListener('pointerdown', e => { if (e.target === $('ovLex')) closeLexicon(); });
+  $('bLex').onclick = () => ($('ovLex').hidden ? openLexicon() : closeLexicon());
+  $('lexClose').onclick = () => closeLexicon();
+  // Esc ist sonst nirgends belegt (input.js); nur bei offenem Lexikon
+  window.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ovLex').hidden) { e.preventDefault(); closeLexicon(); } });
 
   function updateInfo() {
     const el = $('info'), sel = game.sel, mis = game.mission;
@@ -169,7 +294,7 @@ export function createUI(game) {
     $('ovRes').hidden = false;
   }
 
-  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; }
+  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; closeLexicon(); }
 
   function resetBattle() { stats.lostBlue = 0; stats.lostRed = 0; stats.heroK = 0; stats.heroType = null; }
 
@@ -204,6 +329,6 @@ export function createUI(game) {
   return {
     refresh, toast, banner, closeBanner, showResult, openMissionList,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
-    hideOverlays, resetBattle, onEvent,
+    hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon,
   };
 }

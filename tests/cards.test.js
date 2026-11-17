@@ -96,3 +96,9 @@ test('unbekannter Typ: keine Karte', () => {
   assert.equal(unitCard('wasser'), null);
   assert.equal(unitCard('gibtsnicht'), null);
 });
+
+test('Punkte: bis zwei Nachkommastellen mit Komma (Bienen 0,55)', async () => {
+  const { fmtPts } = await import('../game/js/cards.js');
+  assert.equal(fmtPts(UNITS.biene.cost), '0,55');
+  assert.equal(fmtPts(4.5), '4,5'); assert.equal(fmtPts(40), '40'); assert.equal(fmtPts(.55 * 3), '1,65');
+});

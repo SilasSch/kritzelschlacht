@@ -818,6 +818,8 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (take('misc')) steam(e.x, e.y);
         break;
       case 'burn': if (take('misc')) { const p = add('fire', e.x + rnd(-4, 4), e.y, .4, 3); if (p) p.vy = -40; } break;
+      // Gift der Bienen (combat.poison): grüne Wölkchen beim Vergiften
+      case 'poison': if (take('misc')) { const y = e.y - (e.z || 0); for (let i = 0; i < 3; i++) wisp(e.x + rnd(-4, 4), y - rnd(2, 10), rnd(2, 3.5), 0x7cc243); } break;
       case 'wallHit':
         if (e.broken && take('misc')) { dots(e.x, e.y, 3, 50, .5, 1.5, 3, 0x8d929c); puff('dust', e.x, e.y, DUST.life, 5); }
         break;

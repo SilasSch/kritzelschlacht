@@ -6,6 +6,10 @@ import { UNITS, COUNTERS, CATEGORIES, RANGED } from './data.js';
 // Gilt für alle Einheiten (Spez. #27); steht einmal im Lexikon statt auf jeder Karte
 export const RETREAT_NOTE = 'Alle Einheiten ziehen sich ab 25 % Leben zurück, erholen sich abseits und kehren ab 60 % in den Kampf zurück. Römer im Block halten bis 15 % durch.';
 
+// Punkte (Kosten, Budget) mit bis zu zwei Nachkommastellen und Komma: Bienen kosten 0,55 (Nachtrag 4, #37), eine Stelle
+// zeigte 0,6
+export const fmtPts = v => String(Math.round(v * 100) / 100).replace('.', ',');
+
 // Fernkampf ab dieser Reichweite (px); darunter Nahkampf
 const MELEE_MAX = 20;
 

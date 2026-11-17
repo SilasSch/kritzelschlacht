@@ -108,7 +108,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   let m = 1; const t = v.type;
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
-    m *= kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
+    m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
@@ -581,6 +581,25 @@ export function stepBurn(world, u, dt) {
   if (u.burnT <= 0) extinguish(u);
 }
 
+/* ---------- Gift (Nachtrag 4, #37) ---------- */
+// Der erste Stich einer Biene auf ein Ziel (u.stingTg) vergiftet es: POISON.T s lang POISON.DPS Schaden/s, Schadensart
+// 'poison' (kein Feuer: Panzer, Vampir und Brand bleiben unberührt; Rüstung, Deckung und Liegen schützen nicht).
+// Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) vergiftet es nicht.
+export const POISON = { DPS: 4, T: 3 };
+const NO_POISON = new Set(['panzer', 'heli']);
+export function poison(world, v, src) {
+  if (!v.alive || NO_POISON.has(v.type)) return;
+  if (!(v.poisonT > 0)) emit(world, { type: 'poison', x: v.x, y: v.y, z: v.z });
+  v.poisonT = POISON.T; v.poisonSrc = src || null;
+}
+function stepPoison(world, u, dt) {
+  const a = dt < u.poisonT ? dt : u.poisonT;
+  u.poisonT -= a;
+  const src = u.poisonSrc && u.poisonSrc.alive ? u.poisonSrc : null;
+  if (u.poisonT <= 0) { u.poisonT = 0; u.poisonSrc = null; }
+  hurt(world, u, POISON.DPS * a, 'poison', src, true);
+}
+
 /* ---------- KI ---------- */
 // Rückruf über Modulvariablen (keine Closure je Aufruf; Task 13: weniger Müll, weniger GC-Spitzen)
 let GI_W = null, GI_T = '', GI_F = null, GI_X = 0, GI_Y = 0, GI_N = 0;
@@ -738,6 +757,8 @@ export function think(world, u, dt) {
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
   // Brand läuft in jedem Zustand (kann töten)
   if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
+  // Gift läuft ebenso in jedem Zustand (kann töten)
+  if (u.poisonT > 0) { stepPoison(world, u, dt); if (!u.alive) return; }
   // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
   if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
@@ -1041,6 +1062,8 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         if (n >= 3) a *= 1.4;
       }
       const before = t.hp, dealt = hurt(world, t, a, 'melee', u);
+      // Biene: der erste Stich auf dieses Ziel vergiftet (Nachtrag 4, #37)
+      if (u.type === 'biene' && u.stingTg !== t) { u.stingTg = t; if (t.alive) poison(world, t, u); }
       if (u.type === 'geist') u.hp = Math.min(T.hp, u.hp + dealt);
       // Lebensraub des Vampirs (Spez. #32): die Hälfte des Schadens, ohne den Überschuss über die LP des Opfers
       else if (u.type === 'vampir') { const h = u.hp + VAMPIRE.HEAL * (dealt < before ? dealt : before > 0 ? before : 0); u.hp = h < T.hp ? h : T.hp; }

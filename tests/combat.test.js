@@ -185,3 +185,38 @@ test('Timer: think lässt fireT wachsen, swingT und hitT sinken bis 0', () => {
   think(w, u, .1);
   assert.equal(u.swingT, 0); assert.equal(u.hitT, 0);
 });
+
+// Nachtrag 4 (#37): Bienengift
+test('Bienengift: ein Stich, Biene weg, das Ziel verliert 3 s lang Leben (4/s), frischt auf statt zu stapeln', async () => {
+  const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
+  const { attack, think, POISON, hurt } = await import('../game/js/combat.js');
+  const { isFire } = await import('../game/js/abilities.js');
+  const { UNITS } = await import('../game/js/data.js');
+  assert.deepEqual(POISON, { DPS: 4, T: 3 });
+  assert.equal(isFire('poison'), false, 'Gift ist kein Feuer');
+  assert.equal(UNITS.biene.cost, .55);
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const b = spawn(w, 'biene', 400, 400, 'blau'), k = spawn(w, 'krieger', 405, 400, 'rot'); k.cd = 1e9;
+  rebuildHash(w);
+  b.cd = 0; attack(w, b, k, 5, 5, 0);
+  assert.ok(k.poisonT > 0, 'vergiftet');
+  const hp0 = k.hp;
+  b.alive = false;   // Biene weg
+  k.T = { ...UNITS.krieger, speed: 0 };
+  for (let i = 0; i < 60 * 4; i++) { rebuildHash(w); think(w, k, 1 / 60); }
+  assert.ok(Math.abs(hp0 - k.hp - POISON.DPS * POISON.T) < 1e-6, `Giftschaden ${(hp0 - k.hp).toFixed(2)}`);
+  assert.equal(k.poisonT, 0);
+  // nur der erste Stich einer Biene vergiftet; ein neuer Giftstich frischt auf, stapelt nicht
+  const w2 = createWorld(1400, 800, 5); w2.teamMode = true;
+  const b1 = spawn(w2, 'biene', 400, 400, 'blau'), b2 = spawn(w2, 'biene', 400, 410, 'blau'), r = spawn(w2, 'ritter', 405, 405, 'rot');
+  rebuildHash(w2);
+  b1.cd = 0; attack(w2, b1, r, 5, 5, 0); r.poisonT = 1;
+  b1.cd = 0; attack(w2, b1, r, 5, 5, 0);
+  assert.equal(r.poisonT, 1, 'zweiter Stich derselben Biene vergiftet nicht neu');
+  b2.cd = 0; attack(w2, b2, r, 5, 5, 0);
+  assert.equal(r.poisonT, POISON.T, 'andere Biene frischt auf');
+  // Maschinen: kein Gift; Gift durchdringt Rüstung (Ritter ×1)
+  const p = spawn(w2, 'panzer', 600, 400, 'rot'); b2.cd = 0; attack(w2, b2, p, 5, 5, 0);
+  assert.equal(p.poisonT, 0);
+  const h = r.hp; hurt(w2, r, 4, 'poison', null, true); assert.ok(Math.abs(h - r.hp - 4) < 1e-9);
+});

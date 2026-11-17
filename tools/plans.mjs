@@ -14,10 +14,12 @@ export const MISSION_PLANS = [
   { smart: [['ritter', 9, ...F]], spam: [['krieger', 30, ...F]] },
   // M2: nur 4 Grenadiere: ihre Bomben fallen in den Nahkampf vor den Rittern und treffen die eigenen Ritter mit
   { smart: [['ritter', 12, ...F], ['grenadier', 4, ...B]], spam: [['krieger', 50, ...F]] },
-  { smart: [['biene', 170, ...F]], spam: [['krieger', 55, ...F]] },
+  // M3, M6: Bienen kosten 0,55 statt 0,5 (Nachtrag 4, #37): 154 bzw. 163 statt 170 bzw. 180, damit der Plan unter par bleibt
+  { smart: [['biene', 154, ...F]], spam: [['krieger', 55, ...F]] },
   { smart: [['reiter', 30, ...F]], spam: [['krieger', 60, ...F]] },
   { smart: [['magier', 14, ...B]], spam: [['krieger', 55, ...F]] },
-  { smart: [['biene', 180, ...F]], spam: [['wolf', 80, ...F]] },
+  // M6: 163 Bienen hinten (B) statt vorn: der Schwarm sammelt sich, bevor die Reiter da sind (vorn 5/8, hinten 8/8)
+  { smart: [['biene', 163, ...B]], spam: [['wolf', 80, ...F]] },
   // M7: Bären und Wölfe kommen durch die Lavalücke (Wegfindung); weit hinten und breit verteilt (beides nötig)
   // schießen die Schützen am längsten, bevor die Tiere heran sind
   { smart: [['schuetze', 34, ...Deep]], spam: [['krieger', 55, ...F]] },

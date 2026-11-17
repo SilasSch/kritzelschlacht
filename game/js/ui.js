@@ -2,7 +2,7 @@
 // Liest den Spielzustand aus `game` (main.js) und ruft dessen Aktionen auf.
 import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS, MSG_NO_PAINT } from './data.js';
 import { iconURL, TEAM_KEYS } from './render/rig.js';
-import { unitCard, cardTypes, RETREAT_NOTE } from './cards.js';
+import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -36,7 +36,7 @@ function cardHTML(t, pic, mini, opt = {}) {
     ${row(r.heal ? 'Heilung' : 'Schaden', st.dmg, fmt(r.dps) + '/s')}
     ${row('Tempo', st.speed, r.speed)}
     ${row('Reichweite', st.range, r.melee ? 'nah' : r.range)}
-    ${row('Kosten', st.cost, fmt(r.cost))}
+    ${row('Kosten', st.cost, fmtPts(r.cost))}
   </div>
   ${c.abil.length ? `<div class="uc-ab">${c.abil.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
   <div class="uc-vs">${vs('s', 'Stark gegen', c.strong)}${vs('w', 'Schwach gegen', c.weak)}</div>
@@ -79,7 +79,7 @@ export function createUI(game) {
       if (!UNITS[k]) b.title = D.n + ' (Taste ' + (idx + 1) + ')';
       b.setAttribute('aria-label', D.n);
       const img = document.createElement('img'); img.src = icon(k); img.alt = ''; b.append(img);
-      if (mis && UNITS[k]) { const s = document.createElement('small'); s.textContent = UNITS[k].cost; b.append(s); }
+      if (mis && UNITS[k]) { const s = document.createElement('small'); s.textContent = fmtPts(UNITS[k].cost); b.append(s); }
       b.onclick = () => game.select(k);
       box.append(b);
     });
@@ -176,10 +176,10 @@ export function createUI(game) {
     const el = $('info'), sel = game.sel, mis = game.mission;
     if (UNITS[sel]) {
       const T = UNITS[sel];
-      el.innerHTML = `<b>${T.n}</b> · LP ${T.hp} · ${T.heal ? 'Heilung ' + T.heal : 'Schaden ' + T.dmg}${mis ? ' · Kosten ' + T.cost : ''} — ${T.d}`;
+      el.innerHTML = `<b>${T.n}</b> · LP ${T.hp} · ${T.heal ? 'Heilung ' + T.heal : 'Schaden ' + T.dmg}${mis ? ' · Kosten ' + fmtPts(T.cost) : ''} — ${T.d}`;
     } else {
       const T = TERRAIN[sel];
-      el.innerHTML = `<b>${T.n}</b>${mis && T.cost ? ' · Kosten ' + T.cost + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
+      el.innerHTML = `<b>${T.n}</b>${mis && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
     }
   }
 
@@ -227,7 +227,7 @@ export function createUI(game) {
 
   function updateMission() {
     const mis = game.mission; if (!mis) return;
-    $('budTxt').textContent = `${Math.round(mis.spent * 10) / 10} / ${mis.budget} Punkte`;
+    $('budTxt').textContent = `${fmtPts(mis.spent)} / ${mis.budget} Punkte`;
     const f = $('budFill');
     f.style.width = Math.min(100, mis.spent / mis.budget * 100) + '%';
     f.classList.toggle('over', mis.spent > mis.par);
@@ -286,7 +286,7 @@ export function createUI(game) {
     h.textContent = r.win ? 'Sieg!' : r.timeUp ? 'Zeit abgelaufen' : 'Niederlage';
     h.className = r.win ? 'win' : '';
     $('resStars').innerHTML = [0, 1, 2].map(i => `<i class="${i < r.stars ? 'on' : ''}">★</i>`).join('');
-    $('resStats').innerHTML = `<li><span>Eingesetzte Punkte</span>${Math.round(r.spent * 10) / 10} von ${r.budget}</li>
+    $('resStats').innerHTML = `<li><span>Eingesetzte Punkte</span>${fmtPts(r.spent)} von ${r.budget}</li>
     <li><span>Drei Sterne bei höchstens</span>${r.par} Punkten</li>
     <li><span>Eigene Verluste</span>${stats.lostBlue}</li><li><span>Besiegte Gegner</span>${stats.lostRed}</li>
     <li><span>Kampfdauer</span>${Math.round(r.time)} s</li>

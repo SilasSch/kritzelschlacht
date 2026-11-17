@@ -829,7 +829,8 @@ export function think(world, u, dt) {
   // Gift läuft ebenso in jedem Zustand (kann töten)
   if (u.poisonT > 0) { stepPoison(world, u, dt); if (!u.alive) return; }
   // Task 6: Froschfluch läuft ab, Troll heilt, Phönix zieht seine Feuerspur, Einhorn heilt (in jedem Zustand)
-  if (u.frogT > 0) stepFrogCurse(world, u, dt);
+  // endet der Fluch hier, ist u wieder es selbst; T (oben) gehört noch dem Frosch, also dieser Schritt nicht weiter
+  if (u.frogT > 0) { stepFrogCurse(world, u, dt); if (u.frogFrom === null) return; }
   if (u.type === 'troll') stepTroll(u, dt);
   else if (u.type === 'phoenix') { stepTrail(world, u, dt); if (!u.alive) return; }
   else if (u.type === 'einhorn') stepAura(world, u, dt);
@@ -1148,7 +1149,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     }
     default: {
       u.swingT = .25;
-      let a = T.dmg * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen)
+      let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen)
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;

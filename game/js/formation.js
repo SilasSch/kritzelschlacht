@@ -33,7 +33,7 @@
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
 // ENGAGE · 2 px um ein Mitglied ist und, nach Festhängen, mindestens STUCK s vergangen sind (holdT); geprüft
 // bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger.
-import { factionOf, query, nearestEnemy, cellIndex, isBat } from './world.js';
+import { factionOf, query, nearestEnemy, cellIndex, isBat, unseen } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 import { TERR_SPEED, TERR_HAZ } from './data.js';
 import { isFleeing } from './morale.js';
@@ -269,6 +269,7 @@ const CLAIMS = new Map();
 let CH_W = null, CH_F = null, CH_U = null, CH_B = null, CH_S = 0;
 function chargeTest(v) {
   if (v.type === 'heli' || isBat(v) || factionOf(CH_W, v) === CH_F) return;
+  if (v.ashT > 0 || (v.hidden && unseen(CH_U, v))) return;   // Asche des Phönix (Task 6), verstecktes Krokodil (Task 5)
   const dx = v.x - CH_U.x, dy = v.y - CH_U.y, d2 = dx * dx + dy * dy;
   if (d2 > CHARGE_R * CHARGE_R) return;
   const s = d2 * (isFleeing(v) ? 4 : 1) * (1 + CHARGE_CLAIM * (CLAIMS.get(v) || 0));

@@ -701,7 +701,8 @@ export function stepFrog(world, u, dt) {
 
 function hexReady(world, u) {
   const t = foeInReach(world, u, u.T.range, false);
-  return !!t && canCurse(t);
+  // stepAbility läuft vor der Neuwahl in combat.think: ein inzwischen abgetauchtes Krokodil (Task 5) nicht verfluchen
+  return !!t && canCurse(t) && !(t.hidden && unseen(u, t));
 }
 function hexStart(world, u) {
   const t = u.tg;

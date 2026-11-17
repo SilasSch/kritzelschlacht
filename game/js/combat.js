@@ -532,10 +532,12 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
 // oder mit verdeckter Linie neuer Versuch nach RETRY s. Startpunkt: Mündung TANK_GEO.mg (muzzle.tankMgMuzzle).
 export const TANK_MG = { DMG: 3, CD: .15, RANGE: 200, RETRY: .25 };
 const infantry = v => !v.T.fly && v.type !== 'panzer';
+// Integration Task 5/6: kein Ziel ist das versteckte Krokodil (world.unseen) und die Asche des Phönix
+const mgSeen = (u, v) => !(v.ashT > 0) && !(v.hidden && unseen(u, v));
 const MGZ = { x: 0, y: 0 };
 function mgTarget(world, u) {
   const t = u.tg, R = TANK_MG.RANGE + u.T.r, f = factionOf(world, u);
-  if (t && t.alive && infantry(t) && factionOf(world, t) !== f && (t.x - u.x) ** 2 + (t.y - u.y) ** 2 <= (R + t.T.r) ** 2) return t;
+  if (t && t.alive && infantry(t) && mgSeen(u, t) && factionOf(world, t) !== f && (t.x - u.x) ** 2 + (t.y - u.y) ** 2 <= (R + t.T.r) ** 2) return t;
   const { HW, HH, hash } = world, ux = u.x, uy = u.y;
   const gx0 = clamp((ux - R - MAX_R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R + MAX_R) / HC | 0, 0, HW - 1);
   const gy0 = clamp((uy - R - MAX_R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R + MAX_R) / HC | 0, 0, HH - 1);
@@ -544,7 +546,7 @@ function mgTarget(world, u) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
-      if (!v.alive || !infantry(v)) continue;
+      if (!v.alive || !infantry(v) || !mgSeen(u, v)) continue;
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2, rr = R + v.T.r;
       if (d2 <= rr * rr && d2 < bd && factionOf(world, v) !== f) { bd = d2; best = v; }
     }
@@ -735,7 +737,7 @@ function pilumTarget(world, u) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
-      if (!v.alive || v.type === 'heli' || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil
+      if (!v.alive || v.type === 'heli' || v.ashT > 0 || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil; Task 6: Asche
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
       if (d2 > PIL_MAX2 || factionOf(world, v) === f) continue;
       if (d2 < bd) { bd = d2; best = v; }

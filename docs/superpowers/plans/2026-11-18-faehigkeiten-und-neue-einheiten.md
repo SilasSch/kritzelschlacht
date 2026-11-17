@@ -24,6 +24,25 @@ tot > betäubt/fliegend > Schreck > Rückzug > laufende Fähigkeit > normal.
 - `cards.js` mit `unitCard` und `abil`-Texten (#29);
 - `formation.js`.
 
+## Vorgaben aus der Abschlussprüfung der Römer-Runde (verbindlich, vor Task 1 gelesen)
+
+1. **Ein Prädikat für Fliehen und Schreck:**
+   - `export const isFleeing = u => u.flee || u.fearT > 0` in morale.js.
+   - Alle bisherigen Abfragen von `u.flee` nutzen es: Blockmitgliedschaft und Marsch (formation.js), Schwerpunkte, doppelte Zieldistanz (nearestEnemy), Sanitäter-Vorrang, `att`-Zählung in sim.js und die Angstaugen in pose.js.
+   - `updateMorale` lässt den Schreck in Ruhe: Es beendet `fearT` nicht über die 60-%-Regel.
+   - Schreck läuft über `combat.retreat` mit einem Merkmal „ohne Erholung“, damit Aufstehen aus dem Liegen und Gegenwehr in der Ecke auch beim Schreck gelten.
+   - Schreck und Froschverwandlung setzen `formOn` und `formFree` zurück und nehmen die Einheit aus ihrem Block.
+   - Das gehört zu Task 1 und wird dort getestet: Ein erschreckter Römer verliert den Schildschutz, und ein erschrecktes liegendes MG steht erst auf.
+2. **Fähigkeitstexte an genau einer Stelle:**
+   - Name und Text der Fähigkeiten bleiben in `data.js` (`ABIL` → `UNITS[t].abil`); die Karten lesen nur dort.
+   - `abilities.js` enthält nur das Verhalten. Seine Tabelle heißt `ABILITY` (nicht `ABIL`) und hat keine `name`- oder `desc`-Felder.
+   - Neue Fähigkeiten und Einheiten bekommen ihre Texte in data.js.
+3. **Nicht malbare Einheiten (`paint: false`):** Gefiltert wird in main.js `catKeys` (Leiste und Tasten 1–9), in main.js `randomBattle`, in bench.js und in ui.js. Im Lexikon erscheinen sie mit dem Hinweis, wie sie entstehen (Task 4 und 6).
+4. **Leistungsszene festhalten:** Die Szene `mixed` in bench.js bekommt keine neuen Einheitentypen. Die Grenze „< 2,0 ms“ bleibt damit vergleichbar. Neue Typen kommen in eine eigene Szene `mixed2`, die zusätzlich gemessen und berichtet wird.
+5. **Brandpfeile und Schilde:** `firearrow` steht in `SHIELD_KINDS`. Ein abgeblockter Brandpfeil zündet nicht an.
+6. **Spam-Prüfung:** `newspam` (Task 7) prüft alle malbaren Einheiten, nicht nur die neuen. Dazu kommt die Römer-Prüfung aus der Korrekturrunde.
+7. **Kampfdauer:** Task 7 prüft auch, wie lange Schlachten dauern. Seit dem Rückzug brauchen manche Smart-Pläne doppelt so lange. Im Blick behalten wird REGEN (zum Beispiel .03).
+
 ## Global Constraints
 
 - Logikmodule bleiben rein und deterministisch: kein DOM, kein PIXI, kein Math.random, nur `world.rng()`. Das gilt für world, physics, combat, sim, pathing, muzzle, bench, formation, morale, abilities und die Logik in fxcore.
@@ -58,7 +77,7 @@ tot > betäubt/fliegend > Schreck > Rückzug > laufende Fähigkeit > normal.
 
 **Interfaces:**
 - Produces in abilities.js:
-  - `export const ABIL = { [type]: { cd, name, desc, ready(world, u) → bool, start(world, u), update(world, u, dt) → bool (true = fertig) } }`;
+  - `export const ABILITY = { [type]: { cd, ready(world, u) → bool, start(world, u), update(world, u, dt) → bool (true = fertig) } }` (Texte in data.js, siehe Vorgabe 2);
   - `export function stepAbility(world, u, dt) → bool`: true, solange eine Fähigkeit die Steuerung übernimmt;
   - `export function scare(world, v, sec)`: Schreck nach Festlegung 1;
   - `export const FIRE_KINDS = new Set(['fire', 'breath', 'burn', 'firearrow', 'phoenix'])`;

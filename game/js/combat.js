@@ -18,7 +18,13 @@ export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 // (morale: world.cent front); Feind näher als KEEP · Reichweite: zurückweichen (stehend, nicht liegend).
 export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40 };
 // Hysterese: nach dem Zurückweichen legt sich der Scharfschütze erst ab LIE_MIN · Reichweite wieder hin (kein Auf und Ab)
-const LIE_MIN = .75;
+// Nur im Liegen (Nachtrag 4, #36, ersetzt den Teil von #22, nach dem auch Stehende schießen): stehend schießt er nie, er
+// bewegt sich. Mit Ziel in Reichweite weicht er stehend bis LIE_MIN · Reichweite zurück (auch vor Nahkämpfern) und legt
+// sich dann hin; sonst (Linie verdeckt, Sperre proneCd) weicht er seitlich aus. Eingeklemmt (Kartenrand, Mauer: pinned)
+// gelten KEEP und LIE_MIN nicht: dann liegt und schießt er auch auf nähere Ziele. In der Ecke (Rückzug) wehrt er sich nicht.
+export const LIE_MIN = .75;
+const PIN_EDGE = 16;
+const pinned = (world, u) => u.blk > .3 || u.x < PIN_EDGE || u.y < PIN_EDGE || u.x > world.W - PIN_EDGE || u.y > world.H - PIN_EDGE;
 // Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
 // Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
 export const KITE = new Set(['schuetze', 'soldat']);
@@ -698,7 +704,7 @@ function retreat(world, u, dt) {
   // festgenagelt (keine freie Fluchtrichtung): sofort in die Ecke gedrängt, PIN_HOLD s lang (morale.js)
   if (fleeSteer(world, u, dt)) u.cornerT = MORALE.CORNER_T + PIN_HOLD;
   const t = u.tg;
-  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser') return;
+  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser' || u.type === 'sniper') return;
   if (outOfMelee(u, t)) return;   // Hubschrauber, Fledermausform
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
   if (d > T.range + T.r + t.T.r) {
@@ -797,6 +803,12 @@ export function think(world, u, dt) {
   if (d <= reach) {
     // Magier: Zauberbuch statt Feuerball (spells.castSpell: Meteor, Feuerball, Blitz, Windstoß, Steinwand); lädt er, steht er
     if (u.type === 'magier') { if (u.cd <= 0) castSpell(world, u, t); return; }
+    // Scharfschütze stehend: kein Schuss (nur liegend, stance), sondern zurück auf LIE_MIN oder seitlich ausweichen
+    if (u.type === 'sniper') {
+      if ((d < T.range * LIE_MIN && !pinned(world, u)) || meleeNear(world, u)) { u.mx = -nx * T.speed; u.my = -ny * T.speed; }
+      else lineBlocked(world, u, nx, ny, dt);
+      return;
+    }
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
     // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
     let ax, ay;
@@ -807,8 +819,7 @@ export function think(world, u, dt) {
       u.blockedT = 0; u.aimOk = true;
     }
     attack(world, u, t, d, dx, dy, ax, ay);
-    if (u.type === 'sniper' && d < T.range * SNIPER.KEEP) { u.mx = -nx * T.speed; u.my = -ny * T.speed; }
-    else if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
+    if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
     else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
   }
@@ -941,7 +952,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
   const T = u.T;
   switch (u.stance) {
     case 'prone': {
-      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP)) { standUp(u); return true; }
+      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP && !pinned(world, u))) { standUp(u); return true; }
       if (u.cd > 0) return true;
       const kind = STRAIGHT_KIND[u.type];
       if (!lofCheck(world, u, t, kind)) {
@@ -954,7 +965,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       return true;
     }
     default: {
-      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * LIE_MIN) || meleeNear(world, u)) return false;
+      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * LIE_MIN && !pinned(world, u)) || meleeNear(world, u)) return false;
       // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
       // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
       const kind = STRAIGHT_KIND[u.type];

@@ -23,7 +23,8 @@ export const UNITS = {
   ghul:{n:'Ghul',cat:'mythisch',col:'#8f9c84',r:9,hp:40,dmg:7,range:3,speed:32,cd:1.1,cost:1,mass:1,paint:false,d:'Entsteht durch den Biss eines Vampirs. Langsam, schwach und hirnlos. Zerfällt mit der Zeit und mit seinem Vampir.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
   mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.13,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
-  sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:60,range:380,speed:40,cd:3,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer. Sehr verwundbar.'},
+  // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
+  sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
   panzerfaust:{n:'Panzerfaust',cat:'modern',col:'#b59060',r:9,hp:85,dmg:70,range:230,splash:22,speed:44,cd:3.5,cost:6,mass:1,d:'Rakete gegen Panzer und Hubschrauber. Lange Nachladezeit.'},
   moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:55,speed:34,cd:4.5,cost:9,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
@@ -90,7 +91,7 @@ const ABIL = {
   ],
   mg: [{n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'}],
   sniper: [
-    {n:'Hinlegen', d:'Liegt, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen, ruhigeres Feuer.'},
+    {n:'Nur im Liegen', d:'Schießt nur liegend und legt sich hin, wenn kein Nahkämpfer nah ist: halber Schaden durch Kugeln, Pfeile und Explosionen.'},
     {n:'Geduldig', d:'Rückt nur bis auf Schussweite vor, bleibt hinter der eigenen Front und weicht zurück, wenn Feinde nahe kommen.'},
   ],
   panzerfaust: [{n:'Rakete', d:'Trifft Panzer und Hubschrauber besonders hart.'}],

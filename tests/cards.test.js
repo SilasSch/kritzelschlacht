@@ -23,7 +23,7 @@ test('jede Einheit hat eine Karte', () => {
 
 test('Werte: das Maximum aller Einheiten ergibt 1, mehr ist mehr', () => {
   assert.equal(unitCard('panzer').stats.hp, 1);
-  assert.equal(unitCard('moerser').stats.range, 1);
+  assert.equal(unitCard('sniper').stats.range, 1);   // 456 px seit Nachtrag 4 (#36), vor dem Mörser (420)
   assert.equal(unitCard('biene').stats.speed, 1);
   assert.equal(unitCard('drache').stats.cost, 1);
   assert.ok(unitCard('ritter').stats.hp > unitCard('krieger').stats.hp);
@@ -64,7 +64,7 @@ test('Fähigkeiten', () => {
   assert.match(txt, /Schild/);
   assert.ok(unitCard('ritter').abil.some(a => a.n === 'Schildwall'));
   assert.ok(unitCard('mg').abil.some(a => a.n === 'Hinlegen'));
-  assert.ok(unitCard('sniper').abil.some(a => a.n === 'Hinlegen'));
+  assert.ok(unitCard('sniper').abil.some(a => a.n === 'Nur im Liegen'));
   for (const t of Object.keys(UNITS)) {
     for (const a of unitCard(t).abil) {
       assert.ok(typeof a.n === 'string' && a.n.length > 0 && a.n.length <= 24, `${t}: ${a.n}`);

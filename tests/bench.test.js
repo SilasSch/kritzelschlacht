@@ -92,11 +92,12 @@ test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
 // (data.BAT_FORM, gleiche Schlüssel): beides ändert die Form der Einheiten nicht.
 test('mixed2: Ghule und Fledermausform behalten die Form der Einheiten', () => {
   const keys = Object.keys(spawn(createWorld(400, 300, 1), 'krieger', 50, 50, 'blau')).join();
-  const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed2', 600);
-  let bats = 0;
-  for (let k = 0; k < 600; k++) { step(w, DT); w.events.length = 0; for (const u of w.units) if (u.alive && u.batT > 0) bats++; }
+  // 800 statt 600 Einheiten: seit Task 6 (fünf Kreaturen mehr in mixed2) stehen bei 600 zu wenige Vampire für einen Biss in 10 s
+  const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed2', 800);
+  let bats = 0, ghouls = 0;
+  for (let k = 0; k < 600; k++) { step(w, DT); w.events.length = 0; for (const u of w.units) { if (u.alive && u.batT > 0) bats++; if (u.type === 'ghul') ghouls++; } }
   assert.deepEqual(w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type), []);
-  assert.ok(w.units.some(u => u.type === 'ghul'), 'Ghule entstanden');
+  assert.ok(ghouls > 0, 'Ghule entstanden');   // gezählt während der Schlacht (Tote räumt sim.step ab 300 weg)
   assert.ok(bats > 0, 'Fledermausform kam vor');
   assert.ok(Object.keys(UNITS.vampir).join() === Object.keys(w.units.find(u => u.type === 'vampir').T).join());
   for (const k of ['batT', 'riseT', 'ghouls']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);

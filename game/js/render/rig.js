@@ -632,6 +632,174 @@ const DEF = {
       for (let i = -1; i <= 1; i++) Ln(c, [[r * 1.45, r * (.45 - a)], [r * 1.7, r * (.45 - a + i * .14)]], '#f3ead8', .7, false);
     },
   },
+  // --- Task 6: Kreaturen (Spez. #34) --- Sticker mit Glubschaugen und Umriss O; die Teamfarbe trägt ein Akzent (k.shield,
+  // wie die Lumpen des Ghuls; neutral T6_ACCENT): Lendenschurz (Troll), Gurt (Zyklop), Hutband und Schal (Hexe),
+  // Brustfeder (Phönix), Satteldecke (Einhorn). Der Frosch bleibt grün (Team am Teamring).
+  // Troll: grünlich, breit, mit Warzen, Spitzohren, Knollennase und zwei Hauern; Waffe: Keule.
+  troll: {
+    eyes: eyePair(.3, -.3, .19),
+    body(c, r, k, f) {
+      const dk = shade(k.col, -.32);
+      poly(c, r, [[-.62, -.55], [-1.12, -.85], [-.8, -.25]], k.col, 1.2);
+      feet(c, r, dk, f);
+      E(c, 0, 0, r, r * 1.05, k.col);
+      c.save(); c.beginPath(); c.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2); c.clip();
+      E(c, r * .12, r * .42, r * .62, r * .48, shade(k.col, .16), 0);
+      // Lendenschurz in Akzentfarbe mit Zacken
+      c.beginPath(); c.moveTo(-r * 1.1, r * .48); c.lineTo(r * 1.1, r * .42); c.lineTo(r * 1.1, r * .8);
+      for (let i = 0; i < 5; i++) { const x = r * 1.1 - (i + 1) * r * .44; c.lineTo(x + r * .22, r * (i % 2 ? .78 : 1.02)); c.lineTo(x, r * .8); }
+      c.closePath(); c.fillStyle = k.shield; c.fill(); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+      c.restore();
+      E(c, 0, 0, r, r * 1.05, null, 1.4);
+      // Warzen
+      for (const [x, y, s] of [[-.5, -.55, .09], [-.62, .02, .07], [-.18, -.82, .06], [.62, .3, .07]]) E(c, r * x, r * y, r * s, r * s, dk, .8);
+      // Knollennase, Mund mit zwei Hauern
+      E(c, r * .64, r * -.04, r * .2, r * .16, shade(k.col, -.08), 1.1);
+      c.beginPath(); c.moveTo(r * .12, r * .28); c.quadraticCurveTo(r * .38, r * .36, r * .66, r * .26); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+      poly(c, r, [[.2, .3], [.24, .12], [.3, .31]], '#f3ead8', .7);
+      poly(c, r, [[.52, .3], [.57, .1], [.62, .28]], '#f3ead8', .7);
+      whites(c, r, this.eyes);
+    },
+    weapon: {
+      grip: [.85, .38], axis: Math.atan2(-1.2, .55), swing: 1,
+      draw(c, r) {
+        Ln(c, [[r * .8, r * .5], [r * 1.28, -r * .6]], '#8a5a2b', 2.6);
+        E(c, r * 1.36, -r * .82, r * .3, r * .44, '#9a6a3b', 1.4, O, .4);
+        for (const [x, y] of [[1.2, -.95], [1.5, -.7], [1.38, -1.12]]) E(c, r * x, r * y, r * .07, r * .07, '#6f4a26', .7);
+      },
+    },
+  },
+  // Zyklop: großer hautfarbener Kerl mit einem großen Auge mitten im Gesicht, Stirnhorn, Gurt in Akzentfarbe; Waffe:
+  // Felsbrocken in der Hand (den wirft er).
+  zyklop: {
+    eyes: { L: [.22, -.34], R: [.22, -.34], s: .36, prx: .36 * .48, pry: .36 * .55, whites: true },
+    body(c, r, k, f) {
+      feet(c, r, shade(k.col, -.35), f);
+      E(c, 0, 0, r, r * 1.08, k.col);
+      c.save(); c.beginPath(); c.ellipse(0, 0, r, r * 1.08, 0, 0, Math.PI * 2); c.clip();
+      // Fellschurz und Gurt quer über die Brust
+      c.fillStyle = '#7a5434'; c.fillRect(-r, r * .55, r * 2, r * .6);
+      c.beginPath(); c.moveTo(-r * .9, -r * .2); c.lineTo(-r * .62, -r * .42); c.lineTo(r * .9, r * .52); c.lineTo(r * .62, r * .74); c.closePath();
+      c.fillStyle = k.shield; c.fill(); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+      c.restore();
+      E(c, 0, 0, r, r * 1.08, null, 1.4);
+      poly(c, r, [[-.12, -1.0], [.0, -1.32], [.12, -1.0]], '#efe4d2', 1.1);
+      // breiter Mund mit einem Zahn
+      c.beginPath(); c.moveTo(r * .0, r * .2); c.quadraticCurveTo(r * .3, r * .1, r * .6, r * .22); c.lineWidth = 1.2; c.strokeStyle = O; c.stroke();
+      poly(c, r, [[.28, .15], [.32, .3], [.37, .15]], '#fff', .6);
+      whites(c, r, this.eyes);
+    },
+    weapon: {
+      grip: [.95, .25], axis: 0, swing: .6,
+      draw(c, r) {
+        E(c, r * 1.12, r * .05, r * .42, r * .36, '#9aa0aa', 1.4, O, .3);
+        E(c, r * 1.0, -r * .08, r * .12, r * .08, '#c3c8cf', 0);
+        Ln(c, [[r * 1.18, -r * .12], [r * 1.3, r * .12]], '#6d727c', .8, false);
+      },
+    },
+  },
+  // Hexe: sitzt auf dem Besen (Stiel unter ihr, Reisig hinten, flattert in zwei Bildern), dunkles Kleid, grünliches
+  // Gesicht mit langer Nase, graue Strähnen, Schal in Akzentfarbe; Kopfbedeckung: spitzer Hut mit Knick und Hutband.
+  hexe: {
+    eyes: eyePair(.3, -.36, .19),
+    body(c, r, k, f) {
+      const w = f ? .1 : -.1;
+      Ln(c, [[-r * 1.35, r * .78], [r * 1.45, r * .55]], '#8a5a2b', 1.8);
+      c.beginPath(); c.moveTo(-r * 1.2, r * .74); c.lineTo(-r * 2.05, r * (.4 + w)); c.lineTo(-r * 2.15, r * (.85 + w)); c.lineTo(-r * 2.0, r * (1.25 + w)); c.closePath();
+      c.fillStyle = '#d9b45a'; c.fill(); c.lineWidth = 1.2; c.strokeStyle = O; c.stroke();
+      Ln(c, [[-r * 1.25, r * .76], [-r * 1.9, r * (.82 + w)]], '#b08a3a', .8, false);
+      // Kleid (Körper), Bein mit spitzem Schuh am Besen
+      E(c, 0, r * .1, r, r * .95, k.col);
+      Ln(c, [[r * .2, r * .8], [r * .45, r * 1.05]], shade(k.col, -.3), 2);
+      poly(c, r, [[.38, .98], [.78, 1.0], [.52, 1.12]], '#2f2638', .9);
+      // Gesicht und Haar
+      E(c, r * .1, -r * .35, r * .72, r * .6, '#bfe0a8');
+      for (const [x0, y0, x1, y1] of [[-.5, -.6, -.75, .05], [-.4, -.7, -.58, .12], [-.6, -.45, -.8, -.05]]) Ln(c, [[r * x0, r * y0], [r * x1, r * y1]], '#b9bcc4', 1.1);
+      poly(c, r, [[.58, -.3], [1.05, -.12], [.6, -.08]], '#a9d48f', 1);
+      c.beginPath(); c.moveTo(r * .22, r * .02); c.quadraticCurveTo(r * .4, r * .1, r * .56, r * .0); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+      // Schal in Akzentfarbe
+      E(c, r * .05, r * .26, r * .62, r * .16, k.shield, 1.1);
+      whites(c, r, this.eyes);
+    },
+    headgear(c, r, k) {
+      E(c, r * .05, -r * .8, r * 1.05, r * .24, '#2f2638', 1.3);
+      c.beginPath(); c.moveTo(-r * .55, -r * .82); c.lineTo(r * .6, -r * .82); c.lineTo(r * .05, -r * 1.75); c.lineTo(-r * .45, -r * 2.05); c.lineTo(-r * .18, -r * 1.55); c.closePath();
+      c.fillStyle = '#2f2638'; c.fill(); c.lineWidth = 1.3; c.strokeStyle = O; c.stroke();
+      c.beginPath(); c.moveTo(-r * .5, -r * .9); c.lineTo(r * .56, -r * .9); c.lineTo(r * .48, -r * 1.06); c.lineTo(-r * .42, -r * 1.06); c.closePath();
+      c.fillStyle = k.shield; c.fill(); c.lineWidth = .9; c.strokeStyle = O; c.stroke();
+    },
+  },
+  // Phönix: runder Feuervogel (orange, gelber Bauch), Schwingen in zwei Bildern, Schnabel, Flammenkrone, langer
+  // Flammenschweif hinten (rot, orange, gelb, flackert), Brustfeder in Akzentfarbe.
+  phoenix: {
+    eyes: eyePair(.42, -.28, .19),
+    body(c, r, k, f) {
+      const fl = f ? .12 : -.12;
+      // Flammenschweif
+      for (const [col, s, lw] of [['#e5574f', 1, 1.4], ['#ff8a3d', .78, 1.2], ['#ffe066', .52, 0]]) {
+        c.beginPath(); c.moveTo(-r * .55, -r * .35 * s);
+        c.quadraticCurveTo(-r * (1.4 + .3 * s), -r * (.9 + fl) * s, -r * (2.1 + .2 * s), -r * (.55 - fl) * s);
+        c.quadraticCurveTo(-r * 1.6, -r * .05, -r * (2.25 + .15 * s), r * (.45 + fl) * s);
+        c.quadraticCurveTo(-r * 1.3, r * .5 * s, -r * .55, r * .4 * s); c.closePath();
+        c.fillStyle = col; c.fill(); if (lw) { c.lineWidth = lw; c.strokeStyle = O; c.stroke(); }
+      }
+      // hintere Schwinge
+      E(c, -r * .2, -r * (.55 + (f ? .35 : 0)), r * .75, r * (f ? .55 : .3), '#e5574f', 1.2, O, f ? -.5 : -.2);
+      E(c, 0, 0, r, r, k.col);
+      E(c, r * .25, r * .35, r * .55, r * .45, '#ffd25a', 0);
+      poly(c, r, [[.0, .3], [.18, .55], [.0, .8], [-.18, .55]], k.shield, 1);
+      E(c, 0, 0, r, r, null, 1.4);
+      // Flammenkrone und Schnabel
+      for (const [x, h] of [[-.25, 1.45], [.05, 1.6], [.32, 1.4]]) poly(c, r, [[x - .12, -.85], [x + .04, -h - fl * .5], [x + .16, -.85]], '#ffb84d', 1);
+      poly(c, r, [[.85, -.2], [1.35, -.02], [.85, .14]], '#ffd84d', 1.1);
+      whites(c, r, this.eyes);
+      // vordere Schwinge
+      E(c, -r * .05, -r * (.1 + (f ? .45 : 0)), r * .7, r * (f ? .5 : .32), '#ff6a2a', 1.3, O, f ? -.6 : .15);
+    },
+  },
+  // Einhorn: weißes Pferd mit vier Beinen (zwei Bilder), Kopf vorn oben mit goldenem Horn, Regenbogenmähne und -schweif,
+  // Satteldecke in Akzentfarbe.
+  einhorn: {
+    eyes: eyePair(1.0, -.62, .13),
+    body(c, r, k, f) {
+      const l = f ? r * .18 : -r * .18, leg = '#dcd6e6', RB = ['#ff6b6b', '#ffb84d', '#ffe066', '#6fd36f', '#6fb7ff', '#b48cff'];
+      [-r * .72, -r * .36, r * .36, r * .72].forEach((x, i) => Ln(c, [[x, r * .45], [x + (i % 2 ? l : -l), r * 1.05]], leg, 2.2));
+      // Regenbogenschweif
+      RB.forEach((col, i) => Ln(c, [[-r * 1.0, r * (.02 + i * .05)], [-r * (1.5 + i * .03), r * (.35 + i * .1) + l * .3]], col, 1.5, i === 0));
+      E(c, 0, r * .28, r * 1.15, r * .55, k.col);
+      // Satteldecke
+      c.save(); c.beginPath(); c.ellipse(0, r * .28, r * 1.15, r * .55, 0, 0, Math.PI * 2); c.clip();
+      c.fillStyle = k.shield; c.fillRect(-r * .45, -r * .4, r * .75, r * .78);
+      Ln(c, [[-r * .45, r * .36], [r * .3, r * .36]], '#ffe08a', 1, false);
+      c.restore();
+      E(c, 0, r * .28, r * 1.15, r * .55, null, 1.4);
+      // Hals und Kopf
+      poly(c, r, [[.55, .05], [.75, -.55], [1.08, -.45], [.95, .2]], k.col, 1.3);
+      E(c, r * 1.02, -r * .55, r * .42, r * .3, k.col, 1.4, O, -.35);
+      E(c, r * 1.32, -r * .45, r * .06, r * .05, O, 0);
+      // Regenbogenmähne am Hals
+      RB.forEach((col, i) => E(c, r * (.62 + i * .06), -r * (.62 - i * .1), r * .12, r * .09, col, i === 0 || i === 5 ? .7 : 0, O, -.6));
+      // goldenes Horn mit Rillen
+      poly(c, r, [[.95, -.78], [1.22, -1.55], [1.12, -.72]], '#ffd84d', 1.1);
+      for (const q of [.3, .55]) Ln(c, [[r * (.97 + .12 * q), r * (-.78 - .7 * q)], [r * (1.13 + .03 * q), r * (-.74 - .7 * q)]], '#d9a441', .7, false);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Frosch (nicht malbar, Froschfluch): klein und grün, Glubschaugen oben auf dem Kopf, breites Maul, helle Kehle
+  frosch: {
+    eyes: { L: [-.02, -.72], R: [.5, -.72], s: .3, prx: .3 * .48, pry: .3 * .55, whites: true },
+    body(c, r, k, f) {
+      const dk = shade(k.col, -.3), l = f ? .1 : -.1;
+      E(c, -r * .72, r * (.72 + l), r * .42, r * .22, dk, 1.1);
+      E(c, 0, r * .08, r * 1.08, r * .82, k.col);
+      E(c, r * .25, r * .42, r * .62, r * .32, '#cdeeb0', 0);
+      E(c, 0, r * .08, r * 1.08, r * .82, null, 1.4);
+      for (const p of [this.eyes.L, this.eyes.R]) E(c, p[0] * r, p[1] * r + r * .12, r * .36, r * .3, k.col, 1.2);
+      c.beginPath(); c.moveTo(r * .05, r * .12); c.quadraticCurveTo(r * .45, r * .32, r * .9, r * .02); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+      E(c, r * .62, r * (.88 - l), r * .26, r * .14, dk, 1);
+      whites(c, r, this.eyes);
+    },
+  },
   ...BOSS_DEF,
 };
 
@@ -639,12 +807,14 @@ const DEF = {
 // deren Körper die Teamfarbe trägt (TINT), der Ritter (Schild in Teamfarbe) und der Ghul (Lumpen in Teamfarbe, k.shield).
 export const TEAM_KEYS = ['', 'blau', 'rot', 'gruen', 'gelb'];
 export const TEAM_INDEX = { blau: 1, rot: 2, gruen: 3, gelb: 4 };
-const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul';
+// Task 6: Kreaturen mit Akzent in Teamfarbe (k.shield) und ihr neutraler Akzent im Sandkasten
+export const T6_ACCENT = { troll: '#8a6a4a', zyklop: '#8a6a4a', hexe: '#3d8f5a', phoenix: '#ffd84d', einhorn: '#9b6be0' };
+const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined;
 
 function colors(t, vi) {
   const tc = vi ? TEAMS[TEAM_KEYS[vi]].body : null;
   const col = tc && TINT.has(t) ? tc : U[t].col;
-  return { col, dk: shade(col, -.3), shield: tc || (t === 'ghul' ? '#8a7a64' : '#3f6fcf') };
+  return { col, dk: shade(col, -.3), shield: tc || (t === 'ghul' ? '#8a7a64' : T6_ACCENT[t] || '#3f6fcf') };
 }
 
 function drawLid(c, r, e) {

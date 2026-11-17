@@ -24,6 +24,8 @@ test('PROJECTILES: Bögen und gerade Schüsse mit Tempo', () => {
     arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
     shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
     fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
+    // Task 6: Felsbrocken des Zyklopen, Zauber der Hexe
+    boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
   });
 });
 

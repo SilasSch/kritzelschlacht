@@ -162,7 +162,8 @@ function randomBattle() {
 function saveSandbox() {
   sandSave = {
     // Ghule (nicht malbar) gehören zur Schlacht ihres Vampirs, sie kommen nicht mit zurück
-    units: world.units.filter(u => u.alive && u.T.paint !== false).map(u => ({ type: u.type, team: u.team, x: u.x, y: u.y, hp: u.hp })),
+    // Task 6: ein verfluchter Frosch kommt als er selbst zurück (u.frogFrom), die Asche des Phönix mit halben LP
+    units: world.units.filter(u => u.alive && (u.T.paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp })),
     GW: world.GW, GH: world.GH, terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
     teamMode: world.teamMode,
   };
@@ -493,7 +494,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir', 'kreaturen';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -606,6 +607,28 @@ const scenes = {
     for (let k = 0; k < 3; k++) spawn(world, 'vampir', x, H * .5 + (k - 1) * 70, 'blau');
     placeRect(world, 'krieger', 6, (x + 320) / W, .38, (x + 350) / W, .62, 'rot');
     spawn(world, 'magier', x + 680, H * .44, 'rot'); spawn(world, 'magier', x + 680, H * .56, 'rot');
+  },
+  // --- Task 6: Kreaturen (Spez. #34) --- fünf Reihen, Blau links gegen Rot rechts:
+  // 1. ein verletzter Troll gegen zwei Magier (heilt sich, die Feuerbälle stoppen die Heilung);
+  // 2. ein Zyklop wirft Felsbrocken über eine Mauer auf Krieger dahinter (Staub, Trümmer bleiben liegen);
+  // 3. eine Hexe gegen zwei Ritter (grüne Zauber, nach einer Sekunde wird ein Ritter für 5 s zum Frosch);
+  // 4. ein angeschlagener Phönix gegen Schützen (Feuerspur auf dem Anflug, stirbt, liegt 2 s als Asche, steht wieder auf);
+  // 5. ein Einhorn mit drei verletzten Kriegern gegen Krieger (Hornstoß aus vollem Lauf, Heilaura glitzert).
+  kreaturen() {
+    world.teamMode = true;
+    const W = world.W, H = world.H, x = W * .2, row = i => H * (i + .5) / 5;
+    const t = spawn(world, 'troll', x, row(0), 'blau'); t.hp = .55 * t.T.hp;
+    spawn(world, 'magier', x + 260, row(0) - 16, 'rot'); spawn(world, 'magier', x + 260, row(0) + 16, 'rot');
+    spawn(world, 'zyklop', x, row(1), 'blau').cd = .3;
+    tRect(world, 'mauer', (x + 120) / W, (row(1) - 60) / H, (x + 130) / W, (row(1) + 60) / H);
+    placeRect(world, 'krieger', 6, (x + 230) / W, (row(1) - 30) / H, (x + 260) / W, (row(1) + 30) / H, 'rot');
+    const hx = spawn(world, 'hexe', x, row(2), 'blau'); hx.abCd = 1;
+    spawn(world, 'ritter', x + 190, row(2) - 14, 'rot'); spawn(world, 'ritter', x + 205, row(2) + 14, 'rot');
+    const ph = spawn(world, 'phoenix', x, row(3), 'blau'); ph.hp = 30;
+    placeRect(world, 'schuetze', 6, (x + 200) / W, (row(3) - 30) / H, (x + 225) / W, (row(3) + 30) / H, 'rot');
+    spawn(world, 'einhorn', x - 40, row(4), 'blau');
+    for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', x + 10, row(4) - 30 + k * 30, 'blau'); a.hp = .4 * a.T.hp; }
+    placeRect(world, 'krieger', 5, (x + 300) / W, (row(4) - 30) / H, (x + 320) / W, (row(4) + 30) / H, 'rot');
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

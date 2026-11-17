@@ -28,6 +28,10 @@ import { fire, clearShot, hasLineOfFire, fling, hurt } from './combat.js';
 import { isFleeing } from './morale.js';
 import { leaveBlock } from './formation.js';
 import { FLY_VZ } from './physics.js';
+// --- Task 6: Kreaturen --- (nur in Funktionen gelesen, siehe Importkreis oben)
+import { nearestEnemy } from './world.js';
+import { ignite } from './combat.js';
+import { hazardAt } from './formation.js';
 
 /* ---------- Feuer (Festlegung 7) ---------- */
 // Feuerball, Drachenatem, Brand über Zeit, Brandpfeile, Phönixspur: gemeinsames Merkmal Feuer (combat.hurt: Panzer
@@ -603,6 +607,181 @@ export function crumbleGhouls(world, v) {
   v.ghouls = 0;
 }
 
+/* ---------- Task 6: Kreaturen (Spez. #34; Festlegung 1, 3, 6 und 7) ----------
+   Troll, Zyklop, Hexe, Phönix, Einhorn und der Frosch (nicht malbar). Eine ABILITY hat nur die Hexe (Froschfluch); alles
+   andere ist ständig da und läuft aus combat.think (stepTroll, stepTrail, stepAura in jedem Zustand wie der Brand; stepAsh
+   und stepFrog statt des normalen Verhaltens). Felsbrocken und Hexenzauber fliegen als Geschosse (combat.PROJECTILES). */
+
+// Troll: heilt REGEN seiner max. LP je s. Jeder Feuertreffer (isFire, auch der Brand über Zeit; combat.hurt) setzt
+// u.noHealT = NO_HEAL: so lange keine Heilung (Festlegung 7).
+export const TROLL = { REGEN: .03, NO_HEAL: 4 };
+export function stepTroll(u, dt) {
+  if (u.noHealT > 0) { u.noHealT = u.noHealT > dt ? u.noHealT - dt : 0; return; }
+  const T = u.T;
+  if (u.hp < T.hp) { const h = u.hp + TROLL.REGEN * T.hp * dt; u.hp = h < T.hp ? h : T.hp; }
+}
+
+// Zyklop (combat.js): Felsbrocken 'boulder' im Bogen, am Landepunkt eine Explosion mit Radius R (Schaden wie blast, trifft
+// auch Eigene, Festlegung 2; als Explosion halten Römerschilde sie nicht ab) und DEBRIS Trümmerbrocken ohne Schaden
+// (world.debris, Festlegung 5). Feinde näher als MIN_D: unbeholfener Nahkampf, Abklingzeit ×MELEE_CD, Schaden ×MELEE_DMG,
+// Reichweite MELEE px (Rand zu Rand); dazwischen geht er auf sie zu.
+export const CYCLOPS = { R: UNITS.zyklop.splash, MIN_D: 70, MELEE: 4, MELEE_CD: 2, MELEE_DMG: .5, DEBRIS: 2 };
+
+// Hexe: Zauber 'hex' (combat.js, gerade, grünlich, kein Feuer, Schaden UNITS.hexe.dmg). Froschfluch (ABILITY, Abklingzeit
+// CD): ihr aktuelles Ziel in Reichweite wird T s lang zum Frosch (curseFrog). Der Frosch behält die LP und das Team (u.kin:
+// auch jeder gegen jeden), greift nicht an und hüpft vor dem nächsten Feind weg (stepFrog: HOP_HZ Sprünge je s, je Sprung
+// den Anteil HOP der Zeit in Bewegung, Feinde bis FLEE_R px, neue Suche alle LOOK_T s). Danach ist er wieder er selbst
+// (endFrog), LP höchstens seine max. LP. Immun (FROG_IMMUNE): Panzer, Hubschrauber, Drache, Elefant, Ghul; dazu Frösche
+// und die Asche des Phönix.
+export const FROG = { T: 5, CD: 14, HOP_HZ: 1.6, HOP: .45, FLEE_R: 180, LOOK_T: .5 };
+export const FROG_IMMUNE = new Set(['panzer', 'heli', 'drache', 'elefant', 'ghul']);
+export const canCurse = v => v.alive && !(v.ashT > 0) && v.type !== 'frosch' && !FROG_IMMUNE.has(v.type);
+
+// Zählt u wieder zum Schwerpunkt seiner Fraktion (wie morale.endFlee), wenn es floh oder erschreckt war
+function unflee(world, u) {
+  if (isFleeing(u)) { const c = world.cent.get(factionOf(world, u)); if (c) c.n++; }
+  u.flee = false; u.fearT = 0; u.safeT = 0; u.cornerT = 0;
+}
+
+// Froschfluch auf v für sec s (Typwechsel u.type/u.T, alter Typ in u.frogFrom). Vorher: laufende Fähigkeit abbrechen (mit
+// end), Römerblock verlassen (kein Schild, Vorgabe 1), Schreck und Flucht enden, Fledermausform, Meteor-Kanal, Liegen,
+// Durchritt und Verstärkung enden. Ein Flieger fällt als Frosch aus seiner Höhe (landet betäubt). Liefert true, wenn verwandelt.
+export function curseFrog(world, v, sec = FROG.T) {
+  if (!canCurse(v)) return false;
+  cancelAbility(world, v);
+  leaveBlock(v);
+  unflee(world, v);
+  v.batT = 0; v.batOn = false; v.chanId = 0;
+  v.stance = 'stand'; v.stanceT = 0; v.st = 0; v.buffT = 0; v.spdMul = 1; v.dmgMul = 1;
+  if (v.T.fly && v.z > 0 && v.state === 'ok') { v.state = 'air'; v.vz = 0; v.peakZ = v.z; v.bounced = true; v.impact = 0; }
+  v.frogFrom = v.type; v.frogT = sec; v.type = 'frosch'; v.T = UNITS.frosch; v.fz = 0;
+  v.tg = null; v.rt = 0; v.mx = 0; v.my = 0; v.swingT = 0;
+  emit(world, { type: 'creature', k: 'frog', x: v.x, y: v.y, z: v.z });
+  return true;
+}
+// Der Frosch wird wieder er selbst (Ablauf oder Tod des verwandelten Phönix): Typ zurück, LP gedeckelt, Flieger steigen auf
+export function endFrog(world, u) {
+  const T = UNITS[u.frogFrom];
+  u.type = u.frogFrom; u.T = T; u.frogFrom = null; u.frogT = 0;
+  if (u.hp > T.hp) u.hp = T.hp;
+  u.fz = T.flyZ || 0;
+  if (T.fly && u.state !== 'ok') { u.state = 'ok'; u.stunT = 0; u.vz = 0; }
+  u.tg = null; u.rt = 0;
+  emit(world, { type: 'creature', k: 'unfrog', x: u.x, y: u.y, z: u.z });
+}
+// Restzeit des Fluchs (combat.think, in jedem Zustand)
+export function stepFrogCurse(world, u, dt) {
+  u.frogT -= dt;
+  if (u.frogT <= 0) endFrog(world, u);
+}
+// Verhalten des Froschs (statt Moral, Fähigkeit und Angriff): hüpft vom nächsten Feind weg, nie auf Lava oder Mauer
+export function stepFrog(world, u, dt) {
+  if (u.rt <= 0) { u.tg = nearestEnemy(world, u); u.rt = FROG.LOOK_T + (u.id % 4) * .05; }
+  const t = u.tg;
+  if (!t || !t.alive) return;
+  const dx = u.x - t.x, dy = u.y - t.y, d = Math.hypot(dx, dy) || 1;
+  u.face = dx < 0 ? 1 : -1;   // schaut den Feind an
+  if (d > FROG.FLEE_R) return;
+  const ph = world.time * FROG.HOP_HZ + u.seed;
+  if (ph - Math.floor(ph) >= FROG.HOP) return;
+  const nx = dx / d, ny = dy / d;
+  if (hazardAt(world, u.x + nx * 12, u.y + ny * 12)) return;
+  const sp = u.T.speed * 2;
+  u.mx = nx * sp; u.my = ny * sp; u.run += dt;
+}
+
+function hexReady(world, u) {
+  const t = foeInReach(world, u, u.T.range, false);
+  return !!t && canCurse(t);
+}
+function hexStart(world, u) {
+  const t = u.tg;
+  faceTo(u, t.x, t.y);
+  emit(world, { type: 'creature', k: 'curse', x: u.x, y: u.y, z: u.z, tx: t.x, ty: t.y, tz: t.z });
+  curseFrog(world, t, FROG.T);
+  u.fireT = 0;
+  sound(world, 'pop');
+}
+
+// Phönix: beim ersten Tod (combat.hurt) wird er zu Asche statt zu sterben: ASH_T s am Boden, unverwundbar (hurt), nicht
+// anvisierbar (world.nearestEnemy, combat.cast) und lebendig (zählt für Sieg, Missionsende und facCount, Festlegung 6).
+// Dann steht er mit HP seiner max. LP wieder auf (u.reborn); der zweite Tod ist endgültig. Auch ein verwandelter Phönix
+// (Frosch) wird beim ersten Tod zur Asche. Feuerspur: alle TRAIL_DT s im Flug trifft er feindliche Bodentruppen bis
+// TRAIL_R px (plus ihr Radius) mit TRAIL_DMG Schaden 'phoenix' (Feuer) und zündet sie an (Generation TRAIL_GEN: das Feuer
+// springt höchstens einmal weiter). Er selbst fängt kein Feuer (combat.ignite).
+export const PHOENIX = { ASH_T: 2, HP: .5, TRAIL_DT: .25, TRAIL_R: 16, TRAIL_DMG: 2, TRAIL_GEN: 2 };
+const unburn = u => { u.burnT = 0; u.burnGen = 0; u.burnSrc = null; u.burnCk = 0; };
+export function phoenixAsh(world, v) {
+  if (v.reborn || v.ashT > 0 || (v.type !== 'phoenix' && v.frogFrom !== 'phoenix')) return false;
+  if (v.frogFrom !== null) endFrog(world, v);
+  cancelAbility(world, v);
+  unflee(world, v);
+  unburn(v);
+  v.hp = 0; v.ashT = PHOENIX.ASH_T; v.fz = 0; v.mx = 0; v.my = 0; v.tg = null; v.hitT = 0;
+  emit(world, { type: 'creature', k: 'ash', x: v.x, y: v.y, z: v.z });
+  sound(world, 'fire');
+  return true;
+}
+// Ein Schritt Asche (combat.think, vor allem anderen): liegt still, steht nach ASH_T s wieder auf
+export function stepAsh(world, u, dt) {
+  u.mx = 0; u.my = 0;
+  u.ashT -= dt;
+  if (u.ashT > 0) return;
+  u.ashT = 0; u.reborn = true; u.hp = PHOENIX.HP * u.T.hp; u.fz = u.T.flyZ;
+  u.abOn = false; u.abT = 0; u.abK = 0;
+  unflee(world, u);
+  unburn(u);
+  u.rt = 0; u.cd = 0; u.tg = null;
+  emit(world, { type: 'creature', k: 'rise', x: u.x, y: u.y, z: u.z });
+  sound(world, 'whoosh');
+}
+let TR_W = null, TR_U = null, TR_F = null;
+function trailTest(v) {
+  if (v.T.fly || v.ashT > 0 || factionOf(TR_W, v) === TR_F) return;
+  const dx = v.x - TR_U.x, dy = v.y - TR_U.y, R = PHOENIX.TRAIL_R + v.T.r;
+  if (dx * dx + dy * dy > R * R) return;
+  hurt(TR_W, v, PHOENIX.TRAIL_DMG, 'phoenix', TR_U, true);
+  if (v.alive) ignite(TR_W, v, PHOENIX.TRAIL_GEN, TR_U);
+}
+// Feuerspur (combat.think, in jedem Zustand): nur im Flug (seit dem letzten Schritt bewegt, u.px/u.py aus physics.integrate)
+export function stepTrail(world, u, dt) {
+  if (u.ashT > 0 || u.state !== 'ok') return;
+  u.trailT -= dt;
+  if (u.trailT > 0) return;
+  u.trailT = u.trailT + PHOENIX.TRAIL_DT > 0 ? u.trailT + PHOENIX.TRAIL_DT : PHOENIX.TRAIL_DT;
+  const mx = u.x - u.px, my = u.y - u.py;
+  if (!(mx * mx + my * my > .04)) return;
+  TR_W = world; TR_U = u; TR_F = factionOf(world, u);
+  query(world, u.x, u.y, PHOENIX.TRAIL_R + MAX_R, trailTest);
+  TR_W = null; TR_U = null; TR_F = null;
+  emit(world, { type: 'creature', k: 'trail', x: u.x, y: u.y, z: u.z });
+}
+
+// Einhorn: Sturmlauf wie der Reiter, aber geradeaus mit dem Horn voran (combat.attack): der Stoß aus vollem Lauf macht
+// CHARGE-fachen Schaden, stößt das Ziel mit PUSH zurück, und es läuft THROUGH s durch. Heilaura: alle AURA_DT s bekommen
+// verletzte Verbündete bis AURA_R px (Mitte zu Mitte, ohne das Einhorn selbst) AURA_HP · AURA_DT LP (gedeckelt); Untote
+// (Ghule, data.UNDEAD) nicht, Heilungen nur Verbündete (Festlegung 2). Ein Glitzern zeigt sie etwa alle 2 s.
+export const UNICORN = { CHARGE: 1.5, PUSH: 200, THROUGH: .6, AURA_R: 70, AURA_HP: 2, AURA_DT: .5 };
+let AU_W = null, AU_U = null, AU_F = null, AU_N = 0;
+function auraTest(v) {
+  if (v === AU_U || v.hp >= v.T.hp || v.ashT > 0 || UNDEAD.has(v.type) || factionOf(AU_W, v) !== AU_F) return;
+  const dx = v.x - AU_U.x, dy = v.y - AU_U.y, R = UNICORN.AURA_R;
+  if (dx * dx + dy * dy > R * R) return;
+  const h = v.hp + UNICORN.AURA_HP * UNICORN.AURA_DT;
+  v.hp = h < v.T.hp ? h : v.T.hp;
+  AU_N++;
+}
+// Ein Schritt Heilaura (combat.think, in jedem Zustand)
+export function stepAura(world, u, dt) {
+  u.auraT -= dt;
+  if (u.auraT > 0) return;
+  u.auraT = u.auraT + UNICORN.AURA_DT > 0 ? u.auraT + UNICORN.AURA_DT : UNICORN.AURA_DT;
+  AU_W = world; AU_U = u; AU_F = factionOf(world, u); AU_N = 0;
+  query(world, u.x, u.y, UNICORN.AURA_R, auraTest);
+  AU_W = null; AU_U = null; AU_F = null;
+  if (AU_N > 0 && (u.id + Math.round(world.time / UNICORN.AURA_DT)) % 4 === 0) emit(world, { type: 'creature', k: 'aura', x: u.x, y: u.y, z: u.z, R: UNICORN.AURA_R });
+}
+
 /* ---------- Tabelle ---------- */
 export const ABILITY = {
   heli: { cd: 25, ready: heliReady, start: nothing, update: heliUpdate },
@@ -615,4 +794,6 @@ export const ABILITY = {
   baer: { cd: 20, ready: roarReady, start: roarStart, update: done },
   geist: { cd: 15, ready: spookReady, start: spookStart, update: done },
   drache: { cd: 30, ready: diveReady, start: diveStart, update: diveUpdate, end: diveEnd },
+  // --- Task 6: Kreaturen ---
+  hexe: { cd: FROG.CD, ready: hexReady, start: hexStart, update: done },
 };

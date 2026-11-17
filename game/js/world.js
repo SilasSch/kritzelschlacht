@@ -116,11 +116,17 @@ export function spawn(world, type, x, y, team) {
     // Verwandlung) und ihr Ziel (batOn: soll Fledermaus sein); Zahl der lebenden Ghule des Vampirs; beim Ghul sein Vampir
     // (owner) und die Restzeit des Aufstehens (riseT, s).
     batT: .5, batOn: false, ghouls: 0, owner: null, riseT: .5,
+    // --- Task 6: Kreaturen (abilities.js, Spez. #34) --- Froschfluch: ursprünglicher Typ (null = kein Frosch) und Restzeit
+    // (s); Phönix: schon wiedergeboren, Restzeit als Asche (s, dann unverwundbar und nicht anvisierbar); Troll: Restzeit ohne
+    // Heilung nach einem Feuertreffer (s); Takt der Heilaura des Einhorns und der Feuerspur des Phönix (s bis zum nächsten).
+    frogFrom: null, frogT: .5, reborn: false, ashT: .5, noHealT: .5, auraT: .5, trailT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
   u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0;
+  // Task 6: Takte nach id versetzt (nicht alle Einhörner und Phönixe im selben Schritt), ohne world.rng
+  u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.trailT = (u.id % 4) * .06;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
@@ -175,6 +181,7 @@ export function nearestEnemy(world, u) {
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
           if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v)))) continue;
+          if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           let d = (dx * dx + dy * dy) * (1 + .12 * (v.tg === u ? 0 : (v.att || 0)));
           if (pref < 1 && (v.T.heal || RANGED.has(v.type))) d *= pref;

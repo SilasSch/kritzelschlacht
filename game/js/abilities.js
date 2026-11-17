@@ -48,8 +48,9 @@ const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 // zählt sofort nicht mehr zum Schwerpunkt der Fraktion (wie der Fluchtbeginn). Wer betäubt oder in der Luft ist,
 // erschrickt trotzdem; der Schreck läuft dann erst ab, wenn er wieder steht (Vorrang: betäubt > Schreck).
 // Schreckwirkungen treffen nur Feinde: das prüft der Aufrufer.
+// Ghule sind hirnlos (Festlegung 3): sie erschrecken nicht.
 export function scare(world, v, sec) {
-  if (!v.alive || !(sec > 0)) return;
+  if (!v.alive || !(sec > 0) || v.type === 'ghul') return;
   if (!isFleeing(v)) {
     const c = world.cent.get(factionOf(world, v));
     if (c && c.n > 0) c.n--;

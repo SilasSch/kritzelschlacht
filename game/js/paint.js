@@ -40,7 +40,8 @@ function warn(stroke, msg) {
 export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
   rebuildHash(world);
   const T = UNITS[sel];
-  if (!T) return { placed: 0, warning: null };
+  // nicht malbar (paint: false, der Ghul): Rückhalt, falls die Auswahl doch einmal darauf steht
+  if (!T || T.paint === false) return { placed: 0, warning: null };
   if (world.totalAlive > UNIT_CAP) return { placed: 0, warning: warn(stroke, MSG_FULL) };
   const r = T.r, minD = r * 2.05, { W, H } = world;
   const tries = Math.min(140, Math.ceil((R * R) / ((minD * .9) ** 2) * 1.4) + 1);
@@ -100,8 +101,10 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
     query(world, x, y, R + 10, v => {
       if ((v.x - x) ** 2 + (v.y - y) ** 2 > R * R) return;
       if (mission && v.team !== PLAYER) return;
-      if (mission) mission.spent = Math.max(0, mission.spent - v.T.cost);
-      if (stroke) stroke.erased.push({ type: v.type, team: v.team, x: v.x, y: v.y, hp: v.hp });
+      // Nicht Gemaltes (paint: false, der Ghul) war nie bezahlt und kommt mit Rückgängig nicht wieder (sonst ein Ghul ohne Vampir)
+      const painted = v.T.paint !== false;
+      if (mission && painted) mission.spent = Math.max(0, mission.spent - v.T.cost);
+      if (stroke && painted) stroke.erased.push({ type: v.type, team: v.team, x: v.x, y: v.y, hp: v.hp });
       v.alive = false; world.dead = (world.dead || 0) + 1; changed = true;
       releaseUnit(world, v);   // Ghul meldet sich beim Vampir ab, die Ghule eines Vampirs zerfallen (Spez. #32)
     });

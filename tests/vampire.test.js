@@ -252,3 +252,50 @@ test('Fledermausform: setzt sich nicht über Lava zusammen', () => {
   assert.equal(onLava, 0, 'nie als Vampir in der Lava');
   assert.ok(v.alive && v.batT === 0 && dist(v, t) < 30, `beißt am Ziel (${dist(v, t)})`);
 });
+
+/* ---------- Prüfung der Vampir-Runde (Nachbesserungen 8a–8d) ---------- */
+test('8a: Ghul nicht malbar: stamp setzt keinen, game.select und das Lexikon wählen ihn nicht', async () => {
+  const { stamp, createStroke } = await import('../game/js/paint.js');
+  const fs = await import('node:fs');
+  const w = mkWorld(), s = createStroke(0);
+  const r = stamp(w, s, 400, 400, 60, 'ghul', 'blau', null, null);
+  assert.equal(r.placed, 0); assert.equal(w.units.length, 0); assert.equal(s.units.length, 0);
+  assert.ok(stamp(w, s, 400, 400, 60, 'vampir', 'blau', null, null).placed > 0, 'malbare Typen weiter');
+  // main.js und ui.js brauchen das DOM: hier nur die Sperren im Quelltext
+  const main = fs.readFileSync(new URL('../game/js/main.js', import.meta.url), 'utf8');
+  assert.match(main, /select\(k\) \{ if \(UNITS\[k\] && UNITS\[k\]\.paint === false\) return;/);
+  const ui = fs.readFileSync(new URL('../game/js/ui.js', import.meta.url), 'utf8');
+  assert.match(ui, /paint === false\) \{ toast\(MSG_NO_PAINT\); return; \}/);
+});
+
+test('8b: Fledermaus ohne Ziel über Lava setzt sich nicht zusammen', async () => {
+  const { stepBat } = await import('../game/js/abilities.js');
+  const w = mkWorld(), v = spawn(w, 'vampir', 405, 405, 'blau');
+  for (let gx = 35; gx <= 45; gx++) for (let gy = 35; gy <= 45; gy++) w.terr[gy * w.GW + gx] = 2;
+  for (let i = 0; i < 60 && v.batT < 1; i++) stepBat(w, v, DT, true);
+  assert.equal(v.batT, 1);
+  rebuildHash(w);
+  for (let i = 0; i < 120; i++) { step(w, DT); w.events.length = 0; }
+  assert.ok(v.alive && v.batT === 1 && v.T.fly, `bleibt Fledermaus (batT ${v.batT})`);
+});
+
+test('8c: Rückgängig holt einen radierten Ghul nicht zurück (kein Ghul ohne Vampir), Mission erstattet ihn nicht', async () => {
+  const { paintTerrain, createStroke, undo } = await import('../game/js/paint.js');
+  const w = mkWorld(), v = spawn(w, 'vampir', 300, 400, 'blau'), e = spawn(w, 'krieger', 318, 400, 'rot'); e.hp = 1;
+  rebuildHash(w); bite(w, v, e);
+  const g = ghoulsOf(w, v)[0]; assert.ok(g);
+  g.x = 700; g.y = 200; rebuildHash(w);
+  const s = createStroke(0), mission = { budget: 50, spent: 10 };
+  g.team = 'blau';
+  paintTerrain(w, s, 700, 200, 20, 'radierer', mission, 'plan');
+  assert.ok(!g.alive); assert.equal(s.erased.length, 0); assert.equal(mission.spent, 10, 'nichts erstattet');
+  undo(w, s);
+  assert.equal(w.units.filter(u => u.alive && u.type === 'ghul').length, 0);
+});
+
+test('8d: Ghule erschrecken nicht (hirnlos)', async () => {
+  const { scare } = await import('../game/js/abilities.js');
+  const w = mkWorld(), g = spawn(w, 'ghul', 400, 400, 'blau'), k = spawn(w, 'krieger', 400, 440, 'blau');
+  scare(w, g, 2); scare(w, k, 2);
+  assert.equal(g.fearT, 0); assert.ok(k.fearT > 0);
+});

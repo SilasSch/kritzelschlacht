@@ -138,6 +138,8 @@ export const BAT_FORM = new UnitType(Object.assign({}, UNITS.vampir, { fly: 1, f
 
 // Untote: weder Sanitäter noch Heilwelle heilen sie (sonst verlöre der Zerfall der Ghule seinen Sinn)
 export const UNDEAD = new Set(['ghul']);
+// Hinweis, wenn im Lexikon eine nicht malbare Einheit (paint: false) angeklickt wird (ui.js)
+export const MSG_NO_PAINT = 'Diese Einheit kann man nicht malen.';
 
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten. Quelle für tools/balance.mjs (über tools/plans.mjs) und die
 // Charakterkarten (stark/schwach gegen, cards.js).

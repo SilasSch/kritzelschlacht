@@ -745,7 +745,8 @@ export function think(world, u, dt) {
   const t = u.tg;
   // Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (und ohne Umdrehen mitten in der Bewegung)
   if (PRONE.has(u.type) && transit(world, u, dt)) return;
-  if (!t) { if (u.type === 'vampir') stepBat(world, u, dt, false); return; }
+  // ohne Ziel zurück zum Vampir, aber nie über Lava oder Mauer (wie mit Ziel, unten)
+  if (!t) { if (u.type === 'vampir') stepBat(world, u, dt, u.batOn && hazardAt(world, u.x, u.y)); return; }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
   // Vampir auf langen Wegen (abilities.stepBat): ab BAT_START px als Fledermausschwarm geradewegs zum Ziel, ab BAT_END px

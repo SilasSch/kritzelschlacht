@@ -1,6 +1,6 @@
 // HUD: Palette, Zähler, Missionsleiste, Dialoge, Banner, Toasts, Charakterkarten und Lexikon. Markup kommt aus index.html.
 // Liest den Spielzustand aus `game` (main.js) und ruft dessen Aktionen auf.
-import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS } from './data.js';
+import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS, MSG_NO_PAINT } from './data.js';
 import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE } from './cards.js';
 
@@ -161,6 +161,7 @@ export function createUI(game) {
   $('lexBody').addEventListener('click', e => {
     const b = e.target.closest('.lexc'); if (!b) return;
     if (b.classList.contains('off')) { toast('In dieser Mission nicht erlaubt.'); return; }
+    if (UNITS[b.dataset.k] && UNITS[b.dataset.k].paint === false) { toast(MSG_NO_PAINT); return; }   // Ghul: nur ansehen
     closeLexicon();
     if (game.cat !== b.dataset.cat) game.setCat(b.dataset.cat);
     game.select(b.dataset.k);

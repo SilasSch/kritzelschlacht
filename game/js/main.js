@@ -63,7 +63,8 @@ const game = {
     if (!game.catKeys(c).includes(game.sel)) game.sel = game.catKeys(c)[0];
     ui.renderUnits();
   },
-  select(k) { game.sel = k; ui.renderUnits(); },
+  // Nicht malbare Typen (paint: false, der Ghul) sind nie die Auswahl, auch nicht über das Lexikon (Vorgabe 3)
+  select(k) { if (UNITS[k] && UNITS[k].paint === false) return; game.sel = k; ui.renderUnits(); },
   setBrush(v) { game.brush = clamp(Math.round(v), 10, 150); ui.syncBrush(); },
   setTeam(k) { game.curTeam = k; ui.buildChips(); },
   setTeamMode(on) {

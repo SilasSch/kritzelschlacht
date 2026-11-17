@@ -105,7 +105,7 @@ test('liegend: Reichweite +15 % (schießt auf 1,1 · Reichweite), stehend nicht'
     // stehend auf dieselbe Distanz: kein Schuss, läuft hin
     const w2 = mkWorld(), s = spawn(w2, type, 200, 400, 'blau');
     spawn(w2, 'schuetze', 200 + D, 400, 'rot').hp = 1e9;
-    rebuildHash(w2); s.cd = 0; think(w2, s, DT);
+    rebuildHash(w2); s.cd = 0; s.snipeT = 99; think(w2, s, DT);   // Scharfschütze hat schon gewartet (Spez. #28)
     assert.equal(bullets(w2), 0); assert.ok(s.mx > 0);
   }
 });
@@ -294,8 +294,8 @@ test('durchgelassene Kugel trifft den Körper dahinter', () => {
 });
 
 /* ---------- Eigene Liegende (Controller-Entscheid) ---------- */
-test('MG hinter einem liegenden verbündeten Scharfschützen schießt weiter, der Scharfschütze bleibt heil', () => {
-  const w = mkWorld(), m = spawn(w, 'mg', 200, 400, 'blau'), sn = spawn(w, 'sniper', 250, 400, 'blau');
+test('MG hinter einem liegenden verbündeten MG schießt weiter, der Liegende bleibt heil', () => {
+  const w = mkWorld(), m = spawn(w, 'mg', 200, 400, 'blau'), sn = spawn(w, 'mg', 250, 400, 'blau');   // zweites MG als Liegender (ein Scharfschütze so nah am Feind steht auf, Spez. #28)
   lie(sn); sn.cd = 1e9;   // der Scharfschütze selbst schießt nicht (nur das MG zählt)
   const a = spawn(w, 'schuetze', 340, 400, 'rot'); a.hp = 1e9;
   const seen = new Set();
@@ -305,7 +305,7 @@ test('MG hinter einem liegenden verbündeten Scharfschützen schießt weiter, de
     for (const p of w.proj) if (p.src === m) seen.add(p);
   }
   assert.ok(seen.size > 5, `MG-Schüsse ${seen.size}`);
-  assert.equal(sn.hp, UNITS.sniper.hp, 'Scharfschütze unverletzt');
+  assert.equal(sn.hp, UNITS.mg.hp, 'Scharfschütze unverletzt');
   assert.equal(sn.stance, 'prone');
   assert.ok(a.hp < 1e9, 'Ziel getroffen');
 });

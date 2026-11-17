@@ -69,7 +69,7 @@ export function spawn(world, type, x, y, team) {
     // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt; lofWait: Drossel des Zielchecks (combat.lofCheck)
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0, lofWait: 0,
     meleeT: 0, meleeHit: false, fleeT: 0, fleeX: 0, fleeY: 0,   // Drosseln: Nahkämpfer-Check (combat.meleeNear), Flucht der Sanitäter
-    stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
+    stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false, snipeT: 0,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
     pathT: 0, pathBlk: 0,

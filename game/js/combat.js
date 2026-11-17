@@ -11,6 +11,10 @@ import { MORALE, PIN_HOLD, updateMorale, fleeSteer } from './morale.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
+// Geduldige Scharfschützen (Spez. #28): mit Ziel in Reichweite nie näher als HOLD · Reichweite heran; ohne Ziel
+// in Reichweite WAIT s warten, dann vorrücken, aber höchstens bis BEHIND px hinter die eigene Frontlinie
+// (morale: world.cent front); Feind näher als KEEP · Reichweite: zurückweichen (stehend, nicht liegend).
+export const SNIPER = { HOLD: .95, KEEP: .6, WAIT: 3, BEHIND: 40 };
 export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
@@ -685,6 +689,7 @@ export function think(world, u, dt) {
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
   // MG und Scharfschütze: Hinlegen, Liegen, Aufstehen (sonst weiter wie stehend)
   if (PRONE.has(u.type) && stance(world, u, t, d, dx, dy, reach, dt)) return;
+  if (u.type === 'sniper' && d <= reach) u.snipeT = 0;
   if (d <= reach) {
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
     // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
@@ -696,9 +701,17 @@ export function think(world, u, dt) {
       u.blockedT = 0; u.aimOk = true;
     }
     attack(world, u, t, d, dx, dy, ax, ay);
-    if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
+    if (u.type === 'sniper' && d < T.range * SNIPER.KEEP) { u.mx = -nx * T.speed; u.my = -ny * T.speed; }
+    else if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
     else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
+  }
+  // Scharfschütze ohne Ziel in Reichweite: erst WAIT s warten, dann vorrücken, nie über die Frontgrenze
+  if (u.type === 'sniper') {
+    u.snipeT += dt;
+    if (u.snipeT < SNIPER.WAIT) return;
+    const c = world.cent.get(factionOf(world, u));
+    if (c && c.has && c.fn > 0 && u.x * c.ex + u.y * c.ey >= c.front - SNIPER.BEHIND) return;
   }
   // Wegfindung (Spez. #24, pathing.js), nur Bodentruppen mit Bodenziel: Ist die gerade Linie zum Ziel
   // verbaut (Mauerzelle oder ≥ 2 Lavazellen; Prüfung alle PATH_RECHECK s; Fernkämpfer prüfen nur das
@@ -822,7 +835,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
   const T = u.T;
   switch (u.stance) {
     case 'prone': {
-      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u)) { standUp(u); return true; }
+      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP)) { standUp(u); return true; }
       if (u.cd > 0) return true;
       const kind = STRAIGHT_KIND[u.type];
       if (!lofCheck(world, u, t, kind)) {
@@ -835,7 +848,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       return true;
     }
     default: {
-      if (u.proneCd > 0 || d > reach || meleeNear(world, u)) return false;
+      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * SNIPER.KEEP) || meleeNear(world, u)) return false;
       // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
       // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
       const kind = STRAIGHT_KIND[u.type];

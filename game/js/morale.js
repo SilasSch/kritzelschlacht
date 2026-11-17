@@ -66,12 +66,31 @@ export function updateCentroids(world, dt) {
     if (!u.alive || u.flee) continue;
     const f = factionOf(world, u);
     let c = C.get(f);
-    if (!c) { c = { x: 0, y: 0, n: 0 }; C.set(f, c); }
+    if (!c) { c = { x: 0, y: 0, n: 0, fn: 0, front: 0, has: false, ex: 0, ey: 0 }; C.set(f, c); }
     c.x += u.x; c.y += u.y; c.n++;
   }
   C.forEach(meanC);
+  // Frontlinie (Scharfschützen, combat.SNIPER): je Fraktion Einheitsvektor (ex, ey) zum nächsten feindlichen
+  // Schwerpunkt und größte Projektion (front) der eigenen nicht fliehenden Bodentruppen ohne Scharfschützen
+  // darauf; fn = Anzahl dieser Truppen (0: keine Grenze)
+  C.forEach(setDir, C);
+  for (let i = 0; i < units.length; i++) {
+    const u = units[i];
+    if (!u.alive || u.flee || u.type === 'sniper' || u.T.fly) continue;
+    const c = C.get(factionOf(world, u));
+    if (!c.has) continue;
+    const p = u.x * c.ex + u.y * c.ey;
+    if (c.fn === 0 || p > c.front) c.front = p;
+    c.fn++;
+  }
 }
-function resetC(c) { c.x = 0; c.y = 0; c.n = 0; }
+function setDir(c, f) {
+  let best = null, bd = Infinity;
+  this.forEach((o, g) => { if (g === f || !o.n) return; const d = (o.x - c.x) ** 2 + (o.y - c.y) ** 2; if (d < bd) { bd = d; best = o; } });
+  c.has = !!(c.n && best && bd > 0);
+  if (c.has) { const l = Math.sqrt(bd); c.ex = (best.x - c.x) / l; c.ey = (best.y - c.y) / l; }
+}
+function resetC(c) { c.x = 0; c.y = 0; c.n = 0; c.fn = 0; c.front = 0; c.has = false; c.ex = 0; c.ey = 0; }
 function meanC(c) { if (c.n) { c.x /= c.n; c.y /= c.n; } }
 
 /* ---------- Bedrohung ---------- */

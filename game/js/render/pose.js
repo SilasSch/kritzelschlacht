@@ -60,6 +60,10 @@ export const CHANNEL_LIFT = .55, CHANNEL_SWAY = .06, CHANNEL_HZ = 1.2;
 // Ghul (Spez. #32): gebückt (GHOUL_HUNCH rad nach vorn geneigt) und schwankend (±GHOUL_SWAY mit GHOUL_HZ); beim Aufstehen
 // (u.riseT, abilities.GHOUL.RISE) wächst er aus dem Boden: sy von RISE_SY0 auf 1 (um die Füße), sx etwas breiter.
 export const GHOUL_HUNCH = .2, GHOUL_SWAY = .06, GHOUL_HZ = .9, RISE_SY0 = .15;
+// --- Task 6: Kreaturen --- Frosch: hüpft beim Laufen in Bögen (FROG_HOP_HZ Sprünge je s, bis FROG_HOP px hoch, beim
+// Absprung gestaucht und im Flug gestreckt); Einhorn galoppiert (wippt etwas stärker, UNI_BOB px); Hexe auf dem Besen
+// schwankt sanft (WITCH_SWAY rad).
+export const FROG_HOP_HZ = 3.2, FROG_HOP = 5, UNI_BOB = 2.2, WITCH_SWAY = .07;
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -259,6 +263,12 @@ export function poseUnit(u, t, out = {}, mem) {
       out.sy *= RISE_SY0 + (1 - RISE_SY0) * k; out.sx *= 1 + .25 * (1 - k);
     }
   }
+  // Task 6: Frosch hüpft, Einhorn galoppiert, Hexe schwankt auf dem Besen
+  if (u.type === 'frosch' && walking) {
+    const q = frac(t * FROG_HOP_HZ + u.seed), k = Math.sin(Math.PI * q);
+    out.bob = -FROG_HOP * k; out.sy = q < .15 ? .82 : 1 + .12 * k; out.sx = 1 / out.sy;
+  } else if (u.type === 'einhorn' && walking) out.bob *= UNI_BOB / 1.5;
+  else if (u.type === 'hexe') out.tilt += WITCH_SWAY * Math.sin(TAU * .7 * t + u.seed);
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.
   const st = u.state;

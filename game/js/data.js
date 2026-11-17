@@ -29,6 +29,16 @@ export const UNITS = {
   moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:55,speed:34,cd:4.5,cost:9,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
+  // --- Task 6: Kreaturen (Spez. #34; Verhalten in abilities.js, Abschnitt Kreaturen) ---
+  // Troll: heilt sich ständig, Feuer stoppt das; Zyklop: Felsbrocken im Bogen (combat 'boulder'), im Nahkampf unbeholfen;
+  // Hexe: fliegt niedrig (Festlegung 6), Zauber 'hex', Froschfluch; Phönix: fliegt, Feuerspur, steht einmal wieder auf;
+  // Einhorn: Sturmlauf mit dem Horn, Heilaura; Frosch: nicht malbar, entsteht nur durch den Froschfluch (Festlegung 3).
+  troll:{n:'Troll',cat:'mythisch',col:'#7f9a62',r:14,hp:260,dmg:22,range:4,speed:38,cd:1.3,cost:8,mass:4,d:'Zäh, mit Keule. Heilt sich ständig selbst, nur Feuer stoppt die Heilung.'},
+  zyklop:{n:'Zyklop',cat:'mythisch',col:'#d0a983',r:15,hp:220,dmg:30,range:280,splash:34,speed:32,cd:3.6,cost:10,mass:5,d:'Mythische Artillerie: wirft Felsbrocken im Bogen über Mauern und Köpfe. Im Nahkampf unbeholfen.'},
+  hexe:{n:'Hexe',cat:'mythisch',col:'#6a4c8c',r:9,hp:55,dmg:10,range:200,speed:58,cd:1.3,cost:5,fly:1,flyZ:24,mass:.8,d:'Fliegt niedrig auf dem Besen und schießt grüne Zauber. Verwandelt Gegner kurz in harmlose Frösche.'},
+  phoenix:{n:'Phönix',cat:'mythisch',col:'#ff8a3d',r:11,hp:110,dmg:12,range:3,speed:88,cd:.8,cost:7,fly:1,flyZ:26,mass:1,d:'Feuervogel mit Feuerspur, die Bodentruppen anzündet. Steht einmal pro Schlacht aus seiner Asche wieder auf.'},
+  einhorn:{n:'Einhorn',cat:'mythisch',col:'#f4f0fa',r:13,hp:150,dmg:16,range:4,speed:105,cd:1.1,cost:4.5,mass:3,d:'Schneller Sturmläufer mit dem Horn voran. Heilt Verbündete in der Nähe ein wenig.'},
+  frosch:{n:'Frosch',cat:'mythisch',col:'#5cb85c',r:6,hp:20,dmg:0,range:3,speed:30,cd:1,cost:0,mass:.5,paint:false,d:'Entsteht durch Froschfluch: ein verwandelter Gegner. Harmlos, hüpft weg und wird nach 5 s wieder er selbst.'},
 };
 
 // Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}]. Einzige
@@ -121,6 +131,31 @@ const ABIL = {
     {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
     {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},
   ],
+  // --- Task 6: Kreaturen ---
+  troll: [
+    {n:'Regeneration', d:'Heilt jede Sekunde 3 % seiner Lebenspunkte.'},
+    {n:'Schwäche: Feuer', d:'Nach jedem Feuertreffer, auch durch Brand, 4 s lang keine Heilung.'},
+  ],
+  zyklop: [
+    {n:'Felsbrocken', d:'Wirft Felsen im Bogen über Mauern hinweg. Der Einschlag trifft alle im Umkreis, auch Eigene. Schilde halten ihn nicht ab.'},
+    {n:'Unbeholfen', d:'Im Nahkampf schlägt er nur halb so oft und halb so stark zu.'},
+  ],
+  hexe: [
+    {n:'Froschfluch', d:'Alle 14 s wird ihr Ziel 5 s lang ein harmloser Frosch, danach mit seinen LP wieder es selbst. Bosse und Ghule sind immun.'},
+    {n:'Hexenzauber', d:'Schießt grüne Zauber geradeaus. Fliegt niedrig: Nahkämpfer erreichen sie.'},
+  ],
+  phoenix: [
+    {n:'Wiedergeburt', d:'Beim ersten Tod wird er zu Asche, ist 2 s unverwundbar und steht mit halben LP wieder auf. Der zweite Tod ist endgültig.'},
+    {n:'Feuerspur', d:'Wo er tief über Feinde fliegt, fangen Bodentruppen kurz Feuer. Selbst fängt er kein Feuer.'},
+  ],
+  einhorn: [
+    {n:'Hornstoß', d:'Stürmt mit dem Horn voran: der erste Stoß aus vollem Lauf macht 50 % mehr Schaden, dann läuft es durch.'},
+    {n:'Heilaura', d:'Verbündete bis 70 px heilen 2 LP je Sekunde. Ghule nicht.'},
+  ],
+  frosch: [
+    {n:'Froschfluch', d:'Nicht malbar, entsteht durch Froschfluch: Eine Hexe verwandelt einen Gegner für 5 s, er behält seine LP.'},
+    {n:'Harmlos', d:'Greift nicht an und hüpft vor Feinden weg. Ein Biss macht aus ihm keinen Ghul.'},
+  ],
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 
@@ -177,6 +212,8 @@ export const TERR_SPEED = [], TERR_HAZ = [];
 for (const k in TERRAIN) { const T = TERRAIN[k]; TERR_SPEED[T.id] = T.sp ?? 1; TERR_HAZ[T.id] = !!T.haz; }
 
 export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber',vampir:'Vampire',ghul:'Ghule'};
+// --- Task 6: Kreaturen ---
+Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
 
@@ -187,6 +224,8 @@ export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter',
 
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
+// --- Task 6: Kreaturen --- (Hexe und Zyklop: Geister und Reiter jagen sie bevorzugt)
+RANGED.add('hexe'); RANGED.add('zyklop');
 
 // M5 (Die Festung): Budget 110 → 80 und 26 statt 16 Schützen (finale Prüfung der Römer-Runde). Die Schilde halten die
 // Pfeile von vorn, die Feuerbälle der Magier treffen innen oft die eigene Mauer und die eigenen Schützen: 36 Römer

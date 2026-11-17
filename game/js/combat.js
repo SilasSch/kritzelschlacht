@@ -10,6 +10,8 @@ import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } fro
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, releaseUnit, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
 import { castSpell, spellReact, FIREBALL } from './spells.js';
+// --- Task 6: Kreaturen ---
+import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepFrog, stepFrogCurse, phoenixAsh } from './abilities.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -31,6 +33,8 @@ export const KITE = new Set(['schuetze', 'soldat']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
+// --- Task 6: Kreaturen --- Hexe: gerader Zauber 'hex' (Schusslinie prüfen wie die Schützen)
+STRAIGHT.add('hexe'); STRAIGHT_KIND.hexe = 'hex';
 
 // Liegen (Spez. #22): MG-Schützen und Scharfschützen legen sich hin, wenn ein Ziel in Reichweite ist und
 // kein Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R ist. Haltung u.stance: 'stand' → 'down'
@@ -56,6 +60,8 @@ export const PROJECTILES = {
   arrow: { arc: true, speed: 520 }, bomb: { arc: true, speed: 450 }, mortar: { arc: true, speed: 500 },
   shell: { arc: true, speed: 850 }, bullet: { arc: false, speed: 1100 }, rocket: { arc: false, speed: 520 },
   fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
+  // --- Task 6: Kreaturen --- boulder: Felsbrocken des Zyklopen (Bogen, landBoulder); hex: Zauber der Hexe (gerade, hexImpact)
+  boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
 };
 // Bögen, die wie ein Pfeil den nächsten Körper am Landepunkt treffen (alle anderen Bögen explodieren)
 export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow']);
@@ -70,6 +76,9 @@ const SHOT = {
   fire: [0, 0, 14, 'fire'],
   bullet: [0, 0, 5, 'shot'],
   rocket: [0, 0, 6, 'whoosh'],
+  // --- Task 6: Kreaturen ---
+  boulder: [.6, .42, 16, 'throw'],
+  hex: [0, 0, 6, 'whoosh'],
 };
 
 // Höhen der geraden Schüsse: am Boden in Laufhöhe (unter WALL_CLEAR_Z, Mauern blocken),
@@ -105,6 +114,7 @@ export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 // Merkmal Feuer (Festlegung 7): Panzer ×0,6, Geister voll, Vampire doppelt (auch der Brand und in Fledermausform, #32).
 export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
+  if (v.ashT > 0) return 0;   // Task 6: Asche des Phönix ist unverwundbar
   let m = 1; const t = v.type;
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
@@ -114,6 +124,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
+  if (t === 'troll' && isFire(kind)) v.noHealT = TROLL.NO_HEAL;   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7)
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
@@ -125,6 +136,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (v.formOn && (kind === 'arrow' || kind === 'bullet')) v.rangedT = world.time;
   if (!dot && (src || !isFire(kind))) v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
+  // Task 6: der erste Tod des Phönix macht ihn zu Asche (abilities.phoenixAsh), ohne Abschuss
+  if (v.hp <= 0 && phoenixAsh(world, v)) return d;
   if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src, kind); }
   return d;
 }
@@ -138,6 +151,8 @@ export const PARTS = {
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
   panzer: ['turret'], heli: ['headgear', 'weapon'], vampir: [], ghul: [],
+  // --- Task 6: Kreaturen --- (Troll: Keule, Zyklop: Felsen in der Hand, Hexe: Hut)
+  troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
@@ -352,6 +367,7 @@ function cast(world, x0, y0, x1, y1, za, zb, skip, skipSet, pad, duckF = null) {
       for (let i = 0; i < cell.length; i++) {
         const v = cell[i];
         if (!v.alive || v === skip || (skipSet !== null && skipSet.has(v))) continue;
+        if (v.ashT > 0) continue;   // Task 6: Asche des Phönix
         if (duckF !== null && v.stance === 'prone' && factionOf(world, v) === duckF) continue;
         const band = v.T.r + BODY_Z_PAD;
         if (v.z <= zlo - band || v.z >= zhi + band) continue;
@@ -576,6 +592,7 @@ const wet = (world, u) => !u.T.fly && u.z < BURN_Z && world.terr[cellIndex(world
 // wenn gesetzt. ignite-Ereignis nur beim Anzünden (nicht beim Auffrischen).
 export function ignite(world, u, gen, src) {
   if (gen > BURN_MAX_GEN || !u.alive || u.type === 'drache') return false;
+  if (u.type === 'phoenix' || u.ashT > 0) return false;   // Task 6: Feuervogel (und seine Asche) brennt nicht
   const burning = u.burnT > 0;
   if (burning && u.burnGen < gen) return false;
   if (wet(world, u)) return false;
@@ -794,15 +811,24 @@ export function think(world, u, dt) {
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
+  // Task 6: Asche des Phönix liegt still und steht nach 2 s wieder auf (abilities.stepAsh), sonst nichts
+  if (u.ashT > 0) { stepAsh(world, u, dt); return; }
   // Brand läuft in jedem Zustand (kann töten)
   if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
   // Gift läuft ebenso in jedem Zustand (kann töten)
   if (u.poisonT > 0) { stepPoison(world, u, dt); if (!u.alive) return; }
+  // Task 6: Froschfluch läuft ab, Troll heilt, Phönix zieht seine Feuerspur, Einhorn heilt (in jedem Zustand)
+  if (u.frogT > 0) stepFrogCurse(world, u, dt);
+  if (u.type === 'troll') stepTroll(u, dt);
+  else if (u.type === 'phoenix') { stepTrail(world, u, dt); if (!u.alive) return; }
+  else if (u.type === 'einhorn') stepAura(world, u, dt);
   // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
   if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.abOn) cancelAbility(world, u); if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
+  // Task 6: Frosch (Froschfluch) ist harmlos: kein Rückzug, keine Fähigkeit, kein Angriff, hüpft vom Feind weg
+  if (u.type === 'frosch') { stepFrog(world, u, dt); return; }
   // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block. Der Vampir flieht als
   // Fledermausschwarm (Festlegung 1: die Fledermausform ist die Flucht selbst) und beißt dabei nicht.
   if (updateMorale(world, u, dt)) {
@@ -829,6 +855,7 @@ export function think(world, u, dt) {
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
+  if (u.tg !== null && u.tg.ashT > 0) u.tg = null;   // Task 6: Asche des Phönix ist kein Ziel
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform)
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || (u.tg.batT > 0 && outOfMelee(u, u.tg))) {
     const nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
@@ -858,11 +885,15 @@ export function think(world, u, dt) {
   if (u.type === 'magier' && u.cd > 0 && spellReact(world, u)) return;
   // Reiter reiten nach dem Sturmangriff durch die Reihen und wenden dann
   if (u.type === 'reiter' && u.st > 0) { u.mx = u.cvx; u.my = u.cvy; u.face = u.cvx < 0 ? -1 : 1; return; }
+  // Task 6: Einhorn läuft nach dem Hornstoß durch wie der Reiter
+  if (u.type === 'einhorn' && u.st > 0) { u.mx = u.cvx; u.my = u.cvy; u.face = u.cvx < 0 ? -1 : 1; return; }
   // Mörser halten Mindestabstand
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
   if (u.type === 'sniper' && d <= reach) u.snipeT = 0;   // Wartezeit beginnt neu, solange ein Ziel in Reichweite ist (auch liegend)
   // MG und Scharfschütze: Hinlegen, Liegen, Aufstehen (sonst weiter wie stehend)
   if (PRONE.has(u.type) && stance(world, u, t, d, dx, dy, reach, dt)) return;
+  // Task 6: Zyklop wirft nicht auf nahe Feinde, sondern schlägt unbeholfen zu (cyclopsClose)
+  if (u.type === 'zyklop' && cyclopsClose(world, u, t, d, dx, dy, dt)) return;
   if (d <= reach) {
     // Magier: Zauberbuch statt Feuerball (spells.castSpell: Meteor, Feuerball, Blitz, Windstoß, Steinwand); lädt er, steht er
     if (u.type === 'magier') { if (u.cd <= 0) castSpell(world, u, t); return; }
@@ -1073,6 +1104,10 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     case 'panzer': fire(world, u, t, 'shell'); break;
     case 'moerser': fire(world, u, t, 'mortar'); break;
     case 'drache': breath(world, u, dx / d, dy / d, t); break;
+    // --- Task 6: Kreaturen ---
+    // Zyklop: nahe Feinde (auch in der Ecke auf der Flucht) unbeholfen schlagen statt werfen (cyclopsHit)
+    case 'zyklop': if (d < CYCLOPS.MIN_D) { u.cd *= CYCLOPS.MELEE_CD; cyclopsHit(world, u, t); } else { fire(world, u, t, 'boulder'); u.swingT = .25; } break;
+    case 'hexe': fire(world, u, t, 'hex', ax, ay); break;
     case 'baer': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
@@ -1098,12 +1133,18 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         emit(world, { type: 'charge', x: t.x, y: t.y });
         u.st = .6; u.cvx = dx / d * T.speed; u.cvy = dy / d * T.speed;
       }
+      // Task 6: Hornstoß des Einhorns aus vollem Lauf (abilities.UNICORN), danach Durchlauf
+      if (u.type === 'einhorn' && u.run > .7) {
+        a *= UNICORN.CHARGE; knock(t, dx / d, dy / d, UNICORN.PUSH);
+        emit(world, { type: 'charge', x: t.x, y: t.y, horn: true });
+        u.st = UNICORN.THROUGH; u.cvx = dx / d * T.speed; u.cvy = dy / d * T.speed;
+      }
       // Rudelbonus
       if (u.type === 'wolf') {
         let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'wolf' && v.team === u.team && ++n >= 3) return true; });
         if (n >= 3) a *= 1.4;
       }
-      const before = t.hp, dealt = hurt(world, t, a, 'melee', u);
+      const before = t.hp, dealt = hurt(world, t, a, u.type === 'phoenix' ? 'phoenix' : 'melee', u);   // Phönix: Feuerkrallen (Task 6)
       // Biene: der erste Stich auf dieses Ziel vergiftet (Nachtrag 4, #37)
       if (u.type === 'biene' && u.stingTg !== t) { u.stingTg = t; if (t.alive) poison(world, t, u); }
       if (u.stingTg !== null && !u.stingTg.alive) u.stingTg = null;   // keinen Verweis auf Tote festhalten
@@ -1232,6 +1273,7 @@ function shieldHit(world, v, a, kind, dx, dy, src) {
 // Der Brandpfeil zündet danach an (Verursacher der Schütze) mit der höchsten Generation BURN_MAX_GEN: der Getroffene
 // brennt, das Feuer springt nicht über (abilities.FIRE_ARROWS); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
+  if (p.kind === 'boulder') { landBoulder(world, p, src); return; }   // Task 6
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
@@ -1250,6 +1292,7 @@ function landArc(world, p, src) {
 
 // Gerader Schuss am Ende: v = getroffener Körper, cell = Mauerzelle (−1), (x, y) = Trefferpunkt am Boden
 function impact(world, p, v, cell, x, y, src) {
+  if (p.kind === 'hex') { hexImpact(world, p, v, x, y, src); return; }   // Task 6
   if (p.kind === 'bullet') {
     if (v) {
       const a = p.dmg * (.85 + world.rng() * .3);
@@ -1267,4 +1310,56 @@ function impact(world, p, v, cell, x, y, src) {
   // Der Feuerball setzt die Getroffenen in Brand (Spez. #31, Generation spells.FIREBALL.GEN)
   const bx = v ? v.x : x, by = v ? v.y : y, fb = p.kind === 'fire';
   blast(world, bx, by, p.R, p.dmg, p.f, src, fb ? 'fire' : 'rocket', fb ? 1.5 : 2, fb ? FIREBALL.GEN : -1);
+}
+
+/* ---------- Task 6: Kreaturen (Spez. #34) ----------
+   Zyklop: Felsbrocken und unbeholfener Nahkampf; Hexe: Zauber 'hex'. Werte in abilities.js (CYCLOPS, FROG). */
+
+// Felsbrocken am Landepunkt: Explosion mit Radius p.R (Schaden, Abfall und Schleudern wie blast, trifft alle Fraktionen,
+// der Werfer ×0,5; Schadensart 'blast', also kein Schildblock und Deckung im Wald), dazu CYCLOPS.DEBRIS Brocken, die nur
+// liegen bleiben (world.debris, ohne Schaden). Kein Mauerschaden und kein Feuerball-Blitz: eigener Staub-Effekt (creature
+// 'boulder').
+function landBoulder(world, p, src) {
+  const x = p.x1, y = p.y1, R = p.R, dmg = p.dmg;
+  query(world, x, y, R + 16, v => {
+    const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
+    if (d > R + v.T.r) return;
+    const fall = 1 - .5 * Math.min(1, d / R);
+    fling(v, dx, dy, d, dmg * BLAST_PUSH * fall);
+    hurt(world, v, dmg * fall * (v === src ? .5 : 1), 'blast', src);
+  });
+  for (let k = 0; k < CYCLOPS.DEBRIS; k++) {
+    const a = world.rng() * Math.PI * 2, sp = rnd(world, 40, 110);
+    world.debris.push(makeDebris(x, y, rnd(world, 2, 6), Math.cos(a) * sp, Math.sin(a) * sp, rnd(world, 90, 180),
+      world.rng() * Math.PI * 2, (world.rng() < .5 ? -1 : 1) * rnd(world, 4, 10)));
+  }
+  emit(world, { type: 'creature', k: 'boulder', x, y, R, shake: 4 });
+  sound(world, 'impact');
+}
+
+// Hexenzauber am Ende: trifft den Körper mit dem Schaden der Hexe (Art 'hex': kein Feuer, kein Schildblock), sonst verpufft er
+function hexImpact(world, p, v, x, y, src) {
+  if (v) {
+    hurt(world, v, p.dmg * (.85 + world.rng() * .3), 'hex', src);
+    emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'hex' });
+    emit(world, { type: 'creature', k: 'hexhit', x: v.x, y: v.y, z: v.z });
+    sound(world, 'pop');
+  } else emit(world, { type: 'creature', k: 'hexhit', x, y, z: 0 });
+}
+
+// Zyklop mit Ziel näher als CYCLOPS.MIN_D (Bodenziel, nicht Hubschrauber/Fledermaus): in Nahkampfreichweite ein
+// unbeholfener Schlag (attack: Abklingzeit ×MELEE_CD, cyclopsHit: Schaden ×MELEE_DMG), sonst geht er hin. Liefert true,
+// wenn der Schritt damit erledigt ist (weiter weg: false, er wirft).
+function cyclopsClose(world, u, t, d, dx, dy, dt) {
+  if (d >= CYCLOPS.MIN_D || t.type === 'heli' || isBat(t)) return false;
+  const T = u.T, reach = CYCLOPS.MELEE + T.r + t.T.r;
+  if (d > reach) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.run += dt; return true; }
+  if (u.cd <= 0) attack(world, u, t, d, dx, dy);
+  return true;
+}
+function cyclopsHit(world, u, t) {
+  u.swingT = .25;
+  hurt(world, t, u.T.dmg * CYCLOPS.MELEE_DMG * (.85 + world.rng() * .3), 'melee', u);
+  emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
+  sound(world, 'thud');
 }

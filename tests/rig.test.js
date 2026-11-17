@@ -125,14 +125,15 @@ test('Bildwechsel: Bodentruppen im Stand Bild 0, Flieger flattern immer', () => 
 });
 
 test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', async () => {
-  const { rigLayout } = await import('../game/js/render/rig.js');
+  const { rigLayout, T6_ACCENT } = await import('../game/js/render/rig.js');
   const { TINT } = await import('../game/js/data.js');
   for (const t of Object.keys(UNITS)) {
     const L = rigLayout(t);
     assert.deepEqual(Object.keys(L), RIG_PARTS, t);
     assert.ok(L.body && L.shadow, `${t}: Körper und Schatten`);
     assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
-    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' ? 5 : 1, `${t}: Teamfarbe`);   // Ghul: Lumpen in Teamfarbe
+    // Ghul: Lumpen in Teamfarbe; Task 6: Kreaturen mit Akzent in Teamfarbe (rig.T6_ACCENT)
+    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined ? 5 : 1, `${t}: Teamfarbe`);
     assert.equal(!!L.pupilL, !!L.pupilR, t);
   }
   const L = rigLayout;

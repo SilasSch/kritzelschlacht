@@ -331,6 +331,17 @@ export const VAMP_FX = {
   dust: 4, bits: 6, bitCol: 0x8f9c84,
 };
 const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
+/* ---------- Task 6: Kreaturen (Spez. #34) ----------
+   creature-Ereignis (abilities.js, combat.js), Budget-Art ability. boulder: Felseinschlag ohne Feuer (Staubwelle bis R,
+   Staubwolken am Rand, Steinsplitter, Krater, Wackeln über e.shake); frog / unfrog: grünes Wölkchen mit Funkeln (Fluch
+   bzw. Ende); curse: grüner Strahl von der Hexe zum Ziel mit Funkeln; hexhit: grüne Funken am Treffer; ash: der Phönix
+   zerfällt zu Asche (Flammen, Glut, dunkler Fleck); rise: er steht auf (Feuerwelle, Flammen nach oben, Funken); trail:
+   Feuerspur (Flammen und Glut am Boden unter ihm, kleiner Brandfleck); aura: Glitzern in Regenbogenfarben um das Einhorn.
+   Alles unter 1,2 s. Fliegende Hexenzauber ziehen grüne Funken (update). */
+export const CREATURE_FX = {
+  hex: 0x7be06a, hexDark: 0x3f9a4a, frogPuff: 0xa8e29a, rainbow: [0xff6b6b, 0xffb84d, 0xffe066, 0x6fd36f, 0x6fb7ff, 0xb48cff],
+  rock: 0x8d929c, rockDark: 0x6d727c, scorch: '#3a3d45', trailRate: 26,
+};
 
 /* ---------- Zauber der Magier (Spez. #31, Task 3) ----------
    spell-Ereignis (spells.js), Budget-Art spell:
@@ -534,6 +545,68 @@ export function createFxCore(hooks = {}, opt = {}) {
         for (let i = 0; i < F.bits; i++) {
           const p = add('dot', x + rnd(-5, 5), y - rnd(2, 12), rnd(.4, .6), rnd(1.2, 2), F.bitCol); if (!p) break;
           p.vx = rnd(-25, 25); p.vy = -rnd(10, 40); p.ay = 300;
+        }
+        break;
+    }
+  }
+  // Kreaturen (creature-Ereignis, Task 6; siehe CREATURE_FX)
+  function creature(e) {
+    const x = e.x, y = e.y - (e.z || 0), F = CREATURE_FX, R = e.R > 0 ? e.R : 30;
+    switch (e.k) {
+      case 'boulder':
+        crater(x, e.y, R * .8);
+        wave(x, e.y, R * 1.2, .45, 0xb8a98a);
+        for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + rnd(-.3, .3), d = R * rnd(.35, .8); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(4.5, 7)); }
+        for (let i = 0; i < 6; i++) {
+          const a = rand() * TAU, s = rnd(50, 120), p = add('dot', x, e.y - 3, rnd(.35, .55), rnd(1.3, 2.4), i % 2 ? F.rock : F.rockDark); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .5 - rnd(60, 110); p.ay = 420;
+        }
+        break;
+      case 'frog': case 'unfrog':
+        for (let i = 0; i < 5; i++) wisp(x + rnd(-7, 7), y - rnd(0, 12), rnd(3, 4.5), F.frogPuff);
+        add('ring', x, y - 4, .35, 14, F.hex);
+        for (let i = 0; i < 6; i++) {
+          const a = rand() * TAU, s = rnd(30, 70), p = add('spark', x, y - 6, rnd(.3, .5), rnd(.9, 1.4)); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 20; p.drag = 2;
+        }
+        break;
+      case 'curse': {
+        const tx = e.tx, ty = e.ty - (e.tz || 0);
+        if (Number.isFinite(tx) && Number.isFinite(ty)) {
+          seg('gust', x, y, tx, ty, 2.2, .35, F.hex);
+          for (let i = 0; i < 5; i++) { const q = rand(), p = add('dot', x + (tx - x) * q, y + (ty - y) * q, rnd(.3, .5), rnd(1, 1.8), F.hex); if (!p) break; p.vy = -rnd(10, 30); }
+        }
+        add('ring', x, y, .3, 9, F.hexDark);
+        break;
+      }
+      case 'hexhit':
+        for (let i = 0; i < 4; i++) {
+          const a = rand() * TAU, s = rnd(30, 60), p = add('dot', x, y - 4, rnd(.25, .4), rnd(1, 1.7), i % 2 ? F.hex : F.hexDark); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s; p.drag = 3;
+        }
+        break;
+      case 'ash':
+        decal(x, e.y + 3, 9, F.scorch, .16);
+        for (let i = 0; i < 8; i++) { const p = add('flame', x + rnd(-6, 6), y + rnd(-6, 4), rnd(.3, .5), rnd(2.5, 4)); if (!p) break; p.vx = rnd(-20, 20); p.vy = -rnd(30, 60); p.drag = 1.5; }
+        for (let i = 0; i < 6; i++) { const a = rand() * TAU, s = rnd(30, 80), p = add('ember', x, y, rnd(.4, .7), rnd(1.5, 2.5)); if (!p) break; p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 20; p.ay = 120; }
+        for (let i = 0; i < 2; i++) puff('smoke', x + rnd(-4, 4), y - rnd(0, 6), SMOKE.life * .5, rnd(4, 6));
+        break;
+      case 'rise':
+        wave(x, e.y, 34, .45, 0xff8a3d);
+        for (let i = 0; i < 12; i++) { const p = add('flame', x + rnd(-8, 8), e.y - rnd(0, 6), rnd(.35, .6), rnd(3, 5)); if (!p) break; p.vx = rnd(-25, 25); p.vy = -rnd(60, 120); p.drag = 1.2; }
+        for (let i = 0; i < 8; i++) { const a = rand() * TAU, s = rnd(60, 120), p = add('spark', x, e.y - 8, rnd(.3, .6), rnd(1, 1.6)); if (!p) break; p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 50; p.ay = 160; p.drag = 1.5; }
+        if (lightLive < LIGHT_LIVE_MAX && add('light', x, e.y, LIGHT_T, 40)) lightLive++;
+        break;
+      case 'trail':
+        decal(x + rnd(-3, 3), e.y + rnd(-2, 2), 5, F.scorch, .08);
+        for (let i = 0; i < 3; i++) { const p = add('flame', x + rnd(-6, 6), e.y + rnd(-3, 3), rnd(.3, .5), rnd(2, 3.2)); if (!p) break; p.vy = -rnd(20, 40); p.drag = 1; }
+        { const p = add('ember', x, y + 4, rnd(.3, .5), rnd(1.3, 2)); if (p) { p.vx = rnd(-15, 15); p.vy = rnd(10, 30); p.ay = 60; } }
+        break;
+      case 'aura':
+        for (let i = 0; i < 6; i++) {
+          const a = i / 6 * TAU + rnd(-.3, .3), d = R * rnd(.25, .6);
+          const p = add('dot', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6 - 6, rnd(.5, .8), rnd(1.2, 1.8), F.rainbow[i % 6]); if (!p) break;
+          p.vy = -rnd(16, 30);
         }
         break;
     }
@@ -790,6 +863,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       case 'spell': if (take('spell')) spell(e); break;
       case 'ability': if (take('ability')) ability(e); break;
       case 'vamp': if (take('ability')) vamp(e); break;
+      case 'creature': if (take('ability')) creature(e); break;   // Task 6
       case 'fear': if (take('misc')) { const p = add('bang', e.x + rnd(-2, 2), e.y - (e.z || 0) - 10, .7, 7, 0xe5574f); if (p) p.vy = -14; } break;
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
       case 'miss':
@@ -849,6 +923,16 @@ export function createFxCore(hooks = {}, opt = {}) {
         } else if (p.kind === 'fire') {
           if (rand() < dt * 30) { const f = add('fire', TR.x, TR.y, .25, rnd(2, 4)); if (f) { f.vx = rnd(-15, 15); f.vy = rnd(-15, 15); f.drag = DRAG; } }
         } else if (rand() < dt * 36) puff('smoke', TR.x - Math.cos(TR.a) * 6, TR.y - Math.sin(TR.a) * 6, 1, rnd(2, 3.5));
+      }
+    }
+    // Task 6: fliegende Hexenzauber ziehen grüne Funken
+    if (world && dt > 0) {
+      const proj = world.proj;
+      for (let i = 0; i < proj.length; i++) {
+        const p = proj[i];
+        if (p.kind !== 'hex' || !(rand() < dt * CREATURE_FX.trailRate)) continue;
+        projScreen(p, TR);
+        const f = add('dot', TR.x + rnd(-1.5, 1.5), TR.y + rnd(-1.5, 1.5), .25, rnd(1, 1.6), CREATURE_FX.hex); if (f) { f.vy = -rnd(5, 15); f.drag = DRAG; }
       }
     }
     // Meteor-Kanäle (spells.js): Zielkreis, Strahlen, Kugel, fallender Meteor

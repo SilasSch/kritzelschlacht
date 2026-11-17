@@ -93,7 +93,8 @@ test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
 // (data.BAT_FORM, gleiche Schlüssel): beides ändert die Form der Einheiten nicht.
 test('mixed2: Ghule und Fledermausform behalten die Form der Einheiten', () => {
   const keys = Object.keys(spawn(createWorld(400, 300, 1), 'krieger', 50, 50, 'blau')).join();
-  const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed2', 600);
+  // 800 statt 600 Einheiten: seit Task 6 (fünf Kreaturen mehr in mixed2) stehen bei 600 zu wenige Vampire
+  const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed2', 800);
   // Ob in der Schlacht von selbst ein Ghul aufsteht, hängt vom Verlauf ab und kippte mit jeder Regeländerung: nach 300
   // Schritten beißt darum ein Vampir einen Gegner mit 1 LP tot (wie in combat.think), dann läuft die Schlacht weiter
   let bats = 0, ghouls = false;
@@ -107,7 +108,7 @@ test('mixed2: Ghule und Fledermausform behalten die Form der Einheiten', () => {
     for (const u of w.units) { if (u.alive && u.batT > 0) bats++; if (u.type === 'ghul') ghouls = true; }
   }
   assert.deepEqual(w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type), []);
-  assert.ok(ghouls, 'Ghule entstanden');
+  assert.ok(ghouls, 'Ghule entstanden');   // gezählt während der Schlacht (Tote räumt sim.step ab 300 weg)
   assert.ok(bats > 0, 'Fledermausform kam vor');
   assert.ok(Object.keys(UNITS.vampir).join() === Object.keys(w.units.find(u => u.type === 'vampir').T).join());
   for (const k of ['batT', 'riseT', 'ghouls']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);

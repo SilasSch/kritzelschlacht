@@ -5,7 +5,8 @@
 // Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
-import { TEAMS, CELL } from '../data.js';
+import { TEAMS, CELL, UNITS } from '../data.js';
+import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
 import { query, factionOf } from '../world.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
@@ -251,6 +252,27 @@ export function createRenderer(canvasHost) {
     }
     stats.bats++;
   }
+  // Task 6: Asche des Phönix (abilities.phoenixAsh): grauer Aschehaufen im Sticker-Stil (Umriss O) mit geschlossenen
+  // Augen und Glutpunkten, darunter ein oranges Glühen, das bis zum Aufstehen wächst und flackert.
+  const ASH_RES = 4, ASH_W = 18;
+  const ashTex = canvasTex(Math.ceil((ASH_W + 4) * ASH_RES), Math.ceil((ASH_W * .7 + 4) * ASH_RES), c => {
+    c.setTransform(ASH_RES, 0, 0, ASH_RES, c.canvas.width / 2, c.canvas.height / 2);
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    const w = ASH_W / 2, h = ASH_W * .3;
+    c.beginPath(); c.moveTo(-w, h * .6); c.quadraticCurveTo(-w * .75, -h * .8, -w * .15, -h * .95);
+    c.quadraticCurveTo(w * .15, -h * 1.35, w * .4, -h * .75); c.quadraticCurveTo(w * .92, -h * .45, w, h * .6); c.closePath();
+    c.fillStyle = '#5b5f69'; c.fill(); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+    E(c, -w * .3, -h * .35, w * .28, h * .22, '#7d828c', 0);
+    for (const [x, y] of [[-.5, .2], [.15, -.3], [.55, .25], [-.05, .35]]) E(c, x * w, y * h, 1.1, .9, '#ff8a3d', .5);
+    for (const x of [-.18, .22]) { c.beginPath(); c.moveTo(x * w - 1.1, -h * .2); c.quadraticCurveTo(x * w, -h * .02, x * w + 1.1, -h * .2); c.lineWidth = .7; c.strokeStyle = O; c.stroke(); }
+  });
+  function ashPile(Q, u, t) {
+    const q = 1 - Math.max(0, u.ashT) / PHOENIX.ASH_T, fl = .5 + .5 * Math.sin(t * 14 + u.seed * 3);
+    const gr = (5 + 9 * q) * (.9 + .2 * fl) / 31;
+    Q.addPart(softTex[1], null, u.x, u.y - u.z - 2, 0, gr, gr * .7, .5, .5, 0xff8a3d, .25 + .45 * q);
+    const k = (.85 + .2 * q) / ASH_RES;
+    Q.addPart(ashTex, null, u.x, u.y - u.z, 0, k, k, .5, .7, 0xffffff, 1);
+  }
   // Stein je Brocken bleibt fest (die Liste wird verdichtet, Indizes wandern)
   const stoneOf = new WeakMap();
   let stoneNext = 0;
@@ -353,6 +375,7 @@ export function createRenderer(canvasHost) {
   function bodies(list, Q, bars, t, tm, inv) {
     Q.clear(); bars.clear();
     for (const u of list) {
+      if (u.ashT > 0) { ashPile(Q, u, t); continue; }   // Task 6: Asche statt Figur, ohne Leiste
       const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
       // Vampir in Fledermausform (ganz: nur der Schwarm; beim Verwandeln schrumpft der Körper, der Schwarm blendet ein)
       if (u.batT > 0) {
@@ -420,10 +443,11 @@ export function createRenderer(canvasHost) {
 
   // HP-Leiste über der Figur (rig.barTop: Oberkante der Zeichnung, Bosse höher und breiter); liegend tiefer
   function bar(bars, u, T, rig, sy, pr) {
-    if (!(u.hp < T.hp && T.hp > 10)) return;
+    const H = u.frogFrom !== null ? UNITS[u.frogFrom].hp : T.hp;   // Task 6: der Frosch zeigt die LP seines alten Typs
+    if (!(u.hp < H && H > 10)) return;
     const w = Math.max(12, rig.r * 1.6), y = sy + rig.barTop * (1 - .375 * pr) - 4;
     bars.rect(u.x - w / 2, y, w, 3, 0x2a2a33, .25);
-    bars.rect(u.x - w / 2, y, w * Math.max(0, u.hp / T.hp), 3, u.hp / T.hp > .4 ? 0x2fbf6b : 0xe5574f, 1);
+    bars.rect(u.x - w / 2, y, w * Math.max(0, u.hp / H), 3, u.hp / H > .4 ? 0x2fbf6b : 0xe5574f, 1);
   }
 
   /* ---------- Boss-Sticker (Task 12c, Spez. #23) ----------
@@ -611,6 +635,7 @@ export function createRenderer(canvasHost) {
      Bodenpunkt ihrer Bahn, der mit der Höhe kleiner und weicher wird. */
   const PS = {};
   const PROJ_SHADOW = { arrow: 3, firearrow: 3, pilum: 5, bomb: 4, mortar: 4.5, shell: 3.5 };
+  PROJ_SHADOW.boulder = 5.5;   // Task 6
   // Gezeichnet aus Strichen (weiße Textur, gedreht) und Scheiben (softTex[0], Radius 31 px) in projQ wie
   // früher mit Graphics: Pfeil, Speer, Bombe/Mörser (Rand O + Füllung, Bombe mit Lunte), Kugel, Rakete, Granate, Feuerball
   function disc(x, y, r, col) { projQ.addPart(softTex[0], null, x, y, 0, r / 31, r / 31, .5, .5, col, 1); }
@@ -648,6 +673,9 @@ export function createRenderer(canvasHost) {
         disc(x - ca * 6, y - sa * 6, 3, 0xff8a3d);
         projQ.line(x - ca * 4, y - sa * 4, x + ca * 4, y + sa * 4, 3.4, OC);
       } else if (p.kind === 'shell') disc(x, y, 3.2, 0x2f3340);
+      // Task 6: Felsbrocken des Zyklopen (grauer Stein mit Umriss und Glanz), Hexenzauber (grüne Kugel mit hellem Kern)
+      else if (p.kind === 'boulder') { disc(x, y, 5.6, OC); disc(x, y, 4.5, 0x9aa0aa); disc(x - 1.4, y - 1.5, 1.6, 0xc3c8cf); }
+      else if (p.kind === 'hex') { disc(x, y, 4.4, 0x3f9a4a); disc(x, y, 2.9, 0x9df58a); disc(x, y, 1.3, 0xeaffd8); }
       else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
     }
     stats.projShadows = ns;

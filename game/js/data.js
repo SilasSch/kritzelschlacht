@@ -26,11 +26,6 @@ export const UNITS = {
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
 };
 
-// Leistung: alle Einträge in eine gemeinsame Form bringen (dieselben Schlüssel in derselben Reihenfolge, fehlende
-// als undefined, Werte unverändert). Mit dem Römer (pilum) hätte u.T sonst fünf Formen, und Zugriffe wie u.T.r
-// in physics.collide würden megamorph (V8 merkt sich höchstens vier Formen je Zugriff): Kollision 0,33 → 0,67 ms
-// je Schritt in tools/bench.mjs mixed. Ein Konstruktor statt {} hält die Felder im Objekt selbst (schneller als
-// nachträglich angehängte), mixed 1,7 → 1,5 ms.
 // Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}].
 // Kurz halten (Name ≤ 24, Text ≤ 140 Zeichen, tests/cards.test.js). Neue Einheiten tragen hier ein oder setzen
 // abil direkt im UNITS-Eintrag; die Karten lesen nur UNITS[t].abil. Rückzug ab 25 % gilt für alle (cards.RETREAT_NOTE).
@@ -77,6 +72,11 @@ const ABIL = {
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 
+// Leistung: alle Einträge in eine gemeinsame Form bringen (dieselben Schlüssel in derselben Reihenfolge, fehlende
+// als undefined, Werte unverändert). Mit dem Römer (pilum) hätte u.T sonst fünf Formen, und Zugriffe wie u.T.r
+// in physics.collide würden megamorph (V8 merkt sich höchstens vier Formen je Zugriff): Kollision 0,33 → 0,67 ms
+// je Schritt in tools/bench.mjs mixed. Ein Konstruktor statt {} hält die Felder im Objekt selbst (schneller als
+// nachträglich angehängte), mixed 1,7 → 1,5 ms.
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
 for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);

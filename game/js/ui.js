@@ -120,9 +120,9 @@ export function createUI(game) {
     ucard.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
   }
   unitsBox.addEventListener('pointerover', e => {
+    // Lücken zwischen den Knöpfen behalten die Karte (kein Flackern); erst das Verlassen der Leiste blendet aus
     const b = e.target.closest && e.target.closest('.ub');
-    const k = b ? b.dataset.k : null;
-    if (k !== hoverK) { hoverK = k; cardUpdate(); }
+    if (b && b.dataset.k !== hoverK) { hoverK = b.dataset.k; cardUpdate(); }
   });
   unitsBox.addEventListener('pointerleave', () => { hoverK = null; cardUpdate(); });
   // Tastatur (Tab auf einen Einheitenknopf) zeigt die Karte wie Hover

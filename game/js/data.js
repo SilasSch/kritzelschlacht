@@ -100,7 +100,7 @@ const ABIL = {
   geist: [
     {n:'Spuk', d:'Alle 15 s erschreckt er sein Ziel, das dann 2,5 s lang in Panik flieht.'},
     {n:'Körperlos', d:'Nur Feuer trifft voll, alles andere macht halben Schaden.'},
-    {n:'Lebensraub', d:'Jeder Treffer heilt ihn um den angerichteten Schaden.'},
+    {n:'Lebensraub', d:'Jeder Treffer heilt ihn um den angerichteten Schaden. Darum flieht er nie, auch nicht mit wenig Leben.'},
   ],
   drache: [
     {n:'Sturzflug', d:'Alle 30 s stürzt er sich in eine Feindgruppe und schleudert alles im Kreis weg. Nur Feinde nehmen Schaden.'},

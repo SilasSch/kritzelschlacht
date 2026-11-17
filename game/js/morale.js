@@ -38,6 +38,8 @@ import { hazardAt, leaveBlock } from './formation.js';
 // Fliehend oder erschreckt: das eine Prädikat für Blockmitgliedschaft, Schwerpunkte, Zielwahl, Sanitäter, att und
 // Angstaugen (Vorgabe 1 der Abschlussprüfung)
 export const isFleeing = u => u.flee || u.fearT > 0;
+// Fliehen nie (Rückzug #27): Ghule (hirnlos) und Geister (#41: heilen sich durch Schaden). Schreck wirkt trotzdem.
+export const NO_RETREAT = new Set(['ghul', 'geist']);
 
 // CORNER_T: .3 statt 1,5 s (Task 7): wer eingeholt wird, wehrt sich fast sofort. Mit 1,5 s standen Fliehende im
 // Bienenschwarm wehrlos und langsame Nahkämpfer verloren gegen schnelle (krieger > biene, mg > biene, ritter > reiter).
@@ -153,8 +155,9 @@ export function updateMorale(world, u, dt) {
   }
   const others = c ? c.n - (isFleeing(u) ? 0 : 1) : 0;
   if (!u.flee) {
-    // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen
-    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || u.type === 'ghul') return false;
+    // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen. Geister (Nachtrag 5, #41) fliehen nie: sie heilen
+    // sich, indem sie Schaden machen (Lebensraub, combat.js)
+    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || NO_RETREAT.has(u.type)) return false;
     c.n--;
     u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = null; u.run = 0;
     // Römer verlassen den Block (formation.rebuild nimmt Fliehende nicht wieder auf)

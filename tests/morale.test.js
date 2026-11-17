@@ -370,3 +370,16 @@ test('att: Fliehende zählen nicht als Angreifer ihrer Bedrohung', () => {
   assert.equal(fi.flee, false); assert.equal(fi.tg, e);
   assert.equal(e.att, 1, 'nur der Kämpfer zählt');
 });
+
+// Nachtrag 5, #41: Geister fliehen nie, sie heilen sich durch Schaden (Lebensraub: jeder Treffer heilt den Schaden)
+test('Geist flieht nicht unter 25 % und heilt sich durch seine Treffer', () => {
+  const w = mkWorld(), g = spawn(w, 'geist', 600, 400, 'blau');
+  g.hp = 8;   // 8/55 < 25 %
+  allies(w, 200, 700);
+  const e = spawn(w, 'krieger', 620, 400, 'rot'); e.hp = 1e9; e.cd = 1e9;   // schlägt nie zu
+  let fled = false;
+  run(w, 2, () => { if (g.flee) fled = true; });
+  assert.equal(fled, false, 'keine Flucht');
+  assert.ok(g.hp > 8, `heilt durch Treffer: ${g.hp}`);
+  assert.ok(e.hp < 1e9, 'hat zugeschlagen');
+});

@@ -35,7 +35,8 @@
 import { factionOf, query, nearestEnemy, cellIndex } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 
-export const FORM = { MIN: 4, LINK: 46, SPACING: 22, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
+// SPACING: 26 statt 22 (Task 4): Platz für das Scutum vor jedem Körper, der Block bleibt lesbar
+export const FORM = { MIN: 4, LINK: 46, SPACING: 26, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
 export const FORM_LEAD = 22;              // px: so weit darf das Zentrum der tatsächlichen Lage vorauslaufen
 export const FORM_FLANK = 40;             // px: Gegner so nah an einem Mitglied löst den Block auf
 export const FORM_LOOSE = [6, 30, .3];    // Sammelfaktor: größte Platzabweichung (px) → Tempoanteil

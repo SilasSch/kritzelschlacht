@@ -27,8 +27,10 @@ function block(w, n, x0, y0, team = 'blau', rows = 3) {
 const romans = w => w.units.filter(u => u.alive && u.type === 'roemer');
 const formOf = (w, u) => w.formations.find(f => f.id === u.form);
 
+// SPACING 22 → 26 (Task 4, Controller-Entscheid): mit dem großen Scutum vor dem Körper wirkte der Block mit
+// 22 px gedrängt (Schilde überdecken den Vordermann); 26 px lässt jede Figur samt Schild lesbar
 test('FORM: Werte laut Spez.', () => {
-  assert.deepEqual(FORM, { MIN: 4, LINK: 46, SPACING: 22, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
+  assert.deepEqual(FORM, { MIN: 4, LINK: 46, SPACING: 26, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
 });
 
 test('Block ab 4 Römern: 6 eng beieinander bilden einen Block, 3 nicht', () => {

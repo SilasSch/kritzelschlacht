@@ -4,7 +4,8 @@
 // formVx/formVy, formSp, formAx/formAy).
 //
 // Blöcke entstehen alle FORM.REFORM s neu (rebuild): Römer derselben Fraktion, die über Ketten mit Abstand
-// ≤ LINK verbunden sind (Suche über den Spatial Hash), bilden eine Gruppe; ab MIN Römern im Zustand 'ok'
+// ≤ LINK verbunden sind (Suche über den Spatial Hash, Breitensuche ab dem ersten Römer), bilden eine Gruppe von
+// höchstens MAX Römern (die Breitensuche hört dann auf, der Rest bildet eigene Gruppen); ab MIN Römern im Zustand 'ok'
 // wird sie ein Block. Die Gruppe übernimmt id und Zustand des alten Blocks, aus dem die meisten ihrer
 // Mitglieder kommen (Gruppen nach Größe abgearbeitet: bei einer Teilung behält der größere Teil die id, der
 // kleinere bekommt eine neue, aber denselben Zustand).
@@ -38,11 +39,13 @@ import { TERR_SPEED, TERR_HAZ } from './data.js';
 import { isFleeing } from './morale.js';
 
 // SPACING: 26 statt 22 (Task 4): Platz für das Scutum vor jedem Körper, der Block bleibt lesbar
-// LINK: 110 statt 46 (Task 7): gemalte Römer liegen ohnehin dichter (Pinsel: nächster Nachbar meist 21–30 px), aber
-// locker gesetzte (einzelne Klicks, placeRect der Duelle: Spaltenabstand bis 104 px) blieben sonst ohne Block.
+// LINK: 50 (Nachtrag 4, #35; vorher 110 aus Task 7): gemalte Römer liegen dicht (Pinsel: nächster Nachbar meist 21–30 px).
+// Mit 110 verband die Kette alle Römer der Karte zu einem Riesenblock. Die Duelle in tools/balance.mjs setzen Römer
+// jetzt selbst in Maldichte (plans.DUEL_DENSE), statt LINK für ihr lockeres Raster (Spaltenabstand bis 104 px) zu dehnen.
+// MAX: höchstens so viele Mitglieder je Block; eine große gemalte Masse teilt sich in mehrere Blöcke.
 // ENGAGE: 30 statt 90 (Task 7): der Block bleibt bis kurz vor dem Zusammenstoß geschlossen; mit 90 px löste er sich
 // vor Schützen auf, die dann die Römer ohne Schildschutz zurückschossen (roemer > schuetze verfehlt).
-export const FORM = { MIN: 4, LINK: 110, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
+export const FORM = { MIN: 4, MAX: 40, LINK: 50, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
 export const FORM_LEAD = 22;              // px: so weit darf das Zentrum der tatsächlichen Lage vorauslaufen
 export const FORM_FLANK = 40;             // px: Gegner so nah an einem Mitglied löst den Block auf
 export const FORM_LOOSE = [6, 30, .3];    // Sammelfaktor: größte Platzabweichung (px) → Tempoanteil
@@ -119,6 +122,7 @@ const ROM = [], GRP = [], SEEN = new Set();
 let GR_W = null, GR_F = null, GR_X = 0, GR_Y = 0;
 const LINK2 = FORM.LINK * FORM.LINK;
 function linkTest(v) {
+  if (GRP.length >= FORM.MAX) return true;   // Block voll: Rest bildet eigene Blöcke
   if (v.type !== 'roemer' || isFleeing(v) || SEEN.has(v) || factionOf(GR_W, v) !== GR_F) return;
   const dx = v.x - GR_X, dy = v.y - GR_Y;
   if (dx * dx + dy * dy > LINK2) return;
@@ -145,7 +149,7 @@ function rebuild(world) {
     if (SEEN.has(u0)) continue;
     GRP.length = 0; GRP.push(u0); SEEN.add(u0);
     GR_F = factionOf(world, u0);
-    for (let k = 0; k < GRP.length; k++) { const a = GRP[k]; GR_X = a.x; GR_Y = a.y; query(world, a.x, a.y, FORM.LINK, linkTest); }
+    for (let k = 0; k < GRP.length && GRP.length < FORM.MAX; k++) { const a = GRP[k]; GR_X = a.x; GR_Y = a.y; query(world, a.x, a.y, FORM.LINK, linkTest); }
     let ok = 0;
     for (let k = 0; k < GRP.length; k++) if (GRP[k].state === 'ok') ok++;
     if (ok < FORM.MIN) { for (let k = 0; k < GRP.length; k++) { GRP[k].form = 0; GRP[k].formOn = false; GRP[k].formFree = false; } continue; }

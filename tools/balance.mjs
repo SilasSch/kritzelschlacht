@@ -6,8 +6,8 @@ import { spawn as spawnProc } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { createWorld } from '../game/js/world.js';
-import { step, buildMission, missionResult, placeRect } from '../game/js/sim.js';
-import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan } from './plans.mjs';
+import { step, buildMission, missionResult } from '../game/js/sim.js';
+import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan, placeDuel } from './plans.mjs';
 
 const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
@@ -55,7 +55,7 @@ function runMission(i, plan, seed) {
 function runDuel(a, b, pts, seed) {
   const w = createWorld(W, H, seed); w.teamMode = true;
   const na = Math.max(1, Math.round(pts / UNITS[a].cost)), nb = Math.max(1, Math.round(pts / UNITS[b].cost));
-  placeRect(w, a, na, ...DUEL_A, 'blau'); placeRect(w, b, nb, ...DUEL_B, 'rot');
+  placeDuel(w, a, na, DUEL_A, 'blau'); placeDuel(w, b, nb, DUEL_B, 'rot');
   let t = 0;
   for (;;) {
     let ca = 0, cb = 0;

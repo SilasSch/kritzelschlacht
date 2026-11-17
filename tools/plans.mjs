@@ -2,7 +2,7 @@
 // Plan = Array<[type, n, x0, y0, x1, y1]> (blaue Rechtecke; x in Anteilen des Missionsrahmens world.frameX, y von H).
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { placeRect } from '../game/js/sim.js';
-import { frameX } from '../game/js/world.js';
+import { frameX, spawn } from '../game/js/world.js';
 
 const F = [.32, .3, .38, .7];   // Front
 const B = [.18, .32, .25, .68]; // hinten
@@ -49,6 +49,26 @@ export const SHAPES = [[1400, 875], [1614, 820], [1670, 826], [1726, 820], [1670
 // Duell-Aufstellung: a links (blau), b rechts (rot)
 export const DUEL_A = [.22, .3, .34, .7];
 export const DUEL_B = [.66, .3, .78, .7];
+
+// Duell-Dichte je Typ (Nachtrag 4, #35): Römer bilden nur aus dicht gemalten Gruppen einen Block (formation.FORM.LINK
+// 50 px). Das Raster von placeRect in DUEL_A/DUEL_B hat bis zu 104 px Spaltenabstand, also setzt das Duell sie wie
+// gemalt: ein fast quadratisches Raster mit DUEL_DENSE[type] px Abstand, mittig im Duell-Rechteck. Nur der Prüfstand,
+// keine Spielregel.
+export const DUEL_DENSE = { roemer: 24 };
+// Setzt n Einheiten vom Typ type ins Duell-Rechteck rect (Anteile von W und H, wie placeRect): dicht für DUEL_DENSE-Typen,
+// sonst placeRect. Zufall wie placeRect (±2 px je Achse über world.rng).
+export function placeDuel(world, type, n, rect, team) {
+  const sp = DUEL_DENSE[type];
+  if (!sp) { placeRect(world, type, n, ...rect, team); return; }
+  const [x0, y0, x1, y1] = rect, cx = (x0 + x1) / 2 * world.W, cy = (y0 + y1) / 2 * world.H;
+  const cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
+  for (let k = 0; k < n; k++) {
+    const i = k % cols, j = (k / cols) | 0;
+    const x = cx + (i - (cols - 1) / 2) * sp + (world.rng() * 4 - 2);
+    const y = cy + (j - (rows - 1) / 2) * sp + (world.rng() * 4 - 2);
+    spawn(world, type, x, y, team);
+  }
+}
 
 // Setzt einen Plan als blaue Einheiten (Rasterlayout wie placeRect, im Missionsrahmen) und gibt die Kosten zurück.
 export function placePlan(world, plan) {

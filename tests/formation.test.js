@@ -29,10 +29,10 @@ const formOf = (w, u) => w.formations.find(f => f.id === u.form);
 
 // SPACING 22 → 26 (Task 4, Controller-Entscheid): mit dem großen Scutum vor dem Körper wirkte der Block mit
 // 22 px gedrängt (Schilde überdecken den Vordermann); 26 px lässt jede Figur samt Schild lesbar
-// LINK 46 → 110 und ENGAGE 90 → 30 (Task 7, Balance): locker gesetzte Römer bilden auch einen Block, und der Block
-// bleibt bis kurz vor dem Zusammenstoß geschlossen (Gründe in formation.js)
+// ENGAGE 90 → 30 (Task 7, Balance): der Block bleibt bis kurz vor dem Zusammenstoß geschlossen (Gründe in formation.js)
+// LINK 110 → 50 und MAX 40 (Nachtrag 4, #35): nur dicht gemalte Römer bilden einen Block, höchstens 40 je Block
 test('FORM: Werte laut Spez.', () => {
-  assert.deepEqual(FORM, { MIN: 4, LINK: 110, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
+  assert.deepEqual(FORM, { MIN: 4, MAX: 40, LINK: 50, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
 });
 
 test('Block ab 4 Römern: 6 eng beieinander bilden einen Block, 3 nicht', () => {
@@ -406,19 +406,30 @@ test('Speer: Zielsuche bleibt auf PILUM_MAX begrenzt, auch wenn der Feind weit w
   assert.ok(rs.every(u => u.pilum === 1), 'kein Wurf ohne Ziel in Reichweite');
 });
 
-// Finale Prüfung: 200 Römer marschierten als Kolonne 10 × 20 (Spalten fest höchstens 10). Die Grenze wächst jetzt
-// mit n bis COLS_MAX; bis 80 Römer bleibt alles wie vorher.
+// Finale Prüfung: 200 Römer marschierten als Kolonne 10 × 20 (Spalten fest höchstens 10). Die Grenze wächst
+// mit n bis COLS_MAX (blockCols); seit MAX 40 (Nachtrag 4) ist ein Block höchstens 40 Römer groß (10 Spalten × 4 Reihen).
 test('Breite: große Blöcke marschieren als Front, kleine wie bisher', () => {
   for (const [n, c] of [[4, 3], [12, 5], [30, 9], [40, 10], [80, 10], [100, 13], [200, 16], [400, 16]]) assert.equal(blockCols(n), c, `n ${n}`);
   const w = mk();
-  for (let k = 0; k < 200; k++) spawn(w, 'roemer', 200 + (k % 10) * 22, 180 + ((k / 10) | 0) * 22, 'blau');
+  for (let k = 0; k < 40; k++) spawn(w, 'roemer', 200 + (k % 5) * 22, 300 + ((k / 5) | 0) * 22, 'blau');
   spawn(w, 'krieger', 1300, 400, 'rot');
   run(w, .6);
   assert.equal(w.formations.length, 1);
   const f = w.formations[0], rows = new Set(f.oD).size, cols = new Set(f.oL).size;
-  assert.equal(f.n, 200);
-  assert.equal(cols, COLS_MAX); assert.equal(rows, Math.ceil(200 / COLS_MAX));
+  assert.equal(f.n, 40);
+  assert.equal(cols, 10); assert.equal(rows, 4);
   assert.ok(cols > rows, `breiter als tief: ${cols} × ${rows}`);
+});
+
+// Nachtrag 4 (#35): eine große gemalte Masse wird nicht ein Riesenblock, sondern mehrere Blöcke zu höchstens MAX
+test('MAX: 200 dicht gemalte Römer bilden mehrere Blöcke zu höchstens 40', () => {
+  const w = mk();
+  for (let k = 0; k < 200; k++) spawn(w, 'roemer', 200 + (k % 10) * 22, 180 + ((k / 10) | 0) * 22, 'blau');
+  spawn(w, 'krieger', 1300, 400, 'rot');
+  run(w, .05);
+  assert.ok(w.formations.length >= 5, `Blöcke ${w.formations.length}`);
+  assert.ok(w.formations.every(f => f.n <= FORM.MAX), w.formations.map(f => f.n).join(','));
+  assert.equal(w.formations.reduce((s, f) => s + f.n, 0), 200);
 });
 
 // Finale Prüfung: Gefahr und Geländebremse kommen aus TERRAIN (data.js), nicht aus Zahlen in formation.js
@@ -437,9 +448,9 @@ test('Gelände: Gefahr und Tempo nach TERRAIN, gleich wie physics.integrate', ()
   }
 });
 
-// Finale Prüfung: LINK 110 (Task 7) festhalten. Zwei Gruppen aus je 4 Römern (2 × 2, Abstand 22) übereinander;
+// LINK 50 (Nachtrag 4, #35; vorher 110). Zwei Gruppen aus je 4 Römern (2 × 2, Abstand 22) übereinander;
 // ihre nächsten Mitglieder liegen gap px auseinander. Bis LINK verbindet die Kette sie zu einem Block.
-test('LINK: Gruppen 100 px auseinander bilden einen Block, 120 px auseinander zwei', () => {
+test('LINK: Gruppen 40 px auseinander bilden einen Block, 60 px auseinander zwei', () => {
   const blocks = gap => {
     const w = mk();
     const a = block(w, 4, 300, 400, 'blau', 2), b = block(w, 4, 300, 400 + 22 + gap, 'blau', 2);
@@ -447,13 +458,13 @@ test('LINK: Gruppen 100 px auseinander bilden einen Block, 120 px auseinander zw
     run(w, .05);
     return { w, a, b };
   };
-  const one = blocks(100);
+  const one = blocks(40);
   assert.equal(one.w.formations.length, 1);
   assert.equal(one.w.formations[0].n, 8);
   assert.ok([...one.a, ...one.b].every(u => u.formOn && u.form === one.a[0].form));
-  const two = blocks(120);
+  const two = blocks(60);
   assert.equal(two.w.formations.length, 2);
   assert.ok(two.w.formations.every(f => f.n === 4));
   assert.notEqual(two.a[0].form, two.b[0].form);
-  assert.ok(FORM.LINK > 100 && FORM.LINK < 120, `LINK ${FORM.LINK}`);
+  assert.ok(FORM.LINK > 40 && FORM.LINK < 60, `LINK ${FORM.LINK}`);
 });

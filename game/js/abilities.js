@@ -590,6 +590,12 @@ export function crumble(world, g) {
   emit(world, { type: 'death', x: g.x, y: g.y, z: g.z, unitType: g.type, team: g.team, killerId: null, killerType: null,
     killerTeam: null, killerKills: null, crumble: true });
 }
+// Eine Einheit verlässt die Schlacht (Tod in combat.die, Radierer und Rückgängig in paint.js): ein Ghul meldet sich bei
+// seinem Vampir ab (der darf wieder einen haben), die Ghule eines Vampirs zerfallen.
+export function releaseUnit(world, v) {
+  if (v.owner !== null) { v.owner.ghouls--; v.owner = null; }
+  if (v.ghouls > 0) crumbleGhouls(world, v);
+}
 // Alle lebenden Ghule des Vampirs v zerfallen (sein Tod, combat.die)
 export function crumbleGhouls(world, v) {
   const us = world.units;

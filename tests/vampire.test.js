@@ -228,3 +228,27 @@ test('Darstellung: rise- und bat-Effekte im Budget, Ghul wächst beim Aufstehen 
   g.riseT = 0; const sy1 = poseUnit(g, 0).sy;
   assert.ok(sy0 < .5 * sy1, `wächst aus dem Boden (${sy0} → ${sy1})`);
 });
+
+test('Radierer: radierter Ghul meldet sich beim Vampir ab, radierter Vampir lässt seine Ghule zerfallen', async () => {
+  const { paintTerrain, createStroke } = await import('../game/js/paint.js');
+  const w = mkWorld(), v = spawn(w, 'vampir', 400, 400, 'blau'); rebuildHash(w);
+  for (let k = 0; k < 3; k++) { const e = spawn(w, 'krieger', 418, 380 + k * 20, 'rot'); e.hp = 1; bite(w, v, e); }
+  const gs = ghoulsOf(w, v);
+  assert.equal(v.ghouls, 3);
+  gs[0].x = 700; gs[0].y = 200; rebuildHash(w);
+  paintTerrain(w, createStroke(0), 700, 200, 20, 'radierer', null, null);
+  assert.ok(!gs[0].alive); assert.equal(v.ghouls, 2, 'wieder Platz für einen Ghul');
+  paintTerrain(w, createStroke(0), 400, 400, 8, 'radierer', null, null);
+  assert.ok(!v.alive); assert.ok(gs.every(g => !g.alive), 'Ghule zerfallen mit');
+});
+
+test('Fledermausform: setzt sich nicht über Lava zusammen', () => {
+  const w = mkWorld(), v = spawn(w, 'vampir', 200, 400, 'blau'), t = dummy(w, 'krieger', 640, 400);
+  // Lavastreifen direkt vor dem Ziel: 40 px vor ihm wäre der Vampir mitten in der Lava
+  for (let gx = 57; gx <= 61; gx++) for (let gy = 30; gy <= 50; gy++) w.terr[gy * w.GW + gx] = 2;
+  rebuildHash(w);
+  let onLava = 0;
+  for (let i = 0; i < 600; i++) { step(w, DT); w.events.length = 0; if (v.batT < 1 && !v.T.fly && w.terr[((v.y / 10) | 0) * w.GW + ((v.x / 10) | 0)] === 2) onLava++; }
+  assert.equal(onLava, 0, 'nie als Vampir in der Lava');
+  assert.ok(v.alive && v.batT === 0 && dist(v, t) < 30, `beißt am Ziel (${dist(v, t)})`);
+});

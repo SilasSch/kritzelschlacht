@@ -5,6 +5,7 @@
 import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
 import { clearSpellWalls, STONE_WALL } from './spells.js';
+import { releaseUnit } from './abilities.js';
 
 export const UNIT_CAP = 2600;
 export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= zoneX (Anteil des Missionsrahmens)
@@ -102,6 +103,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
       if (mission) mission.spent = Math.max(0, mission.spent - v.T.cost);
       if (stroke) stroke.erased.push({ type: v.type, team: v.team, x: v.x, y: v.y, hp: v.hp });
       v.alive = false; world.dead = (world.dead || 0) + 1; changed = true;
+      releaseUnit(world, v);   // Ghul meldet sich beim Vampir ab, die Ghule eines Vampirs zerfallen (Spez. #32)
     });
   }
   const cells = {
@@ -114,7 +116,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
 // Nimmt einen Strich zurück und liefert die Ausgaben vor dem Strich. Steinwände der Magier (towner 2, spells.js) sind
 // kein Teil eines Strichs: Rückgängig stellt keine wieder her und entfernt alle, die noch stehen.
 export function undo(world, stroke) {
-  for (const u of stroke.units) if (u.alive) { u.alive = false; world.dead = (world.dead || 0) + 1; }
+  for (const u of stroke.units) if (u.alive) { u.alive = false; world.dead = (world.dead || 0) + 1; releaseUnit(world, u); }
   for (const [i, [t, o, h]] of stroke.cells) {
     if (i >= world.terr.length) continue;
     world.terr[i] = t; world.towner[i] = o; world.whp[i] = h;

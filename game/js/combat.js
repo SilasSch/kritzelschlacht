@@ -8,7 +8,7 @@ import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLIN
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
-import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, crumbleGhouls, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
+import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, releaseUnit, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
 import { castSpell, spellReact, FIREBALL } from './spells.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
@@ -151,8 +151,7 @@ export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag
 // Leiche und keine Teile, das death-Ereignis trägt ghoul (Verlust in der Statistik, kein Seelchen).
 function die(world, v, src, kind) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
-  if (v.owner !== null) { v.owner.ghouls--; v.owner = null; }
-  if (v.ghouls > 0) crumbleGhouls(world, v);
+  releaseUnit(world, v);
   if (kind === 'melee' && riseGhoul(world, v, src)) {
     emit(world, {
       type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team, ghoul: true,
@@ -750,9 +749,10 @@ export function think(world, u, dt) {
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
   // Vampir auf langen Wegen (abilities.stepBat): ab BAT_START px als Fledermausschwarm geradewegs zum Ziel, ab BAT_END px
-  // wieder Vampir; beim Verwandeln steht er, als Fledermaus beißt er nicht
+  // wieder Vampir, aber nie über Lava oder Mauer (dann fliegt er weiter aufs Ziel zu); beim Verwandeln steht er, als
+  // Fledermaus beißt er nicht
   if (u.type === 'vampir') {
-    const s = stepBat(world, u, dt, u.batOn ? d > VAMPIRE.BAT_END : d > VAMPIRE.BAT_START);
+    const s = stepBat(world, u, dt, u.batOn ? d > VAMPIRE.BAT_END || hazardAt(world, u.x, u.y) : d > VAMPIRE.BAT_START);
     if (s === BAT_FLY) { u.mx = nx * T.speed; u.my = ny * T.speed; u.run += dt; return; }
     if (s !== BAT_NONE) return;
   }

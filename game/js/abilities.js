@@ -3,8 +3,9 @@
 //
 // ABILITY[type] = { cd, ready(world, u) → bool, start(world, u), update(world, u, dt) → bool (true = fertig),
 // end?(world, u) }:
-//   cd      Abklingzeit in s. Beim Spawn startet u.abCd bei cd · (0,3 + 0,7 · rng) (world.spawn), damit gleichzeitig
-//           gemalte Einheiten nicht alle zugleich auslösen.
+//   cd      Abklingzeit in s. Beim Spawn startet u.abCd bei cd · (0,3 + 0,7 · q), q nach u.id gestreut (goldener
+//           Schnitt, world.spawn, ohne world.rng), damit gleichzeitig gemalte Einheiten nicht alle zugleich auslösen.
+//           Gruppen (Schützen, Soldaten) teilen die Abklingzeit beim Auslösen (shareCd).
 //   ready   Darf sie jetzt auslösen (Ziel, Lage)? Kann dabei Ziel bzw. Zielpunkt merken (u.tg, u.abX/u.abY). Ohne
 //           Erfolg versucht stepAbility es erst nach ABILITY_RETRY s wieder (u.abCd), statt jeden Schritt zu suchen.
 //   start   Beginn (einmal). Gleich danach läuft update mit dt = 0 im selben Schritt.
@@ -26,6 +27,7 @@ import { factionOf, query } from './world.js';
 import { fire, clearShot, hasLineOfFire, fling, hurt } from './combat.js';
 import { isFleeing } from './morale.js';
 import { leaveBlock } from './formation.js';
+import { FLY_VZ } from './physics.js';
 
 /* ---------- Feuer (Festlegung 7) ---------- */
 // Feuerball, Drachenatem, Brand über Zeit, Brandpfeile, Phönixspur: gemeinsames Merkmal Feuer (combat.hurt: Panzer
@@ -204,31 +206,40 @@ function faceTo(u, x, y) {
   u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d;
 }
 
+// Gruppen-Abklingzeit: löst u aus, laden eigene Einheiten seines Typs bis R px mit neu, auf cd · (1 + SHARE_JITTER · q),
+// q nach id gestreut (goldener Schnitt). So gibt es eine Salve je Gruppe statt einer Welle beim ersten Feindkontakt
+// (wenn die versetzten Startzeiten auf dem Anmarsch schon abgelaufen sind), und die Gruppe löst danach nicht wieder
+// im Gleichtakt aus. Wer seine Fähigkeit gerade ausführt, bleibt unberührt.
+export const SHARE_JITTER = .3;
+let SC_W = null, SC_U = null, SC_F = null, SC_R2 = 0, SC_CD = 0;
+function shareTest(v) {
+  if (v === SC_U || v.type !== SC_U.type || v.abOn || factionOf(SC_W, v) !== SC_F) return;
+  const dx = v.x - SC_U.x, dy = v.y - SC_U.y;
+  if (dx * dx + dy * dy > SC_R2) return;
+  const q = v.id * .6180339887, c = SC_CD * (1 + SHARE_JITTER * (q - Math.floor(q)));
+  if (v.abCd < c) v.abCd = c;
+}
+function shareCd(world, u, R) {
+  SC_W = world; SC_U = u; SC_F = factionOf(world, u); SC_R2 = R * R; SC_CD = ABILITY[u.type].cd;
+  query(world, u.x, u.y, R, shareTest);
+  SC_W = null; SC_U = null; SC_F = null;
+}
+
 /* ---------- Schütze: Brandpfeile ---------- */
 // N Brandpfeile im Abstand GAP s auf das aktuelle Ziel in Reichweite (Bogen wie der Pfeil, Schaden des Schützen).
 // Ein Treffer zündet an (combat.landArc, Generation GEN = 0); ein Römerschild hält ihn ab und er zündet nicht
 // (Vorgabe 5). Kein Drache als Ziel (feuerfest). Verlässt das Ziel die Reichweite oder fällt es, endet die Salve.
 // Balance (Task 2, Prüfstand): in Masse kippten die Brandpfeile die Konter ritter > schuetze und roemer > schuetze
 // sowie M2 und M5 (ein Brand macht am Ritter ×1,5 gut 36 Schaden, etwa 8 normale Pfeile). Darum: Abklingzeit 30 s
-// statt des Richtwerts 20 s; eigene Schützen bis SHARE px laden beim Auslösen mit neu (eine Salve je Gruppe, wie das
-// Rudel beim Heulen); und die Salve ersetzt die nächsten Pfeile (archerEnd: danach Nachladen für sie).
-export const FIRE_ARROWS = { N: 3, GAP: .2, GEN: 0, SHARE: 300 };
+// statt des Richtwerts 20 s; eigene Schützen bis SHARE px laden beim Auslösen mit neu (shareCd: eine Salve je Gruppe,
+// über eine lange Reihe mehrere); und die Salve ersetzt die nächsten Pfeile (archerEnd: danach Nachladen für sie).
+// Fix-Runde 1: SHARE 300 → 120 (bei 300 schoss eine Reihe von 80 Schützen in 30 s nur eine Salve: kaum sichtbar).
+export const FIRE_ARROWS = { N: 3, GAP: .2, GEN: 0, SHARE: 120 };
 function archerReady(world, u) {
   const t = foeInReach(world, u, u.T.range, false);
   return !!t && t.type !== 'drache';
 }
-// Eigene Schützen bis SHARE px laden mit neu (wie das Rudel beim Heulen): seltene Salven statt Dauerfeuer
-let SH_W = null, SH_U = null, SH_F = null;
-function shareTest(v) {
-  if (v === SH_U || v.type !== 'schuetze' || v.abOn || factionOf(SH_W, v) !== SH_F) return;
-  const dx = v.x - SH_U.x, dy = v.y - SH_U.y, R = FIRE_ARROWS.SHARE, cd = ABILITY.schuetze.cd;
-  if (dx * dx + dy * dy <= R * R && v.abCd < cd) v.abCd = cd;
-}
-function archerStart(world, u) {
-  SH_W = world; SH_U = u; SH_F = factionOf(world, u);
-  query(world, u.x, u.y, FIRE_ARROWS.SHARE, shareTest);
-  SH_W = null; SH_U = null; SH_F = null;
-}
+function archerStart(world, u) { shareCd(world, u, FIRE_ARROWS.SHARE); }
 function archerUpdate(world, u) {
   const S = FIRE_ARROWS, t = foeInReach(world, u, u.T.range, false);
   if (!t) return true;
@@ -272,13 +283,16 @@ function saniStart(world, u) {
 /* ---------- Soldat: Handgranate ---------- */
 // Ein Bogenwurf 'bomb' (Schaden DMG, Splash R; trifft wie jede Explosion auch Eigene, Festlegung 2) auf das aktuelle
 // Bodenziel, wenn es MIN_D bis RANGE px entfernt ist und an ihm mehr Feinde als Eigene im Umkreis R stehen.
-export const GRENADE = { DMG: 24, R: 36, RANGE: 160, MIN_D: 50 };
+// Eigene Soldaten bis SHARE px laden beim Wurf mit neu (shareCd; Fix-Runde 1: sonst warfen 80 Soldaten beim ersten
+// Feindkontakt bis zu 30 Granaten in einer Sekunde).
+export const GRENADE = { DMG: 24, R: 36, RANGE: 160, MIN_D: 50, SHARE: 80 };
 function grenadeReady(world, u) {
   const t = foeInReach(world, u, GRENADE.RANGE, true);
   if (!t || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < GRENADE.MIN_D * GRENADE.MIN_D) return false;
   return groupScore(world, factionOf(world, u), t.x, t.y, GRENADE.R) >= 1;
 }
 function grenadeStart(world, u) {
+  shareCd(world, u, GRENADE.SHARE);
   const t = u.tg;
   faceTo(u, t.x, t.y);
   fire(world, u, t, 'bomb', undefined, undefined, GRENADE.DMG, GRENADE.R);
@@ -444,12 +458,13 @@ function spookStart(world, u) {
 
 /* ---------- Drache: Sturzflug ---------- */
 // Auf ein Bodenziel bis RANGE px, um das mindestens MIN Feinde und mehr Feinde als Eigene (Boden) im Kreis R stehen:
-// Phase 0 (u.abK) sinkt er auf Z (Flughöhe u.fz, physics.FLY_VZ) und fliegt mit höchstens V px/s zum Zielpunkt
-// (u.abX/u.abY, beim Start); unten (spätestens nach FALL_MAX s) Aufschlag: jeder Bodenkörper im Kreis R wird
+// Phase 0 (u.abK) fliegt er mit höchstens V px/s zum Zielpunkt (u.abX/u.abY, beim Start) und sinkt erst, wenn der
+// Restweg nicht länger dauert als das Sinken auf Z (Flughöhe u.fz, physics.FLY_VZ): so setzt er am Zielpunkt auf, nicht
+// davor (Fix-Runde 1). Unten (Notfall: nach FALL_MAX s sinkt er, wo er ist) Aufschlag: jeder Bodenkörper im Kreis R wird
 // weggeschleudert (combat.fling, Stoß I · Abfall wie bei Explosionen), nur Feinde nehmen DMG Schaden (Festlegung 2).
 // Phase 1 hält er HOLD s am Boden (abT beginnt beim Aufschlag neu), Phase 2 steigt er auf T.flyZ und ist fertig,
 // sobald er oben ist. Beim Abbruch steigt er weich zurück (end setzt u.fz).
-export const DIVE = { Z: 6, R: 90, DMG: 30, I: 500, V: 160, HOLD: .25, RANGE: 160, MIN: 3, FALL_MAX: 1.5 };
+export const DIVE = { Z: 6, R: 90, DMG: 30, I: 500, V: 160, HOLD: .25, RANGE: 160, MIN: 3, FALL_MAX: 2 };
 let DV_W = null, DV_U = null, DV_F = null, DV_X = 0, DV_Y = 0, DV_FOE = 0, DV_OWN = 0;
 function diveCount(v) {
   if (v.T.fly) return;
@@ -467,7 +482,7 @@ function diveReady(world, u) {
   u.abX = t.x; u.abY = t.y;
   return true;
 }
-function diveStart(world, u) { u.fz = DIVE.Z; sound(world, 'whoosh'); }
+function diveStart(world, u) { sound(world, 'whoosh'); }
 function slamTest(v) {
   const u = DV_U;
   if (v === u || v.T.fly) return;
@@ -490,7 +505,9 @@ function diveUpdate(world, u, dt) {
       const sp = dt > 0 ? Math.min(DIVE.V, d / dt) : DIVE.V;
       u.mx = dx / d * sp; u.my = dy / d * sp; u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d;
     }
-    if (u.z <= DIVE.Z + 1e-6 || u.abT > DIVE.FALL_MAX) { slam(world, u); u.abK = 1; u.abT = 0; u.mx = 0; u.my = 0; }
+    // sinken, sobald der Restweg in der Sinkzeit zu schaffen ist (oder im Notfall)
+    if (d / DIVE.V <= (u.z - DIVE.Z) / FLY_VZ + dt || u.abT > DIVE.FALL_MAX) u.fz = DIVE.Z;
+    if (u.z <= DIVE.Z + 1e-6) { slam(world, u); u.abK = 1; u.abT = 0; u.mx = 0; u.my = 0; }
     return false;
   }
   if (u.abK === 1) {

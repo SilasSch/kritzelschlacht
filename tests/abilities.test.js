@@ -14,7 +14,7 @@ import { createFxCore } from '../game/js/render/fxcore.js';
 import { UNITS } from '../game/js/data.js';
 import {
   ABILITY, stepAbility, scare, cancelAbility, FIRE_KINDS, isFire, HELI_SALVO,
-  FIRE_ARROWS, HEAL_WAVE, GRENADE, BARRAGE, RAM, HOWL, ROAR, SPOOK, DIVE, FEARLESS,
+  FIRE_ARROWS, HEAL_WAVE, GRENADE, BARRAGE, RAM, HOWL, ROAR, SPOOK, DIVE, FEARLESS, SHARE_JITTER,
 } from '../game/js/abilities.js';
 
 const DT = 1 / 60;
@@ -380,7 +380,7 @@ test('stepAbility: Typ ohne Fähigkeit (Typwechsel, Froschfluch) setzt ein häng
   assert.equal(k.abOn, false); assert.equal(k.abT, 0); assert.equal(k.abK, 0);
 });
 
-test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an (Generation 0), dann abCd ≈ 20', () => {
+test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an (Generation 0), dann abCd ≈ 30', () => {
   const w = mkWorld(), s = spawn(w, 'schuetze', 400, 400, 'blau');
   const K = [];
   for (let k = 0; k < 5; k++) { const e = dummy(w, 'krieger', 560, 380 + k * 10); e.state = 'stun'; e.stunT = 1e9; K.push(e); }
@@ -405,7 +405,9 @@ test('Brandpfeile: eigene Schützen bis SHARE px laden mit neu, die Salve kostet
   s.abCd = 0; s.tg = e; s.rt = 5; s.cd = 0;
   think(w, s, DT);
   assert.equal(s.abOn, true);
-  assert.equal(near.abCd, ABILITY.schuetze.cd); assert.equal(far.abCd, 2); assert.equal(foe.abCd, 2);
+  const cd = ABILITY.schuetze.cd;
+  assert.ok(near.abCd >= cd && near.abCd <= cd * (1 + SHARE_JITTER), `geteilt ${near.abCd}`);
+  assert.equal(far.abCd, 2); assert.equal(foe.abCd, 2);
   run(w, .5);
   assert.equal(s.abOn, false);
   assert.ok(s.cd > (FIRE_ARROWS.N - 1) * UNITS.schuetze.cd - .6, `Nachladen ${s.cd}`);
@@ -662,4 +664,38 @@ test('Erschreckte lösen auch die neuen Fähigkeiten nicht aus', () => {
   scare(w, b, 1); b.abCd = 0; b.cd = 1e9;
   think(w, b, DT);
   assert.equal(e1.fearT, 0); assert.equal(e2.fearT, 0); assert.equal(b.abOn, false);
+});
+
+/* ---------- Fix-Runde 1 ---------- */
+test('Sturzflug: Ziel 170 px entfernt, der Aufschlag trifft dort mindestens 5 von 6 Feinden', () => {
+  const w = mkWorld(), d = spawn(w, 'drache', 300, 400, 'blau');
+  d.cd = 1e9;
+  const F = [];
+  for (let k = 0; k < 6; k++) { const e = dummy(w, 'krieger', 470 + (k % 3) * 14, 392 + (k / 3 | 0) * 14); e.state = 'stun'; e.stunT = 1e9; F.push(e); }
+  rebuildHash(w); updateCentroids(w, DT);
+  d.abCd = 0; d.tg = F[0]; d.rt = 5;
+  let slam = null;
+  for (let k = 0; k < 300 && !slam; k++) { step(w, DT); for (const e of w.events) if (e.type === 'ability' && e.k === 'dive') slam = e; w.events.length = 0; }
+  assert.ok(slam, 'Aufschlag');
+  assert.ok(Math.hypot(slam.x - 470, slam.y - 392) < 8, `Aufschlag bei ${slam.x.toFixed(0)}, ${slam.y.toFixed(0)}`);
+  const hit = F.filter(e => e.hp < 1e9).length;
+  assert.ok(hit >= 5, `getroffen ${hit}/6`);
+});
+
+// 80 Soldaten gegen 80 Krieger: beim ersten Feindkontakt höchstens GREN_PER_S Granaten in einer Sekunde
+const GREN_PER_S = 6;
+test(`Handgranate: Gruppen-Abklingzeit, 80 gegen 80 höchstens ${GREN_PER_S} Granaten je Sekunde`, () => {
+  const w = createWorld(1600, 900, 3); w.teamMode = true;
+  for (let i = 0; i < 80; i++) spawn(w, 'soldat', 300 + (i % 8) * 20, 250 + (i / 8 | 0) * 40, 'blau');
+  for (let i = 0; i < 80; i++) spawn(w, 'krieger', 1200 + (i % 8) * 20, 250 + (i / 8 | 0) * 40, 'rot');
+  const per = new Map();
+  let n = 0;
+  for (let s = 0; s < 60 * 30; s++) {
+    step(w, DT);
+    for (const e of w.events) if (e.type === 'shot' && e.kind === 'bomb') { n++; const k = s / 60 | 0; per.set(k, (per.get(k) || 0) + 1); }
+    w.events.length = 0;
+  }
+  const peak = Math.max(0, ...per.values());
+  assert.ok(n >= 3, `geworfen ${n}`);
+  assert.ok(peak <= GREN_PER_S, `Spitze ${peak} je s`);
 });

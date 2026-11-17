@@ -227,14 +227,16 @@ function shareCd(world, u, R) {
 
 /* ---------- Schütze: Brandpfeile ---------- */
 // N Brandpfeile im Abstand GAP s auf das aktuelle Ziel in Reichweite (Bogen wie der Pfeil, Schaden des Schützen).
-// Ein Treffer zündet an (combat.landArc, Generation GEN = 0); ein Römerschild hält ihn ab und er zündet nicht
-// (Vorgabe 5). Kein Drache als Ziel (feuerfest). Verlässt das Ziel die Reichweite oder fällt es, endet die Salve.
+// Ein Treffer zündet das Ziel an, das Feuer springt aber nicht über (combat.landArc: höchste Generation
+// BURN_MAX_GEN; Entscheidung des Controllers in Fix-Runde 2, ersetzt "Generation 0" der Plantabelle: über 144 Duelle
+// gewannen Römer gegen Schützen mit überspringendem Feuer 55 %, ohne 71 %, ohne Fähigkeit 76 %). Ein Römerschild hält
+// ihn ab und er zündet nicht (Vorgabe 5). Kein Drache als Ziel (feuerfest). Verlässt das Ziel die Reichweite oder fällt es, endet die Salve.
 // Balance (Task 2, Prüfstand): in Masse kippten die Brandpfeile die Konter ritter > schuetze und roemer > schuetze
 // sowie M2 und M5 (ein Brand macht am Ritter ×1,5 gut 36 Schaden, etwa 8 normale Pfeile). Darum: Abklingzeit 30 s
 // statt des Richtwerts 20 s; eigene Schützen bis SHARE px laden beim Auslösen mit neu (shareCd: eine Salve je Gruppe,
 // über eine lange Reihe mehrere); und die Salve ersetzt die nächsten Pfeile (archerEnd: danach Nachladen für sie).
 // Fix-Runde 1: SHARE 300 → 120 (bei 300 schoss eine Reihe von 80 Schützen in 30 s nur eine Salve: kaum sichtbar).
-export const FIRE_ARROWS = { N: 3, GAP: .2, GEN: 0, SHARE: 120 };
+export const FIRE_ARROWS = { N: 3, GAP: .2, SHARE: 120 };
 function archerReady(world, u) {
   const t = foeInReach(world, u, u.T.range, false);
   return !!t && t.type !== 'drache';

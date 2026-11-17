@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createWorld, spawn, rebuildHash, nearestEnemy } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
-import { think, ignite, attack, PRONE_UP_T } from '../game/js/combat.js';
+import { think, ignite, attack, PRONE_UP_T, BURN_MAX_GEN, BURN_T } from '../game/js/combat.js';
 import { integrate } from '../game/js/physics.js';
 import { MORALE, isFleeing, updateCentroids } from '../game/js/morale.js';
 import { shieldBlocks, SHIELD_KINDS } from '../game/js/formation.js';
@@ -380,7 +380,7 @@ test('stepAbility: Typ ohne Fähigkeit (Typwechsel, Froschfluch) setzt ein häng
   assert.equal(k.abOn, false); assert.equal(k.abT, 0); assert.equal(k.abK, 0);
 });
 
-test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an (Generation 0), dann abCd ≈ 30', () => {
+test('Brandpfeile: 3 Brandpfeile auf das Ziel, Treffer zünden an, dann abCd ≈ 30', () => {
   const w = mkWorld(), s = spawn(w, 'schuetze', 400, 400, 'blau');
   const K = [];
   for (let k = 0; k < 5; k++) { const e = dummy(w, 'krieger', 560, 380 + k * 10); e.state = 'stun'; e.stunT = 1e9; K.push(e); }
@@ -429,14 +429,14 @@ test('Brandpfeile: Römerschild hält den Brandpfeil ab, er zündet nicht; sonst
   assert.ok(evs.some(e => e.type === 'block' && e.kind === 'firearrow'), 'Schildblock');
   assert.equal(evs.filter(e => e.type === 'ignite').length, 0);
   assert.equal(u.burnT, 0);
-  // Ritter ohne Schild: Schaden wie ein Pfeil (×0,35), dann brennt er (Generation 0)
+  // Ritter ohne Schild: Schaden wie ein Pfeil (×0,35), dann brennt er (ohne Überspringen: höchste Generation)
   const w2 = mkWorld(), s2 = dummy(w2, 'schuetze', 100, 400), r = dummy(w2, 'ritter', 300, 400);
   r.hp = 200;
   arcShot(w2, 'firearrow', s2, 100, 400, 300, 400);
   w2.rng = () => .5;
   step(w2, DT);
   assert.ok(w2.events.some(e => e.type === 'ignite'), 'zündet');
-  assert.equal(r.burnGen, 0); assert.ok(r.burnT > 0);
+  assert.equal(r.burnGen, BURN_MAX_GEN); assert.ok(r.burnT > 0);
   assert.ok(Math.abs(200 - r.hp - 12 * .35) < 1e-6, `Schaden ${200 - r.hp}`);
 });
 
@@ -698,4 +698,26 @@ test(`Handgranate: Gruppen-Abklingzeit, 80 gegen 80 höchstens ${GREN_PER_S} Gra
   const peak = Math.max(0, ...per.values());
   assert.ok(n >= 3, `geworfen ${n}`);
   assert.ok(peak <= GREN_PER_S, `Spitze ${peak} je s`);
+});
+
+/* ---------- Fix-Runde 2 ---------- */
+// Entscheidung des Controllers: Brandpfeile zünden das getroffene Ziel an, das Feuer springt nicht über (sonst kippte
+// der Brand im gedrängten Römer-Ansturm den Konter roemer > schuetze). Drachenfeuer springt weiter (#21).
+test('Brandpfeile: der Getroffene brennt, das Feuer springt nicht auf einen anliegenden Verbündeten über', () => {
+  const w = mkWorld(), s = dummy(w, 'schuetze', 100, 400, 'blau');
+  const r = dummy(w, 'ritter', 300, 400), nb = dummy(w, 'ritter', 300, 420);   // berühren sich (r 11 + 11 + 6)
+  for (const u of [r, nb]) { u.state = 'stun'; u.stunT = 1e9; }
+  arcShot(w, 'firearrow', s, 100, 400, 300, 400);
+  let burnedR = false;
+  for (let t = 0; t < BURN_T + .5; t += DT) { step(w, DT); w.events.length = 0; if (r.burnT > 0) burnedR = true; assert.equal(nb.burnT, 0, 'Nachbar brennt nicht'); }
+  assert.ok(burnedR, 'Getroffener brennt');
+  assert.ok(r.hp < 1e9, 'Brandschaden');
+  // Gegenprobe: Drachenfeuer (Generation 0) springt auf denselben Nachbarn über
+  const w2 = mkWorld(), a = dummy(w2, 'ritter', 300, 400), b = dummy(w2, 'ritter', 300, 420);
+  for (const u of [a, b]) { u.state = 'stun'; u.stunT = 1e9; }
+  rebuildHash(w2);
+  ignite(w2, a, 0, null);
+  let jumped = false;
+  for (let t = 0; t < BURN_T; t += DT) { step(w2, DT); w2.events.length = 0; if (b.burnT > 0) jumped = true; }
+  assert.ok(jumped, 'Generation 0 springt über');
 });

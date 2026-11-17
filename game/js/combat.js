@@ -8,7 +8,7 @@ import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLIN
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
-import { stepAbility, cancelAbility, isFire, FIRE_ARROWS } from './abilities.js';
+import { stepAbility, cancelAbility, isFire } from './abilities.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -1062,7 +1062,8 @@ function shieldHit(world, v, a, kind, dx, dy, src) {
 
 // Pfeil, Speer und Brandpfeil treffen den nächsten Körper am Landepunkt (Schaden als 'arrow': Rüstung, Deckung,
 // Liegen wie beim Pfeil); Römer im Block halten sie von vorn mit dem Schild ab (Flugrichtung Start → Landepunkt).
-// Der Brandpfeil zündet danach an (Generation 0, Verursacher der Schütze); ein abgeblockter zündet nicht (Vorgabe 5).
+// Der Brandpfeil zündet danach an (Verursacher der Schütze) mit der höchsten Generation BURN_MAX_GEN: der Getroffene
+// brennt, das Feuer springt nicht über (abilities.FIRE_ARROWS); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
@@ -1074,7 +1075,7 @@ function landArc(world, p, src) {
     const a = p.dmg * (.85 + world.rng() * .3), dx = p.x1 - p.x0, dy = p.y1 - p.y0;
     if (shieldBlocks(best, p.kind, dx, dy)) { shieldHit(world, best, a, p.kind, dx, dy, src); return; }
     hurt(world, best, a, 'arrow', src);
-    if (p.kind === 'firearrow' && best.alive) ignite(world, best, FIRE_ARROWS.GEN, src);
+    if (p.kind === 'firearrow' && best.alive) ignite(world, best, BURN_MAX_GEN, src);
     emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: p.kind });
     sound(world, 'hit');
   } else emit(world, { type: 'miss', kind: p.kind, x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });

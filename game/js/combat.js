@@ -189,7 +189,8 @@ function die(world, v, src, kind) {
     sound(world, 'die');
     return;
   }
-  const T = v.T, sgn = () => (world.rng() < .5 ? -1 : 1);
+  // Task 6: ein verfluchter Frosch stirbt als er selbst (Leiche, Teile und Todesmeldung nach u.frogFrom)
+  const ty = v.frogFrom || v.type, T = UNITS[ty], sgn = () => (world.rng() < .5 ? -1 : 1);
   let vx = v.vx + v.mx, vy = v.vy + v.my, vz = v.vz;
   const vrot = sgn() * rnd(world, VROT_MIN, VROT_MAX);
   if (v.state !== 'air') {
@@ -200,17 +201,17 @@ function die(world, v, src, kind) {
     if (l > 1e-6) { dx /= l; dy /= l; } else { const a = world.rng() * Math.PI * 2; dx = Math.cos(a); dy = Math.sin(a); }
     vx += dx * sp; vy += dy * sp;
   }
-  world.corpses.push(makeCorpse('body', null, v.type, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot,
-    CRASH.has(v.type) ? v.type : null));
-  const parts = PARTS[v.type];
+  world.corpses.push(makeCorpse('body', null, ty, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot,
+    CRASH.has(ty) ? ty : null));
+  const parts = PARTS[ty];
   for (let i = 0; i < parts.length; i++) {
     const a = world.rng() * Math.PI * 2, sp = rnd(world, PART_V[0], PART_V[1]);
     const vz = rnd(world, PART_VZ[0], PART_VZ[1]), pr = sgn() * rnd(world, PART_VROT[0], PART_VROT[1]);
-    world.corpses.push(makeCorpse('part', parts[i], v.type, v.team, v.face, v.x, v.y, v.z + T.r,
+    world.corpses.push(makeCorpse('part', parts[i], ty, v.team, v.face, v.x, v.y, v.z + T.r,
       vx + Math.cos(a) * sp, vy + Math.sin(a) * sp, Math.max(0, v.vz) + vz, 0, pr));
   }
   emit(world, {
-    type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team,
+    type: 'death', x: v.x, y: v.y, z: v.z, unitType: ty, team: v.team,
     killerId: src ? src.id : null, killerType: src ? src.type : null,
     killerTeam: src ? src.team : null, killerKills: src ? src.kills : null,
   });

@@ -412,3 +412,18 @@ test('Sanitäter: heilt nicht die Asche des Phönix, sondern den verletzten Krie
   assert.notEqual(s.tg, p, 'altes Ziel zu Asche geworden: neu wählen');
   assert.equal(p.hp, 0);
 });
+
+// Review Task 6, Punkt 4: ein Frosch stirbt als sein ursprünglicher Typ (Leiche und Todesmeldung)
+test('Frosch stirbt: Leiche, Teile und death-Ereignis nach dem ursprünglichen Typ', () => {
+  const w = mkWorld(), r = spawn(w, 'ritter', 300, 400, 'rot'), s = spawn(w, 'schuetze', 500, 400, 'blau');
+  rebuildHash(w);
+  assert.ok(curseFrog(w, r));
+  w.events.length = 0;
+  hurt(w, r, 1e6, 'arrow', s);
+  assert.ok(!r.alive);
+  const ev = w.events.find(e => e.type === 'death');
+  assert.equal(ev.unitType, 'ritter');
+  assert.ok(w.corpses.length > 0 && w.corpses.every(c => c.type === 'ritter'), w.corpses.map(c => c.type).join());
+  // Körper plus die Teile des Ritters (Helm und Schild), nicht die des Froschs (keine)
+  assert.equal(w.corpses.filter(c => c.kind === 'part').length, 2);
+});

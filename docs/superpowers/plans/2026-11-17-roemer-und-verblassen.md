@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Neue Einheit Römer (Blockformation im Gleichschritt, Speerwurf, Schilde nur in Formation) und Bodenmüll, der mit der Zeit verblasst.
+**Goal:** Neue Einheit Römer (Blockformation im Gleichschritt, Speerwurf, Schilde nur in Formation), Bodenmüll, der mit der Zeit verblasst, Rückzug und Erholung für alle Einheiten und geduldige Scharfschützen.
 
 **Architecture:** Die Formationslogik kommt in ein neues reines Modul `game/js/formation.js`. sim.step ruft es einmal je Schritt vor `think` auf. Es setzt Felder auf den Römern, die `combat.think` liest. Schildblock und Speer sitzen in den bestehenden Trefferpfaden von combat.js. Das Verblassen besteht aus drei Teilen:
 - Leichen und Trümmer altern in physics.js.
@@ -186,7 +186,67 @@
 - [ ] **Step 4:** `node --test tests/*.test.js` → alle grün.
 - [ ] **Step 5: Commit** `feat: Roemer sticker rig, lockstep pose, pilum and shield-block fx`
 
-### Task 5: Balance, Hinweise, Prüfung im Browser
+### Task 5: Rückzug und Erholung (Spez. #27)
+
+**Files:**
+- Create: `game/js/morale.js` (rein)
+- Modify: `game/js/world.js` (spawn-Felder), `game/js/combat.js` (think, Sanitäter-Zielwahl), `game/js/formation.js` (Fliehende verlassen den Block)
+- Modify: `game/js/render/pose.js`, `game/js/render/rig.js` oder `renderer.js` (Angstaugen, Schweißtropfen)
+- Test: `tests/morale.test.js`
+
+**Interfaces:**
+- Produces in morale.js:
+  - `export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5 }`. REGEN ist der Anteil der vollen LP pro Sekunde.
+  - `export function updateMorale(world, u, dt)`. Liefert true, solange die Einheit flieht. think ruft sie zuerst auf und steuert bei true die Flucht statt des normalen Verhaltens.
+- Unit-Felder (in spawn anlegen): `flee: false`, `safeT: 0`, `cornerT: 0`.
+- Regeln:
+  - Flucht beginnt bei `hp ≤ FLEE · T.hp`. Römer mit `formOn` fliehen erst bei FLEE_FORM; ein fliehender Römer verlässt den Block.
+  - Fluchtrichtung: weg vom nächsten Feind, gemischt mit der Richtung zum Schwerpunkt der eigenen Fraktion. Sie meidet Lava und Mauern wie bei Bodentruppen. Flieger ignorieren das Gelände.
+  - Tempo × SPEED. Keine Angriffe, außer wenn ein Feind seit CORNER_T in Nahkampfreichweite klebt (eingeholt oder in die Ecke gedrängt): dann schlägt sie zurück.
+  - Erholung: ist SAFE_T s kein Feind innerhalb SAFE_R, steigen die LP um `REGEN · T.hp` pro Sekunde. Ab `BACK · T.hp` endet die Flucht.
+  - Sanitäter wählen fliehende Verbündete vor allen anderen.
+  - Liegende Einheiten (#22) stehen erst auf und fliehen dann.
+  - Gilt für alle Typen, auch Panzer, Hubschrauber und Drache.
+- Aussehen: Wenn `flee` gesetzt ist, zeigt der Sticker Angstaugen (kleine Pupillen, hochgezogene Lider) und einen Schweißtropfen.
+
+- [ ] **Step 1: Failing tests** in `tests/morale.test.js`:
+  - „Flucht ab 25 %“: Ein Krieger mit 14/60 LP und ein Feind in 30 px. Nach 0,5 s ist der Abstand gewachsen, `flee === true`, und er hat nicht zugeschlagen (keine `hit`-Events von ihm).
+  - „Erholung“: Ein Fliehender ohne Feind in 200 px. Nach SAFE_T + 4 s sind seine LP gestiegen; bei ≥ 60 % ist `flee === false`.
+  - „Eingeholt wehrt sich“: Ein schnellerer Feind klebt an ihm. Nach CORNER_T + .5 s gibt es mindestens einen Treffer von ihm.
+  - „Römer im Block halten länger“: Bei 20 % LP und `formOn` flieht er nicht, bei 14 % schon.
+  - „Keine Flucht in Lava“: Lava hinter dem Fliehenden. Er betritt keine Lava-Zelle.
+  - „Sanitäter bevorzugt Fliehende“.
+  - „Panzer flieht auch“.
+- [ ] **Step 2:** `node --test tests/morale.test.js` → FAIL.
+- [ ] **Step 3:** Implementieren.
+- [ ] **Step 4:** `node --test tests/*.test.js` → alle grün. `node tools/bench.mjs mixed` < 2,0 ms im Durchschnitt.
+- [ ] **Step 5: Commit** `feat: units retreat at low health and recover`
+
+### Task 6: Geduldige Scharfschützen (Spez. #28)
+
+**Files:**
+- Modify: `game/js/combat.js` (think für `sniper`)
+- Test: `tests/prone.test.js` oder neu `tests/sniper.test.js`
+
+**Interfaces:**
+- Produces in combat.js: `export const SNIPER = { HOLD: .95, KEEP: .6, WAIT: 3, BEHIND: 40 }`.
+- Regeln für den Typ `sniper`:
+  - Ist ein Ziel in Reichweite, bewegt er sich nicht weiter vor. Er hält bei höchstens `HOLD · range` zum Ziel.
+  - Ohne Ziel in Reichweite wartet er WAIT s und rückt dann vor, aber nie weiter als bis BEHIND px hinter die eigene Frontlinie. Die Frontlinie ist die größte Projektion eigener Bodentruppen (ohne Scharfschützen) auf die Richtung zum feindlichen Schwerpunkt.
+  - Ist ein Feind näher als `KEEP · range`, weicht er zurück, wie das bestehende Ausweichen (KITE).
+  - Hinlegen (#22) und Rückzug (#27) bleiben vorrangig.
+
+- [ ] **Step 1: Failing tests**
+  - „Hält Abstand zum Ziel“: Ein Scharfschütze und ein stehendes Ziel in 300 px (range 380). Nach 3 s hat er sich weniger als 10 px bewegt.
+  - „Wartet ohne Ziel“: Der Feind ist 600 px entfernt. In den ersten 2,5 s bewegt er sich weniger als 5 px, danach rückt er vor.
+  - „Bleibt hinter der Front“: 10 eigene Krieger stehen bei x = 500, der Feind bei x = 1200. Der Scharfschütze überschreitet x = 460 nicht.
+  - „Weicht zurück“: Ein Feind auf 0,5 · range. Der Abstand wächst.
+- [ ] **Step 2:** Tests → FAIL.
+- [ ] **Step 3:** Implementieren.
+- [ ] **Step 4:** `node --test tests/*.test.js` → alle grün.
+- [ ] **Step 5: Commit** `feat: snipers hold back and wait`
+
+### Task 7: Balance, Hinweise, Prüfung im Browser
 
 **Files:**
 - Modify: `tools/plans.mjs` (COUNTERS)
@@ -206,4 +266,4 @@
 - [ ] **Step 3:** Prüfen, ob sich durch die Römer der Spam- oder Smart-Ausgang einer Mission ändert. Die Pläne verwenden keine Römer, also sollte sich nichts ändern. Falls doch: Grund im Bericht.
 - [ ] **Step 4:** `node --test tests/*.test.js` → alle grün. `node tools/bench.mjs mixed` < 2,0 ms im Durchschnitt.
 - [ ] **Step 5: Commit** `balance: Roemer counters`
-- [ ] **Step 6 (Controller):** Browser-Prüfung mit der Szene `roemer` unter `?debug` (aus Task 4) und ein Leistungslauf. Danach Veröffentlichung unter demselben Link.
+- [ ] **Step 6 (Controller):** Browser-Prüfung mit der Szene `roemer` und einer Rückzugsszene unter `?debug` (aus Task 4) und ein Leistungslauf. Danach Veröffentlichung unter demselben Link.

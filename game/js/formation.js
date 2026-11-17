@@ -36,7 +36,11 @@ import { factionOf, query, nearestEnemy, cellIndex } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 
 // SPACING: 26 statt 22 (Task 4): Platz für das Scutum vor jedem Körper, der Block bleibt lesbar
-export const FORM = { MIN: 4, LINK: 46, SPACING: 26, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
+// LINK: 110 statt 46 (Task 7): gemalte Römer liegen ohnehin dichter (Pinsel: nächster Nachbar meist 21–30 px), aber
+// locker gesetzte (einzelne Klicks, placeRect der Duelle: Spaltenabstand bis 104 px) blieben sonst ohne Block.
+// ENGAGE: 30 statt 90 (Task 7): der Block bleibt bis kurz vor dem Zusammenstoß geschlossen; mit 90 px löste er sich
+// vor Schützen auf, die dann die Römer ohne Schildschutz zurückschossen (roemer > schuetze verfehlt).
+export const FORM = { MIN: 4, LINK: 110, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 };
 export const FORM_LEAD = 22;              // px: so weit darf das Zentrum der tatsächlichen Lage vorauslaufen
 export const FORM_FLANK = 40;             // px: Gegner so nah an einem Mitglied löst den Block auf
 export const FORM_LOOSE = [6, 30, .3];    // Sammelfaktor: größte Platzabweichung (px) → Tempoanteil

@@ -9,7 +9,7 @@ export const UNITS = {
   ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:15,range:3,speed:34,cd:1.05,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Anfällig für Bomben, Feuer und MG-Dauerfeuer.'},
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
-  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:80,dmg:13,range:3,speed:46,cd:.9,cost:3,mass:1.4,pilum:16,d:'Marschiert als Block im Gleichschritt und wirft vor dem Angriff Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab.'},
+  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:95,dmg:15,range:3,speed:46,cd:.9,cost:3,mass:1.4,pilum:40,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Feuerbälle und Reiter über die Flanke brechen den Block.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:10,range:90,speed:50,cd:1,cost:3,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},

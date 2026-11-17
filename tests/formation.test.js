@@ -7,7 +7,7 @@ import { step } from '../game/js/sim.js';
 import { hurt, think, fire, stepProjectiles, PILUM_SCAN } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
 import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT } from '../game/js/formation.js';
-import { CELL, HASH_CELL } from '../game/js/data.js';
+import { CELL, HASH_CELL, UNITS } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
 const mk = (seed = 3) => { const w = createWorld(W, H, seed); w.teamMode = true; return w; };
@@ -29,8 +29,10 @@ const formOf = (w, u) => w.formations.find(f => f.id === u.form);
 
 // SPACING 22 → 26 (Task 4, Controller-Entscheid): mit dem großen Scutum vor dem Körper wirkte der Block mit
 // 22 px gedrängt (Schilde überdecken den Vordermann); 26 px lässt jede Figur samt Schild lesbar
+// LINK 46 → 110 und ENGAGE 90 → 30 (Task 7, Balance): locker gesetzte Römer bilden auch einen Block, und der Block
+// bleibt bis kurz vor dem Zusammenstoß geschlossen (Gründe in formation.js)
 test('FORM: Werte laut Spez.', () => {
-  assert.deepEqual(FORM, { MIN: 4, LINK: 46, SPACING: 26, ENGAGE: 90, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
+  assert.deepEqual(FORM, { MIN: 4, LINK: 110, SPACING: 26, ENGAGE: 30, PILUM_MIN: 90, PILUM_MAX: 160, REFORM: .5, STUCK: 3 });
 });
 
 test('Block ab 4 Römern: 6 eng beieinander bilden einen Block, 3 nicht', () => {
@@ -120,10 +122,17 @@ test('Auflösen vor dem Feind: näher als ENGAGE → charge, die Römer suchen s
   const alive = rs.filter(u => u.alive);
   assert.ok(alive.every(u => u.formOn === false), 'keiner mehr in Formation');
   assert.ok(alive.every(u => u.tg && u.tg.alive), 'alle haben ein Ziel');
-  // bleibt aufgelöst, solange Feinde in ENGAGE · 2 sind
-  run(w, 1);
-  const f = formOf(w, rs.find(u => u.alive));
-  assert.ok(!f || f.state === 'charge');
+  // bleibt aufgelöst, solange Feinde in ENGAGE · 2 sind (geprüft bei jeder Neubildung)
+  let checked = 0;
+  run(w, 1, ww => {
+    const members = rs.filter(u => u.alive);
+    const near = ww.units.some(v => v.alive && v.team === 'rot' && members.some(u => Math.hypot(u.x - v.x, u.y - v.y) <= FORM.ENGAGE * 2));
+    if (!near || !members.length) return;
+    const f = formOf(ww, members[0]);
+    assert.ok(!f || f.state === 'charge', 'Feind in ENGAGE · 2, Block bleibt aufgelöst');
+    checked++;
+  });
+  assert.ok(checked > 0, 'Feinde blieben in ENGAGE · 2');
 });
 
 test('Fraktionen getrennt: 4 blaue und 4 rote Römer nebeneinander bilden zwei Blöcke', () => {
@@ -315,7 +324,7 @@ test('Speer einmal: Feind 120 px vor einem Römer im Block → genau ein Speer, 
   assert.equal(shots, out.length, 'ein shot-Ereignis je Speer');
   assert.equal(new Set(out.map(o => o.u)).size, out.length, 'jeder höchstens einmal');
   for (const o of out) assert.ok(o.d >= FORM.PILUM_MIN && o.d <= FORM.PILUM_MAX + 1, `Wurf aus ${o.d.toFixed(1)} px`);
-  assert.ok(out.every(o => o.p.dmg === 16), 'Schaden UNITS.roemer.pilum');
+  assert.ok(out.every(o => o.p.dmg === UNITS.roemer.pilum), 'Schaden UNITS.roemer.pilum');
   // Feind steht still: der Speer trifft ihn
   assert.ok(foe.hp < foe.T.hp, 'Feind getroffen');
 

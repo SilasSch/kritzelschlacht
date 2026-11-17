@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { PROJECTILES, fire, stepProjectiles, blast, raycast, hasLineOfFire, think } from '../game/js/combat.js';
 import { integrate, collide, collideWalls } from '../game/js/physics.js';
+import { UNITS } from '../game/js/data.js';
 
 const DT = 1 / 60;
 const mkWorld = () => { const w = createWorld(1400, 800, 7); w.teamMode = true; return w; };
@@ -43,12 +44,13 @@ test('Speer: Bogen wie ein Pfeil, Schaden UNITS.roemer.pilum, trifft am Landepun
   rebuildHash(w);
   fire(w, r, t, 'pilum');
   const p = w.proj[0];
-  assert.equal(p.kind, 'pilum'); assert.equal(p.arc, true); assert.equal(p.dmg, 16); assert.ok(p.h > 0);
+  assert.equal(p.kind, 'pilum'); assert.equal(p.arc, true); assert.equal(p.dmg, UNITS.roemer.pilum); assert.ok(p.h > 0);
   assert.ok(evs(w, 'shot').some(e => e.kind === 'pilum'));
   flyAll(w);
   assert.ok(full(ally), 'fliegt über Verbündete');
   const lost = t.T.hp - t.hp;
-  assert.ok(lost >= 16 * .85 - 1e-9 && lost <= 16 * 1.15 + 1e-9, `Schaden ${lost}`);
+  const pd = UNITS.roemer.pilum;
+  assert.ok(lost >= pd * .85 - 1e-9 && lost <= pd * 1.15 + 1e-9, `Schaden ${lost}`);
   assert.ok(evs(w, 'hit').some(e => e.kind === 'pilum'));
   assert.equal(evs(w, 'blast').length, 0, 'keine Explosion');
 });
@@ -61,7 +63,7 @@ test('Schild: Pfeil, Kugel und Speer von vorn auf Römer in Formation → block,
     rebuildHash(w);
     fire(w, shooter, r, kind, 440, 300);
     flyAll(w);
-    const lost = r.T.hp - r.hp, base = kind === 'pilum' ? 16 : shooter.T.dmg;
+    const lost = r.T.hp - r.hp, base = kind === 'pilum' ? UNITS.roemer.pilum : shooter.T.dmg;
     assert.ok(lost > 0 && lost <= base * 1.15 * .1 + 1e-9, `${kind}: Schaden ${lost}`);
     const b = evs(w, 'block');
     assert.equal(b.length, 1, `${kind}: ein block-Ereignis`);

@@ -39,6 +39,8 @@ export const COUNTERS = [
   ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90],
   ['panzer', 'krieger', 105], ['panzer', 'soldat', 105],
   ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90],
+  ['roemer', 'schuetze', 60], ['roemer', 'krieger', 60],
+  ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier', 'roemer', 60],
 ];
 
 // Weltformen, an denen das Balance-Gate gelten muss (Welt = Viewport / Grundzoom, main.js baseZoomFor).

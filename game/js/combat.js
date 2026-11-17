@@ -7,7 +7,7 @@ import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
-import { MORALE, updateMorale, fleeSteer } from './morale.js';
+import { MORALE, PIN_HOLD, updateMorale, fleeSteer } from './morale.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -623,13 +623,19 @@ function retreat(world, u, dt) {
     else if (u.stance === 'down') standUp(u, 1 - u.stanceT / PRONE_DOWN_T);
     if (transit(world, u, dt)) return;
   }
-  fleeSteer(world, u, dt);
+  // festgenagelt (keine freie Fluchtrichtung): sofort in die Ecke gedrängt, PIN_HOLD s lang (morale.js)
+  if (fleeSteer(world, u, dt)) u.cornerT = MORALE.CORNER_T + PIN_HOLD;
   const t = u.tg;
-  if (!t || u.cornerT < MORALE.CORNER_T || u.cd > 0 || T.heal || u.type === 'moerser') return;
+  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser') return;
   if (t.type === 'heli' && !T.fly && T.range < 20) return;
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
-  if (d > T.range + T.r + t.T.r) return;
-  attack(world, u, t, d, dx, dy);
+  if (d > T.range + T.r + t.T.r) {
+    // Bedrohung außer Reichweite (Fernkämpfer): nach dem Festnageln auf sie los, statt stehend beschossen zu werden
+    if (u.cornerT > MORALE.CORNER_T) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d; }
+    return;
+  }
+  u.face = dx < 0 ? -1 : 1;
+  if (u.cd <= 0) attack(world, u, t, d, dx, dy);
 }
 
 export function think(world, u, dt) {

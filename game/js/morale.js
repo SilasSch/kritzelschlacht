@@ -17,7 +17,12 @@
 // sofort mit, Tode erst beim nächsten Durchlauf (höchstens CENT_T s später).
 // In die Ecke gedrängt oder eingeholt (u.cornerT): der Gegner ist ohne Unterbrechung höchstens Nahkampfreichweite
 // plus 10 px (CORNER_PAD, Körperränder plus 14 px) entfernt; ab CORNER_T s schlägt die Einheit zurück (combat.think),
-// bleibt aber auf der Flucht.
+// bleibt aber auf der Flucht. Bricht der Kontakt ab, fällt cornerT über CORNER_T hinaus erst mit der Zeit zurück
+// (danach auf 0). Festgenagelt (fleeSteer findet keine freie Fluchtrichtung, echte Ecke oder Kartenrand): gilt
+// sofort als in die Ecke gedrängt, cornerT = CORNER_T + PIN_HOLD (combat.retreat); sie wehrt sich gegen die
+// Bedrohung, auch gegen einen Fernkämpfer: ist er außer Reichweite, geht sie auf ihn los, PIN_HOLD s lang auch
+// über den Moment hinaus, in dem wieder eine Richtung frei wäre (sonst pendelte sie in der Ecke hin und her).
+// Erreicht die Einheit BACK · T.hp auf irgendeinem Weg (eigene Erholung, Sanitäter), endet die Flucht sofort.
 import { factionOf } from './world.js';
 import { HASH_CELL } from './data.js';
 import { hazardAt } from './formation.js';
@@ -25,6 +30,7 @@ import { hazardAt } from './formation.js';
 export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5, MIN_ALLIES: 3 };
 // Nahkampfreichweite (höchstens 4 px bei allen Nahkämpfern) plus 10 px, zusätzlich zu den beiden Radien
 export const CORNER_PAD = 14;
+export const PIN_HOLD = 3;
 export const FLEE_SCAN = .1, FLEE_STAGGER = .02, FLEE_LOOK = 2 * MORALE.SAFE_R;
 // Schwerpunkt je Fraktion (ohne Fliehende), neu alle CENT_T s
 export const CENT_T = .25;
@@ -120,12 +126,14 @@ export function updateMorale(world, u, dt) {
   if (t) d2 = (t.x - u.x) ** 2 + (t.y - u.y) ** 2;
   if (d2 <= SAFE_R2) u.safeT = 0; else u.safeT += dt;
   const cr = t ? T.r + t.T.r + CORNER_PAD : 0;
-  if (t && d2 <= cr * cr) u.cornerT += dt; else u.cornerT = 0;
+  if (t && d2 <= cr * cr) u.cornerT += dt;
+  else u.cornerT = u.cornerT - dt > M.CORNER_T ? u.cornerT - dt : 0;
   if (u.safeT >= M.SAFE_T) {
     const hp = u.hp + M.REGEN * T.hp * dt;
     u.hp = hp < T.hp ? hp : T.hp;
-    if (u.hp >= M.BACK * T.hp) { endFlee(u, c); return false; }
   }
+  // geheilt (Erholung oder Sanitäter): zurück in den Kampf, auch mit Gegner in SAFE_R
+  if (u.hp >= M.BACK * T.hp) { endFlee(u, c); return false; }
   return true;
 }
 // Flucht endet (erholt oder letztes Gefecht): zählt wieder als kämpfende Einheit der Fraktion, sucht gleich ein Ziel
@@ -138,7 +146,8 @@ function endFlee(u, c) {
 // Fluchtbewegung von u (auch für spätere Schreck-Zustände): weg von der Bedrohung u.tg (falls gesetzt und am
 // Leben), gemischt mit der Richtung zum Schwerpunkt der eigenen Fraktion (world.cent). Zieht der Schwerpunkt auf
 // den Feind zu, zählt nur sein seitlicher Anteil. Tempo T.speed · MORALE.SPEED, Blickrichtung = Laufrichtung.
-// Bodentruppen meiden Lava, Mauern und den Kartenrand, Flieger nur den Rand.
+// Bodentruppen meiden Lava, Mauern und den Kartenrand, Flieger nur den Rand. Liefert true, wenn keine
+// Fluchtrichtung frei ist (festgenagelt: u steht).
 export function fleeSteer(world, u, dt) {
   const T = u.T, t = u.tg && u.tg.alive ? u.tg : null;
   let ax = 0, ay = 0;
@@ -158,7 +167,7 @@ export function fleeSteer(world, u, dt) {
     }
   }
   let l = Math.hypot(dx, dy);
-  if (l < 1e-6) { u.mx = 0; u.my = 0; return; }
+  if (l < 1e-6) { u.mx = 0; u.my = 0; return false; }
   dx /= l; dy /= l;
   const fly = !!T.fly, haz = !fly && (!world.flow || world.flow.hazards > 0);
   if (blocked(world, u, dx, dy, haz)) {
@@ -168,7 +177,7 @@ export function fleeSteer(world, u, dt) {
       const s = DIRX[k] * dx + DIRY[k] * dy;
       if (s > bs && (!away || DIRX[k] * ax + DIRY[k] * ay >= BACK_COS) && !blocked(world, u, DIRX[k], DIRY[k], haz)) { bs = s; bx = DIRX[k]; by = DIRY[k]; }
     }
-    if (bs === -Infinity) { u.mx = 0; u.my = 0; return; }   // in die Ecke gedrängt
+    if (bs === -Infinity) { u.mx = 0; u.my = 0; return true; }   // festgenagelt
     dx = bx; dy = by;
   }
   if (haz) {
@@ -180,6 +189,7 @@ export function fleeSteer(world, u, dt) {
   const sp = T.speed * MORALE.SPEED;
   u.mx = dx * sp; u.my = dy * sp; u.fx = dx; u.fy = dy;
   if (dx < -.2) u.face = -1; else if (dx > .2) u.face = 1;
+  return false;
 }
 
 // Richtung (dx, dy) versperrt? Kartenrand (EDGE px) bei r + PROBE[1], dazu für Bodentruppen (haz) Lava/Mauer bei

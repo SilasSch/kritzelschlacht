@@ -286,3 +286,50 @@ test('Zielwahl: ein fliehender Gegner zählt doppelt so weit, ist er der einzige
   fl.flee = true; fi.alive = false; rebuildHash(w);
   assert.equal(nearestEnemy(w, c), fl, 'einziger Gegner');
 });
+
+test('Geheilt endet die Flucht: Sanitäter heilt einen Fliehenden mit Feind in SAFE_R, ab 60 % kämpft er wieder', () => {
+  const w = mkWorld(), u = spawn(w, 'krieger', 700, 400, 'blau');
+  u.hp = 14;
+  allies(w, 300, 700);
+  const s = spawn(w, 'sani', 660, 400, 'blau');
+  const e = dummy(w, 'schuetze', 850, 400);
+  // Sanitäter bleibt neben ihm, der Schütze 150 px vor ihm (in SAFE_R: keine eigene Erholung)
+  const pin = () => { s.x = u.x - 40; s.y = u.y; e.x = u.x + 150; e.y = u.y; };
+  let back = -1, regen = false;
+  run(w, .1, pin);
+  assert.equal(u.flee, true);
+  run(w, 6, () => { pin(); if (u.safeT > 0) regen = true; if (back < 0 && !u.flee) back = u.hp; });
+  assert.equal(regen, false, 'Feind die ganze Zeit in SAFE_R');
+  assert.ok(back >= MORALE.BACK * 60, `Flucht endet bei ${back}`);
+  assert.equal(u.flee, false);
+  // direkt auf volle LP gesetzt (Bericht des Reviews): Flucht endet im nächsten Schritt
+  const w2 = mkWorld(), v = spawn(w2, 'krieger', 700, 400, 'blau');
+  v.hp = 14; allies(w2, 300, 700); dummy(w2, 'schuetze', 850, 400);
+  run(w2, .2);
+  assert.equal(v.flee, true);
+  v.hp = 60;
+  run(w2, DT);
+  assert.equal(v.flee, false);
+});
+
+test('Festgenagelt in der Ecke: wehrt sich gegen einen Schützen, statt stehend beschossen zu werden', () => {
+  const w = mkWorld(), u = spawn(w, 'krieger', 14, 14, 'blau');
+  u.hp = 14;
+  allies(w, 600, 700);
+  const e = dummy(w, 'schuetze', 14 + 106, 14 + 106);   // 150 px schräg vor der Ecke
+  const d0 = dist(u, e);
+  let moved = false;
+  run(w, MORALE.CORNER_T + .5, () => { if (Math.hypot(u.mx, u.my) > 1) moved = true; });
+  assert.equal(u.flee, true);
+  assert.ok(moved, 'bewegt sich');
+  assert.ok(dist(u, e) < d0 - 40, `geht auf den Schützen los (${dist(u, e)})`);
+  run(w, 2.5);
+  assert.ok(e.hp < 1e9, 'trifft ihn');
+  // Hubschrauber in der Ecke gegen Soldaten: schießt zurück
+  const w2 = mkWorld(), h = spawn(w2, 'heli', 20, 20, 'blau');
+  h.hp = .2 * UNITS.heli.hp; allies(w2, 600, 700);
+  const s = dummy(w2, 'soldat', 20 + 106, 20 + 106);
+  run(w2, MORALE.CORNER_T + .5);
+  assert.equal(h.flee, true);
+  assert.ok(s.hp < 1e9 || w2.proj.length > 0, 'schießt zurück');
+});

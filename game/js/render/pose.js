@@ -12,6 +12,7 @@
 import { GRAVITY, CORPSE_FADE, SINK_T, ASH_T } from '../physics.js';
 import { MUZZLE_Z, PRONE_DOWN_T, PRONE_UP_T } from '../combat.js';
 import { isFleeing } from '../morale.js';
+import { GHOUL } from '../abilities.js';
 import { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, TILT_MAX, DRAGON_GEO, dragonHead, tankAim, headAim, tipOffset } from '../muzzle.js';
 
 export const RIG_PARTS = ['shadow', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
@@ -56,6 +57,9 @@ const blockPhase = id => frac(id * .6180339887);
 export const FEAR_PUPIL = .55, SWEAT_HZ = .9;
 // Meteor-Kanal (spells.js, u.chanId > 0): Stab um CHANNEL_LIFT · r angehoben, ±CHANNEL_SWAY mit CHANNEL_HZ
 export const CHANNEL_LIFT = .55, CHANNEL_SWAY = .06, CHANNEL_HZ = 1.2;
+// Ghul (Spez. #32): gebückt (GHOUL_HUNCH rad nach vorn geneigt) und schwankend (±GHOUL_SWAY mit GHOUL_HZ); beim Aufstehen
+// (u.riseT, abilities.GHOUL.RISE) wächst er aus dem Boden: sy von RISE_SY0 auf 1 (um die Füße), sx etwas breiter.
+export const GHOUL_HUNCH = .2, GHOUL_SWAY = .06, GHOUL_HZ = .9, RISE_SY0 = .15;
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -248,6 +252,13 @@ export function poseUnit(u, t, out = {}, mem) {
   // Meteor-Kanal (spells.js): der Magier reckt den Stab hoch (CHANNEL_LIFT · r, schwingt sanft), kein Rückstoß
   if (u.chanId > 0) { out.weaponLift = CHANNEL_LIFT + CHANNEL_SWAY * Math.sin(TAU * CHANNEL_HZ * t + u.seed); out.recoil = 0; }
   if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
+  if (u.type === 'ghul') {
+    out.tilt += (u.face < 0 ? -1 : 1) * GHOUL_HUNCH + GHOUL_SWAY * Math.sin(TAU * GHOUL_HZ * t + u.seed);
+    if (u.riseT > 0) {
+      const q = clamp(1 - u.riseT / GHOUL.RISE, 0, 1), k = q * q * (3 - 2 * q);
+      out.sy *= RISE_SY0 + (1 - RISE_SY0) * k; out.sx *= 1 + .25 * (1 - k);
+    }
+  }
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.
   const st = u.state;

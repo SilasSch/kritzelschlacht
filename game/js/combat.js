@@ -1,14 +1,14 @@
 // Reiner Kampf: KI, Waffen, Geschosse, Schaden/Rüstung, Explosionen, Mauertreffer.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
-import { CELL, HASH_CELL, UNITS, PATH_RECHECK } from './data.js';
-import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world.js';
+import { CELL, HASH_CELL, UNITS, PATH_RECHECK, UNDEAD } from './data.js';
+import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat } from './world.js';
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
-import { stepAbility, cancelAbility, isFire } from './abilities.js';
+import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, crumbleGhouls, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
 import { castSpell, spellReact, FIREBALL } from './spells.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
@@ -96,10 +96,11 @@ export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 /* ---------- Schaden ---------- */
 // dot: Schaden über Zeit (Brand), quetscht nie, auch mit Verursacher.
 // Feuerarten (abilities.FIRE_KINDS: Feuerball, Drachenatem, Brand 'burn', Brandpfeile, Phönixspur) teilen sich das
-// Merkmal Feuer (Festlegung 7): Panzer ×0,6, Geister voll.
+// Merkmal Feuer (Festlegung 7): Panzer ×0,6, Geister voll, Vampire doppelt (auch der Brand und in Fledermausform, #32).
 export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
   let m = 1; const t = v.type;
+  if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
     m *= kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
@@ -116,7 +117,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   const d = a * m; v.hp -= d;
   if (!dot && (src || !isFire(kind))) v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
-  if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src); }
+  if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src, kind); }
   return d;
 }
 
@@ -128,7 +129,7 @@ export const PARTS = {
   grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'shield', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
-  panzer: ['turret'], heli: ['headgear', 'weapon'],
+  panzer: ['turret'], heli: ['headgear', 'weapon'], vampir: [], ghul: [],
 };
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
@@ -145,8 +146,21 @@ export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag
 // Heli und Drache tragen crash (Absturz beim Aufschlag, stepCorpses → crash). Die Abschussgutschrift
 // geschieht hier beim Tod (hurt), der Absturz selbst schreibt niemandem etwas gut. Dazu die Teile laut
 // PARTS mit Zufallsimpuls. Das Seelchen zeichnet der Renderer zum death-Ereignis.
-function die(world, v, src) {
+// Vampir und Ghul (Spez. #32, abilities.js): ein Ghul meldet sich bei seinem Vampir ab; stirbt ein Vampir, zerfallen seine
+// Ghule. Tötet der Biss eines Vampirs (kind 'melee'), steht das Opfer womöglich als Ghul auf (riseGhoul): dann keine
+// Leiche und keine Teile, das death-Ereignis trägt ghoul (Verlust in der Statistik, kein Seelchen).
+function die(world, v, src, kind) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
+  if (v.owner !== null) { v.owner.ghouls--; v.owner = null; }
+  if (v.ghouls > 0) crumbleGhouls(world, v);
+  if (kind === 'melee' && riseGhoul(world, v, src)) {
+    emit(world, {
+      type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team, ghoul: true,
+      killerId: src.id, killerType: src.type, killerTeam: src.team, killerKills: src.kills,
+    });
+    sound(world, 'die');
+    return;
+  }
   const T = v.T, sgn = () => (world.rng() < .5 ? -1 : 1);
   let vx = v.vx + v.mx, vy = v.vy + v.my, vz = v.vz;
   const vrot = sgn() * rnd(world, VROT_MIN, VROT_MAX);
@@ -659,7 +673,7 @@ function retreat(world, u, dt) {
   if (fleeSteer(world, u, dt)) u.cornerT = MORALE.CORNER_T + PIN_HOLD;
   const t = u.tg;
   if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser') return;
-  if (t.type === 'heli' && !T.fly && T.range < 20) return;
+  if (outOfMelee(u, t)) return;   // Hubschrauber, Fledermausform
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
   if (d > T.range + T.r + t.T.r) {
     // Bedrohung außer Reichweite (Fernkämpfer): nach dem Festnageln auf sie los, statt stehend beschossen zu werden
@@ -692,11 +706,18 @@ export function think(world, u, dt) {
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
   // Brand läuft in jedem Zustand (kann töten)
   if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
+  // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
+  if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.abOn) cancelAbility(world, u); if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
-  // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block
-  if (updateMorale(world, u, dt)) { if (u.abOn) cancelAbility(world, u); retreat(world, u, dt); return; }
+  // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block. Der Vampir flieht als
+  // Fledermausschwarm (Festlegung 1: die Fledermausform ist die Flucht selbst) und beißt dabei nicht.
+  if (updateMorale(world, u, dt)) {
+    if (u.abOn) cancelAbility(world, u);
+    if (u.type === 'vampir') { if (stepBat(world, u, dt, true) === BAT_FLY) fleeSteer(world, u, dt); return; }
+    retreat(world, u, dt); return;
+  }
   // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
@@ -714,7 +735,8 @@ export function think(world, u, dt) {
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
-  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u)) {
+  // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform)
+  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || (u.tg.batT > 0 && outOfMelee(u, u.tg))) {
     const nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
     // weit weg vom nächsten Gegner: seltener neu suchen (das Ziel ändert sich auf dem Anmarsch kaum)
     if (nt && (nt.x - u.x) ** 2 + (nt.y - u.y) ** 2 > RETARGET_FAR * RETARGET_FAR) u.rt *= RETARGET_FAR_MUL;
@@ -724,9 +746,16 @@ export function think(world, u, dt) {
   const t = u.tg;
   // Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (und ohne Umdrehen mitten in der Bewegung)
   if (PRONE.has(u.type) && transit(world, u, dt)) return;
-  if (!t) return;
+  if (!t) { if (u.type === 'vampir') stepBat(world, u, dt, false); return; }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
+  // Vampir auf langen Wegen (abilities.stepBat): ab BAT_START px als Fledermausschwarm geradewegs zum Ziel, ab BAT_END px
+  // wieder Vampir; beim Verwandeln steht er, als Fledermaus beißt er nicht
+  if (u.type === 'vampir') {
+    const s = stepBat(world, u, dt, u.batOn ? d > VAMPIRE.BAT_END : d > VAMPIRE.BAT_START);
+    if (s === BAT_FLY) { u.mx = nx * T.speed; u.my = ny * T.speed; u.run += dt; return; }
+    if (s !== BAT_NONE) return;
+  }
   const reach = T.range + T.r + t.T.r;
   // Magier: Windstoß und Steinwand auch zwischen den Würfen (spells.spellReact, gedrosselt)
   if (u.type === 'magier' && u.cd > 0 && spellReact(world, u)) return;
@@ -946,7 +975,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
       query(world, t.x, t.y, T.splash + 20, v => {
-        if (factionOf(world, v) === f) return;
+        if (factionOf(world, v) === f || isBat(v)) return;   // Fledermausform: für Nahkämpfer unerreichbar
         const ex = v.x - t.x, ey = v.y - t.y;
         if (ex * ex + ey * ey > (T.splash + v.T.r) ** 2) return;
         knock(v, dx / d, dy / d, 140); hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u);
@@ -972,8 +1001,10 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'wolf' && v.team === u.team && ++n >= 3) return true; });
         if (n >= 3) a *= 1.4;
       }
-      const dealt = hurt(world, t, a, 'melee', u);
+      const before = t.hp, dealt = hurt(world, t, a, 'melee', u);
       if (u.type === 'geist') u.hp = Math.min(T.hp, u.hp + dealt);
+      // Lebensraub des Vampirs (Spez. #32): die Hälfte des Schadens, ohne den Überschuss über die LP des Opfers
+      else if (u.type === 'vampir') { const h = u.hp + VAMPIRE.HEAL * (dealt < before ? dealt : before > 0 ? before : 0); u.hp = h < T.hp ? h : T.hp; }
       emit(world, { type: 'hit', x: t.x, y: t.y, flank, kind: 'melee' });
       sound(world, u.type === 'krieger' || u.type === 'ritter' ? 'clink' : 'hit');
     }
@@ -987,8 +1018,9 @@ function healer(world, u, dt) {
   if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || factionOf(world, u.tg) !== f) {
     let best = null, bd = Infinity;
     // Fliehende und Erschreckte (morale.isFleeing) vor allen anderen, unter ihnen der nächste
+    // Untote (Ghule, data.UNDEAD) heilt er nicht
     query(world, u.x, u.y, 380, v => {
-      if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal) return;
+      if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal || UNDEAD.has(v.type)) return;
       const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (isFleeing(v) ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
     });
     if (!best) {
@@ -1018,7 +1050,7 @@ function healer(world, u, dt) {
   if (!u.follow && d <= T.range && u.cd <= 0) {
     u.cd = T.cd;
     query(world, t.x, t.y, 50, v => {
-      if (factionOf(world, v) !== f || v.hp >= v.T.hp) return;
+      if (factionOf(world, v) !== f || v.hp >= v.T.hp || UNDEAD.has(v.type)) return;
       v.hp = Math.min(v.T.hp, v.hp + T.heal);
       emit(world, { type: 'heal', x: v.x, y: v.y - v.T.r });
     });

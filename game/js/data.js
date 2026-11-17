@@ -17,6 +17,10 @@ export const UNITS = {
   magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:5,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},
+  // Vampir (Spez. #32): Biss mit Lebensraub, Fledermausform (BAT_FORM, unten) und Ghule (abilities.js); Teamfarbe am Umhang
+  vampir:{n:'Vampir',cat:'mythisch',col:'#7a2944',r:10,hp:140,dmg:16,range:3,speed:54,cd:.8,cost:6,mass:1.2,d:'Beißt und heilt sich dabei. Auf langen Wegen und auf der Flucht fliegt er als Fledermausschwarm. Wen er totbeißt, steht als Ghul auf.'},
+  // Ghul (Festlegung 3): nicht malbar, entsteht nur durch den tödlichen Biss eines Vampirs; langsam, schwach, zerfällt
+  ghul:{n:'Ghul',cat:'mythisch',col:'#8f9c84',r:9,hp:40,dmg:7,range:3,speed:32,cd:1.1,cost:1,mass:1,paint:false,d:'Entsteht durch den Biss eines Vampirs. Langsam, schwach und hirnlos. Zerfällt mit der Zeit und mit seinem Vampir.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
   mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.13,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:60,range:380,speed:40,cd:3,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer. Sehr verwundbar.'},
@@ -98,6 +102,16 @@ const ABIL = {
     {n:'Ramme', d:'Alle 25 s fährt er mit dreifachem Tempo in die Reihen und schleudert alles weg. Nur Feinde nehmen Schaden.'},
     {n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'},
   ],
+  vampir: [
+    {n:'Lebensraub', d:'Jeder Biss heilt ihn um die Hälfte des Schadens.'},
+    {n:'Fledermausform', d:'Auf langen Wegen und auf der Flucht ein schneller Fledermausschwarm: Nahkämpfer erreichen ihn nicht, er beißt nicht.'},
+    {n:'Ghule', d:'Wen sein Biss tötet, steht als Ghul in seinem Team auf. Höchstens 3 zugleich, nie aus Bossen und Fliegern.'},
+    {n:'Schwäche: Feuer', d:'Feuer macht doppelten Schaden, auch der Brand.'},
+  ],
+  ghul: [
+    {n:'Vampirbiss', d:'Nicht malbar, entsteht durch Vampirbiss: Wen ein Vampir totbeißt, steht als Ghul auf. Sanitäter heilen ihn nicht.'},
+    {n:'Zerfall', d:'Verliert jede Sekunde 4 % seiner Lebenspunkte. Stirbt sein Vampir, zerfällt er sofort.'},
+  ],
   heli: [
     {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
     {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},
@@ -110,9 +124,20 @@ for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 // in physics.collide würden megamorph (V8 merkt sich höchstens vier Formen je Zugriff): Kollision 0,33 → 0,67 ms
 // je Schritt in tools/bench.mjs mixed. Ein Konstruktor statt {} hält die Felder im Objekt selbst (schneller als
 // nachträglich angehängte), mixed 1,7 → 1,5 ms.
+// paint: false = nicht malbar (Ghul; Vorgabe 3: main.js catKeys und randomBattle, bench.js und ui.js filtern), sonst true.
+for (const k in UNITS) if (UNITS[k].paint === undefined) UNITS[k].paint = true;
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
 for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);
+
+// Fledermausform des Vampirs (Spez. #32, abilities.stepBat): u.T wird für die Dauer der Form gegen diesen Typ getauscht.
+// Gleiche Schlüssel und Werte wie UNITS.vampir (gleiche Form für V8, gleiche Karte), aber fliegend in 22 px Höhe mit
+// doppeltem Tempo. So gelten alle Flieger-Regeln von selbst (Physik, Kollision nur mit Fliegern, über Mauern, keine
+// Wegfindung, kein Wald); Nahkämpfer am Boden erreichen sie nicht (world.outOfMelee).
+export const BAT_FORM = new UnitType(Object.assign({}, UNITS.vampir, { fly: 1, flyZ: 22, speed: UNITS.vampir.speed * 2 }));
+
+// Untote: weder Sanitäter noch Heilwelle heilen sie (sonst verlöre der Zerfall der Ghule seinen Sinn)
+export const UNDEAD = new Set(['ghul']);
 
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten. Quelle für tools/balance.mjs (über tools/plans.mjs) und die
 // Charakterkarten (stark/schwach gegen, cards.js).
@@ -144,14 +169,14 @@ export const TERRAIN = {
 export const TERR_SPEED = [], TERR_HAZ = [];
 for (const k in TERRAIN) { const T = TERRAIN[k]; TERR_SPEED[T.id] = T.sp ?? 1; TERR_HAZ[T.id] = !!T.haz; }
 
-export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber'};
+export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',grenadier:'Grenadiere',reiter:'Reiter',roemer:'Römer',sani:'Sanitäter',wolf:'Wölfe',baer:'Bären',biene:'Bienen',magier:'Magier',geist:'Geister',drache:'Drachen',soldat:'Soldaten',mg:'MG-Schützen',sniper:'Scharfschützen',panzerfaust:'Panzerfäuste',moerser:'Mörser',panzer:'Panzer',heli:'Hubschrauber',vampir:'Vampire',ghul:'Ghule'};
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
 
 export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:'#ff4d4d',body:'#ef5d55'},gruen:{n:'Grün',c:'#2fbf6b',body:'#4fc07a'},gelb:{n:'Gelb',c:'#ffb800',body:'#ffc533'}};
 
-// Typen, deren Körper die Teamfarbe trägt
-export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli']);
+// Typen, deren Körper die Teamfarbe trägt (Vampir: der Umhang; der Ghul zeigt sein Team an Lumpen und Teamring, rig.js)
+export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli','vampir']);
 
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);

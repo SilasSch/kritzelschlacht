@@ -33,7 +33,16 @@ export function createWorld(W, H, seed = 1) {
   return world;
 }
 
-export const factionOf = (world, u) => (world.teamMode ? u.team : u.type);
+// Fraktion: im Teammodus das Team, sonst die Art u.kin (beim Spawn der Typ; Ghule tragen die ihres Vampirs, Spez. #32)
+export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
+
+// Fledermausform (Spez. #32, abilities.stepBat): ganz verwandelt und noch in der Luft (u.T ist BAT_FORM, solange batT > 0
+// und die Form nicht erst entsteht)
+export const isBat = v => v.batT > 0 && !!v.T.fly;
+// Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
+// Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
+export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
+export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v)) && groundMelee(u);
 
 export const cellIndex = (world, x, y) =>
   clamp((y / CELL) | 0, 0, world.GH - 1) * world.GW + clamp((x / CELL) | 0, 0, world.GW - 1);
@@ -65,7 +74,7 @@ function hidx(world, x, y) {
 export function spawn(world, type, x, y, team) {
   const T = UNITS[type];
   const u = {
-    id: world.nextId++, type, T, team, x, y, z: T.flyZ || 0, vx: 0, vy: 0, vz: 0, mx: 0, my: 0,
+    id: world.nextId++, type, kin: type, T, team, x, y, z: T.flyZ || 0, vx: 0, vy: 0, vz: 0, mx: 0, my: 0,
     hp: T.hp, alive: true, state: 'ok', stunT: 0, peakZ: 0, face: team === 'rot' ? -1 : 1,
     aimX: 0, aimY: 0, tg: null, cd: world.rng() * T.cd, rt: world.rng() * 0.3, kills: 0,
     hitT: 0, fireT: 1, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
@@ -103,11 +112,15 @@ export function spawn(world, type, x, y, team) {
     // Zauberbuch der Magier (spells.js, Spez. #31): Abklingzeiten von Windstoß, Steinwand und Meteor (s; laufen in
     // combat.think ab), Meteor-Kanal (world.casts-id, 0 = keiner). Für alle anderen bleiben sie 0.
     windCd: .5, wallCd: .5, meteorCd: .5, chanId: 0,
+    // Vampir und Ghul (abilities.js, Spez. #32): Fledermausform 0..1 (0 Vampir, 1 ganz Fledermaus; dazwischen die
+    // Verwandlung) und ihr Ziel (batOn: soll Fledermaus sein); Zahl der lebenden Ghule des Vampirs; beim Ghul sein Vampir
+    // (owner) und die Restzeit des Aufstehens (riseT, s).
+    batT: .5, batOn: false, ghouls: 0, owner: null, riseT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
-  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0;
+  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
@@ -147,6 +160,7 @@ export function nearestEnemy(world, u) {
   const f = factionOf(world, u);
   if (world.totalAlive - (world.facCount.get(f) || 0) <= 0) return null;
   const cx = clamp(u.x / HC | 0, 0, HW - 1), cy = clamp(u.y / HC | 0, 0, HH - 1), maxR = Math.max(HW, HH);
+  const gm = groundMelee(u);   // erreicht keinen Hubschrauber und keine Fledermausform (outOfMelee)
   // Geister und Reiter jagen bevorzugt die hinteren Reihen; überall gilt: Ziele verteilen statt Schlange stehen
   const pref = u.type === 'geist' ? .45 : u.type === 'reiter' ? .7 : 1, sq = Math.sqrt(pref);
   let best = null, bd = Infinity;
@@ -160,7 +174,7 @@ export function nearestEnemy(world, u) {
         const cell = hash[gy * HW + gx];
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
-          if (!v.alive || factionOf(world, v) === f || (v.type === 'heli' && !u.T.fly && u.T.range < 20)) continue;
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v)))) continue;
           const dx = v.x - u.x, dy = v.y - u.y;
           let d = (dx * dx + dy * dy) * (1 + .12 * (v.tg === u ? 0 : (v.att || 0)));
           if (pref < 1 && (v.T.heal || RANGED.has(v.type))) d *= pref;

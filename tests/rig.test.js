@@ -132,7 +132,7 @@ test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', as
     assert.deepEqual(Object.keys(L), RIG_PARTS, t);
     assert.ok(L.body && L.shadow, `${t}: Körper und Schatten`);
     assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
-    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' ? 5 : 1, `${t}: Teamfarbe`);
+    assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' ? 5 : 1, `${t}: Teamfarbe`);   // Ghul: Lumpen in Teamfarbe
     assert.equal(!!L.pupilL, !!L.pupilR, t);
   }
   const L = rigLayout;

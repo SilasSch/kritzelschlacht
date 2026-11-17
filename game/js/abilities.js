@@ -22,8 +22,8 @@
 // die Exporte von world, combat, morale und formation beim Laden dieses Moduls noch nicht belegt. Darum hier keine
 // Zugriffe auf sie auf oberster Ebene (nur in Funktionen); nur data.js darf beim Laden gelesen werden. Der Test
 // "Importkreise: jedes Logikmodul lädt als Einstieg" (tests/abilities.test.js) wacht darüber.
-import { UNITS, CELL, TERR_HAZ } from './data.js';
-import { factionOf, query } from './world.js';
+import { UNITS, CELL, TERR_HAZ, BAT_FORM, UNDEAD } from './data.js';
+import { factionOf, query, spawn } from './world.js';
 import { fire, clearShot, hasLineOfFire, fling, hurt } from './combat.js';
 import { isFleeing } from './morale.js';
 import { leaveBlock } from './formation.js';
@@ -258,7 +258,8 @@ function archerEnd(world, u) { const c = (u.abK - 1) * u.T.cd; if (u.cd < c) u.c
 export const HEAL_WAVE = { R: 90, FRAC: .25, MIN: 2 };
 let HW_W = null, HW_U = null, HW_F = null, HW_N = 0, HW_DO = false;
 function waveTest(v) {
-  if (v.hp >= v.T.hp || factionOf(HW_W, v) !== HW_F) return;
+  // Untote (Ghule) heilt sie nicht (data.UNDEAD)
+  if (v.hp >= v.T.hp || factionOf(HW_W, v) !== HW_F || UNDEAD.has(v.type)) return;
   const dx = v.x - HW_U.x, dy = v.y - HW_U.y, R = HEAL_WAVE.R;
   if (dx * dx + dy * dy > R * R) return;
   HW_N++;
@@ -519,6 +520,82 @@ function diveUpdate(world, u, dt) {
   return u.z >= u.T.flyZ - 1e-9;
 }
 function diveEnd(world, u) { u.fz = u.T.flyZ; }
+
+/* ---------- Vampir und Ghul (Spez. #32, Festlegung 1 und 3, Task 4) ----------
+   Keine ABILITY: die Fledermausform ist die Flucht selbst (Festlegung 1), und Fliehende lösen keine Fähigkeit aus.
+   combat.think führt sie im Rückzugszweig (immer Fledermaus) und in der Bewegung (Weg zum Ziel) über stepBat.
+   Lebensraub (combat.attack): ein Biss heilt um HEAL · Schaden (ohne Überschuss über die LP des Opfers), gedeckelt.
+   Fledermausform: beginnt, wenn das Ziel weiter als BAT_START px entfernt ist oder der Vampir flieht (morale.isFleeing);
+   endet, wenn er nicht flieht und das Ziel höchstens BAT_END px entfernt ist (oder er keins hat). Verwandlung MORPH s
+   in jede Richtung, mit Wölkchen (vamp-Ereignis 'bat'); dabei steht er. Ganz verwandelt ist u.T = data.BAT_FORM (fliegt
+   in 22 px Höhe, doppeltes Tempo): Nahkämpfer am Boden erreichen ihn nicht (world.outOfMelee), er beißt nicht, Fernkampf
+   und Feuer treffen ihn. Zum Zusammensetzen sinkt er auf den Boden (u.fz 0), am Ende ist u.T wieder UNITS.vampir.
+   Ghule: der tödliche Biss (Schadensart 'melee' vom Vampir, nicht in Fledermausform) lässt das Opfer als Ghul im Team
+   (und in der Art, world.factionOf) des Vampirs aufstehen, am Ort des Opfers und ohne Leiche, solange der Vampir weniger
+   als MAX_GHOULS lebende Ghule hat. Nie aus NO_GHOUL (Ghul, Frosch, Bosse) und nie aus Fliegern; sonst bleibt die normale
+   Leiche. Der Ghul steht RISE s lang auf (riseT, ohne Handlung), verliert DECAY seiner max. LP je s und zerfällt bei 0
+   (crumble: ohne Leiche, Staubwölkchen); stirbt sein Vampir, zerfallen alle seine Ghule sofort. Ghule fliehen nicht
+   (hirnlos, morale.updateMorale) und werden nicht geheilt (data.UNDEAD). */
+export const VAMPIRE = { HEAL: .5, BAT_START: 220, BAT_END: 40, MORPH: .3, BAT_Z: BAT_FORM.flyZ, MAX_GHOULS: 3 };
+export const GHOUL = { DECAY: .04, RISE: .6 };
+export const NO_GHOUL = new Set(['ghul', 'frosch', 'panzer', 'heli', 'drache', 'elefant']);
+// Ergebnis von stepBat: kein Fledermaus-Schritt (normales Verhalten), Verwandlung (steht), Fledermaus (Aufrufer bewegt)
+export const BAT_NONE = 0, BAT_MORPH = 1, BAT_FLY = 2;
+
+// Ein Schritt Fledermausform für den Vampir u; want: soll Fledermaus sein.
+export function stepBat(world, u, dt, want) {
+  if (want !== u.batOn) {
+    if (want || u.batT > 0) emit(world, { type: 'vamp', k: 'bat', x: u.x, y: u.y, z: u.z });
+    u.batOn = want;
+    if (!want && u.batT > 0) u.fz = 0;   // sinkt zum Zusammensetzen
+  }
+  if (u.batOn) {
+    if (u.batT >= 1) return BAT_FLY;
+    u.batT += dt / VAMPIRE.MORPH; u.mx = 0; u.my = 0;
+    if (u.batT >= 1) { u.batT = 1; u.T = BAT_FORM; u.fz = BAT_FORM.flyZ; }
+    return BAT_MORPH;
+  }
+  if (u.batT <= 0) return BAT_NONE;
+  u.batT -= dt / VAMPIRE.MORPH; u.mx = 0; u.my = 0;
+  if (u.batT <= 0) { u.batT = 0; u.T = UNITS.vampir; u.fz = 0; u.z = 0; u.vz = 0; }
+  return BAT_MORPH;
+}
+
+// Tötet der Biss des Vampirs src das Opfer v (combat.die, Schadensart 'melee'): Ghul statt Leiche? Legt ihn an und liefert true.
+export function riseGhoul(world, v, src) {
+  if (!src || src.type !== 'vampir' || !src.alive || src.batT > 0 || src.ghouls >= VAMPIRE.MAX_GHOULS) return false;
+  if (NO_GHOUL.has(v.type) || v.T.fly || factionOf(world, v) === factionOf(world, src)) return false;
+  const g = spawn(world, 'ghul', v.x, v.y, src.team);
+  g.kin = src.kin; g.owner = src; g.face = v.face; g.riseT = GHOUL.RISE;
+  src.ghouls++;
+  emit(world, { type: 'vamp', k: 'rise', x: v.x, y: v.y, team: src.team });
+  return true;
+}
+
+// Ein Schritt Ghul (combat.think, in jedem Zustand wie der Brand): Zerfall, Aufstehen. Liefert true, wenn der Schritt damit
+// erledigt ist (zerfallen oder steht noch auf).
+export function stepGhoul(world, u, dt) {
+  u.hp -= GHOUL.DECAY * u.T.hp * dt;
+  if (u.hp <= 1e-6) { crumble(world, u); return true; }
+  if (u.riseT > 0) { u.riseT = u.riseT > dt ? u.riseT - dt : 0; u.mx = 0; u.my = 0; return true; }
+  return false;
+}
+
+// Ghul zerfällt (Zerfall oder Tod seines Vampirs): ohne Leiche und ohne Abschuss, Staubwölkchen; zählt als Verlust (death)
+export function crumble(world, g) {
+  if (!g.alive) return;
+  g.alive = false; world.dead = (world.dead || 0) + 1;
+  if (g.owner !== null) { g.owner.ghouls--; g.owner = null; }
+  emit(world, { type: 'vamp', k: 'crumble', x: g.x, y: g.y });
+  emit(world, { type: 'death', x: g.x, y: g.y, z: g.z, unitType: g.type, team: g.team, killerId: null, killerType: null,
+    killerTeam: null, killerKills: null, crumble: true });
+}
+// Alle lebenden Ghule des Vampirs v zerfallen (sein Tod, combat.die)
+export function crumbleGhouls(world, v) {
+  const us = world.units;
+  for (let i = 0; i < us.length; i++) if (us[i].owner === v) crumble(world, us[i]);
+  v.ghouls = 0;
+}
 
 /* ---------- Tabelle ---------- */
 export const ABILITY = {

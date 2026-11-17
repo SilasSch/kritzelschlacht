@@ -32,7 +32,7 @@
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
 // ENGAGE · 2 px um ein Mitglied ist und, nach Festhängen, mindestens STUCK s vergangen sind (holdT); geprüft
 // bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger.
-import { factionOf, query, nearestEnemy, cellIndex } from './world.js';
+import { factionOf, query, nearestEnemy, cellIndex, isBat } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 import { TERR_SPEED, TERR_HAZ } from './data.js';
 import { isFleeing } from './morale.js';
@@ -102,8 +102,8 @@ function makeForm(id, faction) {
 // Rückruf über Modulvariablen (keine Closure je Aufruf)
 let EN_W = null, EN_F = null, EN_X = 0, EN_Y = 0, EN_R2 = 0, EN_HIT = false;
 function enemyTest(v) {
-  // Hubschrauber erreichen Nahkämpfer nicht (wie world.nearestEnemy)
-  if (v.type === 'heli' || factionOf(EN_W, v) === EN_F) return;
+  // Hubschrauber und Vampire in Fledermausform erreichen Nahkämpfer nicht (wie world.nearestEnemy)
+  if (v.type === 'heli' || isBat(v) || factionOf(EN_W, v) === EN_F) return;
   const dx = v.x - EN_X, dy = v.y - EN_Y;
   if (dx * dx + dy * dy <= EN_R2) { EN_HIT = true; return true; }
 }

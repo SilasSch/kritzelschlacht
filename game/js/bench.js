@@ -5,6 +5,9 @@
 //               MG-Schützen, Scharfschützen, Bienen …). Die Römer eines Teams stehen zusammen in den ersten
 //               Rasterplätzen, damit sie Blöcke bilden (formation.js). Gelände: Mauerkreuz mit Lücken in der
 //               Mitte (Wegfindung aktiv), zwei Lavafelder, ein Teich, ein Wäldchen.
+//   mixed2:     wie mixed, aber der Rest auf alle malbaren Typen verteilt, auch die neuen aus Nachtrag 3 (Vorgabe 4:
+//               mixed bleibt fest auf MIXED_TYPES, damit die Grenze < 2,0 ms vergleichbar bleibt). Ghule (nicht malbar)
+//               entstehen in der Schlacht aus den Bissen der Vampire.
 //   blastcrowd: 500 Bienen im Kreis mit Radius 80 px, alle BLAST_EVERY Schritte 20 gleichzeitige
 //               Mörsereinschläge darin (Review Focus #5); eine halbe Periode vor jeder Salve wird der Schwarm
 //               wieder auf 500 aufgefüllt (buildBench).
@@ -17,20 +20,26 @@ export const BENCH_STEPS = 600;
 export const BENCH_W = 1600, BENCH_H = 900;   // Welt eines Laptops (1920×1080 bei Grundzoom 1,15 ≈ 1670×940)
 export const BENCH_TEAMS = ['blau', 'rot', 'gruen', 'gelb'];
 export const BENCH_BOSSES = { drache: 1, panzer: 2, heli: 2 };   // je Team
-export const SCENARIOS = ['mixed', 'blastcrowd'];
+export const SCENARIOS = ['mixed', 'mixed2', 'blastcrowd'];
+// Typen der Szene mixed, festgehalten auf den Stand vor Nachtrag 3 (Vorgabe 4); Bosse BENCH_BOSSES je Team, der Rest
+// reihum aus den übrigen
+export const MIXED_TYPES = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene',
+  'magier', 'geist', 'drache', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli'];
+// mixed2: alle malbaren Typen (paint: false nie, Vorgabe 3)
+export const mixed2Types = () => Object.keys(UNITS).filter(k => UNITS[k].paint !== false);
 export const CROWD_N = 500, CROWD_R = 80, VOLLEY_N = 20, BLAST_EVERY = 60;
 
 // Bereiche der Teams in Anteilen von W/H (vier Ecken, Abstand zur Mitte etwa eine Schussweite)
 const ZONES = [[.04, .05, .38, .42], [.62, .05, .96, .42], [.04, .58, .38, .95], [.62, .58, .96, .95]];
 
-export function benchMixed(world, n = 2000) {
+export function benchMixed(world, n = 2000, all = MIXED_TYPES) {
   world.teamMode = true;
   // Gelände: Mauerkreuz mit Lücken (Wegfindung), Lava, Wasser, Wald
   tRect(world, 'mauer', .495, .02, .505, .3); tRect(world, 'mauer', .495, .42, .505, .58); tRect(world, 'mauer', .495, .7, .505, .98);
   tRect(world, 'mauer', .1, .49, .3, .51); tRect(world, 'mauer', .7, .49, .9, .51);
   tCircle(world, 'lava', .5, .36, .045); tCircle(world, 'lava', .5, .64, .045);
   tCircle(world, 'wasser', .25, .3, .06); tCircle(world, 'wald', .75, .72, .07);
-  const rest = Object.keys(UNITS).filter(k => !(k in BENCH_BOSSES));
+  const rest = all.filter(k => !(k in BENCH_BOSSES));
   const per = Math.floor(n / 4);
   for (let t = 0; t < 4; t++) {
     const cnt = t < 3 ? per : n - 3 * per, team = BENCH_TEAMS[t];
@@ -107,6 +116,6 @@ export function buildBench(world, scenario, n) {
       return false;
     };
   }
-  benchMixed(world, n);
+  benchMixed(world, n, scenario === 'mixed2' ? mixed2Types() : MIXED_TYPES);
   return null;
 }

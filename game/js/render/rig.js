@@ -563,19 +563,88 @@ const DEF = {
       },
     },
   },
+  // Vampir (Spez. #32): blasse Haut, dunkles Haar mit Spitze in der Stirn, hoher Kragen (dunkle Teamfarbe, rot gefüttert)
+  // und Umhang in Teamfarbe hinter dem Körper, vorn rote Revers mit goldener Spange, Lächeln mit zwei Eckzähnen.
+  // Keine Waffe und keine Kopfbedeckung (der Biss ist die Waffe); Lid in Hautfarbe. Die Fledermausform zeichnet der
+  // Renderer (renderer.batSwarm), nicht das Rig.
+  vampir: {
+    eyes: eyePair(.3, -.1, .25), lidCol: '#ece6f0',
+    body(c, r, k, f) {
+      // Umhang: von den Schultern breit bis zum Boden, Saum mit Zacken
+      c.beginPath(); c.moveTo(-r * .8, -r * .45);
+      c.quadraticCurveTo(-r * 1.35, r * .3, -r * 1.3, r * 1.0);
+      for (let i = 0; i < 4; i++) { const x0 = -r * 1.3 + i * r * .55; c.quadraticCurveTo(x0 + r * .27, r * .78, x0 + r * .55, r * (i % 2 ? 1.02 : .96)); }
+      c.quadraticCurveTo(r * 1.1, r * .3, r * .7, -r * .45); c.closePath();
+      c.fillStyle = k.col; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+      // Kragen: zwei hohe Spitzen hinter dem Kopf, innen rot
+      poly(c, r, [[-.62, -.25], [-1.12, -1.25], [-.2, -.72]], k.dk, 1.3);
+      poly(c, r, [[-.62, -.38], [-.95, -1.02], [-.36, -.7]], '#b3243a', 0);
+      poly(c, r, [[.62, -.25], [1.0, -1.25], [.2, -.72]], k.dk, 1.3);
+      poly(c, r, [[.6, -.38], [.86, -1.02], [.36, -.7]], '#b3243a', 0);
+      feet(c, r, '#2f2638', f);
+      E(c, 0, 0, r, r * 1.05, '#ece6f0');
+      // Haar: dunkle Kappe mit Spitze in der Stirn (Blick nach rechts)
+      c.save(); c.beginPath(); c.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2); c.clip();
+      c.beginPath(); c.moveTo(-r * 1.1, -r * .2); c.quadraticCurveTo(-r * .9, -r * 1.25, r * .2, -r * 1.1);
+      c.quadraticCurveTo(r * 1.05, -r * .95, r * 1.1, -r * .5); c.lineTo(r * .62, -r * .58); c.lineTo(r * .32, -r * .32);
+      c.lineTo(r * .05, -r * .6); c.quadraticCurveTo(-r * .55, -r * .6, -r * 1.1, -r * .2); c.closePath();
+      c.fillStyle = '#2f2638'; c.fill();
+      // Revers: zwei rote Dreiecke von den Schultern zur Brust, goldene Spange
+      c.fillStyle = '#b3243a';
+      c.beginPath(); c.moveTo(-r * .9, r * .2); c.lineTo(-r * .05, r * .62); c.lineTo(-r * .7, r * 1.1); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(r * .9, r * .2); c.lineTo(r * .05, r * .62); c.lineTo(r * .7, r * 1.1); c.closePath(); c.fill();
+      c.restore();
+      E(c, 0, 0, r, r * 1.05, null, 1.4);
+      E(c, 0, r * .62, r * .11, r * .11, '#ffd25a', .9);
+      // Mund mit Eckzähnen
+      c.beginPath(); c.moveTo(r * .08, r * .2); c.quadraticCurveTo(r * .34, r * .34, r * .6, r * .18); c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+      poly(c, r, [[.18, .25], [.23, .42], [.29, .28]], '#fff', .7);
+      poly(c, r, [[.42, .27], [.47, .43], [.52, .24]], '#fff', .7);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Ghul (Spez. #32): grünlich-grau, fleckig, mit nach vorn gestreckten Armen und Krallen, zerrissene Lumpen in Teamfarbe
+  // (k.shield, wie der Ritterschild), schiefer Mund mit einem Zahn. Gebückt und schwankend macht ihn die Pose (pose.js).
+  ghul: {
+    eyes: eyePair(.32, -.18, .23),
+    body(c, r, k, f) {
+      // hinterer Arm, dann Körper, vorderer Arm (nach vorn gestreckt, leicht hängend)
+      const a = f ? .06 : -.06;
+      Ln(c, [[r * .2, r * .05], [r * 1.25, r * (.22 + a)]], '#7d8a73', 2.4);
+      feet(c, r, '#5e6a56', f);
+      E(c, 0, 0, r, r * 1.05, k.col);
+      // Flecken und Lumpen (auf den Körper beschnitten)
+      c.save(); c.beginPath(); c.ellipse(0, 0, r, r * 1.05, 0, 0, Math.PI * 2); c.clip();
+      E(c, -r * .45, -r * .45, r * .2, r * .15, '#7b8870', 0); E(c, -r * .6, r * .1, r * .14, r * .12, '#7b8870', 0);
+      c.beginPath(); c.moveTo(-r * 1.1, r * .25); c.lineTo(r * 1.1, r * .15); c.lineTo(r * 1.1, r * .72);
+      for (let i = 0; i < 5; i++) { const x = r * 1.1 - (i + 1) * r * .44; c.lineTo(x + r * .22, r * (i % 2 ? .62 : .98)); c.lineTo(x, r * .72); }
+      c.closePath(); c.fillStyle = k.shield; c.fill(); c.lineWidth = 1; c.strokeStyle = O; c.stroke();
+      Ln(c, [[-r * .4, r * .32], [-r * .3, r * .6]], shade(k.shield, -.35), .8, false);
+      c.restore();
+      E(c, 0, 0, r, r * 1.05, null, 1.4);
+      // schiefer Mund mit Zahn
+      c.beginPath(); c.moveTo(r * .1, r * .2); c.lineTo(r * .3, r * .14); c.lineTo(r * .48, r * .24); c.lineTo(r * .66, r * .12);
+      c.lineWidth = 1.1; c.strokeStyle = O; c.stroke();
+      poly(c, r, [[.32, .16], [.36, .29], [.41, .19]], '#f3ead8', .6);
+      whites(c, r, this.eyes);
+      // vorderer Arm mit Krallen
+      Ln(c, [[r * .45, r * .35], [r * 1.45, r * (.45 - a)]], '#8f9c84', 2.6);
+      for (let i = -1; i <= 1; i++) Ln(c, [[r * 1.45, r * (.45 - a)], [r * 1.7, r * (.45 - a + i * .14)]], '#f3ead8', .7, false);
+    },
+  },
   ...BOSS_DEF,
 };
 
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
-// deren Körper die Teamfarbe trägt (TINT), und der Ritter (Schild in Teamfarbe).
+// deren Körper die Teamfarbe trägt (TINT), der Ritter (Schild in Teamfarbe) und der Ghul (Lumpen in Teamfarbe, k.shield).
 export const TEAM_KEYS = ['', 'blau', 'rot', 'gruen', 'gelb'];
 export const TEAM_INDEX = { blau: 1, rot: 2, gruen: 3, gelb: 4 };
-const teamed = t => TINT.has(t) || t === 'ritter';
+const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul';
 
 function colors(t, vi) {
   const tc = vi ? TEAMS[TEAM_KEYS[vi]].body : null;
   const col = tc && TINT.has(t) ? tc : U[t].col;
-  return { col, dk: shade(col, -.3), shield: tc || '#3f6fcf' };
+  return { col, dk: shade(col, -.3), shield: tc || (t === 'ghul' ? '#8a7a64' : '#3f6fcf') };
 }
 
 function drawLid(c, r, e) {

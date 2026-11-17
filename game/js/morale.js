@@ -153,7 +153,8 @@ export function updateMorale(world, u, dt) {
   }
   const others = c ? c.n - (isFleeing(u) ? 0 : 1) : 0;
   if (!u.flee) {
-    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES) return false;
+    // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen
+    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || u.type === 'ghul') return false;
     c.n--;
     u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = null; u.run = 0;
     // Römer verlassen den Block (formation.rebuild nimmt Fliehende nicht wieder auf)

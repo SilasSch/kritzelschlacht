@@ -320,7 +320,16 @@ const SHARD_COL = { bullet: 0x9aa0aa, arrow: 0xa5692f, pilum: 0xc9a26b, firearro
    Welle und 3 steigende Noten; spook: fahle Welle um das Opfer und Wölkchen; ram: dunkler Ring und Staub hinter dem
    Panzer (dazu Staub an den Ketten, solange er rammt: bossFx); dive: Staubwelle bis R und Staub am Rand.
    fear-Ereignis (Erschreckter): rotes Ausrufezeichen über dem Kopf (Budget misc). */
-export const ABILITY_FX = { life: 1, waveT: .5, notes: 3, shouts: 8, ramDust: 18 };
+const ABILITY_FX = { life: 1, waveT: .5, notes: 3, shouts: 8, ramDust: 18 };
+/* ---------- Vampir und Ghul (Spez. #32, Task 4) ----------
+   vamp-Ereignis (abilities.js), Budget-Art ability. bat: Verwandlung (beide Richtungen), dunkelviolette Rauchfäden und
+   kleine dunkle Fetzen. rise: ein Ghul steht auf, dunkler Erdfleck, hochgeworfene Erdbrocken und grünlicher Nebel.
+   crumble: ein Ghul zerfällt, Staubwolken und fallende grünlich-graue Brocken. Alles unter 1,2 s. */
+export const VAMP_FX = {
+  batWisps: 6, batBits: 5, batSmoke: 0x6a5a78, batDark: 0x3a2f45,
+  riseClods: 7, riseWisps: 4, riseSoil: '#4a4036', riseClod: 0x7a6a55, riseMist: 0xb6c7a8,
+  dust: 4, bits: 6, bitCol: 0x8f9c84,
+};
 const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
 
 /* ---------- Zauber der Magier (Spez. #31, Task 3) ----------
@@ -501,6 +510,34 @@ export function createFxCore(hooks = {}, opt = {}) {
 
   // Effekt einer Fähigkeit (siehe ABILITY_FX)
   function wave(x, y, R, life, col) { add('wave', x, y, life, R, col); }
+  // Vampir und Ghul (vamp-Ereignis, abilities.js; siehe VAMP_FX)
+  function vamp(e) {
+    const x = e.x, y = e.y - (e.z || 0), F = VAMP_FX;
+    switch (e.k) {
+      case 'bat':
+        for (let i = 0; i < F.batWisps; i++) wisp(x + rnd(-7, 7), y - rnd(2, 14), rnd(3, 4.5), F.batSmoke);
+        for (let i = 0; i < F.batBits; i++) {
+          const a = rand() * TAU, s = rnd(40, 90), p = add('dot', x, y - 8, rnd(.3, .5), rnd(1.2, 2), F.batDark); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7 - 20; p.drag = 3;
+        }
+        break;
+      case 'rise':
+        decal(x, e.y + 4, 9, F.riseSoil, .16);
+        for (let i = 0; i < F.riseClods; i++) {
+          const p = add('dot', x + rnd(-6, 6), e.y + rnd(-2, 3), rnd(.4, .6), rnd(1.3, 2.3), i % 2 ? F.riseClod : 0x5e5242); if (!p) break;
+          p.vx = rnd(-35, 35); p.vy = -rnd(60, 120); p.ay = 380;
+        }
+        for (let i = 0; i < F.riseWisps; i++) wisp(x + rnd(-6, 6), e.y - rnd(0, 8), rnd(2.6, 3.8), F.riseMist);
+        break;
+      case 'crumble':
+        for (let i = 0; i < F.dust; i++) puff('dust', x + rnd(-6, 6), y + rnd(-6, 4), DUST.life * rnd(.9, 1.2), rnd(3.5, 5.5));
+        for (let i = 0; i < F.bits; i++) {
+          const p = add('dot', x + rnd(-5, 5), y - rnd(2, 12), rnd(.4, .6), rnd(1.2, 2), F.bitCol); if (!p) break;
+          p.vx = rnd(-25, 25); p.vy = -rnd(10, 40); p.ay = 300;
+        }
+        break;
+    }
+  }
   function ability(e) {
     const z = e.z || 0, x = e.x, y = e.y - z, R = e.R > 0 ? e.R : 30;
     switch (e.k) {
@@ -722,6 +759,8 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       case 'death': {
         const T = UNITS[e.unitType]; if (!T) break;
+        // aufgestanden als Ghul oder zerfallen (vamp-Ereignis zeigt das): kein Seelchen, kein Fleck
+        if (e.ghoul || e.crumble) break;
         if (!take('death')) break;
         const y = e.y - (e.z || 0);   // Flieger sterben in ihrer Höhe
         decal(e.x, e.y + T.r * .7, T.r * 1.1, shade(T.col, -.25), .13);
@@ -750,6 +789,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
       case 'spell': if (take('spell')) spell(e); break;
       case 'ability': if (take('ability')) ability(e); break;
+      case 'vamp': if (take('ability')) vamp(e); break;
       case 'fear': if (take('misc')) { const p = add('bang', e.x + rnd(-2, 2), e.y - (e.z || 0) - 10, .7, 7, 0xe5574f); if (p) p.vy = -14; } break;
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
       case 'miss':

@@ -83,6 +83,8 @@ export function spawn(world, type, x, y, team) {
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0, lofWait: 0,
     // Gift der Bienen (combat.poison, Nachtrag 4, #37): Restdauer (s), Verursacher; bei der Biene das Ziel ihres ersten Stichs
     poisonT: .5, poisonSrc: null, stingTg: null,
+    // Gedämpfte Heilung (combat.HEAL_STACK): world.time der ersten Heilung im Fenster, Heilungen seitdem
+    healAt: .5, healN: 0,
     meleeT: 0, meleeHit: false, fleeT: 0, fleeX: 0, fleeY: 0,   // Drosseln: Nahkämpfer-Check (combat.meleeNear), Flucht der Sanitäter
     stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false, snipeT: 0,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
@@ -124,7 +126,7 @@ export function spawn(world, type, x, y, team) {
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
-  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0; u.rangedT = -9; u.poisonT = 0;
+  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0; u.batT = 0; u.riseT = 0; u.rangedT = -9; u.poisonT = 0; u.healAt = -9;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;

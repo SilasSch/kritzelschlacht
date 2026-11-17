@@ -72,6 +72,11 @@ export function placeDuel(world, type, n, rect, team) {
   }
 }
 
+// Unterstützung darf nicht dominieren (Nachtrag 4, #38): [a, Helfer, b, Punkte]. Blau hat je die Hälfte der Punkte in a
+// (DUEL_A) und im Helfer (SUPPORT_REAR, dahinter), Rot alle Punkte in b. Blau darf höchstens SUPPORT_MAX der Läufe gewinnen.
+export const SUPPORT_DUELS = [['krieger', 'sani', 'krieger', 90], ['schuetze', 'sani', 'schuetze', 90], ['soldat', 'sani', 'soldat', 105]];
+export const SUPPORT_REAR = [.12, .35, .2, .65];
+
 // Setzt einen Plan als blaue Einheiten (Rasterlayout wie placeRect, im Missionsrahmen) und gibt die Kosten zurück.
 export function placePlan(world, plan) {
   let spent = 0;

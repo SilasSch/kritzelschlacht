@@ -1074,7 +1074,25 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
   u.run = 0;
 }
 
+function healOne(world, f, v, a) {
+  if (!v.alive || factionOf(world, v) !== f || v.hp >= v.T.hp || UNDEAD.has(v.type)) return;
+  v.hp = Math.min(v.T.hp, v.hp + a * healMul(world, v));
+  emit(world, { type: 'heal', x: v.x, y: v.y - v.T.r });
+}
 const HEAL_FLEE_BONUS = 1e12;   // px²: zieht jeden Fliehenden jedem anderen Verletzten vor
+// Gedämpfte Heilung (Nachtrag 4, #38): heilen mehrere Sanitäter dasselbe Ziel zugleich (innerhalb von HEAL_STACK.T s ab der
+// ersten Heilung, v.healAt/v.healN), wirkt die erste voll, die zweite zu MUL[1], jede weitere zu MUL[2].
+// SPLASH: Anteil für Verletzte bis SPLASH_R px um das Ziel (vorher voll). Der Prüfstand zeigte, dass dieser Umkreis die
+// Sanitäter stark machte (ein Sanitäter heilte in einer dichten Reihe 5 und mehr Einheiten je Sekunde): 18 Soldaten mit
+// 15 Sanitätern schlugen 35 Soldaten 8/8, mit SPLASH .5 noch 8/8, mit .25 7/8, mit 0 0/8. Den Umkreis heilt jetzt nur die
+// Heilwelle (abilities.HEAL_WAVE).
+export const HEAL_STACK = { T: 1, MUL: [1, .5, .25], SPLASH: 0, SPLASH_R: 50 };
+export function healMul(world, v) {
+  if (world.time - v.healAt >= HEAL_STACK.T) { v.healAt = world.time; v.healN = 0; }
+  const M = HEAL_STACK.MUL, k = v.healN < M.length ? v.healN : M.length - 1;
+  v.healN++;
+  return M[k];
+}
 function healer(world, u, dt) {
   const T = u.T, f = factionOf(world, u);
   if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || factionOf(world, u.tg) !== f) {
@@ -1111,11 +1129,8 @@ function healer(world, u, dt) {
   if (d > want) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; }
   if (!u.follow && d <= T.range && u.cd <= 0) {
     u.cd = T.cd;
-    query(world, t.x, t.y, 50, v => {
-      if (factionOf(world, v) !== f || v.hp >= v.T.hp || UNDEAD.has(v.type)) return;
-      v.hp = Math.min(v.T.hp, v.hp + T.heal);
-      emit(world, { type: 'heal', x: v.x, y: v.y - v.T.r });
-    });
+    if (HEAL_STACK.SPLASH > 0) query(world, t.x, t.y, HEAL_STACK.SPLASH_R, v => { if (v !== t) healOne(world, f, v, T.heal * HEAL_STACK.SPLASH); });
+    healOne(world, f, t, T.heal);
   }
 }
 

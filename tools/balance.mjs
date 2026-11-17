@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult } from '../game/js/sim.js';
-import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan, placeDuel } from './plans.mjs';
+import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan, placeDuel, SUPPORT_DUELS, SUPPORT_REAR } from './plans.mjs';
 
 const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
@@ -19,6 +19,7 @@ const SPAM_WIN_MIN = 6 / 8;   // Spam-Plan der Einstiegsmission M1 gewinnt minde
 const M3 = 2;
 const M3_SPAM_MAX = 4 / 8;
 const DUEL_MIN = 3 / 4;       // Konter gewinnt mindestens 3/4
+const SUPPORT_MAX = 3 / 4;    // Armee aus halb Einheit, halb Helfer (Sanitäter) gewinnt höchstens 3/4 gegen die reine Einheit
 
 const [cmd = 'missions', runsArg = '8', shapeArg] = process.argv.slice(2);
 const runs = Math.max(1, parseInt(runsArg, 10) || 8);
@@ -52,15 +53,18 @@ function runMission(i, plan, seed) {
   return { res, spent };
 }
 
-function runDuel(a, b, pts, seed) {
+// helper: Blau bekommt die Hälfte der Punkte in a und die Hälfte im Helfer (SUPPORT_DUELS)
+function runDuel(a, b, pts, seed, helper = null) {
   const w = createWorld(W, H, seed); w.teamMode = true;
-  const na = Math.max(1, Math.round(pts / UNITS[a].cost)), nb = Math.max(1, Math.round(pts / UNITS[b].cost));
-  placeDuel(w, a, na, DUEL_A, 'blau'); placeDuel(w, b, nb, DUEL_B, 'rot');
+  const pa = helper ? pts / 2 : pts;
+  const na = Math.max(1, Math.round(pa / UNITS[a].cost)), nb = Math.max(1, Math.round(pts / UNITS[b].cost));
+  const nh = helper ? Math.max(1, Math.round(pts / 2 / UNITS[helper].cost)) : 0;
+  placeDuel(w, a, na, DUEL_A, 'blau'); if (helper) placeDuel(w, helper, nh, SUPPORT_REAR, 'blau'); placeDuel(w, b, nb, DUEL_B, 'rot');
   let t = 0;
   for (;;) {
     let ca = 0, cb = 0;
     for (const u of w.units) if (u.alive) { if (u.team === 'blau') ca++; else cb++; }
-    if (ca === 0 || cb === 0 || t >= 185) return { win: ca > 0 && cb === 0, spent: na * UNITS[a].cost };
+    if (ca === 0 || cb === 0 || t >= 185) return { win: ca > 0 && cb === 0, spent: na * UNITS[a].cost + (helper ? nh * UNITS[helper].cost : 0) };
     step(w, DT); w.events.length = 0; t += DT;
   }
 }
@@ -102,6 +106,13 @@ if (cmd === 'missions') {
     const note = wins / runs < DUEL_MIN ? 'FAIL (< 3/4 wins)' : '';
     if (note) ok = false;
     console.log(`${pad(`${a}>${b}@${pts}`, 24)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
+  }
+  for (const [a, h, b, pts] of SUPPORT_DUELS) {
+    let wins = 0, spent = 0;
+    for (let s = 1; s <= runs; s++) { const r = runDuel(a, b, pts, 500 + s, h); if (r.win) wins++; spent = r.spent; }
+    const note = wins / runs > SUPPORT_MAX ? `FAIL (> ${SUPPORT_MAX * runs}/${runs} wins)` : '';
+    if (note) ok = false;
+    console.log(`${pad(`${a}+${h}!>${b}@${pts}`, 24)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
   }
 }
 

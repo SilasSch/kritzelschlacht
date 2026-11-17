@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { UNITS } from '../game/js/data.js';
 import { createWorld, spawn } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
+import { attack } from '../game/js/combat.js';
 import {
   buildBench, benchMixed, BENCH_W, BENCH_H, BENCH_TEAMS, BENCH_BOSSES, CROWD_N, CROWD_R, VOLLEY_N, BLAST_EVERY, VOLLEY_AT,
   MIXED_TYPES, mixed2Types,
@@ -93,10 +94,20 @@ test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
 test('mixed2: Ghule und Fledermausform behalten die Form der Einheiten', () => {
   const keys = Object.keys(spawn(createWorld(400, 300, 1), 'krieger', 50, 50, 'blau')).join();
   const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed2', 600);
-  let bats = 0;
-  for (let k = 0; k < 600; k++) { step(w, DT); w.events.length = 0; for (const u of w.units) if (u.alive && u.batT > 0) bats++; }
+  // Ob in der Schlacht von selbst ein Ghul aufsteht, hängt vom Verlauf ab und kippte mit jeder Regeländerung: nach 300
+  // Schritten beißt darum ein Vampir einen Gegner mit 1 LP tot (wie in combat.think), dann läuft die Schlacht weiter
+  let bats = 0, ghouls = false;
+  for (let k = 0; k < 600; k++) {
+    if (k === 300 && !w.units.some(u => u.type === 'ghul')) {
+      const v = w.units.find(u => u.alive && u.type === 'vampir' && u.batT === 0 && u.ghouls < 3);
+      const e = w.units.find(u => u.alive && u.team !== v.team && ['krieger', 'schuetze', 'soldat', 'ritter', 'roemer'].includes(u.type));
+      e.x = v.x + 12; e.y = v.y; e.hp = 1; v.cd = 0; attack(w, v, e, 12, 12, 0);
+    }
+    step(w, DT); w.events.length = 0;
+    for (const u of w.units) { if (u.alive && u.batT > 0) bats++; if (u.type === 'ghul') ghouls = true; }
+  }
   assert.deepEqual(w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type), []);
-  assert.ok(w.units.some(u => u.type === 'ghul'), 'Ghule entstanden');
+  assert.ok(ghouls, 'Ghule entstanden');
   assert.ok(bats > 0, 'Fledermausform kam vor');
   assert.ok(Object.keys(UNITS.vampir).join() === Object.keys(w.units.find(u => u.type === 'vampir').T).join());
   for (const k of ['batT', 'riseT', 'ghouls']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);

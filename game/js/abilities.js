@@ -256,7 +256,9 @@ function archerEnd(world, u) { const c = (u.abK - 1) * u.T.cd; if (u.cd < c) u.c
 /* ---------- Sanitäter: Heilwelle ---------- */
 // Alle Verbündeten (auch er selbst) bis R px um den Sanitäter bekommen FRAC ihrer max. LP (gedeckelt). Löst aus,
 // wenn mindestens MIN Verletzte im Kreis sind. Heilungen treffen nur Verbündete (Festlegung 2).
-export const HEAL_WAVE = { R: 90, FRAC: .25, MIN: 2 };
+// Gruppen-Abklingzeit wie die Brandpfeile (Nachtrag 4, #38): eigene Sanitäter bis SHARE px laden beim Auslösen mit neu
+// (shareCd), damit viele Sanitäter nicht mehrere Wellen zugleich auf dieselben Verbündeten legen.
+export const HEAL_WAVE = { R: 90, FRAC: .25, MIN: 2, SHARE: 120 };
 let HW_W = null, HW_U = null, HW_F = null, HW_N = 0, HW_DO = false;
 function waveTest(v) {
   // Untote (Ghule) heilt sie nicht (data.UNDEAD)
@@ -279,6 +281,7 @@ function healWave(world, u, apply) {
 }
 const saniReady = (world, u) => healWave(world, u, false) >= HEAL_WAVE.MIN;
 function saniStart(world, u) {
+  shareCd(world, u, HEAL_WAVE.SHARE);
   healWave(world, u, true);
   emit(world, { type: 'ability', k: 'heal', x: u.x, y: u.y, z: u.z, R: HEAL_WAVE.R });
   sound(world, 'pop');

@@ -220,3 +220,36 @@ test('Bienengift: ein Stich, Biene weg, das Ziel verliert 3 s lang Leben (4/s), 
   assert.equal(p.poisonT, 0);
   const h = r.hp; hurt(w2, r, 4, 'poison', null, true); assert.ok(Math.abs(h - r.hp - 4) < 1e-9);
 });
+
+// Nachtrag 4 (#38): Sanitäter
+test('Sanitäter: mehrere heilen dasselbe Ziel gedämpft (voll, 50 %, 25 %), nur das Ziel; Heilwelle mit Gruppen-Abklingzeit; Kosten 3,5', async () => {
+  const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
+  const { think, HEAL_STACK } = await import('../game/js/combat.js');
+  const { ABILITY, HEAL_WAVE, stepAbility } = await import('../game/js/abilities.js');
+  const { UNITS } = await import('../game/js/data.js');
+  assert.equal(UNITS.sani.cost, 3.5);
+  assert.deepEqual(HEAL_STACK.MUL, [1, .5, .25]);
+  const w = createWorld(1400, 800, 5); w.teamMode = true;
+  const k = spawn(w, 'krieger', 400, 400, 'blau'); k.hp = 10;
+  const n = spawn(w, 'krieger', 420, 400, 'blau'); n.hp = 10;   // Nachbar in 20 px: wird nicht mitgeheilt
+  const ms = [0, 1, 2, 3].map(i => spawn(w, 'sani', 360, 380 + i * 12, 'blau'));
+  for (const m of ms) { m.cd = 0; m.abCd = 99; m.tg = k; m.rt = 1; }
+  w.time = 5; rebuildHash(w);
+  for (const m of ms) think(w, m, 1 / 60);
+  const h = UNITS.sani.heal;
+  assert.ok(Math.abs(k.hp - (10 + h * (1 + .5 + .25 + .25))) < 1e-9, `LP ${k.hp}`);
+  assert.equal(n.hp, 10, 'Nachbar bleibt');
+  // nach HEAL_STACK.T s wieder voll
+  w.time += HEAL_STACK.T; ms[0].cd = 0; ms[0].tg = k; ms[0].rt = 1;
+  const before = k.hp; think(w, ms[0], 1 / 60);
+  assert.ok(Math.abs(k.hp - before - h) < 1e-9);
+  // Heilwelle: nahe Sanitäter (≤ SHARE) laden mit neu, ferne nicht
+  assert.equal(HEAL_WAVE.SHARE, 120);
+  const w2 = createWorld(1400, 800, 5); w2.teamMode = true;
+  const a = spawn(w2, 'sani', 400, 400, 'blau'), b = spawn(w2, 'sani', 480, 400, 'blau'), c = spawn(w2, 'sani', 700, 400, 'blau');
+  for (let i = 0; i < 3; i++) spawn(w2, 'krieger', 400 + i * 15, 430, 'blau').hp = 5;
+  a.abCd = 0; b.abCd = 0; c.abCd = 0; rebuildHash(w2);
+  assert.equal(stepAbility(w2, a, 1 / 60), false);   // Welle sofort fertig
+  assert.ok(b.abCd >= ABILITY.sani.cd, `b wartet: ${b.abCd}`);
+  assert.equal(c.abCd, 0, 'ferner Sanitäter unberührt');
+});

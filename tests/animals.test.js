@@ -295,6 +295,25 @@ test('Adler pickt: sinkt zum Biss unter die Reichweite der Nahkämpfer und steig
   assert.ok(zs.slice(60).some(z => z > 20), 'steigt zwischen den Bissen');
 });
 
+// Review Task 5, Punkt 3: der Meteor (spells.tryMeteor) zielt nicht auf ein verstecktes Krokodil
+test('Meteor: ein verstecktes Krokodil ist kein Zielpunkt; sichtbar schon', async () => {
+  const { tryMeteor } = await import('../game/js/spells.js');
+  const setup = seen => {
+    const w = mkWorld();
+    water(w, 400, 320, 560, 480);
+    for (let k = 0; k < 3; k++) spawn(w, 'magier', 300, 380 + k * 20, 'blau');
+    const c = dummy(w, 'krokodil', 480, 400); c.hidden = true; c.seenT = seen;
+    // sechs Krieger im Ring (50 px) um das Krokodil: nur dessen Mitte hat genug Feinde für den Meteor
+    for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; dummy(w, 'krieger', 480 + 50 * Math.cos(a), 400 + 50 * Math.sin(a)); }
+    rebuildHash(w);
+    return { w, m: w.units[0] };
+  };
+  const hid = setup(0);
+  assert.equal(tryMeteor(hid.w, hid.m), false, 'versteckt: kein Meteor');
+  const vis = setup(CROC.SEEN);
+  assert.equal(tryMeteor(vis.w, vis.m), true, 'sichtbar: Meteor');
+});
+
 /* ---------- Büffel ---------- */
 const herdTest = n => {
   const w = mkWorld(), bs = [];

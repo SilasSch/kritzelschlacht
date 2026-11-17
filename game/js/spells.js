@@ -8,7 +8,7 @@
 // Importkreis wie bei abilities.js: world → abilities → combat → spells → combat … Darum hier keine Zugriffe auf
 // importierte Werte beim Laden (nur in Funktionen); nur data.js darf beim Laden gelesen werden.
 import { UNITS, CELL } from './data.js';
-import { factionOf, query, touchTerrain, isBat } from './world.js';
+import { factionOf, query, touchTerrain, isBat, unseen } from './world.js';
 import { fire, clearShot, fling, hurt, blast, hitWall } from './combat.js';
 import { isFleeing } from './morale.js';
 import { applyImpulse } from './physics.js';
@@ -66,6 +66,7 @@ const isMelee = v => v.T.range < 20 && !v.T.heal;
 let MT_W = null, MT_U = null, MT_F = null, MT_V = null, MT_D = 0;
 function meleeTest(v) {
   if (!isMelee(v) || v.type === 'heli' || isBat(v) || factionOf(MT_W, v) === MT_F) return;   // Fledermausform beißt nicht
+  if (v.hidden && unseen(MT_U, v)) return;   // verstecktes Krokodil (Task 5): der Magier sieht es nicht
   const dx = v.x - MT_U.x, dy = v.y - MT_U.y, d = dx * dx + dy * dy, r = SPELL.MELEE_R + v.T.r;
   if (d <= r * r && d < MT_D) { MT_D = d; MT_V = v; }
 }
@@ -313,7 +314,7 @@ function groupTest(v) {
   if (dx * dx + dy * dy <= METEOR.GROUP_R * METEOR.GROUP_R) GR[GR_N++] = v;
 }
 function candTest(v) {
-  if (factionOf(MQ_W, v) === MQ_F) return;
+  if (factionOf(MQ_W, v) === MQ_F || (v.hidden && unseen(MQ_U, v))) return;   // Task 5: verstecktes Krokodil ist kein Ziel
   const dx = v.x - MQ_U.x, dy = v.y - MQ_U.y, d = dx * dx + dy * dy, r = MQ_R + v.T.r, M = METEOR.CAND;
   if (d > r * r || (CN === M && d >= CS[M - 1])) return;
   let k = CN < M ? CN++ : M - 1;

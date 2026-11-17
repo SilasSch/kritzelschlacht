@@ -1,9 +1,10 @@
 // Leistungsszenen (Task 13) für tools/bench.mjs und game/index.html?bench=N. Rein: kein DOM, Zufall nur
 // über world.rng(), also bei gleicher Saat gleich aufgebaut.
 //   mixed:      N Einheiten in 4 Teams (je ein Viertel), alle Typen gemischt, je Team 1 Drache, 2 Panzer und
-//               2 Hubschrauber, der Rest gleich verteilt auf die übrigen 16 Typen (Mörser, Grenadiere,
-//               MG-Schützen, Scharfschützen, Bienen …). Gelände: Mauerkreuz mit Lücken in der Mitte (Wegfindung
-//               aktiv), zwei Lavafelder, ein Teich, ein Wäldchen.
+//               2 Hubschrauber, der Rest gleich verteilt auf die übrigen 17 Typen (Mörser, Grenadiere,
+//               MG-Schützen, Scharfschützen, Bienen …). Die Römer eines Teams stehen zusammen in den ersten
+//               Rasterplätzen, damit sie Blöcke bilden (formation.js). Gelände: Mauerkreuz mit Lücken in der
+//               Mitte (Wegfindung aktiv), zwei Lavafelder, ein Teich, ein Wäldchen.
 //   blastcrowd: 500 Bienen im Kreis mit Radius 80 px, alle BLAST_EVERY Schritte 20 gleichzeitige
 //               Mörsereinschläge darin (Review Focus #5); eine halbe Periode vor jeder Salve wird der Schwarm
 //               wieder auf 500 aufgefüllt (buildBench).
@@ -38,6 +39,8 @@ export function benchMixed(world, n = 2000) {
     for (let i = 0; types.length < cnt; i++) types.push(rest[i % rest.length]);
     // gemischt: Typen in Zufallsreihenfolge (world.rng) auf ein Gitter im Teambereich
     for (let i = types.length - 1; i > 0; i--) { const j = (world.rng() * (i + 1)) | 0; const q = types[i]; types[i] = types[j]; types[j] = q; }
+    // Römer nach vorn (zusammen im Raster: Block statt verstreuter Einzelkämpfer)
+    types.sort((a, b) => (b === 'roemer') - (a === 'roemer'));
     const [x0, y0, x1, y1] = ZONES[t], w = (x1 - x0) * world.W, h = (y1 - y0) * world.H;
     const cols = Math.max(1, Math.round(Math.sqrt(cnt * w / h))), rows = Math.ceil(cnt / cols);
     for (let k = 0; k < cnt; k++) {

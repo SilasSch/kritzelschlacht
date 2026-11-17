@@ -20,6 +20,7 @@ export function createWorld(W, H, seed = 1) {
     HW: 0, HH: 0, hash: [], facCount: new Map(), totalAlive: 0, nextId: 1,
     terrainVersion: 0,   // zählt jede Geländeänderung (pathing.js berechnet daraufhin neu)
     flow: null,          // Flussfelder der Wegfindung (pathing.js), legt sim.step an
+    formations: [], formT: 0, formNext: 1,   // Römerblöcke (formation.js): Liste, Zeit bis zur Neubildung, nächste id
     // Von Anfang an da (später angehängte Felder ändern die Form der Welt, V8 verwirft dann optimierten Code)
     dead: 0, contested: false, lastWinT: -9,
   };
@@ -76,6 +77,10 @@ export function spawn(world, type, x, y, team) {
     // (Blickrichtung; 0/0 = noch keine: kein Flankenbonus), follow (Sanitäter). Zahlenfelder starten als Zahl
     // (nicht undefined), damit V8 sie als Double führt und Schreiben keine neuen HeapNumbers anlegt.
     px: NaN, py: NaN, bounced: false, impact: 0, fx: 0, fy: 0, follow: false,
+    // Römer-Blockformation (formation.js, Spez. #25): Block-id (0 = keiner), im marschierenden Block, Platz
+    // (px), Blickrichtung des Blocks, Blocktempo als Geschwindigkeit (formVx/formVy) und Betrag (formSp),
+    // Speere übrig. Für Nicht-Römer bleiben sie auf diesen Startwerten.
+    form: 0, formOn: false, slotX: 0, slotY: 0, formAx: 0, formAy: 0, formVx: 0, formVy: 0, formSp: 0, pilum: 1,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
@@ -158,4 +163,5 @@ export function resizeWorld(world, W, H) {
 export function clearBattle(world) {
   world.units = []; world.proj = []; world.corpses = []; world.debris = [];
   world.events.length = 0; world.dead = 0;
+  world.formations = []; world.formT = 0;
 }

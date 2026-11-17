@@ -5,6 +5,7 @@ import { spawn, setCell, rebuildHash, clearBattle, touchTerrain, frameX } from '
 import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
 import { createFlow, updateFlow } from './pathing.js';
+import { updateFormations } from './formation.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -12,7 +13,7 @@ const rnd = (world, a, b) => a + world.rng() * (b - a);
 // Zeit je Teil von step, immer mitgezählt (ms, aufsummiert seit Programmstart; SIM_TIME.steps = Schritte).
 // Für Messungen (tools/bench.mjs --profile, __bench.measure) Differenzen bilden. Immer aktiv statt nur unter
 // einem Schalter: ein selten genommener Messzweig ließ V8 step immer wieder verwerfen (Task 13).
-export const SIM_PHASES = ['hash', 'flow', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
+export const SIM_PHASES = ['hash', 'flow', 'form', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
 export const SIM_TIME = { ms: new Float64Array(SIM_PHASES.length), steps: 0 };
 const pnow = globalThis.performance ? () => globalThis.performance.now() : () => 0;
 export function step(world, dt) {
@@ -25,23 +26,26 @@ export function step(world, dt) {
   if (!world.flow) world.flow = createFlow(world);
   updateFlow(world, world.flow, dt);
   t1 = pnow(); M[1] += t1 - t0; t0 = t1;
+  // Römerblöcke (formation.js): Plätze und Blockzustand, die think liest
+  updateFormations(world, dt);
+  t1 = pnow(); M[2] += t1 - t0; t0 = t1;
   const units = world.units;
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
-  t1 = pnow(); M[2] += t1 - t0; t0 = t1;
-  integrate(world, dt);
   t1 = pnow(); M[3] += t1 - t0; t0 = t1;
-  collide(world);
+  integrate(world, dt);
   t1 = pnow(); M[4] += t1 - t0; t0 = t1;
-  for (const u of units) if (u.alive) collideWalls(world, u, dt);
+  collide(world);
   t1 = pnow(); M[5] += t1 - t0; t0 = t1;
-  stepProjectiles(world, dt);
+  for (const u of units) if (u.alive) collideWalls(world, u, dt);
   t1 = pnow(); M[6] += t1 - t0; t0 = t1;
+  stepProjectiles(world, dt);
+  t1 = pnow(); M[7] += t1 - t0; t0 = t1;
   stepCorpses(world, dt);
   stepDebris(world, dt);
   if ((world.dead || 0) > 300) { world.units = world.units.filter(u => u.alive); world.dead = 0; }
-  M[7] += pnow() - t0; SIM_TIME.steps++;
+  M[8] += pnow() - t0; SIM_TIME.steps++;
 }
 
 /* ---------- Sieger ---------- */

@@ -63,11 +63,14 @@ test('blastcrowd: 500 Bienen im Radius 80, alle BLAST_EVERY Schritte 20 Einschl�
 test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
   const keys = Object.keys(spawn(createWorld(400, 300, 1), 'krieger', 50, 50, 'blau')).join();
   const w = createWorld(BENCH_W, BENCH_H, 2); buildBench(w, 'mixed', 600);
-  for (let k = 0; k < 240; k++) { step(w, DT); w.events.length = 0; }
+  let blocks = 0;
+  for (let k = 0; k < 240; k++) { step(w, DT); w.events.length = 0; blocks += w.formations.length; }
   const bad = w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type);
   assert.deepEqual(bad, []);
   // mit Sanitätern, Flank-Treffern, Abheben und Landen kam in 4 s alles vor
   assert.ok(w.units.some(u => u.fx !== 0) && w.units.some(u => !Number.isNaN(u.px)));
+  // Römer standen im Block (formation.js setzt form, formOn, Plätze und Blickrichtung)
+  assert.ok(blocks > 0 && w.units.some(u => u.type === 'roemer' && u.form > 0 && u.slotX !== 0), 'Römerblöcke');
   // Zahlenfelder bleiben Zahlen (V8 führt sie als Double, Schreiben legt keine HeapNumbers an)
-  for (const k of ['px', 'py', 'fx', 'fy', 'x', 'y', 'mx', 'my', 'vx', 'vy', 'cd', 'rt']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);
+  for (const k of ['px', 'py', 'fx', 'fy', 'x', 'y', 'mx', 'my', 'vx', 'vy', 'cd', 'rt', 'form', 'slotX', 'slotY', 'formAx', 'formAy', 'formVx', 'formVy', 'formSp', 'pilum']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);
 });

@@ -6,6 +6,7 @@ import { factionOf, cellIndex, query, nearestEnemy, touchTerrain } from './world
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
+import { FORM_GAIN, FORM_CATCHUP } from './formation.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -540,6 +541,18 @@ function groupInfo(world, u) {
   GI_W = null; GI_F = null;
 }
 
+// Römer im Block: Blocktempo plus Abweichung vom Platz · FORM_GAIN, höchstens Blocktempo · FORM_CATCHUP (zum
+// Aufholen). Blickrichtung ist die des Blocks.
+function holdSlot(u, dt) {
+  u.tg = null;
+  let vx = u.formVx + (u.slotX - u.x) * FORM_GAIN, vy = u.formVy + (u.slotY - u.y) * FORM_GAIN;
+  const cap = u.formSp * FORM_CATCHUP, l = Math.hypot(vx, vy);
+  if (l > cap) { vx *= cap / l; vy *= cap / l; }
+  u.mx = vx; u.my = vy; u.fx = u.formAx; u.fy = u.formAy;
+  if (u.formAx < -.2) u.face = -1; else if (u.formAx > .2) u.face = 1;
+  u.run += dt;
+}
+
 // Richtung von u nach (px, py) in DIR (wiederverwendet, keine Allokation)
 const DIR = { x: 0, y: 0 };
 function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; DIR.x = x / l; DIR.y = y / l; return DIR; }
@@ -559,6 +572,8 @@ export function think(world, u, dt) {
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
+  // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz
+  if (u.formOn) { holdSlot(u, dt); return; }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
@@ -646,7 +661,7 @@ export function think(world, u, dt) {
       const by = ny + nx * s * o + (u.gy - u.y) * .01 + rnd(world, -.5, .5);
       const l = Math.hypot(bx, by) || 1; ax = bx / l; ay = by / l; break;
     }
-    case 'krieger': case 'ritter': case 'geist': case 'baer':
+    case 'krieger': case 'roemer': case 'ritter': case 'geist': case 'baer':
       // Einkreisen: ist das Ziel schon umringt, sucht man sich einen freien Platz drumherum
       if (t.att > 3 && d < 130) {
         const g = Math.atan2(u.y - t.y, u.x - t.x) + ((u.id % 3) - 1) * .6, R = reach * .9;

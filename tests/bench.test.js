@@ -71,6 +71,7 @@ test('Einheiten behalten ihre Form: kein Feld kommt nach spawn dazu', () => {
   assert.ok(w.units.some(u => u.fx !== 0) && w.units.some(u => !Number.isNaN(u.px)));
   // Römer standen im Block (formation.js setzt form, formOn, Plätze und Blickrichtung)
   assert.ok(blocks > 0 && w.units.some(u => u.type === 'roemer' && u.form > 0 && u.slotX !== 0), 'Römerblöcke');
+  assert.ok(w.units.every(u => typeof u.abOn === 'boolean'), 'abOn');
   // Zahlenfelder bleiben Zahlen (V8 führt sie als Double, Schreiben legt keine HeapNumbers an)
-  for (const k of ['px', 'py', 'fx', 'fy', 'x', 'y', 'mx', 'my', 'vx', 'vy', 'cd', 'rt', 'form', 'slotX', 'slotY', 'formAx', 'formAy', 'formVx', 'formVy', 'formSp', 'pilum']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);
+  for (const k of ['px', 'py', 'fx', 'fy', 'x', 'y', 'mx', 'my', 'vx', 'vy', 'cd', 'rt', 'form', 'slotX', 'slotY', 'formAx', 'formAy', 'formVx', 'formVy', 'formSp', 'pilum', 'abCd', 'abT', 'abK', 'abX', 'abY', 'fearT']) assert.ok(w.units.every(u => typeof u[k] === 'number'), k);
 });

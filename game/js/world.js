@@ -2,6 +2,7 @@
 import { UNITS, CELL, HASH_CELL, RANGED, PATH_RECHECK } from './data.js';
 import { createRng } from './rng.js';
 import { isFleeing } from './morale.js';
+import { ABILITY } from './abilities.js';
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -87,9 +88,14 @@ export function spawn(world, type, x, y, team) {
     formVol: -1,
     // Rückzug (morale.js, Spez. #27): flieht, Zeit ohne Gegner in SAFE_R, Zeit mit Gegner in Nahkampfreichweite
     flee: false, safeT: 0, cornerT: 0,
-    // Schreck: Restdauer (s, Nachtrag 3, Festlegung 1, morale.isFleeing)
-    fearT: 0,
+    // Fähigkeiten (abilities.js, Spez. #30): Abklingzeit (s), läuft gerade, Zeit seit dem Start, Zähler (z. B.
+    // abgefeuerte Raketen), Zielpunkt bzw. Richtung; Schreck: Restdauer (s, Festlegung 1, morale.isFleeing).
+    // Abklingzeit beim Spawn ABILITY.cd · (0,3 + 0,7 · rng), damit nicht alle zugleich auslösen; world.rng() nur für
+    // Typen mit Fähigkeit (die Folge der Zufallszahlen aller anderen bleibt gleich).
+    abCd: 0, abOn: false, abT: 0, abK: 0, abX: 0, abY: 0, fearT: 0,
   };
+  const A = ABILITY[type];
+  if (A) u.abCd = A.cd * (.3 + .7 * world.rng());
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);

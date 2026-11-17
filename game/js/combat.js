@@ -8,6 +8,7 @@ import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLIN
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
+import { stepAbility, cancelAbility, isFire } from './abilities.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -89,6 +90,8 @@ export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 
 /* ---------- Schaden ---------- */
 // dot: Schaden über Zeit (Brand), quetscht nie, auch mit Verursacher.
+// Feuerarten (abilities.FIRE_KINDS: Feuerball, Drachenatem, Brand 'burn', Brandpfeile, Phönixspur) teilen sich das
+// Merkmal Feuer (Festlegung 7): Panzer ×0,6, Geister voll.
 export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
   let m = 1; const t = v.type;
@@ -96,9 +99,9 @@ export function hurt(world, v, a, kind, src, dot = false) {
     m *= kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
   }
-  if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : kind === 'fire' ? .6 : .8;
+  if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
-  if (t === 'geist' && kind !== 'fire') m *= .5;
+  if (t === 'geist' && !isFire(kind)) m *= .5;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
@@ -106,7 +109,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
   const d = a * m; v.hp -= d;
-  if (!dot && (src || kind !== 'fire')) v.hitT = .15;
+  if (!dot && (src || !isFire(kind))) v.hitT = .15;
   // Eigene Leute (Friendly Fire) zählen nicht als Abschuss
   if (v.hp <= 0) { if (src && factionOf(world, src) !== factionOf(world, v)) src.kills++; die(world, v, src); }
   return d;
@@ -407,6 +410,14 @@ function lofCheck(world, u, t, kind) {
   return false;
 }
 
+// Zielcheck ohne Drossel (Fähigkeiten, abilities.js): zieht den Zielpunkt eines geraden Schusses der Art kind und
+// prüft die echte Bahn. Liefert den Zielpunkt (wiederverwendetes Objekt, gleich verbrauchen) oder null, wenn ein
+// Verbündeter zuerst im Weg steht.
+export function clearShot(world, u, t, kind) {
+  aimPoint(world, u, t, kind);
+  return aimLine(world, u, t, kind, AIM.x, AIM.y) ? AIM : null;
+}
+
 // Unter den 8 nächsten Gegnern (im Umkreis von 1.5 · Reichweite) der nächste mit freier Linie.
 const NEAR_U = new Array(8).fill(null), NEAR_D = new Float64Array(8);
 function clearTarget(world, u) {
@@ -427,8 +438,8 @@ function clearTarget(world, u) {
 
 /* ---------- Waffen ---------- */
 // ax/ay: Zielpunkt, den think schon gezogen und auf freie Bahn geprüft hat; fehlt er, wird er hier gezogen.
-// Das Geschoss fliegt genau dorthin.
-export function fire(world, u, t, kind, ax, ay) {
+// Das Geschoss fliegt genau dorthin. dmg/R (optional, Fähigkeiten): Schaden und Splash statt der Werte der Einheit.
+export function fire(world, u, t, kind, ax, ay, dmgO, RO) {
   const T = u.T, P = PROJECTILES[kind], K = SHOT[kind];
   if (ax === undefined) { aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y; }
   const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
@@ -438,7 +449,8 @@ export function fire(world, u, t, kind, ax, ay) {
   let mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
   if (boss) { bossMuzzle(u, t.x, t.y, MZ); mx = u.x + MZ.x; my = u.y - (u.z || 0) + MZ.y; }
   u.fireT = 0;   // Rückstoß (rig.js)
-  const f = factionOf(world, u), dmg = kind === 'pilum' ? T.pilum : T.dmg, R = T.splash || 0;
+  const f = factionOf(world, u);
+  const dmg = dmgO !== undefined ? dmgO : kind === 'pilum' ? T.pilum : T.dmg, R = RO !== undefined ? RO : T.splash || 0;
   if (P.arc) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
     world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
@@ -481,7 +493,7 @@ function breath(world, u, nx, ny, t) {
 }
 
 /* ---------- Brand (Spez. #21) ---------- */
-// Getroffene brennen BURN_T s nach und nehmen BURN_DPS Schaden/s ('fire', Schaden über Zeit) vom
+// Getroffene brennen BURN_T s nach und nehmen BURN_DPS Schaden/s ('burn', Feuer, Schaden über Zeit) vom
 // Verursacher burnSrc, solange er lebt (sonst ohne). Alle SPREAD_DT s (je Einheit nach id gestaffelt)
 // darf eine brennende Einheit jede Nachbar-Einheit im Radius r + v.r + SPREAD_PAD mit Chance
 // SPREAD_P · 0.5^burnGen anzünden (jede Fraktion; Flieger nur Flieger, Boden nur Boden), Generation +1,
@@ -528,7 +540,7 @@ export function stepBurn(world, u, dt) {
   const src = u.burnSrc && u.burnSrc.alive ? u.burnSrc : null;
   const a = dt < u.burnT ? dt : u.burnT;
   u.burnT -= a;
-  hurt(world, u, BURN_DPS * a, 'fire', src, true);
+  hurt(world, u, BURN_DPS * a, 'burn', src, true);
   if (!u.alive) return;
   u.burnCk -= dt;
   if (u.burnCk <= 0 && u.burnGen < BURN_MAX_GEN && u.burnT > 0) {
@@ -595,10 +607,9 @@ function holdSlot(world, u, dt) {
 // gestaffelt wie morale.FLEE_SCAN). Takt über u.rt: im Block braucht der Römer es nicht (holdSlot hält u.tg leer,
 // nach dem Auflösen sucht think wegen u.tg = null sofort ein Ziel).
 export const PILUM_SCAN_T = .1, PILUM_STAGGER = .02;
-const PIL_MIN2 = FORM.PILUM_MIN * FORM.PILUM_MIN, PIL_MAX2 = FORM.PILUM_MAX * FORM.PILUM_MAX;
 export const PILUM_SCAN = { calls: 0, cells: 0 };
 function pilumTarget(world, u) {
-  const { HW, HH, hash } = world, f = factionOf(world, u), R = FORM.PILUM_MAX, ux = u.x, uy = u.y;
+  const { HW, HH, hash } = world, f = factionOf(world, u), R = FORM.PILUM_MAX, ux = u.x, uy = u.y, PIL_MAX2 = R * R;
   const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
   const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
   PILUM_SCAN.calls++; PILUM_SCAN.cells += (gx1 - gx0 + 1) * (gy1 - gy0 + 1);
@@ -616,7 +627,7 @@ function pilumTarget(world, u) {
 }
 function throwPilum(world, u) {
   const t = pilumTarget(world, u);
-  if (!t || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < PIL_MIN2) return;
+  if (!t || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < FORM.PILUM_MIN * FORM.PILUM_MIN) return;
   fire(world, u, t, 'pilum');
   u.pilum = 0;
 }
@@ -651,9 +662,13 @@ function retreat(world, u, dt) {
   if (u.cd <= 0) attack(world, u, t, d, dx, dy);
 }
 
+// Vorrang der Zustände (Nachtrag 3, Festlegung 1), von oben nach unten: tot > betäubt oder in der Luft > Schreck >
+// Rückzug > laufende Fähigkeit > Römerblock > normales Verhalten. Betäubung, Abheben, Schreck und Rückzug brechen eine
+// laufende Fähigkeit ab (abilities.cancelAbility: Abklingzeit beginnt neu); Fliehende und Erschreckte lösen keine aus.
 export function think(world, u, dt) {
   const T = u.T;
   u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
+  if (u.abCd > 0 && !u.abOn) u.abCd -= dt;
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.fleeT > 0) u.fleeT -= dt;
@@ -665,9 +680,11 @@ export function think(world, u, dt) {
   if (u.burnT > 0) { stepBurn(world, u, dt); if (!u.alive) return; }
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
-  if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
+  if (u.state !== 'ok') { if (u.abOn) cancelAbility(world, u); if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
   // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block
-  if (updateMorale(world, u, dt)) { retreat(world, u, dt); return; }
+  if (updateMorale(world, u, dt)) { if (u.abOn) cancelAbility(world, u); retreat(world, u, dt); return; }
+  // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
+  if (stepAbility(world, u, dt)) return;
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
   // einmal den Speer werfen
   if (u.formOn) {

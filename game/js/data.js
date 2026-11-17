@@ -26,7 +26,8 @@ export const UNITS = {
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
 };
 
-// Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}].
+// Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}]. Einzige
+// Stelle für Name und Text auch der ausgelösten Fähigkeiten (Spez. #30); ihr Verhalten steht in abilities.js (ABILITY).
 // Kurz halten (Name ≤ 24, Text ≤ 140 Zeichen, tests/cards.test.js). Neue Einheiten tragen hier ein oder setzen
 // abil direkt im UNITS-Eintrag; die Karten lesen nur UNITS[t].abil. Rückzug ab 25 % gilt für alle (cards.RETREAT_NOTE).
 const ABIL = {
@@ -68,7 +69,10 @@ const ABIL = {
   panzerfaust: [{n:'Rakete', d:'Trifft Panzer und Hubschrauber besonders hart.'}],
   moerser: [{n:'Steilfeuer', d:'Schießt im hohen Bogen über Mauern hinweg.'}],
   panzer: [{n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'}],
-  heli: [{n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'}],
+  heli: [
+    {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
+    {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},
+  ],
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 

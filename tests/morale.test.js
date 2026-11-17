@@ -4,7 +4,7 @@
 // 60 % zurück. Sanitäter heilen Fliehende zuerst. Liegende stehen erst auf. Gilt auch für die Bosse.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn, rebuildHash, cellIndex, setCell } from '../game/js/world.js';
+import { createWorld, spawn, rebuildHash, cellIndex, setCell, nearestEnemy } from '../game/js/world.js';
 import { think, PRONE_UP_T } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
 import { MORALE, updateMorale, updateCentroids, fleeSteer, CORNER_PAD } from '../game/js/morale.js';
@@ -17,9 +17,16 @@ const run = (w, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { ste
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 // Gegner, der nie zuschlägt (oder schießt) und nicht stirbt
 const dummy = (w, type, x, y, team = 'rot') => { const e = spawn(w, type, x, y, team); e.hp = 1e9; e.cd = 1e9; return e; };
+// MORALE.MIN_ALLIES Verbündete, die stillstehen (betäubt) und nicht sterben: ohne sie gäbe es keine Flucht
+// (letztes Gefecht)
+const allies = (w, x, y, team = 'blau', n = MORALE.MIN_ALLIES) => {
+  const A = [];
+  for (let k = 0; k < n; k++) { const a = dummy(w, 'krieger', x + k * 24, y, team); a.state = 'stun'; a.stunT = 1e9; A.push(a); }
+  return A;
+};
 
 test('Rückzug: Werte laut Spez. #27 und neue Felder in spawn', () => {
-  assert.deepEqual(MORALE, { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5 });
+  assert.deepEqual(MORALE, { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5, MIN_ALLIES: 3 });
   const u = spawn(mkWorld(), 'krieger', 100, 100, 'blau');
   assert.equal(u.flee, false); assert.equal(u.safeT, 0); assert.equal(u.cornerT, 0);
 });
@@ -27,6 +34,7 @@ test('Rückzug: Werte laut Spez. #27 und neue Felder in spawn', () => {
 test('Flucht ab 25 %: rennt weg, schneller als sonst, ohne zuzuschlagen', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
   u.hp = 14;   // 14/60 < 25 %
+  allies(w, 200, 700);
   const e = spawn(w, 'krieger', 630, 400, 'rot'); e.hp = 1e9; e.cd = 5;   // verfolgt, schlägt aber in 0,5 s nicht
   let swung = false, maxSp = 0;
   run(w, .5, () => { if (u.swingT > 0) swung = true; maxSp = Math.max(maxSp, Math.hypot(u.mx, u.my)); });
@@ -40,6 +48,7 @@ test('Flucht ab 25 %: rennt weg, schneller als sonst, ohne zuzuschlagen', () => 
 test('über 25 % keine Flucht', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
   u.hp = 16;
+  allies(w, 200, 700);
   dummy(w, 'krieger', 630, 400);
   run(w, .3);
   assert.equal(u.flee, false);
@@ -48,6 +57,7 @@ test('über 25 % keine Flucht', () => {
 test('Erholung: ohne Feind in 200 px nach SAFE_T s +5 %/s, ab 60 % zurück in den Kampf', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 400, 400, 'blau');
   u.hp = 14;
+  allies(w, 380, 420);   // näher als HOME_NEAR: er bleibt stehen
   const s = spawn(w, 'sani', 400 + MORALE.SAFE_R + 60, 400, 'rot');   // Gegner außerhalb SAFE_R, bewegt sich nicht
   run(w, MORALE.SAFE_T - .1);
   assert.equal(u.flee, true);
@@ -66,6 +76,7 @@ test('Erholung: ohne Feind in 200 px nach SAFE_T s +5 %/s, ab 60 % zurück in de
 test('Feind in SAFE_R: keine Erholung', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 400, 400, 'blau');
   u.hp = 14;
+  allies(w, 100, 700);
   const e = dummy(w, 'schuetze', 400 + MORALE.SAFE_R - 40, 400);
   run(w, 4, () => { e.x = u.x + MORALE.SAFE_R - 40; e.y = u.y; });
   assert.equal(u.hp, 14);
@@ -75,6 +86,7 @@ test('Feind in SAFE_R: keine Erholung', () => {
 test('Eingeholt wehrt sich: ein schnellerer Feind klebt an ihm, nach CORNER_T schlägt er zurück', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
   u.hp = 14;
+  allies(w, 100, 700);
   const wolf = dummy(w, 'wolf', 625, 400);   // 100 px/s gegen 62 px/s
   let hp = wolf.hp, early = false;
   run(w, MORALE.CORNER_T - .1, () => { if (wolf.hp < hp) early = true; });
@@ -90,7 +102,8 @@ test('cornerT: Feind in Nahkampfreichweite + 10 px zählt, Abstand setzt zurück
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
   u.hp = 14;
   const e = dummy(w, 'krieger', 600 + 9 + 9 + CORNER_PAD - 1, 400);
-  rebuildHash(w);
+  allies(w, 100, 700);
+  rebuildHash(w); updateCentroids(w, DT);
   for (let k = 0; k < 30; k++) { w.time += DT; u.rt -= DT; updateMorale(w, u, DT); }
   assert.ok(Math.abs(u.cornerT - 30 * DT) < 1e-9, `cornerT ${u.cornerT}`);
   e.x = 600 + 9 + 9 + CORNER_PAD + 5;
@@ -117,7 +130,7 @@ test('Römer im Block halten länger: bei 20 % keine Flucht, bei 14 % schon, dan
   for (const f of w.formations) assert.ok(!f.m.includes(u));
   // allein (nicht im Block) flieht ein Römer schon bei 20 %
   const w2 = mkWorld(), v = spawn(w2, 'roemer', 300, 400, 'blau');
-  v.hp = .2 * UNITS.roemer.hp; dummy(w2, 'krieger', 330, 400);
+  v.hp = .2 * UNITS.roemer.hp; dummy(w2, 'krieger', 330, 400); allies(w2, 100, 700);
   run(w2, DT);
   assert.equal(v.flee, true);
 });
@@ -127,6 +140,7 @@ test('Keine Flucht in Lava: Lava hinter dem Fliehenden, er betritt keine Lava-Ze
   u.hp = 14;
   for (let gy = 0; gy < w.GH; gy++) for (let gx = 15; gx < 29; gx++) setCell(w, gy * w.GW + gx, 2);   // x 150..290
   const e = spawn(w, 'krieger', 330, 400, 'rot'); e.hp = 1e9; e.cd = 1e9;
+  allies(w, 600, 700);
   let lava = 0;
   run(w, 4, () => { if (w.terr[cellIndex(w, u.x, u.y)] === 2) lava++; });
   assert.equal(lava, 0, 'Schritte auf Lava');
@@ -139,6 +153,7 @@ test('Mauer hinter dem Fliehenden: er weicht seitlich aus statt dagegen zu renne
   u.hp = 14;
   for (let gy = 0; gy < w.GH; gy++) for (let gx = 26; gx < 29; gx++) setCell(w, gy * w.GW + gx, 4);
   const e = dummy(w, 'krieger', 330, 400);
+  allies(w, 600, 700);
   run(w, 1.5, () => { e.x = u.x + 30; });   // Feind bleibt dicht dran
   assert.ok(Math.abs(u.y - 400) > 40, `seitlich ausgewichen (y ${u.y})`);
 });
@@ -148,6 +163,7 @@ test('Flieger ignorieren das Gelände auf der Flucht', () => {
   u.hp = 50;
   for (let gy = 0; gy < w.GH; gy++) for (let gx = 15; gx < 29; gx++) setCell(w, gy * w.GW + gx, 2);
   dummy(w, 'soldat', 330, 400);
+  allies(w, 60, 400);
   run(w, 1);
   assert.equal(u.flee, true);
   assert.ok(u.x < 260, `fliegt über die Lava (x ${u.x})`);
@@ -194,6 +210,7 @@ test('Panzer, Hubschrauber und Drache fliehen auch', () => {
     const w = mkWorld(), u = spawn(w, type, 600, 400, 'blau');
     u.hp = .2 * UNITS[type].hp;
     const e = dummy(w, 'soldat', 690, 400);
+    allies(w, 250, 400);
     const d0 = dist(u, e);
     run(w, 1);
     assert.equal(u.flee, true, type);
@@ -205,7 +222,8 @@ test('Liegende stehen erst auf und fliehen dann', () => {
   const w = mkWorld(), u = spawn(w, 'mg', 600, 400, 'blau');
   u.stance = 'prone'; u.hp = 20;
   const e = dummy(w, 'schuetze', 750, 400);
-  rebuildHash(w);
+  allies(w, 300, 420);
+  rebuildHash(w); updateCentroids(w, DT);
   think(w, u, DT);
   assert.equal(u.flee, true);
   assert.equal(u.stance, 'up');
@@ -227,4 +245,44 @@ test('Angstaugen: poseUnit liefert fear und kleine Pupillen nur auf der Flucht',
   assert.ok(p.sweat >= 0 && p.sweat < 1);
   const b = spawn(w, 'panzer', 600, 400, 'blau'); b.flee = true;
   assert.equal(poseUnit(b, 1, {}, undefined).fear, 1);
+});
+
+test('Letztes Gefecht: ohne MIN_ALLIES kämpfende Verbündete flieht niemand, ein Fliehender kehrt um und kämpft', () => {
+  // allein: flieht nicht, schlägt zu
+  const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
+  u.hp = 14; u.flee = true;   // war schon auf der Flucht
+  const e = dummy(w, 'krieger', 625, 400);
+  run(w, 2);
+  assert.equal(u.flee, false, 'keine Truppen mehr: kämpft');
+  assert.ok(e.hp < 1e9, 'schlägt zu');
+  // 2 Verbündete reichen nicht, 3 schon
+  const w2 = mkWorld(), v = spawn(w2, 'krieger', 600, 400, 'blau');
+  v.hp = 14; allies(w2, 100, 700, 'blau', 2); dummy(w2, 'krieger', 630, 400);
+  run(w2, .2);
+  assert.equal(v.flee, false);
+  const w3 = mkWorld(), x = spawn(w3, 'krieger', 600, 400, 'blau');
+  x.hp = 14; const A = allies(w3, 100, 700); dummy(w3, 'krieger', 630, 400);
+  run(w3, .2);
+  assert.equal(x.flee, true);
+  // fällt ein Verbündeter, endet die Flucht (spätestens beim nächsten Schwerpunkt-Durchlauf)
+  A[0].hp = 0; A[0].alive = false;
+  run(w3, .3);
+  assert.equal(x.flee, false);
+  // Fliehende zählen nicht als Verbündete
+  const w4 = mkWorld(), y = spawn(w4, 'krieger', 600, 400, 'blau');
+  y.hp = 14; const B = allies(w4, 100, 700); B[0].flee = true; dummy(w4, 'krieger', 630, 400);
+  run(w4, .2);
+  assert.equal(y.flee, false);
+});
+
+test('Zielwahl: ein fliehender Gegner zählt doppelt so weit, ist er der einzige, wird er gejagt', () => {
+  const w = mkWorld(), c = spawn(w, 'krieger', 300, 400, 'blau');
+  const fl = spawn(w, 'krieger', 360, 400, 'rot'); fl.flee = true;
+  const fi = spawn(w, 'krieger', 300, 500, 'rot');
+  rebuildHash(w);
+  assert.equal(nearestEnemy(w, c), fi, 'der Kämpfer in 100 px vor dem Fliehenden in 60 px');
+  fl.flee = false;
+  assert.equal(nearestEnemy(w, c), fl);
+  fl.flee = true; fi.alive = false; rebuildHash(w);
+  assert.equal(nearestEnemy(w, c), fl, 'einziger Gegner');
 });

@@ -116,6 +116,9 @@ export function query(world, x, y, r, cb) {
   }
 }
 
+// Zielwahl: ein fliehender Gegner (morale.js) zählt FLEE_DIST-mal so weit weg; ist er der einzige, wird er trotzdem gejagt
+export const FLEE_DIST = 2;
+const FLEE_DIST2 = FLEE_DIST * FLEE_DIST;
 export function nearestEnemy(world, u) {
   const { HW, HH, hash } = world;
   const f = factionOf(world, u);
@@ -138,6 +141,7 @@ export function nearestEnemy(world, u) {
           const dx = v.x - u.x, dy = v.y - u.y;
           let d = (dx * dx + dy * dy) * (1 + .12 * (v.tg === u ? 0 : (v.att || 0)));
           if (pref < 1 && (v.T.heal || RANGED.has(v.type))) d *= pref;
+          if (v.flee) d *= FLEE_DIST2;   // Fliehende zählen doppelt so weit (Spez. #27): erst die, die noch kämpfen
           if (d < bd) { bd = d; best = v; }
         }
       }

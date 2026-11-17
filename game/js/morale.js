@@ -11,6 +11,10 @@
 // außerhalb von SAFE_R stehen, ein langsamer Verfolger käme immer wieder heran, und sie erholte sich nie.
 // Erholung: ist SAFE_T s lang kein Gegner in SAFE_R (u.safeT), steigen die LP um REGEN · T.hp je s; ab BACK · T.hp
 // endet die Flucht (u.rt = 0: think sucht gleich ein neues Ziel).
+// Letztes Gefecht: fliehen (anfangen und weiter fliehen) nur, solange die eigene Fraktion mindestens MIN_ALLIES
+// andere lebende, nicht fliehende Einheiten hat; sonst gibt es keine Truppen, zu denen sie laufen kann, und sie
+// kämpft bis zum Ende. Die Zahl kommt aus world.cent (n, Schwerpunkt-Durchlauf); Fluchtbeginn und -ende zählen n
+// sofort mit, Tode erst beim nächsten Durchlauf (höchstens CENT_T s später).
 // In die Ecke gedrängt oder eingeholt (u.cornerT): der Gegner ist ohne Unterbrechung höchstens Nahkampfreichweite
 // plus 10 px (CORNER_PAD, Körperränder plus 14 px) entfernt; ab CORNER_T s schlägt die Einheit zurück (combat.think),
 // bleibt aber auf der Flucht.
@@ -18,7 +22,7 @@ import { factionOf } from './world.js';
 import { HASH_CELL } from './data.js';
 import { hazardAt } from './formation.js';
 
-export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5 };
+export const MORALE = { FLEE: .25, FLEE_FORM: .15, BACK: .6, SAFE_R: 200, SAFE_T: 2, REGEN: .05, SPEED: 1.2, CORNER_T: 1.5, MIN_ALLIES: 3 };
 // Nahkampfreichweite (höchstens 4 px bei allen Nahkämpfern) plus 10 px, zusätzlich zu den beiden Radien
 export const CORNER_PAD = 14;
 export const FLEE_SCAN = .1, FLEE_STAGGER = .02, FLEE_LOOK = 2 * MORALE.SAFE_R;
@@ -98,12 +102,15 @@ export function nearestThreat(world, u, R) {
 // Ein Denkschritt Moral für u (state 'ok'). Liefert true, solange u flieht.
 export function updateMorale(world, u, dt) {
   const T = u.T, M = MORALE;
+  const c = world.cent.get(factionOf(world, u)), others = c ? c.n - (u.flee ? 0 : 1) : 0;
   if (!u.flee) {
-    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp) return false;
+    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES) return false;
+    c.n--;
     u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = null; u.run = 0;
     // Römer verlassen den Block (formation.rebuild nimmt Fliehende nicht wieder auf)
     if (u.formOn) { u.formOn = false; u.formFree = false; u.formVol = -1; u.formVx = 0; u.formVy = 0; }
   }
+  else if (others < M.MIN_ALLIES) { endFlee(u, c); return false; }   // letztes Gefecht
   if (u.rt <= 0 || (u.tg && !u.tg.alive)) {
     u.tg = nearestThreat(world, u, FLEE_LOOK);
     u.rt = FLEE_SCAN + (u.id % 4) * FLEE_STAGGER;
@@ -117,9 +124,14 @@ export function updateMorale(world, u, dt) {
   if (u.safeT >= M.SAFE_T) {
     const hp = u.hp + M.REGEN * T.hp * dt;
     u.hp = hp < T.hp ? hp : T.hp;
-    if (u.hp >= M.BACK * T.hp) { u.flee = false; u.safeT = 0; u.cornerT = 0; u.rt = 0; return false; }
+    if (u.hp >= M.BACK * T.hp) { endFlee(u, c); return false; }
   }
   return true;
+}
+// Flucht endet (erholt oder letztes Gefecht): zählt wieder als kämpfende Einheit der Fraktion, sucht gleich ein Ziel
+function endFlee(u, c) {
+  u.flee = false; u.safeT = 0; u.cornerT = 0; u.rt = 0;
+  if (c) c.n++;
 }
 
 /* ---------- Steuerung ---------- */

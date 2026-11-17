@@ -285,6 +285,8 @@ const actions = {
   undo: () => game.undo(),
   togglePause: () => game.togglePause(),
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
+  // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
+  keysBlocked: () => ui.lexiconOpen(),
 };
 
 /* ---------- Schleife ---------- */

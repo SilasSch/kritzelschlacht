@@ -329,6 +329,6 @@ export function createUI(game) {
   return {
     refresh, toast, banner, closeBanner, showResult, openMissionList,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
-    hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon,
+    hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon, lexiconOpen: () => !$('ovLex').hidden,
   };
 }

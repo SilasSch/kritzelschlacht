@@ -1,6 +1,7 @@
 // Browser-Eingabe: Maus, Mausrad, Tastatur -> actions. Malen nur in Weltkoordinaten (screenToWorld).
 // actions = { paintAt(wx, wy, erase), strokeStart(), strokeEnd(), brushDelta(d), brushRadius() -> Welteinheiten,
-//             setCat(dir), pickSlot(n), eraser(), undo(), togglePause(), hover(wx, wy, inside) }
+//             setCat(dir), pickSlot(n), eraser(), undo(), togglePause(), hover(wx, wy, inside),
+//             keysBlocked() -> true, solange ein Dialog offen ist (Lexikon): dann keine Tastenkürzel }
 import { screenToWorld, zoomAt, pan } from './camera.js';
 import { createWheel, wheelAction } from './wheel.js';
 
@@ -101,7 +102,7 @@ export function bindInput(canvas, cam, actions) {
   };
 
   window.addEventListener('keydown', (e) => {
-    if (inTextInput(e.target)) return;
+    if (inTextInput(e.target) || (actions.keysBlocked && actions.keysBlocked())) return;
     if (e.code === 'Space') { space = true; e.preventDefault(); return; }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
       e.preventDefault(); actions.undo(); return;

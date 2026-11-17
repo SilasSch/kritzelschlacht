@@ -576,12 +576,32 @@ function holdSlot(world, u, dt) {
 // Speerwurf (Spez. #25): ein Römer im Block (formOn, nicht formFree), dessen Reihe schon werfen darf (formVol ≥ 0,
 // formation.march), wirft seinen einen Speer, sobald sein nächster Gegner PILUM_MIN bis PILUM_MAX px entfernt ist.
 // Ist er schon näher, wirft er nicht. Das Ziel wird nicht gemerkt (u.tg bleibt im Marsch leer).
+// Gesucht wird nur in den Hash-Zellen um u bis PILUM_MAX (eigene Schleife ohne Rückruf, wie meleeScan), nicht mit
+// der unbegrenzten Ringsuche nearestEnemy: volT läuft weiter, auch wenn der Gegner, der die Uhr gestartet hat, fällt
+// oder abzieht, und dann sucht jeder Römer mit Speer jeden Schritt. Hubschrauber nicht (wie nearestEnemy für
+// Nahkämpfer). PILUM_SCAN zählt Suchen und besuchte Zellen (Tests, Messungen).
 const PIL_MIN2 = FORM.PILUM_MIN * FORM.PILUM_MIN, PIL_MAX2 = FORM.PILUM_MAX * FORM.PILUM_MAX;
+export const PILUM_SCAN = { calls: 0, cells: 0 };
+function pilumTarget(world, u) {
+  const { HW, HH, hash } = world, f = factionOf(world, u), R = FORM.PILUM_MAX, ux = u.x, uy = u.y;
+  const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
+  const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
+  PILUM_SCAN.calls++; PILUM_SCAN.cells += (gx1 - gx0 + 1) * (gy1 - gy0 + 1);
+  let best = null, bd = Infinity;
+  for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+    const cell = hash[gy * HW + gx];
+    for (let i = 0; i < cell.length; i++) {
+      const v = cell[i];
+      if (!v.alive || v.type === 'heli') continue;
+      const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
+      if (d2 <= PIL_MAX2 && d2 < bd && factionOf(world, v) !== f) { bd = d2; best = v; }
+    }
+  }
+  return best;
+}
 function throwPilum(world, u) {
-  const t = nearestEnemy(world, u);
-  if (!t) return;
-  const d2 = (t.x - u.x) ** 2 + (t.y - u.y) ** 2;
-  if (d2 < PIL_MIN2 || d2 > PIL_MAX2) return;
+  const t = pilumTarget(world, u);
+  if (!t || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < PIL_MIN2) return;
   fire(world, u, t, 'pilum');
   u.pilum = 0;
 }

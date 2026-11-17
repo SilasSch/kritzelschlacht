@@ -60,7 +60,7 @@ const TERR_SP = [1, .4, .8, .85, 1];
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 /* ---------- Schilde und Speerwurf ---------- */
-// Schilde wirken nur in Formation (formOn): Pfeile, Kugeln und Speere, die von vorn kommen (Flugrichtung
+// Schilde wirken nur in Formation (formOn, nicht vom Platz freigegeben: formFree): Pfeile, Kugeln und Speere, die von vorn kommen (Flugrichtung
 // höchstens 60° gegen die Blickrichtung des Blocks), richten nur SHIELD_MUL des Schadens an (combat.landArc,
 // combat.impact). Explosionen, Feuerbälle, Raketen, Brand und Nahkampf gehen nie über diesen Test.
 export const SHIELD_KINDS = new Set(['arrow', 'bullet', 'pilum']);
@@ -70,7 +70,7 @@ export const SHIELD_MUL = .1, SHIELD_COS = .5;   // cos 60°
 export const PILUM_RANK_DT = .15;
 // Hält das Schild von v ein Geschoss der Art kind mit Flugrichtung (dx, dy) ab?
 export function shieldBlocks(v, kind, dx, dy) {
-  if (v.type !== 'roemer' || !v.formOn || !SHIELD_KINDS.has(kind)) return false;
+  if (v.type !== 'roemer' || !v.formOn || v.formFree || !SHIELD_KINDS.has(kind)) return false;
   const l = Math.hypot(dx, dy);
   return l > 1e-9 && -(dx * v.formAx + dy * v.formAy) / l >= SHIELD_COS;
 }

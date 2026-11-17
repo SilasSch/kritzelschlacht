@@ -4,10 +4,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
-import { hurt, think, fire, stepProjectiles } from '../game/js/combat.js';
+import { hurt, think, fire, stepProjectiles, PILUM_SCAN } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
 import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT } from '../game/js/formation.js';
-import { CELL } from '../game/js/data.js';
+import { CELL, HASH_CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
 const mk = (seed = 3) => { const w = createWorld(W, H, seed); w.teamMode = true; return w; };
@@ -236,6 +236,8 @@ test('shieldBlocks: nur Pfeil, Kugel, Speer von vorn (±60°) auf Römer in Form
   assert.equal(shieldBlocks(v, 'bullet', 0, 1), false, '90° seitlich');
   assert.equal(shieldBlocks(v, 'bullet', 0, -1), false, '90° von der anderen Seite');
   assert.equal(shieldBlocks({ ...v, formOn: false }, 'arrow', -1, 0), false, 'ohne Formation');
+  assert.equal(shieldBlocks({ ...v, formFree: true }, 'arrow', -1, 0), false, 'vom Platz freigegeben (Lava/Mauer)');
+  assert.equal(shieldBlocks({ ...v, formFree: false }, 'arrow', -1, 0), true);
   for (const k of ['fire', 'rocket', 'blast', 'melee']) assert.equal(shieldBlocks(v, k, -1, 0), false, k);
   assert.equal(shieldBlocks({ ...v, type: 'krieger' }, 'arrow', -1, 0), false, 'nur Römer');
   assert.equal(shieldBlocks(v, 'arrow', 0, 0), false, 'ohne Richtung');
@@ -369,4 +371,25 @@ test('Speer über eigene Reihen: aus der dritten Reihe auf ein Ziel in 140 px tr
   assert.ok(first.every(v => v.hp === v.T.hp), 'erste Reihe unversehrt');
   assert.ok(rs.every(v => v.hp === v.T.hp), 'kein Römer getroffen');
   assert.ok(foe.hp < foe.T.hp, 'Ziel getroffen');
+});
+
+// Fix-Runde 1: volT läuft weiter, auch wenn der Gegner, der die Uhr gestartet hat, fällt oder abzieht. Dann sucht
+// jeder Römer mit Speer jeden Schritt ein Ziel; die Suche muss auf PILUM_MAX begrenzt sein (nicht die Ringsuche
+// über die ganze Karte), sonst kostet ein ruhender Block mit Speeren ein Vielfaches (0,40 statt 0,10 ms).
+test('Speer: Zielsuche bleibt auf PILUM_MAX begrenzt, auch wenn der Feind weit weg ist', () => {
+  const w = createWorld(2400, 1200, 3); w.teamMode = true;
+  const rs = [];
+  for (let k = 0; k < 40; k++) { const j = k % 4, i = (k / 4) | 0; rs.push(spawn(w, 'roemer', 300 - j * 22, 600 + (i - 4.5) * 22, 'blau')); }
+  spawn(w, 'krieger', 1800, 600, 'rot');   // 1500 px vor dem Block
+  for (let i = 0; i < 30; i++) stepRomans(w);
+  assert.ok(rs.every(u => u.formOn), 'Block marschiert');
+  // Uhr läuft (wie nach einem gefallenen Gegner), alle haben noch ihren Speer
+  for (const f of w.formations) f.volT = 1;
+  const c0 = PILUM_SCAN.calls, z0 = PILUM_SCAN.cells, N = 60;
+  for (let i = 0; i < N; i++) { stepRomans(w); for (const f of w.formations) f.volT = 1; }
+  const calls = PILUM_SCAN.calls - c0, cells = PILUM_SCAN.cells - z0;
+  const box = (2 * Math.ceil(FORM.PILUM_MAX / HASH_CELL) + 1) ** 2;
+  assert.ok(calls > 0 && calls <= 40 * N, `Suchen ${calls}`);
+  assert.ok(cells <= calls * box, `höchstens ${box} Hash-Zellen je Suche: ${(cells / calls).toFixed(1)}`);
+  assert.ok(rs.every(u => u.pilum === 1), 'kein Wurf ohne Ziel in Reichweite');
 });

@@ -78,6 +78,7 @@ test('Schild: kein Block von hinten, von der Seite, ohne Formation und gegen Rak
     ['bullet', 'soldat', 1, 0, true],     // von hinten (Römer blickt vom Schützen weg)
     ['bullet', 'soldat', 0, 1, true],     // 90° seitlich
     ['arrow', 'schuetze', -1, 0, false],  // ohne Formation
+    ['bullet', 'soldat', -1, 0, 'free'],  // vom Platz freigegeben (Lava/Mauer)
     ['rocket', 'panzerfaust', -1, 0, true],
     ['fire', 'magier', -1, 0, true],
   ];
@@ -85,7 +86,7 @@ test('Schild: kein Block von hinten, von der Seite, ohne Formation und gegen Rak
     const w = mkWorld();
     const s = spawn(w, type, 300, 300, 'blau');
     const r = shielded(w, 440, 300, 'rot', ax, ay);
-    r.formOn = on;
+    r.formOn = !!on; r.formFree = on === 'free';
     rebuildHash(w);
     fire(w, s, r, kind, 440, 300);
     flyAll(w);

@@ -158,3 +158,25 @@ test('paintTerrain: eigenes Gelände ersetzen am Budgetlimit erstattet nicht dop
   const b = run(0.22);
   assert.equal(b.walls, 1); assert.equal(b.water, 3);
 });
+
+// Task 6 (Review): Radierer und Rückgängig mit verfluchten Fröschen und der Asche des Phönix
+test('Radierer + Rückgängig: ein Frosch kommt als sein Typ zurück, Asche mit halben LP; Erstattung nach dem echten Typ', async () => {
+  const { curseFrog } = await import('../game/js/abilities.js');
+  const w = createWorld(1400, 800, 3), m = mkMission(100);
+  const r = spawn(w, 'ritter', 200, 400, 'blau'); r.hp = 137; m.spent = UNITS.ritter.cost;
+  const p = spawn(w, 'phoenix', 600, 400, 'blau'); p.hp = 0; p.ashT = 1.5; m.spent += UNITS.phoenix.cost;
+  rebuildHash(w);
+  assert.ok(curseFrog(w, r)); assert.equal(r.type, 'frosch');
+  const s = createStroke(m.spent);
+  paintTerrain(w, s, 200, 400, 20, 'radierer', m, 'plan');
+  assert.ok(!r.alive);
+  assert.ok(Math.abs(m.spent - UNITS.phoenix.cost) < 1e-9, 'Ritter erstattet: ' + m.spent);
+  paintTerrain(w, s, 600, 400, 20, 'radierer', m, 'plan');
+  assert.ok(!p.alive);
+  assert.ok(Math.abs(m.spent) < 1e-9, 'Phönix erstattet: ' + m.spent);
+  undo(w, s);
+  const back = alive(w);
+  const rb = back.find(u => u.x === 200), pb = back.find(u => u.x === 600);
+  assert.equal(rb.type, 'ritter'); assert.equal(rb.hp, 137); assert.equal(rb.frogFrom, null);
+  assert.equal(pb.type, 'phoenix'); assert.equal(pb.hp, UNITS.phoenix.hp / 2); assert.equal(pb.ashT, 0);
+});

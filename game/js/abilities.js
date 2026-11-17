@@ -245,7 +245,9 @@ function shareCd(world, u, R) {
 // statt des Richtwerts 20 s; eigene Schützen bis SHARE px laden beim Auslösen mit neu (shareCd: eine Salve je Gruppe,
 // über eine lange Reihe mehrere); und die Salve ersetzt die nächsten Pfeile (archerEnd: danach Nachladen für sie).
 // Fix-Runde 1: SHARE 300 → 120 (bei 300 schoss eine Reihe von 80 Schützen in 30 s nur eine Salve: kaum sichtbar).
-export const FIRE_ARROWS = { N: 3, GAP: .2, SHARE: 120 };
+// Task 7: SHARE 120 → 200, ein Mittelweg zwischen sichtbaren Salven und dem Konter roemer > schuetze (mit 120 an
+// einzelnen Formen 1–2/4; mit 200 und Römern zu 100 LP an allen Formen mindestens 3/4).
+export const FIRE_ARROWS = { N: 3, GAP: .2, SHARE: 200 };
 function archerReady(world, u) {
   const t = foeInReach(world, u, u.T.range, false);
   return !!t && t.type !== 'drache';
@@ -779,6 +781,10 @@ function auraTest(v) {
   if (v === AU_U || v.hp >= v.T.hp || v.ashT > 0 || UNDEAD.has(v.type) || factionOf(AU_W, v) !== AU_F) return;
   const dx = v.x - AU_U.x, dy = v.y - AU_U.y, R = UNICORN.AURA_R;
   if (dx * dx + dy * dy > R * R) return;
+  // Task 7: Auren stapeln nicht (die Karte sagt 2 LP je s): höchstens eine Heilung je AURA_DT s, auch neben mehreren
+  // Einhörnern. Gestapelt heilte ein Pulk aus 20 Einhörnern jedes um bis zu 12 % LP je s und gewann vier Missionen allein.
+  if (v.auraAt > AU_W.time - UNICORN.AURA_DT + 1e-3) return;
+  v.auraAt = AU_W.time;
   const h = v.hp + UNICORN.AURA_HP * UNICORN.AURA_DT;
   v.hp = h < v.T.hp ? h : v.T.hp;
   AU_N++;

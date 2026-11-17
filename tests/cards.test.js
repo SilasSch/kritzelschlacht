@@ -37,8 +37,8 @@ test('Konter', () => {
   const r = unitCard('ritter');
   assert.ok(r.strong.includes('krieger'));
   assert.ok(r.weak.includes('biene'));
-  assert.deepEqual([...r.strong].sort(), ['krieger', 'reiter', 'schuetze']);
-  assert.deepEqual([...r.weak].sort(), ['biene', 'sniper']);
+  assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'reiter', 'schuetze']);
+  assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'sniper']);
   assert.deepEqual([...unitCard('roemer').weak].sort(), ['grenadier', 'magier', 'moerser', 'reiter']);
   assert.ok(unitCard('moerser').strong.includes('roemer'), 'Mörser, wie im Römer-Text');
   // Konter nur aus COUNTERS, keine erfundenen; Einheiten ohne Einträge haben leere Listen
@@ -47,6 +47,10 @@ test('Konter', () => {
     for (const s of c.strong) assert.ok(COUNTERS.some(([a, b]) => a === t && b === s), `${t} stark gegen ${s}`);
     for (const w of c.weak) assert.ok(COUNTERS.some(([a, b]) => a === w && b === t), `${t} schwach gegen ${w}`);
     assert.equal(new Set(c.strong).size, c.strong.length);
+  }
+  // Task 7: jede neue Einheit schlägt mindestens eine und wird von mindestens einer geschlagen (Duell im Prüfstand)
+  for (const t of ['vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel']) {
+    assert.ok(unitCard(t).strong.length >= 1 && unitCard(t).weak.length >= 1, t);
   }
   assert.deepEqual(unitCard('sani').strong, []);
   assert.deepEqual(unitCard('sani').weak, []);

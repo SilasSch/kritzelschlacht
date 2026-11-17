@@ -329,7 +329,7 @@ test('Einhorn: heilt Verbündete bis 70 px um 2 LP je s (keine Ghule, keine Fein
   for (const v of [a, b, g, f]) v.hp = 30;
   e.hp = 50;
   rebuildHash(w);
-  for (let i = 0; i < 120; i++) think(w, e, DT);
+  for (let i = 0; i < 120; i++) { w.time += DT; think(w, e, DT); }   // world.time: Auren stapeln nicht (je AURA_DT eine Heilung)
   assert.ok(Math.abs(a.hp - (30 + 2 * UNICORN.AURA_HP)) < 1e-6, `Verbündeter in 50 px: ${a.hp}`);
   assert.equal(b.hp, 30, 'Verbündeter in 80 px nicht');
   assert.equal(g.hp, 30, 'Ghul nicht'); assert.ok(UNDEAD.has('ghul'));
@@ -347,6 +347,15 @@ test('Einhorn: heilt Verbündete bis 70 px um 2 LP je s (keine Ghule, keine Fein
   const horn = h0 - t.hp;
   assert.ok(horn >= T.dmg * .85 * m * UNICORN.CHARGE - 1e-9 && horn <= T.dmg * 1.15 * m * UNICORN.CHARGE + 1e-9, `Horn ${horn}`);
   assert.ok(u.st > 0, 'läuft durch');
+});
+
+// Task 7: Auren stapeln nicht: drei Einhörner um einen Verbündeten heilen ihn zusammen auch nur 2 LP je s
+test('Einhorn: mehrere Auren stapeln nicht', () => {
+  const w = mkWorld(), E = [0, 1, 2].map(k => freeze(spawn(w, 'einhorn', 400 + k * 30, 400, 'blau')));
+  const a = freeze(dummy(w, 'krieger', 430, 440, 'blau')); a.hp = 30;
+  rebuildHash(w);
+  for (let i = 0; i < 120; i++) { w.time += DT; for (const e of E) think(w, e, DT); }
+  assert.ok(Math.abs(a.hp - (30 + 2 * UNICORN.AURA_HP)) < 1e-6, `drei Auren, 2 s: ${a.hp}`);
 });
 
 /* ---------- Frosch und Zusammenspiel ---------- */

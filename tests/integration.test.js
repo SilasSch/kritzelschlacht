@@ -75,13 +75,13 @@ test('Form der Einheiten: alle Felder aus Task 4b, 5 und 6 je einmal, Zahlenfeld
   const w = mkWorld();
   const keys = Object.keys(spawn(w, 'krieger', 50, 50, 'blau'));
   for (const k of ['rangedT', 'poisonT', 'poisonSrc', 'stingTg', 'healAt', 'healN', 'mgCd', 'frogFrom', 'frogT', 'reborn', 'ashT',
-    'noHealT', 'auraT', 'trailT', 'hidden', 'seenT', 'grabbed', 'herdCd', 'beatCd', 'beeCd']) {
+    'noHealT', 'auraT', 'auraAt', 'trailT', 'hidden', 'seenT', 'grabbed', 'herdCd', 'beatCd', 'beeCd']) {
     assert.equal(keys.filter(x => x === k).length, 1, k);
   }
   for (const t of Object.keys(UNITS)) {
     const u = spawn(w, t, 100, 100, 'rot');
     assert.equal(Object.keys(u).join(), keys.join(), t);
-    for (const k of ['rangedT', 'poisonT', 'healAt', 'mgCd', 'frogT', 'ashT', 'noHealT', 'auraT', 'trailT', 'seenT', 'herdCd', 'beatCd', 'beeCd']) {
+    for (const k of ['rangedT', 'poisonT', 'healAt', 'mgCd', 'frogT', 'ashT', 'noHealT', 'auraT', 'auraAt', 'trailT', 'seenT', 'herdCd', 'beatCd', 'beeCd']) {
       assert.equal(typeof u[k], 'number', `${t}.${k}`);
     }
   }

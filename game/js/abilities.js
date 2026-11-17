@@ -37,8 +37,9 @@ const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 // Kurzer erzwungener Rückzug von sec s, unabhängig vom Leben und ohne Erholung (morale.updateMorale führt ihn,
 // combat.retreat steuert: Liegende stehen erst auf, in der Ecke wehrt sie sich). Ein längerer laufender Schreck
 // bleibt (fearT = max). Verlässt sofort den Römerblock (kein Schildschutz), bricht eine laufende Fähigkeit ab und
-// zählt sofort nicht mehr zum Schwerpunkt der Fraktion (wie der Fluchtbeginn). Wer betäubt oder in der Luft ist, erschrickt
-// trotzdem; der Schreck läuft dann erst ab, wenn er wieder steht (Vorrang: betäubt > Schreck). Schreckwirkungen treffen nur Feinde: das prüft der Aufrufer.
+// zählt sofort nicht mehr zum Schwerpunkt der Fraktion (wie der Fluchtbeginn). Wer betäubt oder in der Luft ist,
+// erschrickt trotzdem; der Schreck läuft dann erst ab, wenn er wieder steht (Vorrang: betäubt > Schreck).
+// Schreckwirkungen treffen nur Feinde: das prüft der Aufrufer.
 export function scare(world, v, sec) {
   if (!v.alive || !(sec > 0)) return;
   if (!isFleeing(v)) {

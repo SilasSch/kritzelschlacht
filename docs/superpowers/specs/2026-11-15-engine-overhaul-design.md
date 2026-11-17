@@ -160,6 +160,16 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 - Die vollen Balance-Prüfungen mit 6 Fensterformen laufen in den Zwischenschritten nur noch auf einer Form. Alle 6 Formen werden erst vor dem Veröffentlichen geprüft.
 - Unabhängige Aufgaben laufen parallel.
 
+## Nachtrag 5 (2026-11-18, Rückmeldung des Nutzers)
+
+| # | Entscheidung |
+|---|---|
+| 40 | **MG-Schützen** schießen schneller oder machen mehr Schaden. |
+| 41 | **Geister fliehen nicht.** Sie heilen sich, indem sie Schaden machen. |
+| 42 | **Lava:** Einheiten laufen nie freiwillig in Lava, auch nicht auf der Flucht, beim Stürmen oder in Formation. Wer hineingerät (geschleudert, geschoben), läuft auf kürzestem Weg wieder heraus und hat dabei Vorrang vor allem anderen. |
+| 43 | **Charakterkarten:** Die Karte beim Drüberfahren verschwindet zuverlässig, sobald die Maus die Einheit verlässt. |
+| 44 | **GitHub:** Das Projekt liegt im privaten Repo `SilasSch/kritzelschlacht`. |
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

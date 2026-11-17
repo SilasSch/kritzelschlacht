@@ -104,7 +104,7 @@ test('fire: Pfeil fliegt, trifft und meldet shot + sound', () => {
 
 test('Typ-Sets: RANGED in data.js, KITE und LINE in combat.js', () => {
   assert.ok(RANGED.has('schuetze') && RANGED.has('moerser') && !RANGED.has('krieger'));
-  assert.deepEqual([...KITE].sort(), ['schuetze', 'sniper', 'soldat']);
+  assert.deepEqual([...KITE].sort(), ['schuetze', 'soldat']);   // Scharfschütze: SNIPER.KEEP
   assert.deepEqual([...LINE].sort(), ['krieger', 'ritter', 'soldat']);
 });
 

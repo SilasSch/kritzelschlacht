@@ -17,7 +17,9 @@ export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40 };
 // Hysterese: nach dem Zurückweichen legt sich der Scharfschütze erst ab LIE_MIN · Reichweite wieder hin (kein Auf und Ab)
 const LIE_MIN = .75;
-export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
+// Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
+// Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
+export const KITE = new Set(['schuetze', 'soldat']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };

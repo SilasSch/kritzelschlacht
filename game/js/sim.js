@@ -14,7 +14,7 @@ const rnd = (world, a, b) => a + world.rng() * (b - a);
 // Zeit je Teil von step, immer mitgezählt (ms, aufsummiert seit Programmstart; SIM_TIME.steps = Schritte).
 // Für Messungen (tools/bench.mjs --profile, __bench.measure) Differenzen bilden. Immer aktiv statt nur unter
 // einem Schalter: ein selten genommener Messzweig ließ V8 step immer wieder verwerfen (Task 13).
-export const SIM_PHASES = ['hash', 'flow', 'form', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
+export const SIM_PHASES = ['hash', 'flow', 'formMorale', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
 export const SIM_TIME = { ms: new Float64Array(SIM_PHASES.length), steps: 0 };
 const pnow = globalThis.performance ? () => globalThis.performance.now() : () => 0;
 export function step(world, dt) {
@@ -29,7 +29,7 @@ export function step(world, dt) {
   t1 = pnow(); M[1] += t1 - t0; t0 = t1;
   // Römerblöcke (formation.js): Plätze und Blockzustand, die think liest
   updateFormations(world, dt);
-  // Schwerpunkt je Fraktion für die Fluchtrichtung (morale.js), gedrosselt
+  // Schwerpunkt je Fraktion für die Fluchtrichtung (morale.js), gedrosselt; zählt mit den Blöcken als 'formMorale'
   updateCentroids(world, dt);
   t1 = pnow(); M[2] += t1 - t0; t0 = t1;
   const units = world.units;

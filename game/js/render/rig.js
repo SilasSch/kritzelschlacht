@@ -649,10 +649,10 @@ function partSpec(t, part) {
   return null;
 }
 // Zusatzteile normaler Figuren über RIG_PARTS hinaus (Römer: Schild); ohne bleibt rig[name] leer
-export const EXTRA_PARTS = ['shield'];
+const EXTRA_PARTS = ['shield'];
 const extraNames = t => (DEF[t].parts ? [] : EXTRA_PARTS.filter(n => DEF[t][n]));
 // Angstteile (Spez. #27): Brauen für normale Figuren mit Augen; Bosse zeigen nur kleine Pupillen und den Tropfen
-export const FEAR_PARTS = ['brow'];
+const FEAR_PARTS = ['brow'];
 const fearNames = t => (DEF[t].parts || !DEF[t].eyes ? [] : FEAR_PARTS);
 // alle Teile eines Typs: RIG_PARTS, bei Bossen dazu ihre eigenen Teile, sonst die vorhandenen Zusatz- und Angstteile
 const partNames = t => (DEF[t].parts ? [...RIG_PARTS, ...Object.keys(DEF[t].parts).filter(n => !RIG_PARTS.includes(n))] : [...RIG_PARTS, ...extraNames(t), ...fearNames(t)]);

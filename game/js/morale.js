@@ -97,11 +97,9 @@ function meanC(c) { if (c.n) { c.x /= c.n; c.y /= c.n; } }
 
 /* ---------- Bedrohung ---------- */
 // Nächster Gegner (jede Art, auch Flieger) höchstens R px von u, über die Hash-Zellen in Ringen um u.
-export const THREAT_SCAN = { calls: 0 };
 export function nearestThreat(world, u, R) {
   const f = factionOf(world, u);
   if (world.totalAlive - (world.facCount.get(f) || 0) <= 0) return null;
-  THREAT_SCAN.calls++;
   const { HW, HH, hash } = world, ux = u.x, uy = u.y;
   const cx = clamp(ux / HC | 0, 0, HW - 1), cy = clamp(uy / HC | 0, 0, HH - 1), maxR = Math.ceil(R / HC) + 1;
   let best = null, bd = R * R;

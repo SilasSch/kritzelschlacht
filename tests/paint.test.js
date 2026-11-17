@@ -180,3 +180,25 @@ test('Radierer + Rückgängig: ein Frosch kommt als sein Typ zurück, Asche mit 
   assert.equal(rb.type, 'ritter'); assert.equal(rb.hp, 137); assert.equal(rb.frogFrom, null);
   assert.equal(pb.type, 'phoenix'); assert.equal(pb.hp, UNITS.phoenix.hp / 2); assert.equal(pb.ashT, 0);
 });
+
+// Task 6 (Review): ein schon wiedergeborener Phönix steht nach Radierer + Rückgängig oder im gesicherten Sandkasten nicht
+// ein zweites Mal auf
+test('Rückgängig und Sandkasten behalten reborn: der Phönix steht nur einmal auf', async () => {
+  const fs = await import('node:fs');
+  const w = createWorld(1400, 800, 3);
+  const p = spawn(w, 'phoenix', 300, 400, 'blau'); p.reborn = true; p.hp = 40;
+  const q = spawn(w, 'phoenix', 600, 400, 'blau');
+  rebuildHash(w);
+  const s = createStroke(0);
+  paintTerrain(w, s, 300, 400, 20, 'radierer', null, null);
+  paintTerrain(w, s, 600, 400, 20, 'radierer', null, null);
+  undo(w, s);
+  const back = alive(w);
+  assert.equal(back.find(u => u.x === 300).reborn, true);
+  assert.equal(back.find(u => u.x === 600).reborn, false);
+  assert.ok(!q.alive);
+  // main.js braucht das DOM: saveSandbox und enterSandbox im Quelltext
+  const main = fs.readFileSync(new URL('../game/js/main.js', import.meta.url), 'utf8');
+  assert.match(main, /reborn: u\.reborn \}\)\)/, 'saveSandbox sichert reborn');
+  assert.match(main, /n\.hp = u\.hp; n\.reborn = u\.reborn;/, 'enterSandbox stellt reborn her');
+});

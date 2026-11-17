@@ -850,6 +850,7 @@ export function think(world, u, dt) {
   }
   // Task 5: passive Teile der Tiere (Brustklopfen, Angst des Elefanten vor Bienen), nur im normalen Zustand
   if (T.tier) { animalPassive(world, u); if (isFleeing(u)) { retreat(world, u, dt); return; } }
+  if (u.tg !== null && u.tg.ashT > 0) u.tg = null;   // Task 6: Asche des Phönix ist kein Ziel (auch nicht für Fähigkeiten: vor stepAbility)
   // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
@@ -869,7 +870,6 @@ export function think(world, u, dt) {
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   if (T.heal) { healer(world, u, dt); return; }
-  if (u.tg !== null && u.tg.ashT > 0) u.tg = null;   // Task 6: Asche des Phönix ist kein Ziel
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
   // Adler oben)
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || ((u.tg.batT > 0 || aloft(u.tg)) && outOfMelee(u, u.tg)) ||

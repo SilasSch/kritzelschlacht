@@ -37,3 +37,15 @@ test('Fund 2: ein Phönix, der an Gift zu Asche wird, handelt in diesem Schritt 
   assert.equal(e.hp, 1e9, 'Asche schlägt nicht zu');
   assert.ok(p.cd <= 0, 'Asche löst keinen Angriff aus');
 });
+
+test('Fund 3: eine Fähigkeit trifft keine Asche (das Ziel wird vor stepAbility verworfen)', () => {
+  const w = mkWorld(6);
+  const c = spawn(w, 'krokodil', 400, 300, 'blau'); c.abCd = 0; c.cd = 1e9;
+  const a = spawn(w, 'krieger', 410, 300, 'rot'); a.hp = 50; a.ashT = 1; a.cd = 1e9;
+  rebuildHash(w);
+  c.tg = a; c.rt = 5;
+  step(w, DT);
+  assert.equal(a.hp, 50, 'Biss der Fähigkeit trifft die Asche nicht');
+  assert.equal(c.seenT <= 0, true, 'kein Packen (seenT bliebe sonst gesetzt)');
+  assert.equal(a.state, 'ok');
+});

@@ -680,6 +680,8 @@ export function endFrog(world, u) {
 }
 // Restzeit des Fluchs (combat.think, in jedem Zustand)
 export function stepFrogCurse(world, u, dt) {
+  // die Sperre der Troll-Heilung (nur Trolle setzen noHealT) läuft auch als Frosch ab, wie sonst in stepTroll
+  if (u.noHealT > 0) u.noHealT = u.noHealT > dt ? u.noHealT - dt : 0;
   u.frogT -= dt;
   if (u.frogT <= 0) endFrog(world, u);
 }

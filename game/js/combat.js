@@ -128,7 +128,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
-  if (t === 'troll' && isFire(kind)) v.noHealT = TROLL.NO_HEAL;   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7)
+  // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7), auch beim Troll, der gerade ein Frosch ist
+  if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&

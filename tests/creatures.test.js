@@ -427,3 +427,21 @@ test('Frosch stirbt: Leiche, Teile und death-Ereignis nach dem ursprünglichen T
   // Körper plus die Teile des Ritters (Helm und Schild), nicht die des Froschs (keine)
   assert.equal(w.corpses.filter(c => c.kind === 'part').length, 2);
 });
+
+// Review Task 6, Punkt 5: Feuer auf einen Troll, der gerade ein Frosch ist, sperrt die Heilung trotzdem
+test('Troll als Frosch: ein Feuertreffer setzt noHealT, nach dem Rückwandeln heilt er erst nach Ablauf', () => {
+  const w = mkWorld(), tr = spawn(w, 'troll', 300, 400, 'rot'), m = spawn(w, 'magier', 900, 400, 'blau');
+  m.cd = 1e9; m.abCd = 1e9; tr.hp = 100;
+  rebuildHash(w);
+  assert.ok(curseFrog(w, tr, 1));
+  hurt(w, tr, 5, 'fire', m);
+  assert.equal(tr.noHealT, TROLL.NO_HEAL);
+  const hp0 = tr.hp;
+  freeze(m);
+  run(w, 1.5);   // 1 s Frosch, dann wieder Troll; die Sperre ist noch 2,5 s aktiv
+  assert.equal(tr.type, 'troll');
+  assert.ok(Math.abs(tr.noHealT - (TROLL.NO_HEAL - 1.5)) < .05, 'Sperre läuft auch als Frosch: ' + tr.noHealT);
+  assert.ok(tr.hp <= hp0 + 1e-9, 'heilt nicht direkt nach dem Rückwandeln');
+  run(w, 3);
+  assert.ok(tr.hp > hp0, 'nach Ablauf heilt er wieder');
+});

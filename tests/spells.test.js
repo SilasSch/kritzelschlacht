@@ -392,3 +392,30 @@ test('Daten: Zauberbuch-Karte in data.js (Feuerball, Blitz, Windstoß, Steinwand
   const names = UNITS.magier.abil.map(a => a.n);
   for (const n of ['Feuerball', 'Blitz', 'Windstoß', 'Steinwand', 'Meteor']) assert.ok(names.some(x => x.startsWith(n)), n);
 });
+
+// Task 7: gegen einen einzelnen Geist der Feuerball (nur Feuer trifft ihn voll), gegen andere Einzelziele der Blitz
+test('Wahl nach Lage: einzelner Geist → Feuerball, einzelne Biene weiter Blitz', () => {
+  const w = best(mkWorld()), m = spawn(w, 'magier', 300, 400, 'blau'), g = dummy(w, 'geist', 480, 400);
+  rebuildHash(w);
+  assert.equal(chooseSpell(w, m, g), 'fireball');
+  const w2 = best(mkWorld()), m2 = spawn(w2, 'magier', 300, 400, 'blau'), b = dummy(w2, 'biene', 480, 400);
+  rebuildHash(w2);
+  assert.equal(chooseSpell(w2, m2, b), 'lightning');
+});
+
+// Task 7: eine zerschlagene Steinwand, an deren Stelle eine neue gezogen wird, zerfällt erst nach ihrer vollen Zeit
+test('Steinwand an derselben Stelle neu: kein alter Eintrag lässt sie zu früh zerfallen', () => {
+  const w = mkWorld(), m = spawn(w, 'magier', 400, 400, 'blau');
+  rebuildHash(w);
+  assert.ok(stoneWall(w, m, 1, 0) >= STONE_WALL.MIN);
+  const cells = w.tempWalls.map(e => e.i);
+  for (let t = 0; t < 8; t += DT) stepSpells(w, DT);   // 8 s alt
+  // Wand dort von Hand weg (als wäre sie zerschlagen, der Eintrag hängt noch) und sofort neu gezogen
+  for (const i of cells) { w.terr[i] = 0; w.towner[i] = 0; w.whp[i] = 0; }
+  m.wallCd = 0;
+  assert.ok(stoneWall(w, m, 1, 0) >= STONE_WALL.MIN);
+  assert.equal(new Set(w.tempWalls.map(e => e.i)).size, w.tempWalls.length, 'je Zelle ein Eintrag');
+  for (let t = 0; t < 6; t += DT) stepSpells(w, DT);   // alte Restzeit (4 s) vorbei, neue noch nicht
+  for (const i of cells) if (w.tempWalls.some(e => e.i === i)) assert.equal(w.terr[i], 4, 'steht noch');
+  assert.ok(w.tempWalls.length > 0);
+});

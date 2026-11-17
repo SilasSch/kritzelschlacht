@@ -105,7 +105,11 @@ function rank(world, u, t) {
   const fireOk = CN_OWN <= CN_FOE;
   countAround(world, f, t.x, t.y, SPELL.DENSE_R, false);
   const foes = CN_FOE;
-  if (foes < SPELL.DENSE_N && (t.T.fly || foes <= 1)) { OPT[OPT_N++] = 'lightning'; if (fireOk) OPT[OPT_N++] = 'fireball'; }
+  // Einzelziel oder Flieger: Blitz, außer gegen den Geist (Task 7): nur Feuer trifft ihn voll, der Blitz halb
+  if (foes < SPELL.DENSE_N && (t.T.fly || foes <= 1)) {
+    if (t.type === 'geist' && fireOk) { OPT[OPT_N++] = 'fireball'; OPT[OPT_N++] = 'lightning'; }
+    else { OPT[OPT_N++] = 'lightning'; if (fireOk) OPT[OPT_N++] = 'fireball'; }
+  }
   else { if (fireOk) OPT[OPT_N++] = 'fireball'; OPT[OPT_N++] = 'lightning'; }
 }
 function pick(world, u, t) {
@@ -261,6 +265,9 @@ export function stoneWall(world, u, nx, ny) {
   for (let j = 0; j < m; j++) {
     const i = WALL_CELLS[j], gx = i % GW, gy = (i / GW) | 0;
     terr[i] = 4; towner[i] = S.OWNER; whp[i] = S.HP;
+    // Task 7: ein alter Eintrag derselben Zelle (Wand dort zerschlagen, noch nicht aus der Liste) ließe die neue Wand
+    // mit seiner Restzeit zu früh zerfallen: je Zelle nur der neue Eintrag
+    purgeCell(world.tempWalls, i);
     world.tempWalls.push({ i, t: S.T });
     if (gx < gx0) gx0 = gx; if (gx > gx1) gx1 = gx; if (gy < gy0) gy0 = gy; if (gy > gy1) gy1 = gy;
   }
@@ -289,6 +296,8 @@ function stepTempWalls(world, dt) {
   }
   L.length = n;
 }
+
+function purgeCell(L, i) { let n = 0; for (let k = 0; k < L.length; k++) if (L[k].i !== i) L[n++] = L[k]; L.length = n; }
 
 // Alle Steinwände sofort entfernen, ohne Brocken (Rückgängig: paint.undo)
 export function clearSpellWalls(world) {

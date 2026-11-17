@@ -35,6 +35,7 @@
 import { factionOf, query, nearestEnemy, cellIndex } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 import { TERR_SPEED, TERR_HAZ } from './data.js';
+import { isFleeing } from './morale.js';
 
 // SPACING: 26 statt 22 (Task 4): Platz für das Scutum vor jedem Körper, der Block bleibt lesbar
 // LINK: 110 statt 46 (Task 7): gemalte Römer liegen ohnehin dichter (Pinsel: nächster Nachbar meist 21–30 px), aber
@@ -81,6 +82,13 @@ export function shieldBlocks(v, kind, dx, dy) {
   return l > 1e-9 && -(dx * v.formAx + dy * v.formAy) / l >= SHIELD_COS;
 }
 
+// u verlässt seinen Block sofort (Flucht, Schreck, später Froschverwandlung): kein Block, kein Platz, kein Schild,
+// kein Speerwurf. In f.m bleibt er bis zur nächsten Neubildung, march überspringt ihn (isFleeing) und rebuild nimmt
+// Fliehende und Erschreckte nicht wieder auf.
+export function leaveBlock(u) {
+  u.form = 0; u.formOn = false; u.formFree = false; u.formVol = -1; u.formVx = 0; u.formVy = 0;
+}
+
 function makeForm(id, faction) {
   return {
     id, faction, n: 0, cx: 0, cy: 0, ax: 0, ay: 0, speed: 0, state: 'march', stuckT: 0,
@@ -111,7 +119,7 @@ const ROM = [], GRP = [], SEEN = new Set();
 let GR_W = null, GR_F = null, GR_X = 0, GR_Y = 0;
 const LINK2 = FORM.LINK * FORM.LINK;
 function linkTest(v) {
-  if (v.type !== 'roemer' || v.flee || SEEN.has(v) || factionOf(GR_W, v) !== GR_F) return;
+  if (v.type !== 'roemer' || isFleeing(v) || SEEN.has(v) || factionOf(GR_W, v) !== GR_F) return;
   const dx = v.x - GR_X, dy = v.y - GR_Y;
   if (dx * dx + dy * dy > LINK2) return;
   SEEN.add(v); GRP.push(v);
@@ -122,10 +130,10 @@ function rebuild(world) {
   for (let k = 0; k < old.length; k++) oldById.set(old[k].id, old[k]);
   const claimed = new Set(), out = [];
   ROM.length = 0;
-  // Fliehende (morale.js) gehören zu keinem Block
+  // Fliehende und Erschreckte (morale.isFleeing) gehören zu keinem Block
   for (const u of world.units) {
     if (!u.alive || u.type !== 'roemer') continue;
-    if (u.flee) { u.form = 0; u.formOn = false; u.formFree = false; continue; }
+    if (isFleeing(u)) { u.form = 0; u.formOn = false; u.formFree = false; continue; }
     ROM.push(u);
   }
   if (ROM.length === 0) { if (old.length) world.formations = []; return; }
@@ -271,7 +279,7 @@ function march(world, f, dt) {
   let n = 0, ix = 0, iy = 0, worst = 0, tsp = 1, front = null, fd = -Infinity, alive = 0, free = 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (!u.alive || u.flee) continue;   // Fliehende haben den Block verlassen (bis zur Neubildung noch in m)
+    if (!u.alive || isFleeing(u)) continue;   // Fliehende und Erschreckte haben den Block verlassen (bis zur Neubildung noch in m)
     alive++;
     const ox = ax * f.oD[k] + px * f.oL[k], oy = ay * f.oD[k] + py * f.oL[k];
     const pr = (u.x - f.cx) * ax + (u.y - f.cy) * ay;
@@ -296,7 +304,7 @@ function march(world, f, dt) {
   const tick = (world.time * 60) | 0;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (u.alive && !u.flee && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
+    if (u.alive && !isFleeing(u) && (tick + u.id) % FLANK_EVERY === 0 && enemyWithin(world, f.faction, u.x, u.y, FORM_FLANK)) { charge(f, 0); return; }
   }
   // Speerwurf: Uhr ab dem ersten Gegner ≤ PILUM_MAX vor der Front (die Reihen werfen danach gestaffelt)
   if (f.volT >= 0) f.volT += dt;
@@ -324,7 +332,7 @@ function march(world, f, dt) {
   const d0 = f.oD[0], S = FORM.SPACING;
   for (let k = 0; k < m.length; k++) {
     const u = m[k];
-    if (!u.alive || u.flee) continue;
+    if (!u.alive || isFleeing(u)) continue;
     u.slotX = f.cx + ax * f.oD[k] + px * f.oL[k]; u.slotY = f.cy + ay * f.oD[k] + py * f.oL[k];
     u.formVx = f.vx; u.formVy = f.vy;
     // Reihe nach dem Platz (vorn 0): Freigabe des Wurfs PILUM_RANK_DT s je Reihe später

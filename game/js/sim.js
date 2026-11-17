@@ -6,7 +6,7 @@ import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
 import { createFlow, updateFlow } from './pathing.js';
 import { updateFormations } from './formation.js';
-import { updateCentroids } from './morale.js';
+import { updateCentroids, isFleeing } from './morale.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -34,9 +34,9 @@ export function step(world, dt) {
   t1 = pnow(); M[2] += t1 - t0; t0 = t1;
   const units = world.units;
   // att: wie viele Einheiten u gerade angreifen (Zielverteilung world.nearestEnemy, Einkreisen in combat.think).
-  // Fliehende zählen nicht: ihr u.tg ist die Bedrohung, vor der sie weglaufen (morale.js), kein Angriffsziel.
+  // Fliehende und Erschreckte zählen nicht: ihr u.tg ist die Bedrohung, vor der sie weglaufen (morale.js), kein Angriffsziel.
   for (const u of units) u.att = 0;
-  for (const u of units) if (u.alive && !u.flee && u.tg && u.tg.alive) u.tg.att++;
+  for (const u of units) if (u.alive && !isFleeing(u) && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
   t1 = pnow(); M[3] += t1 - t0; t0 = t1;
   integrate(world, dt);

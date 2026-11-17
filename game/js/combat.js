@@ -7,7 +7,7 @@ import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
-import { MORALE, PIN_HOLD, updateMorale, fleeSteer } from './morale.js';
+import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -625,7 +625,7 @@ function throwPilum(world, u) {
 const DIR = { x: 0, y: 0 };
 function toward(u, px, py) { const x = px - u.x, y = py - u.y, l = Math.hypot(x, y) || 1; DIR.x = x / l; DIR.y = y / l; return DIR; }
 
-// Flucht (morale.updateMorale liefert true): Liegende stehen erst auf (ohne Bewegung, wie sonst), dann fleeSteer.
+// Flucht oder Schreck (morale.updateMorale liefert true): Liegende stehen erst auf (ohne Bewegung, wie sonst), dann fleeSteer.
 // Kein Angriff, außer die Bedrohung u.tg klebt seit CORNER_T s an u (u.cornerT): dann schlägt bzw. schießt u
 // zurück, sobald sie in Reichweite ist, und läuft dabei weiter. Sanitäter (kein Schaden) und Mörser (Mindestabstand)
 // wehren sich nicht; Nahkämpfer am Boden erreichen keinen Hubschrauber (wie world.nearestEnemy).
@@ -666,7 +666,7 @@ export function think(world, u, dt) {
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
   // Wer geschleudert wird, liegt nicht mehr: er landet stehend.
   if (u.state !== 'ok') { if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
-  // Rückzug (Spez. #27, morale.js): vor allem anderen, auch vor dem Block
+  // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block
   if (updateMorale(world, u, dt)) { retreat(world, u, dt); return; }
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
   // einmal den Speer werfen
@@ -949,10 +949,10 @@ function healer(world, u, dt) {
   const T = u.T, f = factionOf(world, u);
   if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || factionOf(world, u.tg) !== f) {
     let best = null, bd = Infinity;
-    // Fliehende (morale.js) vor allen anderen, unter ihnen der nächste
+    // Fliehende und Erschreckte (morale.isFleeing) vor allen anderen, unter ihnen der nächste
     query(world, u.x, u.y, 380, v => {
       if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal) return;
-      const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (v.flee ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
+      const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (isFleeing(v) ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
     });
     if (!best) {
       query(world, u.x, u.y, 420, v => {

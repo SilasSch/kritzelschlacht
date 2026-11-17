@@ -1,6 +1,7 @@
 // Reine Welt: Einheiten, Gelände-Gitter, Spatial Hash, Zielsuche. Zufall nur über world.rng().
 import { UNITS, CELL, HASH_CELL, RANGED, PATH_RECHECK } from './data.js';
 import { createRng } from './rng.js';
+import { isFleeing } from './morale.js';
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -86,6 +87,8 @@ export function spawn(world, type, x, y, team) {
     formVol: -1,
     // Rückzug (morale.js, Spez. #27): flieht, Zeit ohne Gegner in SAFE_R, Zeit mit Gegner in Nahkampfreichweite
     flee: false, safeT: 0, cornerT: 0,
+    // Schreck: Restdauer (s, Nachtrag 3, Festlegung 1, morale.isFleeing)
+    fearT: 0,
   };
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
@@ -141,7 +144,7 @@ export function nearestEnemy(world, u) {
           const dx = v.x - u.x, dy = v.y - u.y;
           let d = (dx * dx + dy * dy) * (1 + .12 * (v.tg === u ? 0 : (v.att || 0)));
           if (pref < 1 && (v.T.heal || RANGED.has(v.type))) d *= pref;
-          if (v.flee) d *= FLEE_DIST2;   // Fliehende zählen doppelt so weit (Spez. #27): erst die, die noch kämpfen
+          if (isFleeing(v)) d *= FLEE_DIST2;   // Fliehende und Erschreckte zählen doppelt so weit (Spez. #27): erst die, die noch kämpfen
           if (d < bd) { bd = d; best = v; }
         }
       }

@@ -23,9 +23,21 @@
 // Bedrohung, auch gegen einen Fernkämpfer: ist er außer Reichweite, geht sie auf ihn los, PIN_HOLD s lang auch
 // über den Moment hinaus, in dem wieder eine Richtung frei wäre (sonst pendelte sie in der Ecke hin und her).
 // Erreicht die Einheit BACK · T.hp auf irgendeinem Weg (eigene Erholung, Sanitäter), endet die Flucht sofort.
+//
+// Schreck (Nachtrag 3, Festlegung 1; abilities.scare setzt u.fearT): ein kurzer erzwungener Rückzug, unabhängig vom
+// Leben. u.flee bleibt dabei unberührt; fliehend im Sinne aller Abfragen ist isFleeing(u) (Fliehen oder Schreck).
+// updateMorale führt den Schreck vor dem Rückzug: Bedrohung, cornerT und Steuerung wie auf der Flucht
+// (combat.retreat: Aufstehen aus dem Liegen, Gegenwehr in der Ecke), aber ohne Erholung (das ist das Merkmal
+// „ohne Erholung“: die LP steigen nicht), ohne Ende über die 60-%-Regel und ohne letztes Gefecht. Er endet nur,
+// wenn fearT abgelaufen ist; liegt das Leben dann bei höchstens FLEE · T.hp, beginnt im nächsten Schritt der
+// normale Rückzug. Betäubt oder in der Luft läuft fearT nicht ab (Vorrang: betäubt > Schreck).
 import { factionOf } from './world.js';
 import { HASH_CELL } from './data.js';
-import { hazardAt } from './formation.js';
+import { hazardAt, leaveBlock } from './formation.js';
+
+// Fliehend oder erschreckt: das eine Prädikat für Blockmitgliedschaft, Schwerpunkte, Zielwahl, Sanitäter, att und
+// Angstaugen (Vorgabe 1 der Abschlussprüfung)
+export const isFleeing = u => u.flee || u.fearT > 0;
 
 // CORNER_T: .3 statt 1,5 s (Task 7): wer eingeholt wird, wehrt sich fast sofort. Mit 1,5 s standen Fliehende im
 // Bienenschwarm wehrlos und langsame Nahkämpfer verloren gegen schnelle (krieger > biene, mg > biene, ritter > reiter).
@@ -65,7 +77,7 @@ export function updateCentroids(world, dt) {
   const units = world.units;
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
-    if (!u.alive || u.flee) continue;
+    if (!u.alive || isFleeing(u)) continue;
     const f = factionOf(world, u);
     let c = C.get(f);
     if (!c) { c = { x: 0, y: 0, n: 0, fn: 0, front: 0, has: false, ex: 0, ey: 0 }; C.set(f, c); }
@@ -78,7 +90,7 @@ export function updateCentroids(world, dt) {
   C.forEach(setDir, C);
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
-    if (!u.alive || u.flee || u.type === 'sniper' || u.T.fly) continue;
+    if (!u.alive || isFleeing(u) || u.type === 'sniper' || u.T.fly) continue;
     const c = C.get(factionOf(world, u));
     if (!c.has) continue;
     const p = u.x * c.ex + u.y * c.ey;
@@ -124,18 +136,42 @@ export function nearestThreat(world, u, R) {
 }
 
 /* ---------- Zustand ---------- */
-// Ein Denkschritt Moral für u (state 'ok'). Liefert true, solange u flieht.
+// Ein Denkschritt Moral für u (state 'ok'). Liefert true, solange u flieht oder erschreckt ist (isFleeing).
 export function updateMorale(world, u, dt) {
   const T = u.T, M = MORALE;
-  const c = world.cent.get(factionOf(world, u)), others = c ? c.n - (u.flee ? 0 : 1) : 0;
+  const c = world.cent.get(factionOf(world, u));
+  if (u.fearT > 0) {
+    // Schreck: Bedrohung und Ecke wie auf der Flucht, keine Erholung, Ende nur über fearT
+    watchThreat(world, u, dt);
+    u.fearT -= dt;
+    if (u.fearT <= 0) {
+      u.fearT = 0;
+      // nicht auch noch auf der Flucht: zählt wieder als kämpfende Einheit (scare hat c.n gesenkt), sucht gleich ein Ziel
+      if (!u.flee) { u.safeT = 0; u.cornerT = 0; u.rt = 0; if (c) c.n++; }
+    }
+    return true;
+  }
+  const others = c ? c.n - (isFleeing(u) ? 0 : 1) : 0;
   if (!u.flee) {
     if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES) return false;
     c.n--;
     u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = null; u.run = 0;
     // Römer verlassen den Block (formation.rebuild nimmt Fliehende nicht wieder auf)
-    if (u.formOn) { u.formOn = false; u.formFree = false; u.formVol = -1; u.formVx = 0; u.formVy = 0; }
+    if (u.formOn) leaveBlock(u);
   }
   else if (others < M.MIN_ALLIES) { endFlee(u, c); return false; }   // letztes Gefecht
+  watchThreat(world, u, dt);
+  if (u.safeT >= M.SAFE_T) {
+    const hp = u.hp + M.REGEN * T.hp * dt;
+    u.hp = hp < T.hp ? hp : T.hp;
+  }
+  // geheilt (Erholung oder Sanitäter): zurück in den Kampf, auch mit Gegner in SAFE_R
+  if (u.hp >= M.BACK * T.hp) { endFlee(u, c); return false; }
+  return true;
+}
+// Bedrohung u.tg (gedrosselt neu gesucht), Zeit ohne Gegner in SAFE_R (u.safeT) und in Nahkampfreichweite (u.cornerT)
+function watchThreat(world, u, dt) {
+  const T = u.T, M = MORALE;
   if (u.rt <= 0 || (u.tg && !u.tg.alive)) {
     u.tg = nearestThreat(world, u, FLEE_LOOK);
     u.rt = FLEE_SCAN + (u.id % 4) * FLEE_STAGGER;
@@ -148,13 +184,6 @@ export function updateMorale(world, u, dt) {
   // höchstens CORNER_T + PIN_HOLD: nach langem Nahkampf hält das Wehren nicht länger an als nach dem Festnageln
   if (t && d2 <= cr * cr) { u.cornerT += dt; if (u.cornerT > M.CORNER_T + PIN_HOLD) u.cornerT = M.CORNER_T + PIN_HOLD; }
   else u.cornerT = u.cornerT - dt > M.CORNER_T ? u.cornerT - dt : 0;
-  if (u.safeT >= M.SAFE_T) {
-    const hp = u.hp + M.REGEN * T.hp * dt;
-    u.hp = hp < T.hp ? hp : T.hp;
-  }
-  // geheilt (Erholung oder Sanitäter): zurück in den Kampf, auch mit Gegner in SAFE_R
-  if (u.hp >= M.BACK * T.hp) { endFlee(u, c); return false; }
-  return true;
 }
 // Flucht endet (erholt oder letztes Gefecht): zählt wieder als kämpfende Einheit der Fraktion, sucht gleich ein Ziel
 function endFlee(u, c) {

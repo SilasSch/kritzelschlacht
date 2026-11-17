@@ -176,6 +176,8 @@ export function createFx(renderer) {
       // Generationen tauschen: die alte Leinwand wird gelöscht und zur neuen cur, die bisherige cur wird old
       old.ctx.setTransform(1, 0, 0, 1, 0, 0); old.ctx.clearRect(0, 0, old.cv.width, old.cv.height);
       const t0 = cur; cur = old; old = t0; dctx = cur.ctx;
+      // die ausblendende alte Generation liegt immer unter der neuen (die Sprites tauschen nur die Rollen)
+      L.decals.setChildIndex(old.sprite, 0);
       cur.sprite.alpha = 1;
       old.tex.update(); cur.tex.update();   // beide neu hochladen
       decalDirty = false; decalForce = false; decalUpT = t; decalUploads++;

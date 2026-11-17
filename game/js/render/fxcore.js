@@ -95,6 +95,22 @@ export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow']);
 // zählen nicht. Ohne frameMs gilt frameMs = workMs.
 export const LOD_SLOW_MS = 16, LOD_SLOW_T = .3, LOD_OK_MS = 12, LOD_RECOVER_T = 3, LOD_RECOVER_MAX = 24;
 export const LOD_EMA = .1, LOD_IGNORE_MS = 250;
+// Decal-Generationen: zwei Leinwände, alle gen s tauscht die alte (gelöscht) mit der aktuellen. Die alte blendet
+// linear über gen s aus; ein Fleck lebt so gen bis 2·gen s. Rein: tick gibt true, wenn getauscht werden muss.
+export function createDecalAger(gen = 30) {
+  let since = 0, swapped = false;
+  return {
+    tick(dt) {
+      since += dt;
+      if (since < gen) return false;
+      since = 0; swapped = true;
+      return true;
+    },
+    oldAlpha: () => (swapped ? 1 - since / gen : 0),
+    reset() { since = 0; swapped = false; },
+  };
+}
+
 export function createLodGovernor() {
   const g = {
     level: 0, ema: 0, slowT: 0, okT: 0, hold: LOD_RECOVER_T, drops: 0,

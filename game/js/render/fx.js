@@ -16,7 +16,7 @@
 //   main  (Ebene 'fx', normal): Kerne, Rauch, Staub, Tropfen, Ringe, Pluszeichen, Seelchen, Pfeile, Hitzeflimmern
 // Keine Filter, kein Dauerglühen: alles Licht lebt höchstens so lange wie sein Partikel (Bodenlicht 0.25 s).
 /* global PIXI */
-import { createFxCore, createLodGovernor, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
+import { createFxCore, createLodGovernor, createDecalAger, look, F, FX_CAP, LOD_MAX } from './fxcore.js';
 import { createQuadBatch } from './quads.js';
 
 const RM = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -103,18 +103,24 @@ export function createFx(renderer) {
     return n;
   }
 
-  /* ---------- Decals (Offscreen-Leinwand wie das Gelände, Upload gedrosselt) ---------- */
-  const dcv = document.createElement('canvas'), dctx = dcv.getContext('2d');
-  let res = 0, decalTex = null, decalDirty = false, decalForce = false, decalUpT = -1, decalCount = 0, decalUploads = 0;
-  const decalSprite = new PIXI.Sprite();
-  L.decals.addChild(decalSprite);
+  /* ---------- Decals (zwei Offscreen-Leinwände wie das Gelände, Upload gedrosselt) ----------
+     Gemalt wird nur auf cur; old zeigt die vorige Generation und blendet aus (createDecalAger): ein Fleck lebt 30-60 s. */
+  const mkLayer = () => { const cv = document.createElement('canvas'); return { cv, ctx: cv.getContext('2d'), tex: null, sprite: new PIXI.Sprite() }; };
+  let cur = mkLayer(), old = mkLayer(), dctx = cur.ctx;
+  const ager = createDecalAger(30);
+  let res = 0, decalDirty = false, decalForce = false, decalUpT = -1, decalCount = 0, decalUploads = 0;
+  L.decals.addChild(old.sprite, cur.sprite);   // alte Generation unten
+  old.sprite.alpha = 0;
 
   function resize(W, H, r) {
     res = r;
-    dcv.width = Math.ceil(W * res); dcv.height = Math.ceil(H * res);   // leert die Decals
-    if (decalTex) decalTex.destroy(true);
-    decalTex = PIXI.Texture.from(dcv);
-    decalSprite.texture = decalTex; decalSprite.scale.set(1 / res);
+    for (const d of [cur, old]) {
+      d.cv.width = Math.ceil(W * res); d.cv.height = Math.ceil(H * res);   // leert die Decals
+      if (d.tex) d.tex.destroy(true);
+      d.tex = PIXI.Texture.from(d.cv);
+      d.sprite.texture = d.tex; d.sprite.scale.set(1 / res);
+    }
+    ager.reset(); old.sprite.alpha = 0;
     decalDirty = false; decalForce = false; decalCount = 0;
   }
   // Fleck: drei verschobene flache Ellipsen (wie im alten Spiel)
@@ -166,8 +172,17 @@ export function createFx(renderer) {
     const dt = lastT < 0 || t < lastT ? 0 : Math.min(.1, t - lastT);
     lastT = t;
     core.decay(dt);   // Wackeln klingt je Sekunde ab, nicht je Bild
-    if (decalTex && decalDirty && (decalForce || t - decalUpT >= DECAL_UPLOAD || t < decalUpT)) {
-      decalTex.update(); decalUpT = t; decalDirty = false; decalForce = false; decalUploads++;
+    if (cur.tex && ager.tick(dt)) {
+      // Generationen tauschen: die alte Leinwand wird gelöscht und zur neuen cur, die bisherige cur wird old
+      old.ctx.setTransform(1, 0, 0, 1, 0, 0); old.ctx.clearRect(0, 0, old.cv.width, old.cv.height);
+      const t0 = cur; cur = old; old = t0; dctx = cur.ctx;
+      cur.sprite.alpha = 1;
+      old.tex.update(); cur.tex.update();   // beide neu hochladen
+      decalDirty = false; decalForce = false; decalUpT = t; decalUploads++;
+    }
+    old.sprite.alpha = ager.oldAlpha();
+    if (cur.tex && decalDirty && (decalForce || t - decalUpT >= DECAL_UPLOAD || t < decalUpT)) {
+      cur.tex.update(); decalUpT = t; decalDirty = false; decalForce = false; decalUploads++;
     }
     const live = core.store.live;
     maxWarm = 0;
@@ -186,7 +201,9 @@ export function createFx(renderer) {
 
   function clear() {
     core.clear();
-    dctx.setTransform(1, 0, 0, 1, 0, 0); dctx.clearRect(0, 0, dcv.width, dcv.height);
+    for (const d of [cur, old]) { d.ctx.setTransform(1, 0, 0, 1, 0, 0); d.ctx.clearRect(0, 0, d.cv.width, d.cv.height); }
+    ager.reset(); old.sprite.alpha = 0;
+    if (old.tex) old.tex.update();
     decalDirty = true; decalForce = true; decalCount = 0;
   }
 

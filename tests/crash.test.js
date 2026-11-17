@@ -92,7 +92,7 @@ test('Bienen und Geister fallen als normale Leichen, ohne Absturz', () => {
   assert.equal(cb.state, 'rest'); assert.equal(cg.state, 'rest'); assert.equal(s.hp, s.T.hp);
 });
 
-test('Zerstörte Mauerzelle erzeugt 3 Brocken, die niemanden verletzen und nach 6 s verschwinden', () => {
+test('Zerstörte Mauerzelle erzeugt 3 Brocken, die niemanden verletzen und nach 9 s Liegen verschwinden', () => {
   const w = mkWorld();
   const i = cellIndex(w, 505, 305), cx = (i % w.GW) * CELL + 5, cy = (i / w.GW | 0) * CELL + 5;
   setCell(w, i, 4, 0);
@@ -121,8 +121,8 @@ test('Zerstörte Mauerzelle erzeugt 3 Brocken, die niemanden verletzen und nach 
   assert.equal(s.hp, s.T.hp, 'kein Schaden'); assert.equal(s.x, x0); assert.equal(s.y, y0);
   assert.equal(w.debris.length, 6, 'liegen noch');
   for (const d of w.debris) { assert.equal(d.z, 0); assert.equal(d.vx, 0); assert.equal(d.vy, 0); assert.notEqual(w.terr[cellIndex(w, d.x, d.y)], 4); }
-  run(w, 2.5);
-  assert.equal(w.debris.length, 6, 'liegen noch nach 5.5 s'); assert.ok(w.debris.every(d => d.fade === 0));
+  run(w, 5.5);
+  assert.equal(w.debris.length, 6, 'liegen noch nach 8.5 s'); assert.ok(w.debris.every(d => d.fade === 0));
   let faded = 0, t = 0;
   while (w.debris.length && t < 4) { faded = Math.max(faded, w.debris.filter(d => d.fade > 0).length); phys(w); t += DT; }
   assert.equal(w.debris.length, 0, 'verschwunden'); assert.ok(faded > 0, 'verblassen vor dem Entfernen');

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { makeCorpse } from '../game/js/physics.js';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash, resizeWorld, clearBattle } from '../game/js/world.js';
-import { applyImpulse, integrate, collide, collideWalls, stepCorpses, CORPSE_CAP, PART_CAP, LAUNCH_VZ } from '../game/js/physics.js';
+import { applyImpulse, integrate, collide, collideWalls, stepCorpses, CORPSE_CAP, PART_CAP, LAUNCH_VZ, CORPSE_REST, CORPSE_FADE, DEBRIS_REST } from '../game/js/physics.js';
 import { blast, hurt, PARTS } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
 
@@ -278,4 +279,24 @@ test('Determinismus: gleiche Saat, gleiche Leichen', () => {
     return JSON.stringify(w.corpses);
   };
   assert.equal(sim(), sim());
+});
+
+test('Leichen verblassen nach CORPSE_REST', () => {
+  assert.equal(CORPSE_REST, 29); assert.equal(DEBRIS_REST, 9);
+  const w = mkWorld();
+  const c = makeCorpse('body', null, 'krieger', 'blau', 1, 300, 300, 0, 0, 0, 0, 0, 0);
+  c.state = 'rest'; w.corpses.push(c);
+  run(w, CORPSE_REST - 1);
+  assert.equal(w.corpses.length, 1); assert.equal(c.fade, 0);
+  run(w, 1 + CORPSE_FADE + .1);
+  assert.equal(w.corpses.length, 0);
+});
+
+test('Leichen in Wasser und Lava sind nach CORPSE_REST längst weg (eigene Abläufe)', () => {
+  for (const tt of [1, 2]) {
+    const w = mkWorld(); w.terr.fill(tt);
+    const u = spawn(w, 'krieger', 300, 300, 'blau'); hurt(w, u, 1e9, 'melee', null);
+    run(w, CORPSE_REST + CORPSE_FADE + .1);
+    assert.equal(w.corpses.length, 0);
+  }
 });

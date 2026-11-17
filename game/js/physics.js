@@ -260,6 +260,7 @@ function bodyWalls(world, c) {
 export const CORPSE_CAP = 1500;
 export const PART_CAP = 500;
 export const CORPSE_FADE = 1;        // s
+export const CORPSE_REST = 29;       // s liegen (rest), danach CORPSE_FADE s verblassen: weg nach etwa 30 s
 export const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
 
 export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null) {
@@ -300,6 +301,7 @@ export function stepCorpses(world, dt) {
     const c = list[i];
     c.t += dt;
     if (c.fade > 0) { c.fade -= dt; if (c.fade <= 0) continue; }
+    else if (c.state === 'rest' && c.t >= CORPSE_REST) c.fade = CORPSE_FADE;   // float/ash enden schon vorher von selbst
     if (c.state === 'float') { if (c.t >= FLOAT_T) { c.state = 'sink'; c.t -= FLOAT_T; } }
     else if (c.state === 'sink') { if (c.t >= SINK_T) continue; }
     else if (c.state === 'ash') { if (c.t >= ASH_T) continue; }
@@ -331,7 +333,7 @@ export function stepCorpses(world, dt) {
 // Einheiten. Liegen DEBRIS_REST s (t zählt ab dem Liegen), verblassen dann DEBRIS_FADE s und werden
 // entfernt. Über DEBRIS_CAP werden die ältesten (vorne in der Liste) sofort entfernt.
 export const DEBRIS_CAP = 400;
-export const DEBRIS_REST = 6;        // s
+export const DEBRIS_REST = 9;        // s
 export const DEBRIS_FADE = 1;        // s
 
 export function makeDebris(x, y, z, vx, vy, vz, rot, vrot) {

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   FX_CAP, FRAME_LIMITS, SMOKE, DUST, LIGHT_T, LIGHT_ALPHA, SHAKE_MAX, GLOW_KINDS, CRASH_SMOKE_MUL,
   WARM_KINDS, WARM_TINT, WARM_ALPHA, HALO_ALPHA, groundWarm,
-  createParticles, createFxCore, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
+  createParticles, createFxCore, createDecalAger, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
 } from '../game/js/render/fxcore.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R } from '../game/js/combat.js';
 
@@ -320,4 +320,14 @@ test('Boss-Effekte: Panzer stößt nur beim Anfahren Abgas aus, Heli wirft Rotor
   let gusts = 0;
   for (let i = 0; i < 240; i++) { c5.update(DT, { proj: [], units: [d] }); gusts = Math.max(gusts, kinds(c5).wash || 0); }
   assert.ok(gusts >= 1, 'Flügelböen');
+});
+
+test('Decal-Generationen', () => {
+  const a = createDecalAger(30);
+  assert.equal(a.tick(29), false);
+  assert.equal(a.tick(2), true); assert.equal(a.oldAlpha(), 1);
+  assert.equal(a.tick(15), false); near(a.oldAlpha(), .5);
+  assert.equal(a.tick(15), true); assert.equal(a.oldAlpha(), 1);
+  a.tick(10); a.reset();
+  assert.equal(a.oldAlpha(), 0); assert.equal(a.tick(29), false); assert.equal(a.tick(2), true);
 });

@@ -8,7 +8,7 @@
 // wird sie ein Block. Die Gruppe übernimmt id und Zustand des alten Blocks, aus dem die meisten ihrer
 // Mitglieder kommen (Gruppen nach Größe abgearbeitet: bei einer Teilung behält der größere Teil die id, der
 // kleinere bekommt eine neue, aber denselben Zustand).
-// Plätze: cols = clamp(round(√(n·2,5)), 2, 10) Spalten, Reihen- und Spaltenabstand SPACING, erste Reihe vorn
+// Plätze: cols = clamp(round(√(n·2,5)), 2, maxCols) Spalten mit maxCols = clamp(round(n / COLS_GROW), 10, 16), Reihen- und Spaltenabstand SPACING, erste Reihe vorn
 // in Blickrichtung (ax, ay). Zuordnung: Mitglieder nach Tiefe entlang der Blickrichtung, dann je Reihe nach
 // Seitenlage; wer gerade nicht steuerbar ist (betäubt, in der Luft), wird nach seinem alten Platz einsortiert.
 // Blickrichtung (bei jeder Neubildung): zum nächsten Gegner; ist die gerade Linie dorthin verbaut
@@ -206,10 +206,14 @@ function face(world, f, gx, gy) {
 }
 
 // Plätze: Mitglieder nach Tiefe (vorn zuerst), dann je Reihe nach Seitenlage
+// Breite: bis 80 Römer höchstens 10 Spalten, darüber wächst die Grenze mit n (je COLS_GROW Römer eine Spalte) bis
+// COLS_MAX, damit große Blöcke als breite Front statt als tiefe Kolonne marschieren (200 Römer: 16 × 13 statt 10 × 20)
+export const COLS_MAX = 16, COLS_GROW = 8;
+export const blockCols = n => clamp(Math.round(Math.sqrt(n * 2.5)), 2, clamp(Math.round(n / COLS_GROW), 10, COLS_MAX));
 const KEY_D = new Map(), KEY_L = new Map();
 function slots(f) {
   const n = GRP.length, S = FORM.SPACING, ax = f.ax, ay = f.ay, px = -ay, py = ax;
-  const cols = clamp(Math.round(Math.sqrt(n * 2.5)), 2, 10), rows = Math.ceil(n / cols);
+  const cols = blockCols(n), rows = Math.ceil(n / cols);
   for (let k = 0; k < n; k++) {
     const u = GRP[k];
     // nicht steuerbar: behält seinen Platz (alte Platzlage statt der Lage im Flug)

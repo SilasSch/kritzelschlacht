@@ -6,7 +6,7 @@ import { createWorld, spawn, setCell, cellIndex, clearBattle, rebuildHash } from
 import { step } from '../game/js/sim.js';
 import { hurt, think, fire, stepProjectiles, PILUM_SCAN, PILUM_SCAN_T } from '../game/js/combat.js';
 import { integrate, collide } from '../game/js/physics.js';
-import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT } from '../game/js/formation.js';
+import { FORM, updateFormations, shieldBlocks, SHIELD_KINDS, SHIELD_MUL, SHIELD_COS, PILUM_RANK_DT, blockCols, COLS_MAX } from '../game/js/formation.js';
 import { CELL, HASH_CELL, UNITS } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -404,4 +404,19 @@ test('Speer: Zielsuche bleibt auf PILUM_MAX begrenzt, auch wenn der Feind weit w
   assert.ok(calls > 0 && calls <= 40 * (Math.ceil(N * DT / PILUM_SCAN_T) + 1), `Suchen ${calls}`);
   assert.ok(cells <= calls * box, `höchstens ${box} Hash-Zellen je Suche: ${(cells / calls).toFixed(1)}`);
   assert.ok(rs.every(u => u.pilum === 1), 'kein Wurf ohne Ziel in Reichweite');
+});
+
+// Finale Prüfung: 200 Römer marschierten als Kolonne 10 × 20 (Spalten fest höchstens 10). Die Grenze wächst jetzt
+// mit n bis COLS_MAX; bis 80 Römer bleibt alles wie vorher.
+test('Breite: große Blöcke marschieren als Front, kleine wie bisher', () => {
+  for (const [n, c] of [[4, 3], [12, 5], [30, 9], [40, 10], [80, 10], [100, 13], [200, 16], [400, 16]]) assert.equal(blockCols(n), c, `n ${n}`);
+  const w = mk();
+  for (let k = 0; k < 200; k++) spawn(w, 'roemer', 200 + (k % 10) * 22, 180 + ((k / 10) | 0) * 22, 'blau');
+  spawn(w, 'krieger', 1300, 400, 'rot');
+  run(w, .6);
+  assert.equal(w.formations.length, 1);
+  const f = w.formations[0], rows = new Set(f.oD).size, cols = new Set(f.oL).size;
+  assert.equal(f.n, 200);
+  assert.equal(cols, COLS_MAX); assert.equal(rows, Math.ceil(200 / COLS_MAX));
+  assert.ok(cols > rows, `breiter als tief: ${cols} × ${rows}`);
 });

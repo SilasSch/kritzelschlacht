@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, rebuildHash } from '../game/js/world.js';
 import { attack } from '../game/js/combat.js';
 import { poseUnit, bossMemory, drawnMuzzle, projScreen } from '../game/js/render/pose.js';
-import { bossMuzzle, tipOffset, TANK_GEO, HELI_GEO, visR } from '../game/js/muzzle.js';
+import { bossMuzzle, tipOffset, tankMgMuzzle, TANK_GEO, HELI_GEO, visR } from '../game/js/muzzle.js';
 import { UNITS } from '../game/js/data.js';
 
 const TOL = 2;
@@ -95,4 +95,44 @@ test('Mündung: Geometrie (tipOffset) passt zur Zeichnung', () => {
   // Logik ohne Darstellungs-Zustand: gleiche Einheit, gleiches Ergebnis
   const u = { type: 'drache', T: UNITS.drache, x: 0, y: 0, z: 60, face: 1, mx: 20, hitT: 0 };
   assert.deepEqual(bossMuzzle(u, 100, 30, {}), bossMuzzle(u, 100, 30, {}));
+});
+
+// Nachtrag 4 (#39): Bug-MG des Panzers
+test('Bug-MG: Kugeln zwischen den Kanonenschüssen, aus der gezeichneten MG-Mündung, nicht durch Eigene', async () => {
+  const { step } = await import('../game/js/sim.js');
+  const { TANK_MG } = await import('../game/js/combat.js');
+  assert.deepEqual(TANK_MG, { DMG: 3, CD: .15, RANGE: 200, RETRY: .25 });
+  const w = createWorld(1400, 800, 3); w.teamMode = true;
+  const p = spawn(w, 'panzer', 400, 400, 'blau'); p.abCd = 1e9;
+  const es = []; for (let k = 0; k < 4; k++) { const e = spawn(w, 'krieger', 560, 370 + k * 20, 'rot'); e.hp = 1e9; e.T = { ...UNITS.krieger, speed: 0 }; es.push(e); }
+  const seq = [];
+  for (let i = 0; i < 60 * 8; i++) {
+    step(w, 1 / 60);
+    for (const e of w.events) if (e.type === 'shot') {
+      seq.push(e.kind);
+      if (e.kind === 'bullet') {
+        const m = tankMgMuzzle(p, {});
+        assert.ok(Math.abs(e.x - (p.x + m.x)) < 1e-6 && Math.abs(e.y - (p.y + m.y)) < 1e-6, 'Mündung = TANK_GEO.mg');
+      }
+    }
+    w.events.length = 0;
+  }
+  const shells = seq.reduce((a, k, i) => (k === 'shell' ? a.concat(i) : a), []);
+  assert.ok(shells.length >= 2, `Kanonenschüsse ${shells.length}`);
+  const between = seq.slice(shells[0] + 1, shells[1]).filter(k => k === 'bullet').length;
+  assert.ok(between >= 8, `Kugeln zwischen zwei Kanonenschüssen: ${between}`);
+  // Zeichnung: Mündung vorn an der Wanne, in Blickrichtung
+  const R = visR('panzer');
+  p.face = 1; p.hitT = 0; assert.ok(Math.abs(tankMgMuzzle(p, {}).x - TANK_GEO.mg[0] * R) < 1e-9);
+  p.face = -1; assert.ok(Math.abs(tankMgMuzzle(p, {}).x + TANK_GEO.mg[0] * R) < 1e-9);
+  assert.ok(Math.abs(tankMgMuzzle(p, {}).y - TANK_GEO.mg[1] * R) < 1e-9);
+  // Eigener Krieger in der Schusslinie: kein MG-Feuer
+  const w2 = createWorld(1400, 800, 3); w2.teamMode = true;
+  const p2 = spawn(w2, 'panzer', 400, 400, 'blau'); p2.abCd = 1e9; p2.cd = 1e9;
+  const e2 = spawn(w2, 'krieger', 560, 400, 'rot'); e2.hp = 1e9; e2.T = { ...UNITS.krieger, speed: 0 };
+  const own = spawn(w2, 'krieger', 480, 400, 'blau'); own.T = { ...UNITS.krieger, speed: 0 }; own.cd = 1e9; own.state = 'stun'; own.stunT = 1e9;
+  let bullets = 0;
+  for (let i = 0; i < 60 * 2; i++) { step(w2, 1 / 60); for (const e of w2.events) if (e.type === 'shot' && e.kind === 'bullet') bullets++; w2.events.length = 0; }
+  assert.equal(bullets, 0);
+  assert.equal(own.hp, UNITS.krieger.hp);
 });

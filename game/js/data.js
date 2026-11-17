@@ -105,6 +105,7 @@ const ABIL = {
   panzer: [
     {n:'Ramme', d:'Alle 25 s fährt er mit dreifachem Tempo in die Reihen und schleudert alles weg. Nur Feinde nehmen Schaden.'},
     {n:'Panzerung', d:'Kugeln, Pfeile und Schwerter prallen ab. Raketen treffen hart.'},
+    {n:'Bug-MG', d:'Während die Kanone nachlädt, feuert ein MG in der Wanne auf nahe Infanterie (200 px).'},
   ],
   vampir: [
     {n:'Lebensraub', d:'Jeder Biss heilt ihn um die Hälfte des Schadens.'},

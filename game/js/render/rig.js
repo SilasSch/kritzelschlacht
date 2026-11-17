@@ -61,6 +61,10 @@ const BOSS_DEF = {
           RR(c, -r * .9, -r * .14, r * .5, r * .19, r * .05, k.dk);
           for (const x of [-.25, .12, .5, .85]) E(c, r * x, r * .02, r * .04, r * .04, k.dk, 0);
           E(c, r * 1.13, -r * .1, r * .08, r * .07, '#ffe9a8', 1);
+          // Bug-MG (Nachtrag 4, #39): Kugelblende und kurzer Lauf bis zur Mündung TANK_GEO.mg (combat.hullMg schießt dort)
+          const mg = TANK_GEO.mg, mb = TANK_GEO.mgMount;
+          Ln(c, [[r * mb[0], r * mg[1]], [r * mg[0], r * mg[1]]], '#2b2e35', 2);
+          E(c, r * mb[0], r * mb[1], r * .075, r * .075, k.dk, 1);
         },
       },
       // Kettenglieder (untere Lauffläche, wandern beim Vorwärtsfahren nach hinten) und Radspeichen, f = Bild

@@ -498,7 +498,7 @@ test('Sperrfeuer: 3 Mörsergranaten im Abstand von 0,4 s rund um das Ziel', () =
 
 test('Ramme: 1,2 s mit dreifachem Tempo aufs Ziel, schiebt Eigene weg ohne Schaden, 20 Schaden an Feinden', () => {
   const w = mkWorld(), p = spawn(w, 'panzer', 300, 400, 'blau');
-  p.cd = 1e9;
+  p.cd = 1e9; p.mgCd = 1e9;   // ohne Kanone und Bug-MG (Nachtrag 4): nur der Rammschaden zählt
   const foe = dummy(w, 'krieger', 440, 400); foe.state = 'stun'; foe.stunT = 1e9;
   const own = [spawn(w, 'krieger', 345, 404, 'blau'), spawn(w, 'krieger', 380, 395, 'blau')];
   for (const a of own) { a.cd = 1e9; a.state = 'stun'; a.stunT = 1e9; }

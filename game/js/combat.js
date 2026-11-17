@@ -5,7 +5,7 @@ import { CELL, HASH_CELL, UNITS, PATH_RECHECK, UNDEAD } from './data.js';
 import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat } from './world.js';
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
-import { bossMuzzle, hasMuzzle } from './muzzle.js';
+import { bossMuzzle, hasMuzzle, tankMgMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, releaseUnit, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
@@ -468,7 +468,9 @@ function clearTarget(world, u) {
 /* ---------- Waffen ---------- */
 // ax/ay: Zielpunkt, den think schon gezogen und auf freie Bahn geprüft hat; fehlt er, wird er hier gezogen.
 // Das Geschoss fliegt genau dorthin. dmg/R (optional, Fähigkeiten): Schaden und Splash statt der Werte der Einheit.
-export function fire(world, u, t, kind, ax, ay, dmgO, RO) {
+// mz (optional): Mündungsversatz zu (u.x, u.y − u.z) statt der Hauptwaffe (Bug-MG des Panzers); dann kein Rückstoß
+// der Hauptwaffe (u.fireT bleibt).
+export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
   const T = u.T, P = PROJECTILES[kind], K = SHOT[kind];
   if (ax === undefined) { aimPoint(world, u, t, kind); ax = AIM.x; ay = AIM.y; }
   const d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
@@ -476,8 +478,9 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO) {
   // gezeichneten Mündung (muzzle.js, Bildschirmpunkt; gerade Schüsse unten um die Starthöhe verschoben)
   const boss = hasMuzzle(u.type);
   let mx = u.x + u.face * T.r * (T.r > 15 ? 1.3 : .9), my = u.y - T.r * (T.fly ? .6 : .3);
-  if (boss) { bossMuzzle(u, t.x, t.y, MZ); mx = u.x + MZ.x; my = u.y - (u.z || 0) + MZ.y; }
-  u.fireT = 0;   // Rückstoß (rig.js)
+  if (mz) { mx = u.x + mz.x; my = u.y - (u.z || 0) + mz.y; }
+  else if (boss) { bossMuzzle(u, t.x, t.y, MZ); mx = u.x + MZ.x; my = u.y - (u.z || 0) + MZ.y; }
+  if (!mz) u.fireT = 0;   // Rückstoß (rig.js)
   const f = factionOf(world, u);
   const dmg = dmgO !== undefined ? dmgO : kind === 'pilum' ? T.pilum : T.dmg, R = RO !== undefined ? RO : T.splash || 0;
   if (P.arc) {
@@ -490,7 +493,7 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO) {
     // Mündungsversatz verschoben), dur = len / speed: der Renderer interpoliert die Position wie bisher.
     // tg: gezieltes Ziel; pass: liegende Körper, an denen der Schuss schon vorbeiging (stepProjectiles).
     const g = shotGeo(u, t, kind, ax, ay);
-    if (boss) my += g.z0 - MUZZLE_Z;   // pose.projScreen hebt um z0 − MUZZLE_Z an
+    if (boss || mz) my += g.z0 - MUZZLE_Z;   // pose.projScreen hebt um z0 − MUZZLE_Z an
     const ox = mx - u.x, oy = my - u.y;
     world.proj.push({ kind, arc: false, x0: mx, y0: my, x1: u.x + g.nx * g.len + ox, y1: u.y + g.ny * g.len + oy,
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
@@ -498,6 +501,41 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO) {
   }
   emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
   sound(world, K[3]);
+}
+
+/* ---------- Bug-MG des Panzers (Nachtrag 4, #39) ---------- */
+// Lädt die Kanone (u.cd > 0), feuert das MG Kugeln (Schaden DMG alle CD s, eigene Abklingzeit u.mgCd) auf die nächste
+// feindliche Infanterie (Bodentruppen außer Panzern) bis RANGE px. Wie jeder gerade Schuss: Zielpunkt mit Vorhalt und
+// Streuung, Schusslinie frei von eigenen Leuten (clearShot), die Kugel trifft das Erste im Weg (auch Eigene). Ohne Ziel
+// oder mit verdeckter Linie neuer Versuch nach RETRY s. Startpunkt: Mündung TANK_GEO.mg (muzzle.tankMgMuzzle).
+export const TANK_MG = { DMG: 3, CD: .15, RANGE: 200, RETRY: .25 };
+const infantry = v => !v.T.fly && v.type !== 'panzer';
+const MGZ = { x: 0, y: 0 };
+function mgTarget(world, u) {
+  const t = u.tg, R = TANK_MG.RANGE + u.T.r, f = factionOf(world, u);
+  if (t && t.alive && infantry(t) && factionOf(world, t) !== f && (t.x - u.x) ** 2 + (t.y - u.y) ** 2 <= (R + t.T.r) ** 2) return t;
+  const { HW, HH, hash } = world, ux = u.x, uy = u.y;
+  const gx0 = clamp((ux - R - MAX_R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R + MAX_R) / HC | 0, 0, HW - 1);
+  const gy0 = clamp((uy - R - MAX_R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R + MAX_R) / HC | 0, 0, HH - 1);
+  let best = null, bd = Infinity;
+  for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+    const cell = hash[gy * HW + gx];
+    for (let i = 0; i < cell.length; i++) {
+      const v = cell[i];
+      if (!v.alive || !infantry(v)) continue;
+      const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2, rr = R + v.T.r;
+      if (d2 <= rr * rr && d2 < bd && factionOf(world, v) !== f) { bd = d2; best = v; }
+    }
+  }
+  return best;
+}
+export function hullMg(world, u, dt) {
+  if (u.mgCd > 0) { u.mgCd -= dt; return; }
+  if (!(u.cd > 0)) return;   // die Kanone ist bereit: sie schießt, nicht das MG
+  const t = mgTarget(world, u), a = t ? clearShot(world, u, t, 'bullet') : null;
+  if (!a) { u.mgCd = TANK_MG.RETRY; return; }
+  fire(world, u, t, 'bullet', a.x, a.y, TANK_MG.DMG, 0, tankMgMuzzle(u, MGZ));
+  u.mgCd = TANK_MG.CD * (.9 + world.rng() * .2);
 }
 
 // Drachenfeuer: Kegel vor dem Drachen; Getroffene fangen Feuer (Generation 0, Verursacher der Drache).
@@ -775,6 +813,8 @@ export function think(world, u, dt) {
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
   if (u.chanId > 0) return;
+  // Bug-MG des Panzers: feuert, während die Kanone lädt (eigene Abklingzeit, unabhängig vom übrigen Verhalten)
+  if (u.type === 'panzer') hullMg(world, u, dt);
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
   // einmal den Speer werfen
   if (u.formOn) {

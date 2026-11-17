@@ -205,6 +205,27 @@ test('Gorilla: fällt er während des Hebens, lässt er das Opfer fallen (landet
   assert.equal(g.grabbed, null); assert.equal(v.z, 0); assert.ok(v.state !== 'air');
 });
 
+// Review Task 5, Punkt 4: stirbt der Gorilla, wird er betäubt oder verflucht, während er das Opfer hält, lässt er es über
+// dropGrabbed fallen (Tod: combat.die → releaseUnit; Betäubung und Fluch: cancelAbility → throwEnd)
+test('Gorilla: Tod, Betäubung oder Froschfluch beim Heben lassen das Opfer fallen', async () => {
+  const { hurt } = await import('../game/js/combat.js');
+  const { curseFrog } = await import('../game/js/abilities.js');
+  for (const how of ['tot', 'betäubt', 'frosch']) {
+    const w = mkWorld(), g = spawn(w, 'gorilla', 300, 400, 'blau'), v = dummy(w, 'krieger', 323, 400);
+    g.abCd = 0; g.beatCd = 1e9; rebuildHash(w);
+    for (let k = 0; k < 10 && !g.grabbed; k++) { step(w, DT); w.events.length = 0; }
+    assert.equal(g.grabbed, v, how);
+    run(w, .1);
+    assert.ok(v.z > 0 && g.abK === 0, `${how}: hochgehoben, noch beim Heben`);
+    if (how === 'tot') hurt(w, g, 1e9, 'melee', v);
+    else if (how === 'betäubt') { g.state = 'stun'; g.stunT = 2; }
+    else assert.ok(curseFrog(w, g));
+    run(w, 1);
+    assert.equal(g.grabbed, null, how); assert.equal(v.z, 0, how); assert.ok(v.state !== 'air', how);
+    assert.ok(Math.abs(v.x - 323) < 60, `${how}: nicht geworfen (Wurf: etwa 120 px; x ${v.x})`);
+  }
+});
+
 test('Brustklopfen: beim ersten Kontakt, schwächere Feinde in 70 px fliehen 1,5 s, stärkere nicht; dann 20 s Ruhe', () => {
   const w = mkWorld(), g = spawn(w, 'gorilla', 300, 400, 'blau');
   const weak = dummy(w, 'krieger', 350, 400); weak.hp = 60;

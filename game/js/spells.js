@@ -17,10 +17,11 @@ const emit = (world, e) => { world.events.push(e); };
 const sound = (world, k) => { world.events.push({ type: 'sound', k }); };
 
 /* ---------- Wahl nach Lage ---------- */
-// Lage geht vor: ein feindlicher Nahkämpfer (Reichweite < 20) bis MELEE_R px (Mitte zu Mitte plus sein Radius) →
-// Windstoß, lädt der noch → Steinwand. Sonst nach dem Ziel: dichte Gruppe (mindestens DENSE_N Feinde bis DENSE_R px
-// ums Ziel, das Ziel mitgezählt) → Feuerball vor Blitz; Flieger oder Einzelziel (kein weiterer Feind bis DENSE_R) →
-// Blitz vor Feuerball; dazwischen (2 bis 3 Feinde) Feuerball vor Blitz. Kein Feuerball, wenn im Einschlagkreis (Splash
+// Lage geht vor, in dieser Reihenfolge: ein feindlicher Nahkämpfer (Reichweite < 20) bis MELEE_R px (Mitte zu Mitte
+// plus sein Radius) → Windstoß, lädt der noch → Steinwand. Sonst nach dem Ziel: dichte Gruppe (mindestens DENSE_N
+// Feinde bis DENSE_R px ums Ziel, das Ziel mitgezählt; auch ein dichter Bienenschwarm) → Feuerball vor Blitz; Flieger
+// oder Einzelziel (kein weiterer Feind bis DENSE_R) → Blitz vor Feuerball; dazwischen (2 bis 3 Feinde am Boden)
+// Feuerball vor Blitz. Kein Feuerball, wenn im Einschlagkreis (Splash
 // des Magiers) mehr Eigene als Feinde stehen (Festlegung 2). Mit SECOND_P (world.rng) nimmt er den zweitbesten
 // passenden Zauber; mit nur einem passenden wird nicht gewürfelt.
 export const SPELL = { MELEE_R: 60, DENSE_R: 45, DENSE_N: 4, SECOND_P: .2, RETRY: 2 };
@@ -94,13 +95,13 @@ function rank(world, u, t) {
   THREAT = meleeThreat(world, u);
   if (THREAT) {
     if (!(u.windCd > 0)) OPT[OPT_N++] = 'wind';
-    if (!(u.wallCd > 0)) OPT[OPT_N++] = 'wall';
+    if (!(u.wallCd > 0) && !THREAT.T.fly) OPT[OPT_N++] = 'wall';   // Flieger kommen über die Mauer
   }
   countAround(world, f, t.x, t.y, u.T.splash, true);
   const fireOk = CN_OWN <= CN_FOE;
   countAround(world, f, t.x, t.y, SPELL.DENSE_R, false);
   const foes = CN_FOE;
-  if (t.T.fly || foes <= 1) { OPT[OPT_N++] = 'lightning'; if (fireOk) OPT[OPT_N++] = 'fireball'; }
+  if (foes < SPELL.DENSE_N && (t.T.fly || foes <= 1)) { OPT[OPT_N++] = 'lightning'; if (fireOk) OPT[OPT_N++] = 'fireball'; }
   else { if (fireOk) OPT[OPT_N++] = 'fireball'; OPT[OPT_N++] = 'lightning'; }
 }
 export function chooseSpell(world, u, t) {

@@ -42,6 +42,12 @@ test('Wahl nach Lage: Nahkämpfer in 40 px → Windstoß, lädt der Wind noch �
   const w2 = best(mkWorld()), m2 = spawn(w2, 'magier', 400, 400, 'blau'), s = dummy(w2, 'schuetze', 440, 400);
   rebuildHash(w2);
   assert.notEqual(chooseSpell(w2, m2, s), 'wind');
+  // Bienen (Nahkämpfer, fliegen): Windstoß ja, aber keine Steinwand (sie fliegen darüber)
+  const w3 = best(mkWorld()), m3 = spawn(w3, 'magier', 400, 400, 'blau'), b = dummy(w3, 'biene', 430, 400);
+  rebuildHash(w3);
+  assert.equal(chooseSpell(w3, m3, b), 'wind');
+  m3.windCd = 3;
+  assert.notEqual(chooseSpell(w3, m3, b), 'wall');
 });
 
 test('Wahl nach Lage: 6 Feinde dicht → Feuerball; Biene allein → Blitz', () => {
@@ -53,6 +59,11 @@ test('Wahl nach Lage: 6 Feinde dicht → Feuerball; Biene allein → Blitz', () 
   const w2 = best(mkWorld()), m2 = spawn(w2, 'magier', 300, 400, 'blau'), b = dummy(w2, 'biene', 480, 400);
   rebuildHash(w2);
   assert.equal(chooseSpell(w2, m2, b), 'lightning');
+  // ein dichter Bienenschwarm ist eine dichte Gruppe (Lage: Gruppe vor Flieger) → Feuerball
+  const w4 = best(mkWorld()), m4 = spawn(w4, 'magier', 300, 400, 'blau'), bees = [];
+  for (let k = 0; k < 8; k++) bees.push(dummy(w4, 'biene', 480 + (k % 4) * 9, 392 + (k / 4 | 0) * 12));
+  rebuildHash(w4);
+  assert.equal(chooseSpell(w4, m4, bees[0]), 'fireball');
   // ein einzelner Bodenfeind: auch Blitz
   const w3 = best(mkWorld()), m3 = spawn(w3, 'magier', 300, 400, 'blau'), r = dummy(w3, 'ritter', 480, 400);
   rebuildHash(w3);

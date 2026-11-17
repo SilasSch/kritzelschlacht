@@ -1,6 +1,6 @@
 // Testarmeen pro Mission und Konter-Erwartungen für tools/balance.mjs und die Tests.
 // Plan = Array<[type, n, x0, y0, x1, y1]> (blaue Rechtecke; x in Anteilen des Missionsrahmens world.frameX, y von H).
-import { UNITS } from '../game/js/data.js';
+import { UNITS, MISSIONS } from '../game/js/data.js';
 import { placeRect } from '../game/js/sim.js';
 import { frameX } from '../game/js/world.js';
 
@@ -28,6 +28,16 @@ export const MISSION_PLANS = [
 // Missionen (Index), deren Spam-Plan verlieren muss: M2, M4, M5, M7, M8, M9.
 // M3 (Eiserne Front) und M6 (Wilde Jagd) sind ausgenommen; der M1-Spam (Einstieg) muss gewinnen.
 export const SPAM_MUST_LOSE = [1, 3, 4, 6, 7, 8];
+
+// Spam einzelner neuer Einheiten mit vollem Budget (Spez. Nachtrag 3, Einschränkungen): wo der Spam-Plan einer
+// Mission verlieren muss (SPAM_MUST_LOSE), darf auch eine neue Einheit allein die Mission nicht billig lösen. Grund:
+// nur der Krieger-Spam war geprüft, und 23 Römer (unter par) gewannen M5 mit drei Sternen (finale Prüfung, Römer-
+// Runde). Geprüft wird jede gelistete Einheit in jeder dieser Missionen, deren Kategorien sie erlauben
+// (MISSIONS[i].cats). Ein späterer Plan nimmt hier alle neuen Einheiten auf.
+export const UNIT_SPAM = ['roemer'];
+export const unitSpamAllowed = (i, type) => !MISSIONS[i].cats || MISSIONS[i].cats.includes(UNITS[type].cat);
+// Plan: so viele wie das Budget hergibt, an der Front
+export const unitSpamPlan = (i, type) => [[type, Math.floor(MISSIONS[i].budget / UNITS[type].cost + 1e-9), ...F]];
 
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten. Liegt in game/js/data.js (die Charakterkarten lesen sie).
 export { COUNTERS } from '../game/js/data.js';

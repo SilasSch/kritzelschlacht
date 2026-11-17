@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult, placeRect } from '../game/js/sim.js';
-import { MISSION_PLANS, SPAM_MUST_LOSE, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan } from './plans.mjs';
+import { MISSION_PLANS, SPAM_MUST_LOSE, UNIT_SPAM, unitSpamAllowed, unitSpamPlan, COUNTERS, DUEL_A, DUEL_B, SHAPES, placePlan } from './plans.mjs';
 
 const DT = 1 / 60;
 const SMART_MIN = 6 / 8;      // Smart-Plan (Kosten ≤ par) gewinnt mindestens 6/8 (Task 14)
@@ -84,6 +84,16 @@ if (cmd === 'missions') {
       else note = '(not checked)';
       console.log(`${pad(`M${i + 1} ${kind} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
     }
+  }
+  // Spam einer einzelnen neuen Einheit (UNIT_SPAM, volles Budget) muss dort verlieren, wo der Spam-Plan verlieren muss
+  for (const type of UNIT_SPAM) for (const i of SPAM_MUST_LOSE) {
+    if (!unitSpamAllowed(i, type)) continue;
+    const plan = unitSpamPlan(i, type);
+    let wins = 0, spent = 0;
+    for (let s = 1; s <= runs; s++) { const r = runMission(i, plan, 1000 * (i + 1) + s); if (r.res === 'win') wins++; spent = r.spent; }
+    let note = '';
+    if ((runs - wins) / runs < SPAM_LOSE_MIN) { ok = false; note = `FAIL (${type} spam < 6/8 losses)`; }
+    console.log(`${pad(`M${i + 1} ${type}x${plan[0][1]} ${MISSIONS[i].n}`, 32)}  ${pad(`${wins}/${runs}`, 6)}  ${pad(spent, 6)}  ${note}`.trimEnd());
   }
 } else {
   for (const [a, b, pts] of COUNTERS) {

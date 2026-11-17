@@ -39,6 +39,7 @@ test('Daten: Vampir malbar in Mythisch, Ghul nicht malbar; Fledermausform fliegt
   for (const n of ['Lebensraub', 'Fledermausform', 'Ghule', 'Schwäche: Feuer']) assert.ok(names.includes(n), n);
   assert.ok(unitCard('ghul').abil.some(a => /Vampirbiss/.test(a.n + a.d)), 'Ghul: entsteht durch Vampirbiss');
   assert.ok(cardTypes().find(g => g.cat === 'mythisch').types.includes('ghul'), 'Ghul im Lexikon');
+  assert.ok(unitCard('ghul').tags.includes('Nicht malbar') && !unitCard('vampir').tags.includes('Nicht malbar'));
 });
 
 /* ---------- Lebensraub ---------- */

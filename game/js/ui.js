@@ -70,7 +70,8 @@ export function createUI(game) {
       b.classList.toggle('on', b.dataset.cat === game.cat);
       b.disabled = !game.catAllowed(b.dataset.cat);
     }
-    game.catKeys(game.cat).forEach((k, idx) => {
+    // nur malbare Einheiten (Vorgabe 3; catKeys filtert schon, hier noch einmal für die Leiste)
+    game.catKeys(game.cat).filter(k => !UNITS[k] || UNITS[k].paint !== false).forEach((k, idx) => {
       const D = UNITS[k] || TERRAIN[k];
       const b = document.createElement('button');
       b.className = 'ub' + (k === game.sel ? ' on' : '');

@@ -11,7 +11,7 @@ import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
 import { FORM } from './formation.js';
 import { createUI } from './ui.js';
-import { buildBench } from './bench.js';
+import { buildBench, SCENARIOS } from './bench.js';
 import { createRng } from './rng.js';
 import { SAVE_KEY, parseSave, serializeSave } from './save.js';
 
@@ -52,7 +52,8 @@ const game = {
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
 
-  catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN) : Object.keys(UNITS).filter(k => UNITS[k].cat === c)),
+  // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3)
+  catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN) : Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false)),
   catAllowed: c => !(game.mission && game.mission.def.cats && !game.mission.def.cats.includes(c)),
   unlocked: i => i === 0 || (save.stars[i - 1] || 0) > 0,
 
@@ -141,7 +142,7 @@ function randomBattle() {
     if (k === 'mauer') { const x = rnd(.4, .58), y = rnd(.1, .4); tRect(world, k, x, y, x + .012, y + rnd(.25, .45)); }
     else tCircle(world, k, rnd(.35, .65), rnd(.25, .75), rnd(.06, .14));
   }
-  const types = Object.keys(UNITS).filter(k => k !== 'drache');
+  const types = Object.keys(UNITS).filter(k => k !== 'drache' && UNITS[k].paint !== false);
   const spots = [[.06, .1], [.06, .6], [.78, .1], [.78, .6]];
   const nf = 3 + (Math.random() * 2 | 0), teams = Object.keys(TEAMS);
   for (let i = 0; i < nf; i++) {
@@ -160,7 +161,8 @@ function randomBattle() {
 /* ---------- Sandkasten sichern ---------- */
 function saveSandbox() {
   sandSave = {
-    units: world.units.filter(u => u.alive).map(u => ({ type: u.type, team: u.team, x: u.x, y: u.y, hp: u.hp })),
+    // Ghule (nicht malbar) gehören zur Schlacht ihres Vampirs, sie kommen nicht mit zurück
+    units: world.units.filter(u => u.alive && u.T.paint !== false).map(u => ({ type: u.type, team: u.team, x: u.x, y: u.y, hp: u.hp })),
     GW: world.GW, GH: world.GH, terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
     teamMode: world.teamMode,
   };
@@ -330,7 +332,7 @@ const params = new URLSearchParams(location.search);
    history (eine Zeile je Sekunde), summary(fromSec), restart() }. Sim-ms: alle Simulationsschritte des Bilds;
    Render-ms: der Rest der Arbeit im Bild (Ereignisse, Effekte, Zeichnen); Bilddauer: Abstand der Bilder. */
 const benchN = params.has('bench') ? clamp(parseInt(params.get('bench'), 10) || 2000, 4, 10000) : 0;
-const benchScen = params.get('scenario') === 'blastcrowd' ? 'blastcrowd' : 'mixed';
+const benchScen = SCENARIOS.includes(params.get('scenario')) ? params.get('scenario') : 'mixed';   // mixed, mixed2, blastcrowd
 const BENCH_HISTORY = 600;
 let bench = null, benchBox = null;
 
@@ -491,7 +493,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem
@@ -593,6 +595,17 @@ const scenes = {
     spawn(world, 'magier', x, H * .88, 'blau');
     spawn(world, 'geist', x + 210, H * .88, 'rot');
     for (const u of world.units) if (u.type === 'magier') u.cd = .3 + world.rng() * .5;
+  },
+  // Vampir (Spez. #32, Task 4): drei blaue Vampire gegen sechs rote Krieger gut 320 px entfernt (sie fliegen als
+  // Fledermausschwarm hin und setzen sich davor wieder zusammen, Lebensraub, die Bisskills stehen als Ghule auf) und zwei
+  // rote Magier weit dahinter (680 px), die nach ein paar Sekunden heran sind: ihre Feuerbälle treffen die Vampire doppelt
+  // (der Brand auch). Fällt ein Vampir, zerfallen seine Ghule.
+  vampir() {
+    world.teamMode = true;
+    const W = world.W, H = world.H, x = W * .2;
+    for (let k = 0; k < 3; k++) spawn(world, 'vampir', x, H * .5 + (k - 1) * 70, 'blau');
+    placeRect(world, 'krieger', 6, (x + 320) / W, .38, (x + 350) / W, .62, 'rot');
+    spawn(world, 'magier', x + 680, H * .44, 'rot'); spawn(world, 'magier', x + 680, H * .56, 'rot');
   },
   // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
   // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)

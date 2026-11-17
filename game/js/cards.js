@@ -41,6 +41,8 @@ export function unitCard(type) {
   else tags.push(T.range >= MELEE_MAX || RANGED.has(type) ? 'Fernkampf' : 'Nahkampf');
   if (T.fly) tags.push('Fliegt');
   if (T.splash) tags.push('Flächenschaden');
+  // nicht malbar (Ghul): erscheint nur im Lexikon, die Fähigkeitstexte sagen, wie er entsteht (Vorgabe 3)
+  if (T.paint === false) tags.push('Nicht malbar');
   return {
     type,
     name: T.n,

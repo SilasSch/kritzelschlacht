@@ -4,6 +4,7 @@
 // phase = 'plan' | 'battle' | 'done' (nur in Missionen relevant).
 import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
+import { clearSpellWalls, STONE_WALL } from './spells.js';
 
 export const UNIT_CAP = 2600;
 export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= zoneX (Anteil des Missionsrahmens)
@@ -82,8 +83,9 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
     if (mission) {
       if (old && !towner[i]) continue;   // Gelände der Mission ist geschützt
       if (old === id) continue;
-      // Erst prüfen, dann buchen: ein abgelehntes Feld darf keine Erstattung behalten
-      const refund = old ? TERRAIN[terrKeyById(old)].cost : 0;
+      // Erst prüfen, dann buchen: ein abgelehntes Feld darf keine Erstattung behalten. Eine Steinwand (towner 2,
+      // spells.js) war nie bezahlt: keine Erstattung.
+      const refund = old && towner[i] !== STONE_WALL.OWNER ? TERRAIN[terrKeyById(old)].cost : 0;
       const next = Math.max(0, mission.spent - refund) + (id ? cost : 0);
       if (id && next > mission.budget + EPS) { broke = true; continue; }
       mission.spent = next;
@@ -109,13 +111,15 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
   return { changed, warning: broke ? warn(stroke, MSG_BUDGET) : null, cells };
 }
 
-// Nimmt einen Strich zurück und liefert die Ausgaben vor dem Strich.
+// Nimmt einen Strich zurück und liefert die Ausgaben vor dem Strich. Steinwände der Magier (towner 2, spells.js) sind
+// kein Teil eines Strichs: Rückgängig stellt keine wieder her und entfernt alle, die noch stehen.
 export function undo(world, stroke) {
   for (const u of stroke.units) if (u.alive) { u.alive = false; world.dead = (world.dead || 0) + 1; }
   for (const [i, [t, o, h]] of stroke.cells) {
     if (i >= world.terr.length) continue;
     world.terr[i] = t; world.towner[i] = o; world.whp[i] = h;
   }
+  clearSpellWalls(world);
   touchTerrain(world);
   for (const e of stroke.erased) { const n = spawn(world, e.type, e.x, e.y, e.team); n.hp = e.hp; }
   rebuildHash(world);

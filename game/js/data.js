@@ -14,7 +14,7 @@ export const UNITS = {
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
   biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:7,dmg:3,range:2,speed:135,cd:.45,cost:0.5,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Billig und lästig.'},
-  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:5,mass:1,d:'Feuerbälle mit Flächenschaden.'},
+  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:5,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
@@ -63,7 +63,13 @@ const ABIL = {
     {n:'Prankenhieb', d:'Trifft alle Feinde vor sich und stößt sie zurück.'},
   ],
   biene: [{n:'Schwarm', d:'Umkreist das Ziel und sticht von allen Seiten. Stark in großer Zahl.'}],
-  magier: [{n:'Feuerball', d:'Flächenschaden aus der Ferne. Feuer trifft auch Geister voll.'}],
+  magier: [
+    {n:'Feuerball', d:'Gegen dichte Gruppen: Flächenschaden, setzt in Brand. Nie, wo mehr Eigene als Feinde stehen.'},
+    {n:'Blitz', d:'Gegen Einzelziele und Flieger: trifft sofort und springt auf bis zu 3 nahe Feinde.'},
+    {n:'Windstoß', d:'Kommen Nahkämpfer zu nah, schleudert er sie zurück und pustet Bienen weg. Alle 6 s.'},
+    {n:'Steinwand', d:'Lädt der Wind noch, zieht er eine kurze Mauer hoch. Sie zerbröselt nach 12 s. Alle 10 s.'},
+    {n:'Meteor (Gruppenzauber)', d:'Ab 3 Magiern nah beieinander: 1,5 s gemeinsam zaubern, dann ein Meteor in die dichteste Feindgruppe. Alle 30 s.'},
+  ],
   geist: [
     {n:'Spuk', d:'Alle 15 s erschreckt er sein Ziel, das dann 2,5 s lang in Panik flieht.'},
     {n:'Körperlos', d:'Nur Feuer trifft voll, alles andere macht halben Schaden.'},

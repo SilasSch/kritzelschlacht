@@ -207,7 +207,8 @@ test('Flugspuren: Rakete raucht (normal), Feuerball glüht', () => {
 
 test('Aussehen: Glühen (additiv) nur bei Feuer, Explosion, Mündungsblitz und Bodenlicht; Rauch grau und normal', () => {
   // Spez. #21: Flammenstrahl (jet, spark) und brennende Einheiten (flame) sind Feuer
-  assert.deepEqual([...GLOW_KINDS].sort(), ['core', 'ember', 'fire', 'flame', 'flash', 'jet', 'light', 'spark']);
+  // Spez. #31 (Task 3): Blitz (bolt, zap), Kanalfunken (mote), Feuerkugel (orb) und Meteor glühen auch
+  assert.deepEqual([...GLOW_KINDS].sort(), ['bolt', 'core', 'ember', 'fire', 'flame', 'flash', 'jet', 'light', 'meteor', 'mote', 'orb', 'spark', 'zap']);
   const { core } = mkCore();
   core.consume([
     { type: 'blast', x: 0, y: 0, R: 40, kind: 'blast' }, { type: 'blast', x: 0, y: 0, R: 40, kind: 'fire' },

@@ -7,6 +7,7 @@ import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './phy
 import { createFlow, updateFlow } from './pathing.js';
 import { updateFormations } from './formation.js';
 import { updateCentroids, isFleeing } from './morale.js';
+import { stepSpells } from './spells.js';
 
 const rnd = (world, a, b) => a + world.rng() * (b - a);
 
@@ -38,6 +39,8 @@ export function step(world, dt) {
   for (const u of units) u.att = 0;
   for (const u of units) if (u.alive && !isFleeing(u) && u.tg && u.tg.alive) u.tg.att++;
   for (const u of units) if (u.alive) think(world, u, dt);
+  // Zauber (spells.js): Meteor-Kanäle (nach den Entscheidungen) und befristete Steinwände
+  stepSpells(world, dt);
   t1 = pnow(); M[3] += t1 - t0; t0 = t1;
   integrate(world, dt);
   t1 = pnow(); M[4] += t1 - t0; t0 = t1;

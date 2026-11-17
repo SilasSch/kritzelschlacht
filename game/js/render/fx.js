@@ -110,11 +110,11 @@ export function createFx(renderer) {
   const glow = makePC(L.fx, PIXI.BLEND_MODES.ADD, 'fxGlow');        // unter den Kernen: Kerne behalten ihre Farbe
   const main = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxMain');
 
-  function put(g, t, x, y, scale, rot, tint, alpha, ax) {
+  function put(g, t, x, y, scale, rot, tint, alpha, ax, sy = 1) {
     if (g.n >= FX_CAP) return;
     if (g.n === 0) g.q.clear();
     g.n++;
-    g.q.addPart(t, null, x, y, rot, scale, scale, ax, .5, tint, alpha);
+    g.q.addPart(t, null, x, y, rot, scale, scale * sy, ax, .5, tint, alpha);
   }
   // Ende des Bilds: Anzahl zurückgeben, leere Ebenen leeren
   function finish(g) {
@@ -222,7 +222,7 @@ export function createFx(renderer) {
       look(live[i], LK);
       if (LK.wAlpha > maxWarm) maxWarm = LK.wAlpha;
       if (LK.wAlpha > .004) put(LK.wGround ? warm : halo, tex[F.warm], LK.x, LK.y, LK.wR / FRAME_R[F.warm], 0, LK.wTint, LK.wAlpha, .5);
-      if (LK.alpha > .004) put(main, tex[LK.frame], LK.x, LK.y, Math.max(.001, LK.r) / FRAME_R[LK.frame], LK.rot, LK.tint, LK.alpha, LK.ax);
+      if (LK.alpha > .004) put(main, tex[LK.frame], LK.x, LK.y, Math.max(.001, LK.r) / FRAME_R[LK.frame], LK.rot, LK.tint, LK.alpha, LK.ax, LK.sy);
       if (LK.gAlpha > .004) put(LK.gLight ? light : glow, tex[F.soft], LK.x, LK.y, LK.gR / FRAME_R[F.soft], 0, LK.gTint, LK.gAlpha, .5);
     }
     nMain = finish(main); nGlow = finish(glow); nLight = finish(light); nWarm = finish(warm); nHalo = finish(halo);

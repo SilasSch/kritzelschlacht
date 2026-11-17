@@ -24,6 +24,8 @@ export function createWorld(W, H, seed = 1) {
     flow: null,          // Flussfelder der Wegfindung (pathing.js), legt sim.step an
     formations: [], formT: 0, formNext: 1,   // Römerblöcke (formation.js): Liste, Zeit bis zur Neubildung, nächste id
     cent: new Map(), centT: 0,   // Schwerpunkt je Fraktion ohne Fliehende (morale.updateCentroids) und Zeit bis zur Neuberechnung
+    // Zauber (spells.js): Steinwände { i: Zelle, t: Restzeit s } und Meteor-Kanäle { id, x, y, t, sx, sy, f, n, m }
+    tempWalls: [], casts: [], castNext: 1,
     // Von Anfang an da (später angehängte Felder ändern die Form der Welt, V8 verwirft dann optimierten Code)
     dead: 0, contested: false, lastWinT: -9,
   };
@@ -98,10 +100,14 @@ export function spawn(world, type, x, y, team) {
     // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
     // fz: Flughöhe der Flieger (physics.integrate führt z mit höchstens FLY_VZ px/s dorthin; Sturzflug senkt sie).
     buffT: .5, spdMul: 1.5, dmgMul: 1.5, fz: .5,
+    // Zauberbuch der Magier (spells.js, Spez. #31): Abklingzeiten von Windstoß, Steinwand und Meteor (s; laufen in
+    // combat.think ab), Meteor-Kanal (world.casts-id, 0 = keiner). Für alle anderen bleiben sie 0.
+    windCd: .5, wallCd: .5, meteorCd: .5, chanId: 0,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
   u.abCd = 0; u.abT = 0; u.abX = 0; u.abY = 0; u.fearT = 0; u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; u.fz = T.flyZ || 0;
+  u.windCd = 0; u.wallCd = 0; u.meteorCd = 0;
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
@@ -175,6 +181,13 @@ export function resizeWorld(world, W, H) {
     const a = y * world.GW + x, b = y * nGW + x;
     t[b] = world.terr[a]; o[b] = world.towner[a]; h[b] = world.whp[a];
   }
+  // Steinwände (spells.js) auf die neuen Zellindizes; was außerhalb liegt, fällt weg
+  let n = 0;
+  for (const e of world.tempWalls) {
+    const x = e.i % world.GW, y = (e.i / world.GW) | 0;
+    if (x < mw && y < mh) { e.i = y * nGW + x; world.tempWalls[n++] = e; }
+  }
+  world.tempWalls.length = n;
   world.W = W; world.H = H; world.GW = nGW; world.GH = nGH; world.terr = t; world.towner = o; world.whp = h;
   touchTerrain(world);
   makeHash(world);
@@ -191,4 +204,7 @@ export function clearBattle(world) {
   world.events.length = 0; world.dead = 0;
   world.formations = []; world.formT = 0;
   world.cent.clear(); world.centT = 0;
+  // Steinwände gehören zur Schlacht (spells.js): ihre Zellen werden wieder frei, Meteor-Kanäle enden
+  for (const e of world.tempWalls) if (world.terr[e.i] === 4 && world.towner[e.i] === 2) { world.terr[e.i] = 0; world.towner[e.i] = 0; world.whp[e.i] = 0; touchTerrain(world); }
+  world.tempWalls = []; world.casts = [];
 }

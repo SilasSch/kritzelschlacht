@@ -343,7 +343,7 @@ test('isFire: Feuerarten mit gemeinsamem Merkmal, Brand über Zeit zählt als Fe
 // world → abilities → combat → formation … bilden Importkreise: jedes Logikmodul muss als erstes geladene Datei
 // funktionieren (kein Zugriff auf importierte Werte beim Laden). Je Modul ein eigener Prozess.
 test('Importkreise: jedes Logikmodul lädt als Einstieg', () => {
-  const mods = ['data', 'rng', 'world', 'physics', 'pathing', 'muzzle', 'formation', 'morale', 'abilities', 'combat', 'sim',
+  const mods = ['data', 'rng', 'world', 'physics', 'pathing', 'muzzle', 'formation', 'morale', 'abilities', 'spells', 'combat', 'sim',
     'bench', 'paint', 'cards', 'save', 'camera', 'wheel', 'render/pose', 'render/fxcore', 'render/rig', 'render/quads'];
   for (const m of mods) {
     const url = new URL(`../game/js/${m}.js`, import.meta.url).href;

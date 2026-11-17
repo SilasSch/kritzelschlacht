@@ -54,6 +54,8 @@ const blockPhase = id => frac(id * .6180339887);
    sweat 0..1 ist die Phase des Tropfens (SWEAT_HZ je s, Versatz u.seed), er rinnt an der Kopfseite herab und
    verblasst am Ende. Bosse: nur Pupillen und Tropfen. */
 export const FEAR_PUPIL = .55, SWEAT_HZ = .9;
+// Meteor-Kanal (spells.js, u.chanId > 0): Stab um CHANNEL_LIFT · r angehoben, ±CHANNEL_SWAY mit CHANNEL_HZ
+export const CHANNEL_LIFT = .55, CHANNEL_SWAY = .06, CHANNEL_HZ = 1.2;
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -243,6 +245,8 @@ export function poseUnit(u, t, out = {}, mem) {
       out.weaponLift = THROW_LIFT * k; out.weaponRot = THROW_ROT * k;
     }
   }
+  // Meteor-Kanal (spells.js): der Magier reckt den Stab hoch (CHANNEL_LIFT · r, schwingt sanft), kein Rückstoß
+  if (u.chanId > 0) { out.weaponLift = CHANNEL_LIFT + CHANNEL_SWAY * Math.sin(TAU * CHANNEL_HZ * t + u.seed); out.recoil = 0; }
   if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
   // Luft: Flugfortschritt aus der Energie (vz²/2 + g·z = vmax²/2), ohne Gedächtnis; 0 beim Abheben, 1 bei
   // der Landung. Schnelle Flüge überschlagen sich einmal ganz (landen also aufrecht), langsame kippen nur.

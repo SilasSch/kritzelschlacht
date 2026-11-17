@@ -9,6 +9,7 @@ import { bossMuzzle, hasMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire } from './abilities.js';
+import { castSpell, FIREBALL } from './spells.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -183,7 +184,8 @@ function knock(v, nx, ny, f) { applyImpulse(v, nx * f, ny * f, 0); }
 // Schleudern: waagrechter Impuls I = dmg · 9 · falloff vom Zentrum weg, senkrecht iz = 0.6 · I. Der
 // senkrechte Anteil wirkt nur, wenn er die Einheit mit mindestens LAUNCH_VZ abheben lässt (sonst nur
 // Schubs, keine Betäubung). Leichte Körper werden auf MAX_FLING gedeckelt. Der Impuls wirkt vor dem
-// Schaden, damit die Leiche einer getöteten Einheit mitfliegt.
+// Schaden, damit die Leiche einer getöteten Einheit mitfliegt. gen ≥ 0: wer überlebt, fängt Feuer (ignite mit
+// dieser Generation, Verursacher src; Feuerball und Meteor, spells.js).
 const BLAST_PUSH = 9, BLAST_LIFT = .6;
 // Stoß I vom Punkt weg (dx, dy: Abstand, d: Länge), gedeckelt auf MAX_FLING · Masse; hebt nur ab LAUNCH_VZ ab.
 // Auch für Fähigkeiten (Ramme, Sturzflug, abilities.js).
@@ -193,13 +195,14 @@ export function fling(v, dx, dy, d, I) {
   const iz = BLAST_LIFT * I;
   applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
 }
-export function blast(world, x, y, R, dmg, f, src, kind, wallMul) {
+export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
   query(world, x, y, R + 16, v => {
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
     const fall = 1 - .5 * Math.min(1, d / R);
     fling(v, dx, dy, d, dmg * BLAST_PUSH * fall);
     hurt(world, v, dmg * fall * (v === src ? .5 : 1), kind, src);
+    if (gen >= 0 && v.alive) ignite(world, v, gen, src);
   });
   if (wallMul) {
     const { GW, GH, terr } = world;
@@ -674,6 +677,10 @@ export function think(world, u, dt) {
   const T = u.T;
   u.cd -= dt; u.rt -= dt; u.gt -= dt; if (u.st > 0) u.st -= dt; u.mx = 0; u.my = 0;
   if (u.abCd > 0 && !u.abOn) u.abCd -= dt;
+  // Zauberbuch (spells.js): Abklingzeiten von Windstoß, Steinwand und Meteor
+  if (u.windCd > 0) u.windCd -= dt;
+  if (u.wallCd > 0) u.wallCd -= dt;
+  if (u.meteorCd > 0) u.meteorCd -= dt;
   // Verstärkung (Heulen, abilities.js) läuft ab
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.lofWait > 0) u.lofWait -= dt;
@@ -692,6 +699,8 @@ export function think(world, u, dt) {
   if (updateMorale(world, u, dt)) { if (u.abOn) cancelAbility(world, u); retreat(world, u, dt); return; }
   // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
   if (stepAbility(world, u, dt)) return;
+  // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
+  if (u.chanId > 0) return;
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
   // einmal den Speer werfen
   if (u.formOn) {
@@ -727,6 +736,8 @@ export function think(world, u, dt) {
   // MG und Scharfschütze: Hinlegen, Liegen, Aufstehen (sonst weiter wie stehend)
   if (PRONE.has(u.type) && stance(world, u, t, d, dx, dy, reach, dt)) return;
   if (d <= reach) {
+    // Magier: Zauberbuch statt Feuerball (spells.castSpell: Meteor, Feuerball, Blitz, Windstoß, Steinwand); lädt er, steht er
+    if (u.type === 'magier') { if (u.cd <= 0) castSpell(world, u, t); return; }
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
     // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
     let ax, ay;
@@ -1097,6 +1108,7 @@ function impact(world, p, v, cell, x, y, src) {
     return;
   }
   // Rakete/Feuerball: Volltreffer explodiert am Körper, sonst am Trefferpunkt
-  const bx = v ? v.x : x, by = v ? v.y : y, kind = p.kind === 'fire' ? 'fire' : 'rocket';
-  blast(world, bx, by, p.R, p.dmg, p.f, src, kind, p.kind === 'fire' ? 1.5 : 2);
+  // Der Feuerball setzt die Getroffenen in Brand (Spez. #31, Generation spells.FIREBALL.GEN)
+  const bx = v ? v.x : x, by = v ? v.y : y, fb = p.kind === 'fire';
+  blast(world, bx, by, p.R, p.dmg, p.f, src, fb ? 'fire' : 'rocket', fb ? 1.5 : 2, fb ? FIREBALL.GEN : -1);
 }

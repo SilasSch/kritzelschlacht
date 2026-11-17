@@ -10,10 +10,11 @@
 import { UNITS } from '../data.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R, MUZZLE_Z } from '../combat.js';
 import { shade } from './rig.js';
-import { projScreen, BOSS, BOSS_VIS } from './pose.js';
+import { projScreen, BOSS, BOSS_VIS, CHANNEL_LIFT } from './pose.js';
+import { METEOR, WIND } from '../spells.js';
 
 export const FX_CAP = 3000;
-export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24 };
+export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
 
 /* ---------- Wackeln ---------- */
 // Explosion: max(shake, min(12, R/6)). Abklingen je Sekunde wie früher ×0.85 je Bild bei 60 fps.
@@ -85,7 +86,9 @@ export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10)
    Wann gesenkt wird, entscheidet der Regler createLodGovernor aus der Arbeitszeit je Bild. */
 export const LOD_MAX = 1;
 export const LOD_OFF = new Set(['smoke', 'dust', 'wisp', 'exhaust', 'wash']);
-export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow', 'pilum', 'wave', 'bang']);
+// Zauber (spells.js): Blitzbögen, Kanalstrahlen, Kugel, Meteor und Zielkreis werden nie ausgedünnt (sonst Lücken im
+// Bogen bzw. Flackern der je Bild neu gesetzten Teile)
+export const LOD_KEEP = new Set(['light', 'core', 'soul', 'arrow', 'pilum', 'wave', 'bang', 'bolt', 'boltc', 'beam', 'beamc', 'orb', 'meteor', 'mrock', 'mring', 'mark', 'mtrail']);
 // Regler: update(workMs, frameMs). Gewertet wird die gemessene Arbeitszeit je Bild (Simulation, Effekte,
 // Zeichnen; ms), nicht der Bildabstand: ein auf 30 Hz begrenzter Browser hat 33 ms Abstand, aber wenig Arbeit.
 // Gleitendes Mittel der Arbeitszeit (Gewicht LOD_EMA); länger als LOD_SLOW_T s (Echtzeit aus frameMs) über
@@ -144,7 +147,8 @@ export function createLodGovernor() {
 /* ---------- Partikelspeicher ---------- */
 // Lebende Partikel in live (Zeichenreihenfolge = Entstehung), tote zurück in den Vorrat: keine Allokation
 // im laufenden Spiel. Über cap wird nicht mehr erzeugt (dropped zählt). Bewegung je dt: Dämpfung
-// exp(−drag·dt), Beschleunigung ay (Tropfen fallen), Drehung vrot.
+// exp(−drag·dt), Beschleunigung ay (Tropfen fallen), Drehung vrot. step(dt, hold): mit hold altern Partikel mit p.hold
+// nicht (je Bild neu gesetzte Teile der Zauber bleiben in der Pause stehen, solange die Welt steht).
 export function createParticles(cap = FX_CAP) {
   const live = [], free = [];
   let dropped = 0;
@@ -156,14 +160,15 @@ export function createParticles(cap = FX_CAP) {
       if (live.length >= cap) { dropped++; return null; }
       const p = free.pop() || {};
       p.k = k; p.x = x; p.y = y; p.x0 = x; p.y0 = y; p.vx = 0; p.vy = 0; p.ay = 0; p.drag = 0;
-      p.age = 0; p.life = life; p.r = 1; p.col = 0xffffff; p.rot = 0; p.vrot = 0;
+      p.age = 0; p.life = life; p.r = 1; p.col = 0xffffff; p.rot = 0; p.vrot = 0; p.sy = 1; p.a0 = 1; p.hold = false;
       live.push(p);
       return p;
     },
-    step(dt) {
+    step(dt, hold = false) {
       let n = 0;
       for (let i = 0; i < live.length; i++) {
         const p = live[i];
+        if (hold && p.hold) { live[n++] = p; continue; }
         p.age += dt;
         if (p.age >= p.life) { free.push(p); continue; }
         if (p.drag) { const f = Math.exp(-p.drag * dt); p.vx *= f; p.vy *= f; }
@@ -185,18 +190,20 @@ export function createParticles(cap = FX_CAP) {
 export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7, streak: 8, pilum: 9, wave: 10, note: 11, bang: 12 };
 // Einheitsradius je Bildteil (F) in Atlas-px: ein Partikel mit r = FRAME_R[f] wird in Originalgröße gezeichnet
 export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32, 28, 30, 30];
-export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame']);
+// Zauber (Spez. #31): Blitz (bolt, zap), Kanalfunken (mote), Kugel am Himmel (orb) und Meteor glühen auch
+export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame', 'bolt', 'zap', 'mote', 'orb', 'meteor']);
 export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
 // ax = Anker x), das additive Glühen (gR, gTint, gAlpha; gLight: im Bodenlicht-Layer unter den Figuren) und
 // das warme Licht, normal gemischt unter dem Glühen (wR, wTint, wAlpha; wGround: am Boden unter den Figuren).
+// sy: Stauchung quer (1 = rund; Striche der Zauber: Breite unabhängig von der Länge).
 // alpha, gAlpha bzw. wAlpha 0: kein Sprite.
 export function look(p, o) {
   const q = p.age / p.life, a = 1 - q;
   o.frame = F.disc; o.x = p.x; o.y = p.y; o.r = p.r; o.rot = p.rot; o.tint = p.col; o.alpha = a; o.ax = .5;
   o.gR = 0; o.gTint = 0xffffff; o.gAlpha = 0; o.gLight = false;
-  o.wR = 0; o.wTint = WARM_TINT; o.wAlpha = 0; o.wGround = false;
+  o.wR = 0; o.wTint = WARM_TINT; o.wAlpha = 0; o.wGround = false; o.sy = 1;
   switch (p.k) {
     case 'ember':
       o.r = p.r * (1.6 - a * .6); o.tint = a > .55 ? 0xffd84d : a > .3 ? 0xff8a3d : 0x9aa0aa;
@@ -271,6 +278,29 @@ export function look(p, o) {
     case 'note': o.frame = F.note; o.x = p.x + Math.sin(p.age * 9 + p.rot) * 2.5; o.rot = 0; o.alpha = Math.min(1, a * 2.5); break;
     case 'bang': o.frame = F.bang; o.r = p.r * (q < .12 ? 1.35 - q / .12 * .35 : 1); o.alpha = Math.min(1, a * 3); break;
     case 'shout': o.frame = F.streak; o.r = p.r * (.6 + q * .6); o.alpha = a * .9; break;
+    // Zauber (spells.js, siehe SPELL_FX): Blitzbogen blau mit weißem Kern, kurz voll da und dann aus; Funken am Treffer;
+    // Windschliere (wächst, blendet ein und aus); Kanalstrahl, Kugel, Meteor und Zielkreis werden je Bild neu gesetzt
+    // (Deckkraft p.a0, kein Altern sichtbar); Kanalfunken steigen zum Sammelpunkt
+    case 'bolt':
+      o.frame = F.streak; o.tint = 0x2e64e8; o.alpha = q < .45 ? 1 : a / .55; o.sy = p.sy;
+      o.gR = p.r * .9; o.gTint = 0x8fbaff; o.gAlpha = a * .55;
+      o.wR = p.r * 1.1; o.wTint = 0xc4dcff; o.wAlpha = .18 * a;
+      break;
+    case 'boltc': o.frame = F.streak; o.tint = 0xffffff; o.alpha = q < .45 ? 1 : a / .55; o.sy = p.sy; break;
+    case 'zap': o.tint = a > .5 ? 0xeaf4ff : 0x8fbaff; o.gR = p.r * 3; o.gTint = 0x7fb0ff; o.gAlpha = a * .8; break;
+    case 'gust': o.frame = F.streak; o.tint = p.col; o.r = p.r * (.7 + q * .6); o.alpha = .85 * Math.min(1, q / .15) * a; o.sy = p.sy; break;
+    case 'beam': case 'beamc': case 'mtrail': o.frame = F.streak; o.alpha = p.a0; o.sy = p.sy; break;
+    case 'mote': o.tint = 0xe6dcff; o.gR = p.r * 3.2; o.gTint = 0xa47cff; o.gAlpha = a * .75; break;
+    case 'orb':
+      o.alpha = p.a0; o.gR = p.r * 2.8; o.gTint = 0xff9a3d; o.gAlpha = .65 * p.a0;
+      o.wR = p.r * 2.4; o.wAlpha = .35 * p.a0;
+      break;
+    case 'meteor':
+      o.alpha = p.a0; o.gR = p.r * 3.2; o.gTint = 0xff7a2a; o.gAlpha = .8 * p.a0;
+      o.wR = p.r * 2.6; o.wAlpha = .4 * p.a0;
+      break;
+    case 'mrock': o.alpha = p.a0; break;
+    case 'mring': case 'mark': o.frame = p.k === 'mark' ? F.wave : F.ring; o.alpha = p.a0; break;
     // 'dot', 'drop': Scheibe in p.col
   }
   return o;
@@ -292,6 +322,27 @@ const SHARD_COL = { bullet: 0x9aa0aa, arrow: 0xa5692f, pilum: 0xc9a26b, firearro
    fear-Ereignis (Erschreckter): rotes Ausrufezeichen über dem Kopf (Budget misc). */
 export const ABILITY_FX = { life: 1, waveT: .5, notes: 3, shouts: 8, ramDust: 18 };
 const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
+
+/* ---------- Zauber der Magier (Spez. #31, Task 3) ----------
+   spell-Ereignis (spells.js), Budget-Art spell:
+   bolt     Zickzack-Bogen (x0, y0 − z0) → (x1, y1 − z1): etwa BOLT_SEG px je Stück, quer um bis BOLT_JAG px versetzt,
+            manchmal eine kurze Gabel; je Stück ein blauer Strich (Breite BOLT_W) mit weißem Kern (BOLT_CORE), dazu
+            Glühen und ein blasser Halo (auf Weiß sichtbar), Funken und ein Lichtblitz am Treffer. Lebt BOLT_LIFE s.
+   wind     GUST_N Schlieren (blaugrau) fliegen im Kegel (spells.WIND) nach außen und werden langsamer, Staub am Rand.
+   wall     Staub entlang der neuen Mauer, Steinsplitter springen hoch.
+   channel  kurze rote Welle am Zielpunkt (der Zielkreis selbst kommt je Bild aus world.casts, siehe unten).
+   meteor   Einschlag (dazu kommt das blast-Ereignis: Kern, Glut, Rauch, Krater, Wackeln): Staubwelle bis 1,4 · R, Staub
+            am Rand, fliegende Brocken, Glutfunken und ein Brandfleck.
+   fizzle   abgebrochener Meteor: Rauchwölkchen und fallende violette Funken am Sammelpunkt.
+   Meteor-Kanal (update mit world.casts, höchstens CAST_FX_MAX Kanäle je Bild): Zielkreis am Boden (rot, wird kräftiger),
+   von jedem Magier ein violetter Strahl vom Stab zum Sammelpunkt (sx, sy) mit aufsteigenden Funken, dort eine
+   wachsende Feuerkugel; in den letzten FALL s fällt der Meteor (Glut mit dunklem Kern und Umriss) beschleunigt zum
+   Ziel und zieht einen Schweif (zwei Striche bis TAIL_L px zurück, Flammen mit TAIL_RATE je s, Rauch). Diese Teile werden je Bild neu gesetzt (Lebensdauer PER_LIFE Bilder). */
+export const SPELL_FX = {
+  BOLT_SEG: 16, BOLT_JAG: 9, BOLT_W: 3.6, BOLT_CORE: 1.3, BOLT_LIFE: .2, FORK_P: .35,
+  GUST_N: 14, CAST_FX_MAX: 6, MOTE_RATE: 18, FALL: .38, BEAM_W: 2.6, BEAM_CORE: .9, TAIL_RATE: 200, TAIL_L: 60,
+};
+const PER_LIFE = 1.5;   // je Bild neu gesetzte Teile leben 1,5 Bilder: genau einmal gezeichnet
 
 /* ---------- Ereignisse → Effekte ---------- */
 const TAU = Math.PI * 2;
@@ -495,6 +546,130 @@ export function createFxCore(hooks = {}, opt = {}) {
     }
   }
 
+  // Strich von (x0, y0) nach (x1, y1), Breite w px (Bildteil streak: halbe Länge ≈ r, Strichbreite 9/30 · r · sy)
+  function seg(k, x0, y0, x1, y1, w, life, col) {
+    const L = Math.hypot(x1 - x0, y1 - y0), r = Math.max(.5, L * .5);
+    const p = add(k, (x0 + x1) / 2, (y0 + y1) / 2, life, r, col); if (!p) return null;
+    p.rot = Math.atan2(y1 - y0, x1 - x0); p.sy = w * 30 / (9 * r);
+    return p;
+  }
+  // Zickzack zwischen zwei Bildschirmpunkten (Gabel: dünner, weniger gezackt, ohne weitere Gabel)
+  function zigzag(x0, y0, x1, y1, fork) {
+    const S = SPELL_FX, L = Math.hypot(x1 - x0, y1 - y0);
+    if (L < 1) return;
+    const n = Math.max(2, Math.min(14, Math.round(L / S.BOLT_SEG))), nx = -(y1 - y0) / L, ny = (x1 - x0) / L;
+    const jag = Math.min(S.BOLT_JAG, L * .15) * (fork ? .6 : 1), w = fork ? .6 : 1;
+    let px = x0, py = y0;
+    for (let i = 1; i <= n; i++) {
+      const f = i / n, o = i < n ? rnd(-1, 1) * jag : 0;
+      const qx = x0 + (x1 - x0) * f + nx * o, qy = y0 + (y1 - y0) * f + ny * o;
+      seg('bolt', px, py, qx, qy, S.BOLT_W * w, S.BOLT_LIFE, 0x2e64e8);
+      seg('boltc', px, py, qx, qy, S.BOLT_CORE * w, S.BOLT_LIFE, 0xffffff);
+      if (!fork && i > 1 && i < n && rand() < S.FORK_P * 2 / n) {
+        const a = Math.atan2(y1 - y0, x1 - x0) + (rand() < .5 ? -1 : 1) * rnd(.5, 1), l = L * rnd(.15, .3);
+        zigzag(qx, qy, qx + Math.cos(a) * l, qy + Math.sin(a) * l, true);
+      }
+      px = qx; py = qy;
+    }
+  }
+  function spell(e) {
+    switch (e.k) {
+      case 'bolt': {
+        const x1 = e.x1, y1 = e.y1 - (e.z1 || 0);
+        zigzag(e.x0, e.y0 - (e.z0 || 0), x1, y1, false);
+        add('flash', x1, y1, .1, 4.5);
+        for (let i = 0; i < 5; i++) {
+          const a = rand() * TAU, s = rnd(40, 110), p = add('zap', x1, y1, rnd(.15, .3), rnd(.8, 1.3)); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 20; p.drag = 3;
+        }
+        shake = Math.max(shake, 1.2);
+        break;
+      }
+      case 'wind': {
+        const nx = e.nx || 1, ny = e.ny || 0, base = Math.atan2(ny, nx), R = e.R > 0 ? e.R : WIND.R, half = WIND.ANGLE / 2;
+        for (let i = 0; i < SPELL_FX.GUST_N; i++) {
+          const a = base + rnd(-half, half), d0 = rnd(8, 26), s = rnd(1.6, 2.6) * R;
+          const p = add('gust', e.x + Math.cos(a) * d0, e.y - 6 + Math.sin(a) * d0, rnd(.38, .5), rnd(6, 10), i % 3 ? 0x6f95ad : 0x9fbccd);
+          if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s; p.drag = 3.2; p.rot = a; p.vrot = rnd(-.8, .8); p.sy = .5;
+        }
+        for (let i = 0; i < 4; i++) { const a = base + rnd(-half, half), d = R * rnd(.6, .95); puff('dust', e.x + Math.cos(a) * d, e.y + Math.sin(a) * d * .7, DUST.life, rnd(4, 6)); }
+        break;
+      }
+      case 'wall': {
+        const L = e.L || 30, n = 6;
+        for (let i = 0; i < n; i++) {
+          const s = (i / (n - 1) * 2 - 1) * L;
+          puff('dust', e.x + e.px * s + rnd(-3, 3), e.y + e.py * s + rnd(-2, 2), DUST.life, rnd(4, 6.5));
+          const p = add('dot', e.x + e.px * s, e.y + e.py * s - 4, rnd(.4, .6), rnd(1.4, 2.4), 0x8d929c); if (!p) break;
+          p.vx = rnd(-30, 30); p.vy = -rnd(70, 130); p.ay = 420;
+        }
+        break;
+      }
+      case 'channel': wave(e.x, e.y, METEOR.R, .45, 0xe5574f); break;
+      case 'meteor': {
+        const R = e.R > 0 ? e.R : METEOR.R;
+        wave(e.x, e.y, R * 1.4, .6, 0xb8a98a);
+        decal(e.x, e.y, R * .55, ASH, .16);
+        for (let i = 0; i < 14; i++) { const a = i / 14 * TAU + rnd(-.2, .2), d = R * rnd(.6, 1); puff('dust', e.x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life * 1.3, rnd(6, 9)); }
+        for (let i = 0; i < 12; i++) {
+          const a = rand() * TAU, s = rnd(80, 200), p = add('dot', e.x, e.y - 4, rnd(.5, .8), rnd(1.8, 3.2), i % 2 ? 0x5a4a44 : 0x8d929c); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .6 - rnd(120, 220); p.ay = 520;
+        }
+        for (let i = 0; i < 16; i++) {
+          const a = rand() * TAU, s = rnd(120, 260), p = add('spark', e.x, e.y - 6, rnd(.4, .7), rnd(1.2, 1.8)); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7 - 60; p.ay = 240; p.drag = 1.2;
+        }
+        break;
+      }
+      case 'fizzle':
+        for (let i = 0; i < 3; i++) puff('smoke', e.x + rnd(-6, 6), e.y + rnd(-4, 4), SMOKE.life * .4, rnd(4, 6));
+        for (let i = 0; i < 6; i++) { const p = add('mote', e.x + rnd(-6, 6), e.y, rnd(.4, .7), rnd(.8, 1.2)); if (!p) break; p.vx = rnd(-30, 30); p.vy = rnd(-10, 20); p.ay = 160; }
+        break;
+    }
+  }
+
+  // Meteor-Kanal eines Bilds (siehe SPELL_FX); per: je Bild neu gesetztes Teil mit Deckkraft a0
+  function per(k, x, y, r, col, a0, dt) { const p = add(k, x, y, dt * PER_LIFE, r, col); if (p) { p.a0 = a0; p.hold = true; } return p; }
+  function castFx(c, dt) {
+    const S = SPELL_FX, M = METEOR, fall0 = M.CHANNEL - S.FALL, t = c.t, ramp = Math.min(1, t / .25);
+    per('mark', c.x, c.y, M.R, 0xe5574f, .2 + .45 * Math.min(1, t / M.CHANNEL), dt);
+    const beamA = ramp * (t < fall0 ? 1 : Math.max(0, 1 - (t - fall0) / (S.FALL * .5)));
+    const m = c.m;
+    for (let i = 0; i < m.length && i < M.MAX_M; i++) {
+      const v = m[i];
+      if (!v.alive || v.chanId !== c.id || beamA <= .01) continue;
+      // Stabspitze (rig.js magier, angehoben um pose.CHANNEL_LIFT)
+      const face = v.face < 0 ? -1 : 1, r = v.T.r, tx = v.x + face * r * 1.08, ty = v.y - (v.z || 0) - r * (1.32 + CHANNEL_LIFT);
+      const b = seg('beam', tx, ty, c.sx, c.sy, S.BEAM_W, dt * PER_LIFE, 0x8a5cf0); if (b) { b.a0 = .6 * beamA; b.hold = true; }
+      const bc = seg('beamc', tx, ty, c.sx, c.sy, S.BEAM_CORE, dt * PER_LIFE, 0xffffff); if (bc) { bc.a0 = .9 * beamA; bc.hold = true; }
+      for (let n = count(S.MOTE_RATE, dt); n > 0; n--) {
+        const life = rnd(.35, .5), p = add('mote', tx, ty, life, rnd(.9, 1.4)); if (!p) break;
+        p.vx = (c.sx - tx) / life * rnd(.85, 1); p.vy = (c.sy - ty) / life * rnd(.85, 1);
+      }
+      per('orb', tx, ty, 2.4, 0xe6dcff, .9 * beamA, dt);
+    }
+    if (t < fall0) {
+      // Feuerkugel am Sammelpunkt, wächst bis zum Fall
+      per('orb', c.sx, c.sy, 4 + 8 * Math.min(1, t / fall0), 0xffd27a, ramp, dt);
+      return;
+    }
+    // Fall: beschleunigt vom Sammelpunkt zum Ziel, Feuerschweif und Rauch
+    const f = Math.min(1, (t - fall0) / S.FALL), e2 = f * f, hx = c.sx + (c.x - c.sx) * e2, hy = c.sy + (c.y - c.sy) * e2;
+    // Schweif: zwei Striche zurück zum Sammelpunkt (orange breit, gelb schmal), dazu Flammen und Rauch
+    const dl = Math.hypot(c.x - c.sx, c.y - c.sy) || 1, ux = (c.x - c.sx) / dl, uy = (c.y - c.sy) / dl, tl = S.TAIL_L * (.4 + .6 * f);
+    const t1 = seg('mtrail', hx - ux * tl, hy - uy * tl, hx, hy, 11, dt * PER_LIFE, 0xff8a3d); if (t1) { t1.a0 = .55; t1.hold = true; }
+    const t2 = seg('mtrail', hx - ux * tl * .7, hy - uy * tl * .7, hx, hy, 5, dt * PER_LIFE, 0xffe066); if (t2) { t2.a0 = .85; t2.hold = true; }
+    for (let n = count(S.TAIL_RATE, dt); n > 0; n--) {
+      const p = add('fire', hx + rnd(-5, 5), hy + rnd(-5, 5), rnd(.3, .5), rnd(4, 8)); if (!p) break;
+      p.vx = rnd(-20, 20); p.vy = rnd(-30, 0); p.drag = DRAG;
+    }
+    if (rand() < dt * 30) puff('smoke', hx + rnd(-4, 4), hy + rnd(-4, 4), SMOKE.life * .5, rnd(4, 6));
+    per('meteor', hx, hy, 13, 0xffc15a, 1, dt);
+    per('mrock', hx + ux * 2, hy + uy * 2, 6, 0x5a4a44, 1, dt);
+    per('mring', hx + ux * 2, hy + uy * 2, 6.3, OUTLINE, 1, dt);
+  }
+
   function event(e) {
     switch (e.type) {
       case 'blast': {
@@ -573,6 +748,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
+      case 'spell': if (take('spell')) spell(e); break;
       case 'ability': if (take('ability')) ability(e); break;
       case 'fear': if (take('misc')) { const p = add('bang', e.x + rnd(-2, 2), e.y - (e.z || 0) - 10, .7, 7, 0xe5574f); if (p) p.vy = -14; } break;
       case 'heal': if (take('misc')) { const p = add('plus', e.x + rnd(-4, 4), e.y, .7, 5); if (p) p.vy = -30; } break;
@@ -633,6 +809,8 @@ export function createFxCore(hooks = {}, opt = {}) {
         } else if (rand() < dt * 36) puff('smoke', TR.x - Math.cos(TR.a) * 6, TR.y - Math.sin(TR.a) * 6, 1, rnd(2, 3.5));
       }
     }
+    // Meteor-Kanäle (spells.js): Zielkreis, Strahlen, Kugel, fallender Meteor
+    if (world && dt > 0 && world.casts) for (let k = 0; k < world.casts.length && k < SPELL_FX.CAST_FX_MAX; k++) castFx(world.casts[k], dt);
     // brennende Einheiten: höchstens BURN_FX_UNITS je Bild, reihum ab burnCursor
     if (world && dt > 0 && world.units) {
       const us = world.units, n = us.length;
@@ -657,7 +835,8 @@ export function createFxCore(hooks = {}, opt = {}) {
       bossDone = bd; bossAll = nb;
       bossList.length = 0;   // keine Verweise auf Einheiten festhalten
     }
-    if (dt > 0) store.step(dt);
+    // ohne Welt (Pause, Planphase) bleiben die je Bild gesetzten Teile des Meteor-Kanals stehen
+    if (dt > 0) store.step(dt, !world);
     let nl = 0;
     const live = store.live;
     for (let i = 0; i < live.length; i++) if (live[i].k === 'light') nl++;

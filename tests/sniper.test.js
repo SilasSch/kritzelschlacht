@@ -12,7 +12,7 @@ const run = (w, u, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { 
 const still = e => { e.hp = 1e9; };
 
 test('SNIPER: Werte laut Spez. #28', () => {
-  assert.deepEqual(SNIPER, { HOLD: .95, KEEP: .6, WAIT: 3, BEHIND: 40 });
+  assert.deepEqual(SNIPER, { KEEP: .6, WAIT: 3, BEHIND: 40 });
 });
 
 test('Hält Abstand zum Ziel: bei 300 px (Reichweite 380) kaum Bewegung', () => {
@@ -46,4 +46,29 @@ test('Weicht zurück: Feind bei 0,5 · Reichweite, Abstand wächst', () => {
   const d0 = e.x - u.x;
   run(w, u, 2, () => { u.cd = 5; });
   assert.ok(e.x - u.x > d0 + 5);
+});
+
+test('Wartezeit beginnt neu, auch nach dem Liegen: Ziel weg, dann ~3 s warten', () => {
+  const w = mkWorld(), u = spawn(w, 'sniper', 300, 400, 'blau'), e = spawn(w, 'krieger', 600, 400, 'rot'); still(e); e.T = { ...UNITS.krieger, speed: 0 };
+  u.cd = 1e9;
+  run(w, u, 3);
+  assert.equal(u.stance, 'prone');
+  u.snipeT = 50; run(w, u, .1);   // stale; liegend im Ziel setzt zurück
+  assert.equal(u.snipeT, 0);
+  e.x = 1000; u.tg = null; u.rt = 0;
+  const x0 = u.x;
+  run(w, u, 2);   // aufstehen (0,8 s) + Rest der Wartezeit
+  assert.ok(Math.abs(u.x - x0) < 5);
+  run(w, u, 3);
+  assert.ok(u.x - x0 > 5);
+});
+
+test('Kein Auf und Ab: Schütze rückt langsam an, Scharfschütze legt sich nicht ständig neu hin', () => {
+  const w = mkWorld(), u = spawn(w, 'sniper', 300, 400, 'blau'), e = spawn(w, 'schuetze', 300 + 330, 400, 'rot'); still(e); e.T = { ...UNITS.schuetze, speed: 0 };
+  u.cd = 1e9; e.cd = 1e9;
+  const d0 = e.x - u.x;
+  let changes = 0, last = u.stance;
+  run(w, u, 6, () => { e.x -= 20 * DT; if (u.stance !== last) { changes++; last = u.stance; } });
+  assert.ok(changes <= 4, `Wechsel ${changes}`);
+  assert.ok(e.x - u.x > 0.6 * 380 - 1 || e.x - u.x > d0 - 120);
 });

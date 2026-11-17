@@ -11,10 +11,12 @@ import { MORALE, PIN_HOLD, updateMorale, fleeSteer } from './morale.js';
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
-// Geduldige Scharfschützen (Spez. #28): mit Ziel in Reichweite nie näher als HOLD · Reichweite heran; ohne Ziel
+// Geduldige Scharfschützen (Spez. #28): mit Ziel in Reichweite rückt er nicht weiter vor (er hält, wo er schießen kann, also vor Reichweite; ein eigener HOLD-Wert wäre nie wirksam); ohne Ziel
 // in Reichweite WAIT s warten, dann vorrücken, aber höchstens bis BEHIND px hinter die eigene Frontlinie
 // (morale: world.cent front); Feind näher als KEEP · Reichweite: zurückweichen (stehend, nicht liegend).
-export const SNIPER = { HOLD: .95, KEEP: .6, WAIT: 3, BEHIND: 40 };
+export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40 };
+// Hysterese: nach dem Zurückweichen legt sich der Scharfschütze erst ab LIE_MIN · Reichweite wieder hin (kein Auf und Ab)
+const LIE_MIN = .75;
 export const KITE = new Set(['schuetze', 'soldat', 'sniper']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
@@ -687,9 +689,9 @@ export function think(world, u, dt) {
   if (u.type === 'reiter' && u.st > 0) { u.mx = u.cvx; u.my = u.cvy; u.face = u.cvx < 0 ? -1 : 1; return; }
   // Mörser halten Mindestabstand
   if (u.type === 'moerser' && d < 90) { u.mx = -nx * T.speed; u.my = -ny * T.speed; return; }
+  if (u.type === 'sniper' && d <= reach) u.snipeT = 0;   // Wartezeit beginnt neu, solange ein Ziel in Reichweite ist (auch liegend)
   // MG und Scharfschütze: Hinlegen, Liegen, Aufstehen (sonst weiter wie stehend)
   if (PRONE.has(u.type) && stance(world, u, t, d, dx, dy, reach, dt)) return;
-  if (u.type === 'sniper' && d <= reach) u.snipeT = 0;
   if (d <= reach) {
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
     // Verbündeter darauf, nicht feuern, sondern seitlich ausweichen; sonst genau dorthin schießen.
@@ -848,7 +850,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       return true;
     }
     default: {
-      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * SNIPER.KEEP) || meleeNear(world, u)) return false;
+      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * LIE_MIN) || meleeNear(world, u)) return false;
       // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
       // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
       const kind = STRAIGHT_KIND[u.type];

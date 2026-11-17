@@ -266,4 +266,31 @@
 - [ ] **Step 3:** Prüfen, ob sich durch die Römer der Spam- oder Smart-Ausgang einer Mission ändert. Die Pläne verwenden keine Römer, also sollte sich nichts ändern. Falls doch: Grund im Bericht.
 - [ ] **Step 4:** `node --test tests/*.test.js` → alle grün. `node tools/bench.mjs mixed` < 2,0 ms im Durchschnitt.
 - [ ] **Step 5: Commit** `balance: Roemer counters`
-- [ ] **Step 6 (Controller):** Browser-Prüfung mit der Szene `roemer` und einer Rückzugsszene unter `?debug` (aus Task 4) und ein Leistungslauf. Danach Veröffentlichung unter demselben Link.
+- [ ] **Step 6 (Controller):** Browser-Prüfung mit der Szene `roemer` und einer Rückzugsszene unter `?debug` (aus Task 4) und ein Leistungslauf. Veröffentlicht wird nach Task 8.
+
+
+### Task 8: Charakterkarten und Lexikon (Spez. #29)
+
+**Files:**
+- Create: `game/js/cards.js` (reine Kartendaten aus UNITS, COUNTERS und Fähigkeitstexten)
+- Modify: `game/js/data.js` (je Einheit optional `abil: [{n, d}]`, kurze deutsche Texte für Besonderheiten wie Schildwall, Hinlegen, Speersalve oder Rückzug)
+- Modify: `game/js/ui.js`, `game/index.html` (Karte bei Auswahl oder Hover, Lexikon-Knopf und -Ansicht)
+- Modify: `tools/plans.mjs` → `COUNTERS` nach `game/js/data.js` verschieben (oder dort re-exportieren), damit das Spiel sie lesen kann
+- Test: `tests/cards.test.js`
+
+**Interfaces:**
+- Produces: `export function unitCard(type)` in cards.js. Liefert `{ type, name, cat, desc, stats: { hp, dmg, speed, range, cost } (je 0..1 relativ zum Maximum aller Einheiten), raw: {…}, abil: [{n, d}], strong: [type], weak: [type] }`. strong und weak kommen aus COUNTERS.
+- Porträt: das Sticker-Bild aus dem Rig-Atlas des Renderers. Es wird nicht neu gezeichnet.
+- Aussehen: im Stil der bestehenden Oberfläche (weiße Pillen, Nunito, Luckiest Guy für den Namen, Umrisse `#2a2a33`), Akzent in Teamfarbe.
+- Die Karte erscheint beim Hover über eine Einheit in der Leiste und bei Auswahl, ohne das Malen zu stören. Das Lexikon ist ein Overlay mit allen Karten nach Kategorie und schließt mit Esc.
+- Am Laptop lesbar (1280×800). Kein Layout-Sprung in der Leiste.
+
+- [ ] **Step 1: Failing tests** in `tests/cards.test.js`:
+  - „jede Einheit hat eine Karte“: für alle Schlüssel in UNITS ein Name, Werte in 0..1 und `raw.hp === UNITS[t].hp`.
+  - „Konter“: `unitCard('ritter').strong` enthält `'krieger'`, `unitCard('ritter').weak` enthält `'biene'`.
+  - „Fähigkeiten“: `unitCard('roemer').abil` nennt Speersalve und Schilde.
+- [ ] **Step 2:** Tests → FAIL.
+- [ ] **Step 3:** Implementieren.
+- [ ] **Step 4:** `node --test tests/*.test.js` → alle grün. Ein Screenshot von Karte und Lexikon kommt nach `.superpowers/`, der Controller prüft ihn.
+- [ ] **Step 5: Commit** `feat: character cards and unit lexicon`
+- [ ] **Step 6 (Controller):** Browser-Prüfung, danach Veröffentlichung unter demselben Link.

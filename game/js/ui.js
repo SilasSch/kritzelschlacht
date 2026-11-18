@@ -344,7 +344,11 @@ export function createUI(game) {
   $('resList').onclick = () => { $('ovRes').hidden = true; openMissionList(); };
   $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
 
+  // Schlacht-Modus: Oberfläche folgt (Task 2)
+  const updateBattle = () => {}, batchProgress = () => {}, batchDone = () => {}, showBattleResult = () => {};
+
   return {
+    updateBattle, batchProgress, batchDone, showBattleResult,
     refresh, toast, banner, closeBanner, showResult, openMissionList,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
     hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon, lexiconOpen: () => !$('ovLex').hidden,

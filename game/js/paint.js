@@ -12,6 +12,9 @@ export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= zoneX (A
 export const PLAYER = 'blau';
 export const MSG_BUDGET = 'Budget aufgebraucht.';
 export const MSG_FULL = 'Das Schlachtfeld ist voll.';
+// Schlacht-Modus (Spez. #45): team = BY_HALF, dann gehört jede gestempelte Einheit der Seite ihrer Feldhälfte
+export const BY_HALF = 'half';
+export const sideAt = (world, x) => (x < world.W / 2 ? 'blau' : 'rot');
 
 const EPS = 1e-6;
 const terrKeyById = id => Object.keys(TERRAIN).find(k => TERRAIN[k].id === id);
@@ -63,7 +66,7 @@ export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
       if (mission.spent + T.cost > mission.budget + EPS) { warning = warn(stroke, MSG_BUDGET); break; }
       mission.spent += T.cost;
     }
-    const nu = spawn(world, sel, px, py, mission ? PLAYER : team);
+    const nu = spawn(world, sel, px, py, mission ? PLAYER : team === BY_HALF ? sideAt(world, px) : team);
     placed++;
     if (stroke) stroke.units.push(nu);
   }

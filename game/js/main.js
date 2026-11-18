@@ -2,10 +2,12 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
-import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, placeRect, placeCircle, tRect, tCircle } from './sim.js';
+import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
-import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER } from './paint.js';
+import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
+import { createStats } from './stats.js';
+import { snapshotBattle, restoreBattle, mirrorBattle, createBatch } from './battle.js';
 import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
@@ -40,7 +42,8 @@ const audio = createAudio();
 audio.muted = !!save.muted;
 
 const pointer = { x: -999, y: -999, inside: false, erasing: false };
-let stroke = null, undoStack = [], sandSave = null, snap = null;
+let stroke = null, undoStack = [], sandSave = null, snap = null, battleKeep = null;
+const BATCH_MS = 8;   // 10× auswerten: Rechenzeit je Bild (ms)
 
 // Ganzes Gelände neu zeichnen und die Wegfindung neu rechnen lassen (nach jeder Änderung an world.terr hier)
 const markAll = () => { touchTerrain(world); renderer.markTerrainDirty(0, 0, world.GW - 1, world.GH - 1); };
@@ -49,6 +52,8 @@ const markAll = () => { touchTerrain(world); renderer.markTerrainDirty(0, 0, wor
 const game = {
   world, save,
   mission: null,      // { idx, def, budget, par, spent, phase:'plan'|'battle'|'done', t, endT, result }
+  // Schlacht-Modus (Spez. #45): { phase:'plan'|'fight'|'done', snap, stats, batch, t, endT, result, evFrom, batchRes } oder null
+  battle: null,
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
 
@@ -68,13 +73,14 @@ const game = {
   setBrush(v) { game.brush = clamp(Math.round(v), 10, 150); ui.syncBrush(); },
   setTeam(k) { game.curTeam = k; ui.buildChips(); },
   setTeamMode(on) {
-    if (game.mission) { ui.updateMode(); return; }
+    if (game.mission || game.battle) { ui.updateMode(); return; }
     world.teamMode = !!on; world.contested = false;
     rebuildHash(world); ui.updateMode(); ui.updateCounts();
   },
   togglePause() {
-    const m = game.mission;
+    const m = game.mission, b = game.battle;
     if (m && m.phase !== 'battle') return;
+    if (b && (b.phase === 'plan' || b.batch)) return;
     game.paused = !game.paused; ui.updateControls();
   },
   cycleSpeed() { game.speed = game.speed === 1 ? 2 : game.speed === 2 ? 4 : 1; ui.updateControls(); },
@@ -82,7 +88,13 @@ const game = {
   toggleMute() { audio.init(); save.muted = !save.muted; audio.muted = save.muted; persist(); ui.updateControls(); },
 
   clear() {
-    const m = game.mission;
+    const m = game.mission, b = game.battle;
+    if (b) {
+      if (b.phase !== 'plan') return;
+      clearWorld(); world.teamMode = true; rebuildHash(world);
+      ui.updateBattle(); ui.updateCounts();
+      return;
+    }
     if (m) {
       if (m.phase !== 'plan') return;
       world.units = world.units.filter(u => u.team !== PLAYER);
@@ -93,19 +105,21 @@ const game = {
     }
     clearWorld(); ui.updateCounts();
   },
-  dice() { if (game.mission) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
+  dice() { if (game.mission || game.battle) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
 
   undo() {
-    const m = game.mission;
+    const m = game.mission, b = game.battle;
     if (m && m.phase !== 'plan') return;
+    if (b && b.phase !== 'plan') return;
     const s = undoStack.pop();
     if (!s) { ui.toast('Nichts zum Rückgängigmachen.'); return; }
     const spent = undoStroke(world, s);
     if (m) m.spent = spent;
-    markAll(); ui.updateMission(); ui.updateCounts();
+    markAll(); ui.updateMission(); ui.updateBattle(); ui.updateCounts();
   },
 
   enterSandbox,
+  enterBattle, startBattle, retryBattle, editBattle, runBatch, cancelBatch, swapSides,
   loadMission,
   go() { const m = game.mission; if (!m) return; if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission(); },
   retryMission,
@@ -173,7 +187,8 @@ function saveSandbox() {
 
 function enterSandbox() {
   ui.hideOverlays();
-  if (!game.mission) return;
+  if (!game.mission && !game.battle) return;
+  leaveBattle();
   game.mission = null; snap = null;
   clearWorld();
   if (sandSave) {
@@ -192,7 +207,8 @@ function enterSandbox() {
 
 /* ---------- Missionen ---------- */
 function loadMission(i) {
-  if (!game.mission) saveSandbox();
+  if (!game.mission && !game.battle) saveSandbox();
+  leaveBattle();
   clearWorld();
   buildMission(world, i);
   const def = MISSIONS[i];
@@ -241,6 +257,131 @@ function finishMission() {
   audio.play(win ? 'win' : 'lose');
 }
 
+/* ---------- Schlacht (Spez. #45, #46) ---------- */
+// Planung: beide Seiten frei malen (die Seite ergibt sich aus der Hälfte, paint.BY_HALF), Gelände überall. "Los!" nimmt
+// den Schnappschuss (battle.js) und startet die Statistik (stats.js). "Nochmal" und "Aufstellung ändern" stellen ihn wieder
+// her; "10× auswerten" rechnet ihn in einer eigenen Welt ohne Zeichnen (createBatch, je Bild BATCH_MS).
+const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
+
+function enterBattle() {
+  if (game.battle) { ui.hideOverlays(); return; }
+  if (!game.mission) saveSandbox();
+  game.mission = null; snap = null;
+  clearWorld();
+  world.teamMode = true;
+  game.battle = newBattle();
+  if (battleKeep) restoreBattle(world, battleKeep);
+  game.paused = false;
+  markAll(); rebuildHash(world);
+  ui.closeBanner(); ui.hideOverlays(); ui.refresh();
+}
+
+// Verlässt den Modus (Sandkasten, Mission): bricht eine laufende Auswertung ab und merkt sich die Aufstellung
+function leaveBattle() {
+  const b = game.battle; if (!b) return;
+  cancelBatch();
+  battleKeep = b.phase === 'plan' ? snapshotBattle(world) : b.snap;
+  game.battle = null;
+  ui.hideOverlays();
+}
+
+function sideCounts() {
+  let bl = 0, rt = 0;
+  for (const u of world.units) if (u.alive) { if (u.team === 'blau') bl++; else if (u.team === 'rot') rt++; }
+  return { blau: bl, rot: rt };
+}
+const MSG_TWO = 'Male zuerst zwei Armeen: Blau links, Rot rechts.';
+
+function startBattle() {
+  const b = game.battle; if (!b || b.phase !== 'plan') return false;
+  rebuildHash(world);
+  const n = sideCounts();
+  if (!n.blau || !n.rot) { ui.toast(!n.blau && !n.rot ? MSG_TWO : `Male zuerst eine Armee für ${n.blau ? 'Rot (rechts)' : 'Blau (links)'}.`); return false; }
+  b.snap = snapshotBattle(world);
+  fight(b);
+  return true;
+}
+
+// Kampf aus dem aktuellen Stand der Welt (frisch aufgestellt) beginnen
+function fight(b) {
+  b.stats = createStats(world);
+  b.phase = 'fight'; b.t = 0; b.endT = -1; b.result = null; b.evFrom = world.events.length;
+  undoStack.length = 0; game.paused = false; audio.init();
+  ui.hideOverlays(); ui.updateBattle(); ui.updateControls(); ui.updateCounts();
+}
+
+function restoreSnap(b) {
+  restoreBattle(world, b.snap);
+  renderer.fx.clear(); markAll();
+}
+
+// "Nochmal": dieselbe Aufstellung samt Gelände, gleich wieder in den Kampf
+function retryBattle() {
+  const b = game.battle; if (!b || !b.snap) return;
+  cancelBatch();
+  restoreSnap(b);
+  fight(b);
+}
+
+// "Aufstellung ändern" (und Abbrechen im Kampf): zurück in die Planung mit derselben Aufstellung
+function editBattle() {
+  const b = game.battle; if (!b) return;
+  cancelBatch();
+  if (b.snap) restoreSnap(b);
+  b.phase = 'plan'; b.stats = null; b.result = null; b.endT = -1; b.t = 0; b.batchRes = null;
+  undoStack.length = 0; game.paused = false;
+  rebuildHash(world);
+  ui.hideOverlays(); ui.updateBattle(); ui.updateControls(); ui.updateCounts();
+}
+
+// "Seiten tauschen": spiegelt die Aufstellung samt Gelände an der Mittellinie
+function swapSides() {
+  const b = game.battle; if (!b || b.phase !== 'plan') return;
+  mirrorBattle(world); undoStack.length = 0;
+  renderer.fx.clear(); markAll();
+  ui.updateBattle(); ui.updateCounts();
+}
+
+// "10× auswerten": n Läufe mit verschiedenen Zufallswerten (createBatch), je Bild höchstens BATCH_MS ms (frame). Liefert
+// ein Promise mit { wins: { blau, rot, draw }, avgTime, times } oder null bei Abbruch.
+function runBatch(n = 10, seed = (Math.random() * 2 ** 31) | 0) {
+  const b = game.battle; if (!b) return Promise.resolve(null);
+  if (!b.snap) {
+    if (b.phase !== 'plan') return Promise.resolve(null);
+    const c = sideCounts(); if (!c.blau || !c.rot) { ui.toast(MSG_TWO); return Promise.resolve(null); }
+    b.snap = snapshotBattle(world);
+  }
+  cancelBatch();
+  b.batchRes = null;
+  return new Promise(resolve => {
+    b.batch = { job: createBatch(b.snap, n, seed), resolve };
+    ui.batchProgress(0, n);
+  });
+}
+function cancelBatch() {
+  const b = game.battle; if (!b || !b.batch) return;
+  const { job, resolve } = b.batch;
+  b.batch = null; job.cancel();
+  ui.batchProgress(-1, 0);
+  resolve(null);
+}
+function pumpBatch(b) {
+  const { job, resolve } = b.batch, k = job.k;
+  job.pump(BATCH_MS);
+  if (job.done) {
+    b.batch = null; b.batchRes = job.result;
+    ui.batchDone(job.result);
+    resolve(job.result);
+  } else if (job.k !== k) ui.batchProgress(job.k, job.n);
+}
+
+function finishBattle() {
+  const b = game.battle; if (!b || !b.result) return;
+  ui.showBattleResult(b.result);
+  audio.play(b.result.winner === 'draw' ? 'lose' : 'win');
+}
+
+
 /* ---------- Malen (Eingabe -> paint.js) ---------- */
 const actions = {
   strokeStart() {
@@ -254,7 +395,9 @@ const actions = {
     const m = game.mission;
     if (stroke.first) {
       stroke.first = false;
+      const b = game.battle;
       if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? 'Während des Kampfes wird nicht gemalt.' : 'Plane neu, um weiter zu malen.'); stroke.blocked = true; }
+      else if (b && b.phase !== 'plan') { ui.toast(b.phase === 'fight' ? 'Während des Kampfes wird nicht gemalt.' : 'Ändere die Aufstellung, um weiter zu malen.'); stroke.blocked = true; }
       else if (m && wx > zoneX(world)) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
     }
     if (stroke.blocked) return;
@@ -262,11 +405,11 @@ const actions = {
     const sel = erase ? 'radierer' : game.sel, phase = m ? m.phase : null;
     if (TERRAIN[sel]) {
       const r = paintTerrain(world, stroke, wx, wy, game.brush, sel, m, phase);
-      if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); }
+      if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
     } else {
-      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.curTeam, m, phase);
-      if (r.placed) { audio.play('pop'); ui.updateMission(); }
+      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.curTeam, m, phase);
+      if (r.placed) { audio.play('pop'); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
     }
   },
@@ -306,13 +449,23 @@ function drainEvents() {
     ui.onEvent(e);
   }
   ev.length = 0;
+  if (game.battle) game.battle.evFrom = 0;
 }
 
 function simStep() {
   if (bench && bench.tick) bench.tick(bench.k++);   // ?bench&scenario=blastcrowd: Salven im Takt der Schritte
   step(world, STEP);
-  const m = game.mission;
-  if (m) {
+  const m = game.mission, b = game.battle;
+  if (b) {
+    if (b.phase === 'fight') {
+      b.t += STEP;
+      // Ereignisse dieses Schritts an die Statistik (vor dem Leeren in drainEvents; mehrere Schritte je Bild)
+      b.stats.onEvents(world.events, b.evFrom); b.evFrom = world.events.length;
+      b.stats.tick(world, STEP);
+      const r = battleWinner(world, b.t);
+      if (r) { b.result = b.stats.result(world); b.endT = 1.4; b.phase = 'done'; ui.updateBattle(); }
+    }
+  } else if (m) {
     if (m.phase === 'battle') {
       m.t += STEP;
       const r = missionResult(world, m.t);
@@ -342,7 +495,7 @@ let bench = null, benchBox = null;
 // Szene (neu) aufbauen und die Messung von vorn beginnen; mit ?debug auch als __kritzel.bench(n, scenario)
 function startBench(n = benchN || 2000, scenario = benchScen) {
   if (!benchBox) { benchBox = document.createElement('div'); benchBox.className = 'fps'; benchBox.textContent = 'bench …'; host.append(benchBox); }
-  if (game.mission) game.enterSandbox();
+  if (game.mission || game.battle) game.enterSandbox();
   clearWorld();
   // &seed=N: feste Saat, damit Szene und Verlauf (die Simulation) bei jedem Lauf gleich sind
   const seed = parseInt(params.get('seed'), 10);
@@ -440,9 +593,11 @@ function frame(now) {
   const realDt = Math.min(.05, Math.max(0, rawMs / 1000)); last = now;
   const w0 = performance.now();
   let simMs = 0, n = 0;
-  const m = game.mission;
-  const ts = (game.slow ? SLOW : 1) * game.speed * (m && m.endT >= 0 ? .35 : 1);
-  if (!game.paused && !(m && m.phase === 'plan')) {
+  const m = game.mission, bt = game.battle;
+  const ts = (game.slow ? SLOW : 1) * game.speed * ((m && m.endT >= 0) || (bt && bt.endT >= 0) ? .35 : 1);
+  // 10× auswerten: rechnet in einer eigenen Welt; die angezeigte steht solange still
+  if (bt && bt.batch) pumpBatch(bt);
+  if (!game.paused && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {
     acc += realDt * ts;
     while (acc >= STEP && n < MAX_STEPS) { const s0 = performance.now(); simStep(); simMs += performance.now() - s0; acc -= STEP; n++; }
     if (n >= MAX_STEPS) acc = 0;
@@ -453,16 +608,18 @@ function frame(now) {
     renderer.fx.update(realDt * .5, null);
   }
   if (m && m.endT >= 0) { m.endT -= realDt; if (m.endT < 0) { m.endT = -1; finishMission(); } }
+  if (bt && bt.endT >= 0) { bt.endT -= realDt; if (bt.endT < 0) { bt.endT = -1; finishBattle(); } }
 
-  const canPaint = !(m && m.phase !== 'plan');
+  const canPaint = !(m && m.phase !== 'plan') && !(bt && bt.phase !== 'plan');
   renderer.setOverlay({
     brushX: pointer.x, brushY: pointer.y, brushR: pointer.inside && canPaint ? game.brush : 0,
     erase: game.sel === 'radierer' || pointer.erasing,
     missionZoneX: m && m.phase === 'plan' ? zoneX(world) : null,
+    battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
   });
   renderer.draw(world, cam, now / 1000);
 
-  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); }
+  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); }
   // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)
@@ -676,9 +833,13 @@ const scenes = {
 if (new URLSearchParams(location.search).has('debug')) {
   window.__kritzel = {
     world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: startBench,
+    // Schlacht-Modus: enterBattle(), startBattle(), runBatch(n, seed) (Promise), retryBattle(), editBattle(); armyPoints();
+    // place(type, n, x0, y0, x1, y1, team) wie placeRect (Anteile von W und H)
+    enterBattle, startBattle, runBatch, retryBattle, editBattle, cancelBatch, armyPoints: () => armyPoints(world),
+    place(type, n, x0, y0, x1, y1, team) { placeRect(world, type, n, x0, y0, x1, y1, team); rebuildHash(world); ui.updateCounts(); ui.updateBattle(); },
     scene(name) {
       if (!scenes[name]) return Object.keys(scenes);
-      if (game.mission) game.enterSandbox();
+      if (game.mission || game.battle) game.enterSandbox();
       clearWorld(); scenes[name](); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
       return name;
     },

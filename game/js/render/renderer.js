@@ -70,10 +70,14 @@ export function createRenderer(canvasHost) {
   const zoneG = new PIXI.Graphics();
   const zoneText = new PIXI.Text('deine Seite', { fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: 0x4d82f0 });
   zoneText.alpha = .8; zoneText.anchor.set(1, .75); zoneText.resolution = 3;
+  // Schlacht-Modus (Spez. #45): Mittellinie mit den Seiten Blau (links) und Rot (rechts)
+  const sideStyle = c => ({ fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: c });
+  const sideB = new PIXI.Text('Blau', sideStyle(0x3f7cff)), sideR = new PIXI.Text('Rot', sideStyle(0xff4d4d));
+  sideB.alpha = sideR.alpha = .85; sideB.anchor.set(1, .75); sideR.anchor.set(0, .75); sideB.resolution = sideR.resolution = 3;
   const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d');
   let terrTex = null;
   const terrSprite = new PIXI.Sprite();
-  L.terrain.addChild(zoneG, zoneText, terrSprite);   // Zone liegt wie früher unter dem Gelände
+  L.terrain.addChild(zoneG, zoneText, sideB, sideR, terrSprite);   // Zone liegt wie früher unter dem Gelände
 
   let rigs = null;           // gebackene Rig-Teile pro Typ (rig.js)
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
@@ -712,7 +716,7 @@ export function createRenderer(canvasHost) {
 
 
   /* ---------- Overlay: Pinsel und Missionszone ---------- */
-  const overlay = { brushX: 0, brushY: 0, brushR: 0, erase: false, missionZoneX: null };
+  const overlay = { brushX: 0, brushY: 0, brushR: 0, erase: false, missionZoneX: null, battleMidX: null };
   const overG = new PIXI.Graphics();
   L.overlay.addChild(crownG, crownT, overG);
   function setOverlay(o) { Object.assign(overlay, o); }
@@ -727,6 +731,15 @@ export function createRenderer(canvasHost) {
       for (let y = 0; y < world.H; y += 20) zoneG.moveTo(zx, y).lineTo(zx, Math.min(world.H, y + 10));
       zoneText.position.set(zx - 10, world.H * .5 + 5);
     }
+    const mx = overlay.battleMidX;
+    sideB.visible = sideR.visible = mx != null;
+    if (mx != null) {
+      zoneG.lineStyle(0).beginFill(0x3f7cff, .04).drawRect(0, 0, mx, world.H).endFill();
+      zoneG.beginFill(0xff4d4d, .04).drawRect(mx, 0, world.W - mx, world.H).endFill();
+      zoneG.lineStyle(2, 0x2a2a33, .4);
+      for (let y = 0; y < world.H; y += 20) zoneG.moveTo(mx, y).lineTo(mx, Math.min(world.H, y + 10));
+      sideB.position.set(mx - 10, world.H * .5 + 5); sideR.position.set(mx + 10, world.H * .5 + 5);
+    }
     overG.clear();
     if (overlay.brushR > 0) {
       const er = overlay.erase;
@@ -735,7 +748,7 @@ export function createRenderer(canvasHost) {
     }
   }
 
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { zoneText.dirty = true; crownT.dirty = true; }).catch(() => {});
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { zoneText.dirty = true; sideB.dirty = true; sideR.dirty = true; crownT.dirty = true; }).catch(() => {});
 
   /* ---------- Bild ---------- */
   // draw = prepare (Szene setzen, JS) + present (PIXI zeichnet); getrennt für __bench.measure

@@ -1,6 +1,6 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
-import { MISSIONS, TERRAIN, CELL } from './data.js';
+import { MISSIONS, TERRAIN, CELL, UNITS } from './data.js';
 import { spawn, setCell, rebuildHash, clearBattle, touchTerrain, frameX } from './world.js';
 import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
@@ -76,6 +76,33 @@ export function missionResult(world, battleTime) {
   if (r === 0 && b > 0) return 'win';
   if (b === 0 || battleTime > 180) return 'lose';
   return null;
+}
+
+// Schlacht-Modus (Spez. #45, #46): Armeestärke = Punktwert der Lebenden je Seite (ein Frosch zählt als sein ursprünglicher
+// Typ, die Asche des Phönix und Ghule zählen mit).
+export const BATTLE_TIME = 180;
+export function armyPoints(world) {
+  let b = 0, r = 0;
+  const us = world.units;
+  for (let i = 0; i < us.length; i++) {
+    const u = us[i];
+    if (!u.alive) continue;
+    const c = UNITS[u.frogFrom || u.type].cost;
+    if (u.team === 'blau') b += c; else if (u.team === 'rot') r += c;
+  }
+  return { blau: b, rot: r };
+}
+// Sieger einer Schlacht nach t s: 'blau' | 'rot' | 'draw' oder null (läuft noch). Wer allein übrig bleibt, gewinnt; fallen
+// beide zugleich, ist es ein Unentschieden. Nach BATTLE_TIME s gewinnt die höhere Armeestärke, Gleichstand ist ein Unentschieden.
+export function battleWinner(world, t) {
+  let b = 0, r = 0;
+  for (const u of world.units) { if (!u.alive) continue; if (u.team === 'blau') b++; else if (u.team === 'rot') r++; }
+  if (b === 0 && r === 0) return 'draw';
+  if (r === 0) return 'blau';
+  if (b === 0) return 'rot';
+  if (!(t > BATTLE_TIME)) return null;
+  const p = armyPoints(world), e = 1e-6;
+  return p.blau > p.rot + e ? 'blau' : p.rot > p.blau + e ? 'rot' : 'draw';
 }
 
 /* ---------- Aufbau ---------- */

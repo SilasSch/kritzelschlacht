@@ -136,7 +136,10 @@ export function hurt(world, v, a, kind, src, dot = false) {
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
-  const d = a * m; v.hp -= d;
+  const h0 = v.hp, d = a * m; v.hp -= d;
+  // Schlacht-Statistik (stats.js): der tatsächlich angerichtete Schaden (ohne Überschuss über die LP) zählt für den
+  // Verursacher, nur gegen Gegner (kein Friendly Fire, kein Eigenschaden)
+  if (src && d > 0 && h0 > 0 && factionOf(world, src) !== factionOf(world, v)) src.dmgOut += d < h0 ? d : h0;
   // Römer im Block unter Beschuss (auch abgeblockt, shieldHit): der Block verfolgt schneller (formation.FORM_CHASE)
   if (v.formOn && (kind === 'arrow' || kind === 'bullet')) v.rangedT = world.time;
   if (!dot && (src || !isFire(kind))) v.hitT = .15;

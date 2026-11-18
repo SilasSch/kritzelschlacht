@@ -76,4 +76,6 @@ Auswahl nach Eigenschaft (Nur Fernkampf, Luftkampf, Dickhäuter …) und Budget-
 von selbst weg. Die Revanche-Anfrage kommt als Abfrage mitten im Bild mit Ton, Hinweise (Gegner fertig, hat abgestimmt) als
 Leiste oben. Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
 der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Budget neu, beide malen neu.
+Online gibt es „Aufgeben“ (beim Malen, Warten und im Kampf): die Runde geht an den Gegner (`giveUp`, presence `gave`).
+Im Code-Duell gibt es kein Aufgeben, dort läuft der Kampf ohne Gegner am anderen Ende ab.
 Beim Veröffentlichen `js/rules.js` mit hochladen.

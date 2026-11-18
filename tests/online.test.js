@@ -11,7 +11,7 @@ import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
 import {
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
-  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf,
+  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf, giveUp, canGiveUp,
 } from '../game/js/online.js';
 import { RULES, RULE_IDS, MAP_IDS, ruleAllows, applyMap, mapParts, resolveVote, mapSVG } from '../game/js/rules.js';
 const allowed = (rule, maxCost = 6) => Object.keys(UNITS).filter(t => ruleAllows(rule, t) && UNITS[t].cost < maxCost);
@@ -308,6 +308,33 @@ test('Online: Hinweise „Gegner hat abgestimmt“ und „Gegner ist fertig“ k
   const r2 = link(A, B);
   assert.ok(!r2.evA.includes('peerready'), 'wer selbst schon fertig ist, bekommt keinen Hinweis mehr');
   assert.equal(A.phase, 'fight');
+});
+
+test('Online: Aufgeben beim Malen oder im Kampf gibt die Runde dem Gegner, danach geht es normal weiter', () => {
+  const A = createMatch('host', 100, createRng(9)), B = createMatch('guest');
+  hostStart(A); voteBoth(A, B);
+  assert.ok(canGiveUp(A) && canGiveUp(B));
+  // Gast gibt beim Malen auf
+  assert.deepEqual(giveUp(B), ['gave', 'result']);
+  assert.equal(B.phase, 'result'); assert.equal(B.res.w, 'blau');
+  assert.deepEqual(giveUp(B), [], 'nur einmal');
+  const { evA } = link(A, B);
+  assert.ok(evA.includes('peergave'));
+  assert.equal(A.phase, 'result'); assert.equal(officialWinner(A), 'blau'); assert.equal(officialWinner(B), 'blau');
+  assert.deepEqual(A.score, { blau: 1, rot: 0 }); assert.deepEqual(B.score, { blau: 1, rot: 0 });
+  // Revanche, dann gibt der Host im Kampf auf
+  wantNext(A, true); wantNext(B, true); link(A, B);
+  assert.equal(A.phase, 'paint'); assert.equal(B.phase, 'paint'); assert.equal(A.gave, 0);
+  const wA = createWorld(W, H, 6); wA.teamMode = true; spawn(wA, allowed(A.cfg.cat)[0], 200, 300, 'blau');
+  const wB = createWorld(W, H, 7); wB.teamMode = true; spawn(wB, allowed(B.cfg.cat)[0], 1300, 300, 'rot');
+  markReady(A, packArmy(wA, 'blau')); markReady(B, packArmy(wB, 'rot')); link(A, B);
+  assert.equal(A.phase, 'fight');
+  giveUp(A);
+  const l2 = link(A, B);
+  assert.ok(l2.evB.includes('peergave'));
+  assert.deepEqual(finishFight(B, 'rot'), [], 'der lokale Kampf zählt nach dem Aufgeben nicht mehr');
+  assert.deepEqual(A.score, { blau: 1, rot: 1 }); assert.deepEqual(B.score, { blau: 1, rot: 1 });
+  assert.ok(!canGiveUp(A), 'im Ergebnis nicht mehr');
 });
 
 // Code-Duell (18.11.): game/js/duel.js über share.js

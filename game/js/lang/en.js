@@ -99,7 +99,7 @@ const EN = {
   "Römer": "Roman",
   "Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab, und Schildstöße werfen Angreifer zurück: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.": "Marches as a block in lockstep and throws spears before the clash. In formation the shields block arrows and bullets from the front, and shield bashes throw attackers back: strong against archers and warriors. Bombs, mortars, fireballs and riders on the flank break the block.",
   "Schildstoß": "Shield bash",
-  "Alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 20 % weniger.": "Every 4 s he bashes his foe back with the shield and briefly stuns him. Sword blows from the front: 20 % less.",
+  "Im Block: alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 20 % weniger.": "In the block: every 4 s he bashes his foe back with the shield and briefly stuns him. Sword blows from the front: 20 % less.",
   "Blockformation": "Block formation",
   "Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.": "Marches as a block in lockstep. In the block he holds out down to 15 % health.",
   "Speersalve": "Spear volley",

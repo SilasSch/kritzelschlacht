@@ -147,8 +147,8 @@ export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5
 // und ein größerer Aufprall (fxcore, charge.wedge). Gegen alle anderen Ziele wirkt der Keil nicht.
 export const WEDGE = { MIN: 3, SHIELD: 1.5, PUSH: 340 };
 export const SHIELDED = new Set(['ritter', 'roemer']);
-// Römer-Aufwertung (18.11.): Schildstoß (attack) und Scutum gegen Nahkampf von vorn (hurt). Der Block löst sich vor dem
-// Zusammenstoß auf (formation.FORM.ENGAGE), darum gilt beides auch außerhalb des Blocks.
+// Römer-Aufwertung (18.11.): Schildstoß (attack) und Scutum gegen Nahkampf von vorn (hurt), nur für Blockmitglieder
+// (u.form, bleibt beim Sturmangriff gesetzt; formOn ist dann schon aus). Verstreute Römer bekommen beides nicht (rom-1).
 export const SHOVE = { CD: 4, MUL: 1.3, PUSH: 150, STUN: .5, MAXM: 4, FRONT: .8 };
 const WALL_MELEE = .65;   // Schildwall: Pfeile und Schwerter × 0,65 (hurt)
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
@@ -174,7 +174,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= WALL_MELEE;
   }
   // Römer (18.11., Wunsch Silas): das Scutum hält auch Schwerthiebe von vorn (Blickrichtung) ab, ×SHOVE.FRONT
-  if (t === 'roemer' && kind === 'melee' && src && (src.x - v.x) * v.fx + (src.y - v.y) * v.fy > 0) m *= SHOVE.FRONT;
+  if (t === 'roemer' && v.form && kind === 'melee' && src && (src.x - v.x) * v.fx + (src.y - v.y) * v.fy > 0) m *= SHOVE.FRONT;
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
   if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
@@ -1342,7 +1342,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       if (flank) a *= 1.35;
       if (u.type === 'pikenier' && MOUNTED.has(t.type)) a *= PIKE.MOUNT;
       // Schildstoß der Römer: alle SHOVE.CD s wirft der Schlag den Gegner zurück und betäubt ihn kurz (nicht Schwere)
-      if (u.type === 'roemer' && u.rv[RV_SHOVE] <= world.time && !t.hidden && (t.T.mass || 1) <= SHOVE.MAXM && !t.T.fly && t.T.range < 20) {
+      if (u.type === 'roemer' && u.form && u.rv[RV_SHOVE] <= world.time && !t.hidden && (t.T.mass || 1) <= SHOVE.MAXM && !t.T.fly && t.T.range < 20) {
         u.rv[RV_SHOVE] = world.time + SHOVE.CD;
         a *= SHOVE.MUL; knock(t, dx / d, dy / d, SHOVE.PUSH * (t.T.mass || 1));
         if (t.state === 'ok') { t.state = 'stun'; t.stunT = SHOVE.STUN; }

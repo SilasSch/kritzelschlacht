@@ -41,7 +41,7 @@ export const VERSIONS = {
   v3v8ayv: { until: '2026-11-18' },   // Balance-Runde: Magier 8 und langsamer, Ritter, Sani, Vampir, Gorilla, Meteor, König, Lama, Keil, Synergien, Waldbrand (18.11.)
   v1w2hbq9: { until: '2026-11-18' },   // Bienen 1 Punkt, dafür 24 LP, Stich 4, Gift 5/s, Kugeln ×2,5, Blitze ×1,6 (18.11.)
   vsjyhqn: { until: '2026-11-18' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.)
-  vftrook: { until: null },   // Römer: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
+  vlfb5z: { until: null },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

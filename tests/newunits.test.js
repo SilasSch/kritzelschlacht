@@ -111,3 +111,12 @@ test('Römer: Schildstoß im Block stößt zurück und betäubt, danach Pause', 
   assert.ok(shoves >= 1, 'Schildstoß');
   assert.ok(shoves <= rs.length * Math.ceil(6 / SHOVE.CD), `höchstens einmal je ${SHOVE.CD} s je Römer (${shoves})`);
 });
+test('Römer: ein einzelner Römer ohne Block stößt nicht', () => {
+  const w = mkWorld();
+  const r = spawn(w, 'roemer', 400, 400, 'blau'); r.hp = 1e9;
+  const k = spawn(w, 'krieger', 440, 400, 'rot'); k.hp = 1e9;
+  rebuildHash(w);
+  let shoves = 0;
+  run(w, 6, ev => { shoves += ev.filter(e => e.k === 'shove').length; });
+  assert.equal(shoves, 0);
+});

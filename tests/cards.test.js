@@ -39,7 +39,7 @@ test('Konter', () => {
   assert.ok(r.weak.includes('biene'));
   assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'minibot', 'raptor', 'schuetze']);   // Reiter: Keil bricht Schilde (18.11.)
   assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'ptera', 'schweisser', 'sniper']);
-  assert.deepEqual([...unitCard('roemer').weak].sort(), ['grenadier', 'magier', 'moerser', 'reiter']);
+  assert.deepEqual([...unitCard('roemer').weak].sort(), ['flamme', 'grenadier', 'magier', 'moerser', 'reiter']);
   assert.ok(unitCard('moerser').strong.includes('roemer'), 'Mörser, wie im Römer-Text');
   // Konter nur aus COUNTERS, keine erfundenen; Einheiten ohne Einträge haben leere Listen
   for (const t of Object.keys(UNITS)) {

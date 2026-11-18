@@ -47,7 +47,7 @@ export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
 export const isBat = v => v.batT > 0 && !!v.T.fly;
 // Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
 // Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
-export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
+export const groundMelee = u => (u.T.range < 20 || u.type === 'flamme') && (!u.T.fly || u.type === 'vampir');
 export const outOfMelee = (u, v) => (v.T.high || isBat(v) || aloft(v)) && groundMelee(u);
 // --- Task 5: Tiere ---
 // Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist

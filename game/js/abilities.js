@@ -1157,6 +1157,7 @@ function swoopStart(world, u) {
   sound(world, 'whoosh');
 }
 function swoopUpdate(world, u) {
+  if (u.abK === 2) return carry(world, u);
   const t = u.tg, T = u.T;
   if (!t || !t.alive || factionOf(world, t) === factionOf(world, u)) return true;
   if (u.abK === 0) {
@@ -1166,18 +1167,45 @@ function swoopUpdate(world, u) {
     if (d > reach) { u.mx = dx / d * V; u.my = dy / d * V; } else { u.mx = 0; u.my = 0; }
     if ((d - reach) / V <= (u.z - SWOOP.LOW) / FLY_VZ + .05) u.fz = SWOOP.LOW;
     if (d <= reach + 2 && u.z <= EAGLE_REACH_Z) {
-      hurt(world, t, T.dmg * SWOOP.MUL * (.85 + world.rng() * .3), 'melee', u);
+      const grab = canGrab(world, u, t);   // wer gepackt wird, nimmt erst beim Fallenlassen den großen Schaden
+      hurt(world, t, T.dmg * (grab ? 1 : SWOOP.MUL) * (.85 + world.rng() * .3), 'melee', u);
       emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
       emit(world, { type: 'ability', k: 'swoopHit', x: t.x, y: t.y, z: 0, R: t.T.r });
       sound(world, 'hit');
       u.cd = T.cd; u.swingT = .25; u.abK = 1; u.abT = 0;
+      if (grab && canGrab(world, u, t)) {   // Adler packt zu: kleine Gegner hebt er hoch
+        u.grabbed = t; u.abK = 2; u.abX = -u.fx || -(u.face < 0 ? -1 : 1); u.abY = -u.fy || 0; u.fz = GRAB.Z;
+        leaveBlock(t); cancelAbility(world, t);
+        emit(world, { type: 'ability', k: 'grab', x: t.x, y: t.y, z: 0, R: t.T.r });
+      }
     }
     return false;
   }
   u.mx = 0; u.my = 0;
   return u.abT >= SWOOP.HOLD;
 }
-function swoopEnd(world, u) { u.fz = u.T.flyZ; }
+function swoopEnd(world, u) { u.fz = u.T.flyZ; if (u.grabbed) { dropGrabbed(u); u.grabbed = null; } }
+/* Adler packt zu (18.11., Ideenrunde): trifft der Sturzflug einen kleinen Bodengegner (Masse ≤ MAXM, kein Ei) und
+   überlebt der, packt ihn der Adler, steigt auf Z px und trägt ihn T s lang zurück (Gegenrichtung des Anflugs, SPEED-
+   faches Tempo). Dann lässt er ihn fallen: DMG Schaden, der Fall selbst betäubt (physics.land, nach Höhe). Stirbt oder
+   erschrickt der Adler vorher, fällt das Opfer von dort herunter (swoopEnd). */
+export const GRAB = { MAXM: 1, Z: 50, T: 1.1, SPEED: .7, DMG: 22, HANG: 12 };
+const canGrab = (world, u, t) => t.alive && t.state === 'ok' && !t.T.fly && !t.T.egg && (t.T.mass || 1) <= GRAB.MAXM && !t.T.heal;
+function carry(world, u) {
+  const v = u.grabbed;
+  if (!v || !v.alive) { u.grabbed = null; return true; }
+  const sp = u.T.speed * GRAB.SPEED;
+  u.mx = u.abX * sp; u.my = u.abY * sp; u.fz = GRAB.Z;
+  v.x = u.x; v.y = u.y + 1; v.z = Math.max(0, u.z - GRAB.HANG);
+  v.state = 'stun'; if (v.stunT < .1) v.stunT = .1; v.vx = 0; v.vy = 0; v.mx = 0; v.my = 0;
+  if (u.abT < GRAB.T) return false;
+  u.grabbed = null;
+  hurt(world, v, GRAB.DMG, 'melee', u);
+  if (v.alive) { v.vz = 0; applyImpulse(v, u.abX * 40 * (v.T.mass || 1), u.abY * 40 * (v.T.mass || 1), 1e-3 * (v.T.mass || 1)); }
+  emit(world, { type: 'ability', k: 'drop', x: v.x, y: v.y, z: v.z, R: v.T.r });
+  sound(world, 'whoosh');
+  return true;
+}
 
 /* ---------- König (Wunsch Silas, 18.11.) ----------
    Teure Armee-Einheit, um die sich die Schlacht dreht.
@@ -1257,6 +1285,40 @@ export const FIRST_CD = { schuetze: 20, panzer: 12, wolf: 16, baer: 16, geist: 6
    macht BOT.LIGHTNING-fachen Schaden; Wasser betäubt einen Bodenroboter kurz (Kurzschluss, danach SHORT_CD s nicht
    wieder). Schrott: die Leiche eines zerstörten Roboters (world.corpses, kind 'body'); die Schrauber-Drohne baut aus
    BUILD.N eigenen davon einen Minibot (die Leichen verblassen). */
+/* Pikenier (18.11., Ideenrunde): stemmt die Piken gegen jeden Ansturm. Ein Gegner im Sturm (Reiter oder Einhorn im
+   vollen Lauf, Elefant beim Trampeln, Büffel in der Stampede, Triceratops im Hornsturm) bis r + v.r + REACH px vor
+   ihm prallt ab: Schaden DMG + MASS · Masse (höchstens MAX), der Sturm bricht ab (cancelAbility, run = 0), STUN s
+   betäubt, zurückgestoßen. Danach CD s Pause je Pikenier (u.tickT). Prüfung alle SCAN s, nur wer selbst kampfbereit ist.
+   Im Nahkampf trifft er Reittiere und Dickhäuter (MOUNTED) ×MOUNT (combat.attack). */
+export const PIKE = { REACH: 16, DMG: 30, MASS: 4, MAX: 120, STUN: .8, PUSH: 260, CD: 1.2, SCAN: .1, MOUNT: 2 };
+export const MOUNTED = new Set(['reiter', 'einhorn', 'elefant', 'bueffel', 'trike']);
+const charging = v => ((v.type === 'reiter' || v.type === 'einhorn') && v.run > .7) || (v.abOn && (v.type === 'elefant' || v.type === 'bueffel' || v.type === 'trike'));
+let PI_W = null, PI_U = null, PI_F = null, PI_HIT = null;
+function pikeTest(v) {
+  if (PI_HIT || !v.alive || v.state !== 'ok' || !MOUNTED.has(v.type) || !charging(v) || factionOf(PI_W, v) === PI_F) return;
+  const u = PI_U, dx = v.x - u.x, dy = v.y - u.y, rr = u.T.r + v.T.r + PIKE.REACH;
+  if (dx * dx + dy * dy <= rr * rr) PI_HIT = v;
+}
+export function stepPike(world, u, dt) {
+  u.tickT -= dt;
+  if (u.tickT > 0 || u.state !== 'ok' || isFleeing(u)) return;
+  u.tickT = PIKE.SCAN;
+  PI_W = world; PI_U = u; PI_F = factionOf(world, u); PI_HIT = null;
+  query(world, u.x, u.y, u.T.r + PIKE.REACH + 30, pikeTest);
+  const v = PI_HIT; PI_W = null; PI_U = null; PI_F = null; PI_HIT = null;
+  if (!v) return;
+  u.tickT = PIKE.CD;
+  const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || 1;
+  u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d; u.swingT = .3;
+  if (v.abOn) cancelAbility(world, v);
+  v.run = 0; v.mx = 0; v.my = 0;
+  fling(v, dx, dy, d, Math.min(v.T.mass || 1, 6) * PIKE.PUSH);
+  hurt(world, v, Math.min(PIKE.MAX, PIKE.DMG + PIKE.MASS * (v.T.mass || 1)), 'melee', u);
+  if (v.alive && v.state === 'ok') { v.state = 'stun'; v.stunT = PIKE.STUN; }
+  emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 3 });
+  emit(world, { type: 'ability', k: 'pike', x: u.x, y: u.y, z: 0, R: u.T.r, nx: dx / d, ny: dy / d });
+  sound(world, 'thud');
+}
 export function stepBot(world, u, dt) {
   const T = u.T, max = T.hp * BOT.SHIELD;
   if (u.shdHit > 0) u.shdHit -= dt;

@@ -19,6 +19,9 @@ export const SCENES = {
     placeRect(world, 'soldat', 8, .7, .25, .74, .75, 'rot'); spawn(world, 'mg', world.W * .77, world.H * .5, 'rot');
     placeRect(world, 'krieger', 14, .62, .25, .66, .75, 'rot'); spawn(world, 'lama', world.W * .78, world.H * .3, 'rot');
   },
+  flamme(world) { world.teamMode = true; tRect(world, 'wald', .5, .15, .62, .4); placeRect(world, 'flamme', 8, .3, .35, .36, .65, 'blau'); placeRect(world, 'krieger', 30, .55, .3, .66, .7, 'rot'); },
+  adlergriff(world) { world.teamMode = true; placeRect(world, 'adler', 3, .3, .4, .34, .6, 'blau'); placeRect(world, 'krieger', 8, .6, .35, .66, .65, 'rot'); },
+  pikenier(world) { world.teamMode = true; placeRect(world, 'pikenier', 20, .3, .3, .36, .7, 'blau'); placeRect(world, 'reiter', 12, .7, .3, .78, .7, 'rot'); spawn(world, 'elefant', world.W * .8, world.H * .5, 'rot'); },
   keil(world) { world.teamMode = true; placeRect(world, 'reiter', 12, .15, .35, .25, .65, 'blau'); placeRect(world, 'ritter', 12, .66, .35, .72, .65, 'rot'); },
   grenades(world) { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank(world) { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },

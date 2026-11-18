@@ -872,7 +872,7 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 
 /* ---------- Start ---------- */
 // Nur mit ?debug: Zugriff für Prüfungen in der Konsole (Abbildung Bildschirm <-> Welt usw.).
-// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir', 'kreaturen', 'tiere';
+// scene(name) baut eine Prüfszene im Sandkasten: 'grenades', 'tank', 'heli', 'walls', 'walls2', 'water', 'dragon', 'prone', 'bosses', 'roemer', 'flucht', 'faehigkeiten', 'magier', 'vampir', 'kreaturen', 'tiere', 'waldbrand', 'koenig', 'keil';
 // flow() zeigt die Wegfindung (Task 12d): Fraktionen mit Flussfeld, Neuberechnungen gesamt und je s, ms je Neuberechnung;
 // crashHeli() schießt alle Hubschrauber ab, boom(x, y[, R]) zündet eine Explosion ohne Schützen.
 // Boss-Sticker (Task 12c): renderer.debugRig().bosses (turretFlip, turretRot, rotorRot, wingPhase, tailSwing ... je gezeichnetem

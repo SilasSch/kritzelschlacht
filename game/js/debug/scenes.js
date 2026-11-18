@@ -5,6 +5,11 @@ import { placeRect, placeCircle, tRect, tCircle } from '../sim.js';
 import { FORM } from '../formation.js';
 
 export const SCENES = {
+  // Ideenrunde 18.11.: Waldbrand (Magier schießen Feuerbälle in einen Wald voller Krieger), König mit Kriegern,
+  // Reiter-Keil gegen einen Ritter-Schildwall
+  waldbrand(world) { world.teamMode = true; tRect(world, 'wald', .45, .2, .7, .8); placeRect(world, 'krieger', 30, .5, .3, .65, .7, 'rot'); placeRect(world, 'magier', 10, .15, .35, .2, .65, 'blau'); },
+  koenig(world) { world.teamMode = true; spawn(world, 'koenig', world.W * .3, world.H * .5, 'blau'); placeRect(world, 'krieger', 24, .33, .3, .4, .7, 'blau'); placeRect(world, 'krieger', 34, .62, .3, .7, .7, 'rot'); },
+  keil(world) { world.teamMode = true; placeRect(world, 'reiter', 12, .15, .35, .25, .65, 'blau'); placeRect(world, 'ritter', 12, .66, .35, .72, .65, 'rot'); },
   grenades(world) { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank(world) { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
   heli(world) { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },

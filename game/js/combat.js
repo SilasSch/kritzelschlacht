@@ -20,6 +20,7 @@ import { SYN, SB, stepSynergy, synFx, ZANGE_A, ZANGE_B, FELD_A, JAGD_A, SCHRECK_
 import { RV_MARK, RV_KLINGE } from './world.js';
 import { aloft, unseen } from './world.js';
 // --- Schrottplatz und Urzeit ---
+import { stepPike, MOUNTED, PIKE } from './abilities.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
@@ -237,7 +238,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
-Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [] });
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headgear', 'weapon'], pikenier: ['headgear', 'weapon'] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 // --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
 Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],
@@ -700,6 +701,27 @@ function breath(world, u, nx, ny, t) {
   sound(world, 'fire');
 }
 
+// Flammenwerfer (18.11.): Kegel wie der Drachenatem, aber am Boden. Trifft Gegner bis range + r + v.r im Kegel
+// cos ≥ FLAME.COS, keine hohen Flieger, keine Fledermausform, keinen Adler oben (wie Nahkämpfer, world.groundMelee).
+// Zündet jeden Getroffenen an (Generation 0) und am Ende des Strahls Wald (wildfire.igniteArea, Radius FLAME.WOOD_R).
+export const FLAME = { COS: .8, WOOD_R: 12 };
+function flame(world, u, nx, ny, t, d) {
+  const T = u.T, f = factionOf(world, u), R = T.range + T.r;
+  query(world, u.x, u.y, R + MAX_R, v => {
+    if (factionOf(world, v) === f || v.T.high || isBat(v) || aloft(v)) return;
+    const ex = v.x - u.x, ey = v.y - u.y, e = Math.hypot(ex, ey);
+    if (e > R + v.T.r || (ex * nx + ey * ny) / (e || 1) < FLAME.COS) return;
+    hurt(world, v, T.dmg, 'fire', u);
+    if (v.alive) ignite(world, v, 0, u);
+  });
+  const L = Math.min(d, R);
+  igniteArea(world, u.x + nx * L, u.y + ny * L, FLAME.WOOD_R);
+  const mx = u.x + nx * T.r * 1.6, my = u.y + ny * T.r * 1.6;
+  emit(world, { type: 'shot', kind: 'breath', x: mx, y: my, z: 4, face: u.face, nx, ny,
+    tx: t ? t.x : u.x + nx * R, ty: t ? t.y : u.y + ny * R, tz: t ? t.z : 0 });
+  sound(world, 'fire');
+}
+
 /* ---------- Brand (Spez. #21) ---------- */
 // Getroffene brennen BURN_T s nach und nehmen BURN_DPS Schaden/s ('burn', Feuer, Schaden über Zeit) vom
 // Verursacher burnSrc, solange er lebt (sonst ohne). Alle SPREAD_DT s (je Einheit nach id gestaffelt)
@@ -940,6 +962,7 @@ export function think(world, u, dt) {
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
   if (T.tier) stepAnimal(world, u, dt);   // Task 5: Zeiten der Tiere, Versteck des Krokodils
+  if (u.type === 'pikenier') stepPike(world, u, dt);   // Pikenier stemmt die Piken gegen Stürme
   if (T.bot) stepBot(world, u, dt);       // Schrottplatz: Schild, Kurzschluss, Kuppel, Flicken
   if (u.growT > 0) stepGrow(world, u, dt);   // Urzeit: Jungtiere wachsen, das Ei schlüpft
   if (u.fleeT > 0) u.fleeT -= dt;
@@ -1279,6 +1302,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     case 'panzer': fire(world, u, t, 'shell'); break;
     case 'moerser': fire(world, u, t, 'mortar'); break;
     case 'drache': breath(world, u, dx / d, dy / d, t); break;
+    case 'flamme': flame(world, u, dx / d, dy / d, t, d); break;
     // --- Task 6: Kreaturen ---
     // Zyklop: nahe Feinde (auch in der Ecke auf der Flucht) unbeholfen schlagen statt werfen (cyclopsHit)
     case 'zyklop': if (d < CYCLOPS.MIN_D) { u.cd *= CYCLOPS.MELEE_CD; cyclopsHit(world, u, t); } else { fire(world, u, t, 'boulder'); u.swingT = .25; } break;
@@ -1309,6 +1333,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
+      if (u.type === 'pikenier' && MOUNTED.has(t.type)) a *= PIKE.MOUNT;   // Pikenier gegen Reittiere und Dickhäuter
       // Sturmangriff der Reiter, danach Durchritt
       if (u.type === 'reiter' && u.run > .7) {
         // Keil: im Verband stoßen die Lanzen durch Schilde (Ritter, Römer); den Abzug des Schildwalls heben sie auf

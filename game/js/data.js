@@ -16,6 +16,9 @@ export const UNITS = {
   // Task 7: LP 95 → 100 (römer > schuetze stand an zwei Formen bei 1–2/4)
   roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:100,dmg:15,range:3,speed:47,cd:.9,cost:3,mass:1.4,pilum:20,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.'},
   koenig:{n:'König',cat:'armee',col:'#5b8def',r:12,hp:320,dmg:20,range:3,speed:40,cd:1,cost:20,mass:2,d:'Teuer und wertvoll: seine Aura macht nahe Armee-Truppen mutig und stärker, sein Schlachtruf heilt sie. Fällt er, verlieren sie den Mut.'},
+  // Pikenier (18.11., Ideenrunde): lange Pike, stemmt sie gegen Stürme (abilities.PIKE): Reiter, Einhorn, Elefant,
+  // Büffel und Triceratops prallen im Ansturm ab. Gegen Fußvolk und Fernkampf eher schwach.
+  pikenier:{n:'Pikenier',cat:'armee',col:'#7a9bd1',r:9,hp:85,dmg:10,range:12,speed:42,cd:1.1,cost:3,mass:1.3,d:'Stemmt die lange Pike gegen jeden Ansturm: Reiter, Büffel und Elefanten prallen ab. Gegen Schützen und Fußvolk eher schwach.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:12,range:90,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
@@ -31,6 +34,9 @@ export const UNITS = {
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
   // MG (Nachtrag 5, #40): Abklingzeit .13 → .11 s (18 % mehr Kugeln, sichtbar dichteres Dauerfeuer); Reiter, Scharfschütze und Panzerfaust schlagen es weiter
   mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.11,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
+  // Flammenwerfer (18.11., Ideenrunde): kurzer Flammenkegel wie der Drachenatem (combat.flame), zündet alles darin an
+  // und setzt Wald in Brand. Erreicht niedrige Flieger (Bienen, Geister), aber nichts Hohes (world.groundMelee).
+  flamme:{n:'Flammenwerfer',cat:'modern',col:'#d9643a',r:9,hp:75,dmg:3.5,range:72,speed:46,cd:.25,cost:5,mass:1.1,d:'Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme, Trolle und dichte Blöcke. Auf Abstand hilflos.'},
   // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
   panzerfaust:{n:'Panzerfaust',cat:'modern',col:'#b59060',r:9,hp:85,dmg:70,range:230,splash:22,speed:44,cd:3.5,cost:6,mass:1,d:'Rakete gegen Panzer und Hubschrauber. Lange Nachladezeit.'},
@@ -378,6 +384,12 @@ export const COUNTERS = [
   ['einhorn', 'schuetze', 90], ['ritter', 'einhorn', 90],
   ['elefant', 'grenadier', 96], ['panzerfaust', 'elefant', 96], ['biene', 'elefant', 96],
   ['krokodil', 'bueffel', 90], ['schuetze', 'krokodil', 90],
+  // Flammenwerfer (18.11.): brennt Schwärme und dichte Blöcke weg, verliert gegen Gewehre und schnelle Reiter
+  ['flamme', 'biene', 90], ['flamme', 'troll', 90], ['flamme', 'roemer', 90], ['flamme', 'krieger', 90],
+  ['soldat', 'flamme', 90], ['reiter', 'flamme', 90],
+  // Pikenier (18.11.): bricht jeden Ansturm, verliert gegen Fußvolk und Schützen
+  ['pikenier', 'reiter', 90], ['pikenier', 'bueffel', 90], ['pikenier', 'elefant', 96],
+  ['krieger', 'pikenier', 90], ['schuetze', 'pikenier', 90],
   ['gorilla', 'grenadier', 90], ['ritter', 'gorilla', 90],
   ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
   // Ritter gegen Magier (Feuer und Zauber ×1,5) und Geist gegen Magier (Feuerball trifft ihn voll): als Duell festgehalten
@@ -442,6 +454,7 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
 Object.assign(PLURAL, {koenig:'Könige', lama:'Lamas'});
+Object.assign(PLURAL, {flamme:'Flammenwerfer', pikenier:'Pikeniere'});
 Object.assign(PLURAL, {jet:'Kampfjets',kampfdrohne:'Kampfdrohnen',bomber:'Bomber'});
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 // --- Schrottplatz und Urzeit ---

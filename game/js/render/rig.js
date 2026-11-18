@@ -296,6 +296,22 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.75, -r * .75]], '#e6ebf0', 2.2); Ln(c, [[r * .52, -r * .02], [r * 1.08, r * .5]], '#8a5a2b', 1.8); },
     },
   },
+  // Pikenier: Teamfarbe, Eisenhut mit Krempe, lange gesenkte Pike mit Stahlspitze
+  pikenier: {
+    eyes: eyePair(.28, -.02, .27),
+    body(c, r, k, f) { feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes); },
+    headgear(c, r) {
+      c.beginPath(); c.ellipse(0, -r * .5, r * .8, r * .55, 0, Math.PI, 0); c.closePath(); c.fillStyle = '#a7b0bb'; c.fill(); c.lineWidth = 1.4; c.strokeStyle = O; c.stroke();
+      Ln(c, [[-r * 1.15, -r * .48], [r * 1.15, -r * .48]], '#8d96a2', 2);
+    },
+    weapon: {
+      grip: [.6, .3], axis: Math.atan2(-.25, 2.6), swing: 0,
+      draw(c, r) {
+        Ln(c, [[-r * .9, r * .55], [r * 2.6, -r * .2]], '#8a5a2b', 2);
+        poly(c, r, [[2.5, -.32], [3.05, -.3], [2.55, -.04]], '#e6ebf0', 1.2);
+      },
+    },
+  },
   // König: Teamfarbe, roter Umhang hinter dem Körper, goldene Krone, Schwert mit goldenem Griff
   koenig: {
     eyes: eyePair(.28, -.02, .27),
@@ -483,6 +499,24 @@ const DEF = {
       draw(c, r) {
         Ln(c, [[-r * .3, r * .42], [r * 2.05, r * .3]], '#2f3340', 3.2);
         Ln(c, [[r * 1.55, r * .36], [r * 1.4, r * .9]], '#2f3340', 1.2, false); Ln(c, [[r * 1.55, r * .36], [r * 1.75, r * .9]], '#2f3340', 1.2, false);
+      },
+    },
+  },
+  // Flammenwerfer: Soldat mit Gasmaske, zwei rote Tanks auf dem Rücken, kurzes dickes Rohr mit Zündflamme
+  flamme: {
+    eyes: eyePair(.28, 0, .26),
+    body(c, r, k, f) {
+      RR(c, -r * 1.25, -r * .55, r * .42, r * 1.1, r * .18, '#c0392b'); RR(c, -r * 1.05, -r * .45, r * .38, r * 1.0, r * .16, '#d9483a');
+      feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes);
+      E(c, r * .45, r * .32, r * .2, r * .16, '#3a3f4a');
+    },
+    headgear(c, r) { helmet(c, r, '#5d6b3a'); },
+    weapon: {
+      grip: [.55, .37], axis: Math.atan2(-.1, 2), swing: 0,
+      draw(c, r) {
+        Ln(c, [[-r * .2, r * .45], [r * 1.6, r * .3]], '#2f3340', 3.4);
+        Ln(c, [[-r * .2, r * .45], [-r * .9, r * .1]], '#4a4552', 1.4, false);
+        poly(c, r, [[1.62, .22], [1.95, .14], [1.8, .3], [1.98, .42], [1.62, .38]], '#ffb03a', 1);
       },
     },
   },

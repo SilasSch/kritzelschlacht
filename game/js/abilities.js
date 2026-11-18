@@ -1257,6 +1257,40 @@ export const FIRST_CD = { schuetze: 20, panzer: 12, wolf: 16, baer: 16, geist: 6
    macht BOT.LIGHTNING-fachen Schaden; Wasser betäubt einen Bodenroboter kurz (Kurzschluss, danach SHORT_CD s nicht
    wieder). Schrott: die Leiche eines zerstörten Roboters (world.corpses, kind 'body'); die Schrauber-Drohne baut aus
    BUILD.N eigenen davon einen Minibot (die Leichen verblassen). */
+/* Pikenier (18.11., Ideenrunde): stemmt die Piken gegen jeden Ansturm. Ein Gegner im Sturm (Reiter oder Einhorn im
+   vollen Lauf, Elefant beim Trampeln, Büffel in der Stampede, Triceratops im Hornsturm) bis r + v.r + REACH px vor
+   ihm prallt ab: Schaden DMG + MASS · Masse (höchstens MAX), der Sturm bricht ab (cancelAbility, run = 0), STUN s
+   betäubt, zurückgestoßen. Danach CD s Pause je Pikenier (u.tickT). Prüfung alle SCAN s, nur wer selbst kampfbereit ist.
+   Im Nahkampf trifft er Reittiere und Dickhäuter (MOUNTED) ×MOUNT (combat.attack). */
+export const PIKE = { REACH: 16, DMG: 30, MASS: 4, MAX: 120, STUN: .8, PUSH: 260, CD: 1.2, SCAN: .1, MOUNT: 2 };
+export const MOUNTED = new Set(['reiter', 'einhorn', 'elefant', 'bueffel', 'trike']);
+const charging = v => ((v.type === 'reiter' || v.type === 'einhorn') && v.run > .7) || (v.abOn && (v.type === 'elefant' || v.type === 'bueffel' || v.type === 'trike'));
+let PI_W = null, PI_U = null, PI_F = null, PI_HIT = null;
+function pikeTest(v) {
+  if (PI_HIT || !v.alive || v.state !== 'ok' || !MOUNTED.has(v.type) || !charging(v) || factionOf(PI_W, v) === PI_F) return;
+  const u = PI_U, dx = v.x - u.x, dy = v.y - u.y, rr = u.T.r + v.T.r + PIKE.REACH;
+  if (dx * dx + dy * dy <= rr * rr) PI_HIT = v;
+}
+export function stepPike(world, u, dt) {
+  u.tickT -= dt;
+  if (u.tickT > 0 || u.state !== 'ok' || isFleeing(u)) return;
+  u.tickT = PIKE.SCAN;
+  PI_W = world; PI_U = u; PI_F = factionOf(world, u); PI_HIT = null;
+  query(world, u.x, u.y, u.T.r + PIKE.REACH + 30, pikeTest);
+  const v = PI_HIT; PI_W = null; PI_U = null; PI_F = null; PI_HIT = null;
+  if (!v) return;
+  u.tickT = PIKE.CD;
+  const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || 1;
+  u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d; u.swingT = .3;
+  if (v.abOn) cancelAbility(world, v);
+  v.run = 0; v.mx = 0; v.my = 0;
+  fling(v, dx, dy, d, Math.min(v.T.mass || 1, 6) * PIKE.PUSH);
+  hurt(world, v, Math.min(PIKE.MAX, PIKE.DMG + PIKE.MASS * (v.T.mass || 1)), 'melee', u);
+  if (v.alive && v.state === 'ok') { v.state = 'stun'; v.stunT = PIKE.STUN; }
+  emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 3 });
+  emit(world, { type: 'ability', k: 'pike', x: u.x, y: u.y, z: 0, R: u.T.r, nx: dx / d, ny: dy / d });
+  sound(world, 'thud');
+}
 export function stepBot(world, u, dt) {
   const T = u.T, max = T.hp * BOT.SHIELD;
   if (u.shdHit > 0) u.shdHit -= dt;

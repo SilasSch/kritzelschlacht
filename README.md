@@ -37,7 +37,7 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 ## Als Claude-Artefakt veröffentlichen
 
 Das Spiel läuft als Multi-File-Artefakt: `game/index.html` ist die Seite, alle übrigen Dateien unter `game/`
-(`js/**`, `vendor/pixi.min.js`, `fonts/*`) gehen mit ihrem Pfad relativ zu `game/` in `files`.
+(`js/**`) gehen mit ihrem Pfad relativ zu `game/` in `files`.
 Neue Module müssen dort mit aufgenommen werden, sonst fehlen sie im Artefakt.
 
 Wichtig fürs öffentliche Teilen: Die Prüfung lässt nur gängige Bild-, Video- und Audioformate zu. Schriftdateien (`.woff2`)

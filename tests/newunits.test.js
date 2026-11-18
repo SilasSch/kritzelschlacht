@@ -97,3 +97,17 @@ test('Dornenhecke: Bodentruppen nehmen Schaden, Flieger und Panzer nicht', async
   assert.ok(h[0] - k.hp >= THORN.DPS * .5, `Krieger ${h[0] - k.hp}`);
   assert.equal(b.hp, h[1]); assert.equal(p.hp, h[2]);
 });
+
+test('Römer: Schildstoß im Block stößt zurück und betäubt, danach Pause', async () => {
+  const { SHOVE } = await import('../game/js/combat.js');
+  const w = mkWorld();
+  const rs = [];
+  for (let i = 0; i < 8; i++) rs.push(spawn(w, 'roemer', 400 + (i % 2) * 26, 360 + (i >> 1) * 26, 'blau'));
+  const k = spawn(w, 'krieger', 520, 400, 'rot'); k.hp = 1e9;
+  for (const r of rs) r.hp = 1e9;
+  rebuildHash(w);
+  let shoves = 0;
+  run(w, 6, ev => { shoves += ev.filter(e => e.k === 'shove').length; });
+  assert.ok(shoves >= 1, 'Schildstoß');
+  assert.ok(shoves <= rs.length * Math.ceil(6 / SHOVE.CD), `höchstens einmal je ${SHOVE.CD} s je Römer (${shoves})`);
+});

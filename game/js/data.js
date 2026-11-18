@@ -14,7 +14,7 @@ export const UNITS = {
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
   // Task 7: LP 95 → 100 (römer > schuetze stand an zwei Formen bei 1–2/4)
-  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:100,dmg:15,range:3,speed:47,cd:.9,cost:3,mass:1.4,pilum:20,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.'},
+  roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:100,dmg:15,range:3,speed:47,cd:.9,cost:3,mass:1.4,pilum:20,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab, und Schildstöße werfen Angreifer zurück: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.'},
   koenig:{n:'König',cat:'armee',col:'#5b8def',r:12,hp:320,dmg:20,range:3,speed:40,cd:1,cost:20,mass:2,d:'Teuer und wertvoll: seine Aura macht nahe Armee-Truppen mutig und stärker, sein Schlachtruf heilt sie. Fällt er, verlieren sie den Mut.'},
   // Pikenier (18.11., Ideenrunde): lange Pike, stemmt sie gegen Stürme (abilities.PIKE): Reiter, Einhorn, Elefant,
   // Büffel und Triceratops prallen im Ansturm ab. Gegen Fußvolk und Fernkampf eher schwach.
@@ -135,6 +135,7 @@ const ABIL = {
     {n:'Blockformation', d:'Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.'},
     {n:'Speersalve', d:'Vor dem Zusammenstoß wirft der Block Reihe für Reihe seine Speere.'},
     {n:'Schilde', d:'Nur in Formation: Pfeile, Kugeln und Speere von vorn prallen fast wirkungslos ab.'},
+    {n:'Schildstoß', d:'Alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 20 % weniger.'},
   ],
   sani: [
     {n:'Heilwelle', d:'Alle 20 s heilt er alle Verbündeten im Umkreis um ein Viertel ihrer Lebenspunkte. Nahe Sanitäter warten danach mit ihrer Welle.'},

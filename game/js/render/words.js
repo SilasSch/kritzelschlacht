@@ -11,6 +11,7 @@ export function wordFor(e) {
     case 'crash': return ['KRACH!', 0xffd84d];
     case 'ability':
       if (e.k === 'pike') return ['KLONG!', 0xd8e2ee];
+      if (e.k === 'shove') return ['RUMS!', 0xd8e2ee];
       if (e.k === 'grab') return ['HAPP!', 0xffd84d];
       if (e.k === 'thrown') return ['PLUMPS!', 0xffd84d];
       if (e.k === 'stampede' || e.k === 'trample') return ['RUMMS!', 0xffd84d];

@@ -2,7 +2,7 @@
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
 import { CELL, HASH_CELL, UNITS, PATH_RECHECK, UNDEAD } from './data.js';
-import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat, RV_BACK, RV_BCD, RV_KNIFE } from './world.js';
+import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat, RV_BACK, RV_BCD, RV_KNIFE, RV_SHOVE } from './world.js';
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle, tankMgMuzzle } from './muzzle.js';
@@ -147,6 +147,9 @@ export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5
 // und ein größerer Aufprall (fxcore, charge.wedge). Gegen alle anderen Ziele wirkt der Keil nicht.
 export const WEDGE = { MIN: 3, SHIELD: 1.5, PUSH: 340 };
 export const SHIELDED = new Set(['ritter', 'roemer']);
+// Römer-Aufwertung (18.11.): Schildstoß (attack) und Scutum gegen Nahkampf von vorn (hurt). Der Block löst sich vor dem
+// Zusammenstoß auf (formation.FORM.ENGAGE), darum gilt beides auch außerhalb des Blocks.
+export const SHOVE = { CD: 4, MUL: 1.3, PUSH: 150, STUN: .5, MAXM: 4, FRONT: .8 };
 const WALL_MELEE = .65;   // Schildwall: Pfeile und Schwerter × 0,65 (hurt)
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
@@ -170,6 +173,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
     m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= WALL_MELEE;
   }
+  // Römer (18.11., Wunsch Silas): das Scutum hält auch Schwerthiebe von vorn (Blickrichtung) ab, ×SHOVE.FRONT
+  if (t === 'roemer' && kind === 'melee' && src && (src.x - v.x) * v.fx + (src.y - v.y) * v.fy > 0) m *= SHOVE.FRONT;
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
   if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
@@ -1334,7 +1339,14 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
-      if (u.type === 'pikenier' && MOUNTED.has(t.type)) a *= PIKE.MOUNT;   // Pikenier gegen Reittiere und Dickhäuter
+      if (u.type === 'pikenier' && MOUNTED.has(t.type)) a *= PIKE.MOUNT;
+      // Schildstoß der Römer: alle SHOVE.CD s wirft der Schlag den Gegner zurück und betäubt ihn kurz (nicht Schwere)
+      if (u.type === 'roemer' && u.rv[RV_SHOVE] <= world.time && !t.hidden && (t.T.mass || 1) <= SHOVE.MAXM && !t.T.fly && t.T.range < 20) {
+        u.rv[RV_SHOVE] = world.time + SHOVE.CD;
+        a *= SHOVE.MUL; knock(t, dx / d, dy / d, SHOVE.PUSH * (t.T.mass || 1));
+        if (t.state === 'ok') { t.state = 'stun'; t.stunT = SHOVE.STUN; }
+        emit(world, { type: 'ability', k: 'shove', x: t.x, y: t.y, z: 0, R: t.T.r, nx: dx / d, ny: dy / d });
+      }   // Pikenier gegen Reittiere und Dickhäuter
       // Sturmangriff der Reiter, danach Durchritt
       if (u.type === 'reiter' && u.run > .7) {
         // Keil: im Verband stoßen die Lanzen durch Schilde (Ritter, Römer); den Abzug des Schildwalls heben sie auf

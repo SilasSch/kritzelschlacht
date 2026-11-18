@@ -181,3 +181,37 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   assert.equal(pickPeer([{ isMe: true, presence: { ks: 1 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 }, peer: 'p2' }]).peer, 'p2');
   assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150 } } }, { isMe: false, presence: { open: { code: 'zz', budget: 150 } } }]), [{ code: 'KX7P', budget: 150 }]);
 });
+
+// Code-Duell (18.11.): game/js/duel.js über share.js
+import { encode, decode } from '../game/js/share.js';
+import { challengeData, answerData, duelList, validDuel } from '../game/js/duel.js';
+
+test('Code-Duell: Herausforderung und Antwort als Code, beide sehen denselben Kampf', async () => {
+  const cfg = nextRound(null, 150, createRng(12));
+  const pick = Object.keys(UNITS).filter(t => UNITS[t].cat === cfg.cat && UNITS[t].paint !== false && UNITS[t].cost < 6);
+  const wA = createWorld(W, H, 1), wB = createWorld(W, H, 2); wA.teamMode = wB.teamMode = true;
+  paintSide(wA, 'blau', cfg, pick[0], 25); paintSide(wB, 'rot', cfg, pick[pick.length - 1], 25);
+  const ch = await decode(await encode(challengeData(cfg, packArmy(wA, 'blau'))));
+  assert.equal(ch.k, 'duel'); assert.equal(ch.cfg.cat, cfg.cat); assert.equal(ch.b, undefined);
+  const ans = await decode(await encode(answerData(ch, packArmy(wB, 'rot'))));
+  assert.equal(ans.k, 'duelres');
+  // B kämpft beim Einfügen seiner Armee, A beim Laden der Antwort: gleiche Liste, gleiche Saat, gleicher Kampf
+  const lB = duelList(answerData(ch, packArmy(wB, 'rot'))), lA = duelList(ans);
+  assert.deepEqual(lA, lB);
+  const fa = runFight(lA, ans.cfg.seed), fb = runFight(lB, ch.cfg.seed);
+  assert.equal(fa.r, fb.r); assert.equal(fa.alive, fb.alive);
+});
+
+test('Code-Duell: kaputte oder manipulierte Codes werden abgelehnt', async () => {
+  const cfg = { r: 1, cat: 'tiere', seed: 7, budget: 100 };
+  const w = createWorld(W, H, 3); w.teamMode = true;
+  spawn(w, 'wolf', 200, 200, 'blau');
+  const a = packArmy(w, 'blau');
+  assert.ok(validDuel(challengeData(cfg, a)));
+  assert.equal(validDuel({ ...challengeData(cfg, a), cfg: { ...cfg, cat: 'gelaende' } }), false);
+  assert.equal(validDuel(challengeData({ ...cfg, budget: 1 }, a)), false);
+  assert.equal(validDuel(challengeData(cfg, '')), false, 'ohne Armee');
+  for (let i = 0; i < 80; i++) spawn(w, 'baer', 100 + (i % 8) * 70, 80 + Math.floor(i / 8) * 70, 'blau');
+  await assert.rejects(decode(await encode(challengeData(cfg, packArmy(w, 'blau')))), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'duelres', cfg, a })), /passt nicht/);
+});

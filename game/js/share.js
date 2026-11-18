@@ -8,6 +8,7 @@ import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, rebuildHash, touchTerrain, setCell } from './world.js';
 import { STONE_WALL } from './spells.js';
 import { applyShape } from './shapes.js';
+import { validDuel } from './duel.js';   // Code-Duell (18.11.)
 
 export const PREFIX = 'KS';
 const Q = 10000;   // Koordinaten als ganze Zahlen 0..Q
@@ -71,6 +72,8 @@ function validate(d) {
     if (!l || typeof l.n !== 'string' || !(l.budget > 0) || !(l.par > 0) || !Array.isArray(l.place) || !l.place.length) bad();
     for (const p of l.place) if (!Array.isArray(p) || !(p[0] === 'unit' ? UNITS[p[1]] : p[0] === 'tRect' ? TERRAIN[p[1]] : null)) bad();
     if (l.units && (!Array.isArray(l.units) || !l.units.every(t => UNITS[t] && UNITS[t].paint !== false))) bad();
+  } else if (d.k === 'duel' || d.k === 'duelres') {
+    if (!validDuel(d)) bad();
   } else bad();
 }
 

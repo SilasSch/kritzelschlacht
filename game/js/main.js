@@ -32,6 +32,7 @@ import { createEditorBar } from './ui/editorbar.js';
 import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallenge (Audit 18.11.)
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
+import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -610,6 +611,7 @@ function shareBattle() {
 // Code laden: Schlacht (in die Planung des Schlacht-Modus) oder eigenes Level (gespeichert und gleich als Mission)
 async function loadCode(text) {
   const d = await decode(text);
+  if (d.k === 'duel' || d.k === 'duelres') { duel.load(d); return; }   // Code-Duell (18.11.)
   if (d.k === 'battle') {
     if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
     clearWorld(); world.teamMode = true;
@@ -738,6 +740,9 @@ const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
 // Zwei Geräte über die Live-Verbindung des Artefakts (net.js, online.js, ui/online.js)
 const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || online.covered(); }
+// Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung (duel.js, ui/duel.js)
+const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || duel.covered(); }
 
 /* ---------- Schleife ---------- */
 function drainEvents() {
@@ -825,6 +830,7 @@ function frame(now) {
   });
   hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
   online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
+  duel.frame();      // Code-Duell: Antwort-Code nach dem Kampf
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }

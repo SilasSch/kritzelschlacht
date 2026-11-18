@@ -41,9 +41,9 @@ export function eventSound(e) {
 
 // Tod je Einheit: Fahrzeuge scheppern, Bienen fiepen, der Geist verhallt, Tiere und Ungeheuer brüllen (Tonhöhe nach
 // Größe), alle anderen sind Menschen ("uff").
-const METAL = new Set(['panzer', 'heli']);
+const METAL = new Set(['panzer', 'heli', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega']);
 const SPIRIT = new Set(['geist']);
-const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch']);
+const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
 export function deathVoice(type) {
   const T = UNITS[type];
   if (!T) return 'die';
@@ -93,7 +93,7 @@ const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, cl
   shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, ui: .05, rise: .4, ignite: .2,
   twang: .05, fire: .12 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
-const BUSY = { hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
+const BUSY = { laser: .6, hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
   twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55 };
 const MAX_VOICES = 24;
 export const DEFAULT_VOLUME = .6;
@@ -374,6 +374,10 @@ export function createAudio() {
     crash(v) { explosion(v, 1.4, .3); metal(v, v.f(380, .1), .5, .04); },
 
     /* Zauber */
+    laser(v) { // Laserbot: hohes, schnell fallendes Sirren
+      osc(v, 'sawtooth', v.f(1900, .12), 320, .14, .028, { lp: 4200 });
+      noise(v, 'highpass', 3200, 2400, .05, .03);
+    },
     zap(v) { // Blitz: Knall, elektrisches Sirren, Donner
       noise(v, 'highpass', 2500, 1800, .06, .1);
       osc(v, 'square', v.f(140, .2), 70, .16, .035, { lp: 2500, vib: [60, 80] });

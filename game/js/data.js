@@ -58,6 +58,29 @@ export const UNITS = {
   // Task 7: Kosten 3 → 4 (Spam gewann M7 öfter als der Geist; Nahkämpfer erreichen ihn oben nicht)
   adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
   bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
+  // --- Schrottplatz (5. Kategorie, 18.11.): Roboter (bot: 1). Kategorie-Regeln in abilities.js (Block "Schrottplatz"):
+  // Schild aus 20 % der LP, der sich nach 4 s ohne Treffer auflädt; Blitz macht doppelten Schaden; Wasser schließt kurz.
+  // Zerstörte Bots bleiben als Schrott liegen (ihre Leiche), die Schrauber-Drohne baut daraus Minibots.
+  minibot:{n:'Minibot',cat:'schrott',col:'#b4bcc8',r:8,hp:45,dmg:7,range:3,speed:62,cd:.7,cost:1.5,mass:.8,bot:1,d:'Billiger kleiner Roboter. Ab 5 Minibots beieinander schlagen sie härter zu. Schrauber-Drohnen bauen neue aus Schrott.'},
+  laserbot:{n:'Laserbot',cat:'schrott',col:'#a9b6c9',r:9,hp:55,dmg:10,range:200,speed:44,cd:1.4,cost:3,mass:1,bot:1,d:'Laserstrahl trifft sofort, auch Flieger, und geht durch bis zu einen zweiten Gegner dahinter.'},
+  drohne:{n:'Schrauber-Drohne',cat:'schrott',col:'#ffc533',r:9,hp:50,heal:8,range:90,speed:60,cd:1,cost:3,fly:1,flyZ:18,mass:.6,bot:1,repair:1,d:'Fliegt niedrig, repariert Maschinen und baut aus Schrott neue Minibots.'},
+  kuppel:{n:'Schildkuppel',cat:'schrott',col:'#8fa3c4',r:11,hp:140,dmg:9,range:3,speed:40,cd:1,cost:4.5,mass:2,bot:1,d:'Spannt eine Kuppel auf, die feindliche Geschosse von außen abfängt, bis sie überlastet. Schwach im Nahkampf.'},
+  spinne:{n:'Springspinne',cat:'schrott',col:'#4a4552',r:9,hp:80,dmg:11,range:3,speed:70,cd:.8,cost:3,mass:1,bot:1,d:'Springt über die Front und über Mauern auf Fernkämpfer und Heiler.'},
+  schweisser:{n:'Schweißer',cat:'schrott',col:'#d99a12',r:10,hp:90,dmg:9,range:3,speed:46,cd:.7,cost:4,mass:1.4,bot:1,d:'Nahkampf mit dem Schweißbrenner: zündet Gegner an und flickt Bots in der Nähe.'},
+  magnet:{n:'Magnet-Mech',cat:'schrott',col:'#9aa3b5',r:13,hp:260,dmg:16,range:4,speed:38,cd:1.2,cost:5.5,mass:4,bot:1,d:'Zieht Gegner aus Metall zu sich in einen Haufen: Ritter, Römer, Soldaten und andere Roboter.'},
+  tesla:{n:'Teslaspule',cat:'schrott',col:'#c9a27a',r:11,hp:120,dmg:15,range:170,speed:32,cd:2,cost:7,mass:2,bot:1,d:'Kettenblitz springt auf bis zu 6 Gegner. Stark gegen Schwärme und Flieger.'},
+  mega:{n:'Mega-Mech',cat:'schrott',col:'#8d97a8',r:22,hp:1000,dmg:30,range:5,splash:30,speed:30,cd:1.6,cost:32,mass:30,bot:1,d:'Riesiger Stampfer. Zerfällt beim Tod in 4 Minibots. Blitze und Raketen setzen ihm zu.'},
+  // --- Urzeit (5. Kategorie, 18.11.): grow = s bis zum Erwachsensein. Jungtiere tragen YOUNG[t] als u.T (70 % LP,
+  // 60 % Schaden, kleiner, data.js unten); der T-Rex schlüpft erst aus dem Ei (REX_HATCH). Verhalten in abilities.js.
+  hoehle:{n:'Höhlenmensch',cat:'urzeit',col:'#f2c9a0',r:9,hp:76,dmg:12,range:3,speed:50,cd:.85,cost:2,mass:1,d:'Keule mit Fackel: jeder vierte Schlag zündet den Gegner an.'},
+  speer:{n:'Speerwerfer',cat:'urzeit',col:'#e8bf94',r:9,hp:45,dmg:13,range:190,speed:46,cd:1.5,cost:2.5,mass:1,d:'Wirft Speere im Bogen, trifft auch Flieger. Weicht Nahkämpfern aus.'},
+  schamane:{n:'Schamanin',cat:'urzeit',col:'#f0c49a',r:9,hp:45,heal:8,range:90,speed:48,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete. Ihr Kräuterrauch lässt Jungtiere in der Nähe doppelt so schnell wachsen.'},
+  raptor:{n:'Raptor',cat:'urzeit',col:'#6fae5a',r:10,hp:80,dmg:13,range:3,speed:92,cd:.7,cost:2.5,mass:1,grow:10,d:'Schlüpft klein und wächst in 10 s. Springt Fernkämpfer und Heiler an.'},
+  ptera:{n:'Flugsaurier',cat:'urzeit',col:'#c9a27a',r:12,hp:70,dmg:18,range:30,splash:26,speed:80,cd:2.4,cost:4.5,fly:1,flyZ:34,mass:1,d:'Fliegt hoch und lässt Steine fallen: Flächenschaden, sprengt Mauern. Nahkämpfer erreichen ihn nicht.'},
+  anky:{n:'Ankylosaurus',cat:'urzeit',col:'#a68a5b',r:15,hp:330,dmg:16,range:4,speed:34,cd:1.2,cost:6.5,mass:6,grow:12,d:'Gepanzerter Tank, wächst in 12 s. Von vorn halber Schaden, die Schwanzkeule fegt Gegner hinter ihm weg.'},
+  trike:{n:'Triceratops',cat:'urzeit',col:'#8fb0c9',r:15,hp:360,dmg:22,range:4,speed:52,cd:1.2,cost:8,mass:8,grow:12,d:'Wächst in 12 s. Stürmt mit den Hörnern voran durch die Reihen, im Lauf halber Schaden von vorn.'},
+  rex:{n:'T-Rex',cat:'urzeit',col:'#5e8a4a',r:20,hp:1000,dmg:34,range:5,splash:24,speed:40,cd:1.4,cost:22,mass:25,grow:24,d:'Startet als Ei, schlüpft nach 8 s und ist nach 24 s ein Riese. Sein Brüllen lässt Kleinere fliehen.'},
+  rexei:{n:'Dino-Ei',cat:'urzeit',col:'#f3e6cf',r:9,hp:160,dmg:0,range:3,speed:0,cd:1,cost:0,mass:3,paint:false,egg:1,d:'Aus dem Ei schlüpft nach 8 s ein T-Rex. Wer früh angreift, trifft ihn hier.'},
 };
 
 // Fähigkeiten und Besonderheiten für die Charakterkarten (cards.js, Spez. #29): UNITS[t].abil = [{n, d}]. Einzige
@@ -198,6 +221,38 @@ const ABIL = {
     {n:'Stampede', d:'Ab 3 Büffeln nah beieinander stürmt die Herde 2 s lang los und rammt alles um. Danach 20 s Pause.'},
     {n:'Herde', d:'Bleibt bei den anderen Büffeln.'},
   ],
+  // --- Schrottplatz ---
+  minibot: [{n:'Verbund', d:'Ab 5 Minibots nah beieinander macht jeder Schlag 25 % mehr Schaden.'}],
+  laserbot: [{n:'Laser', d:'Trifft sofort, auch Flieger, und geht durch bis zu einen weiteren Gegner dahinter.'}],
+  drohne: [
+    {n:'Reparieren', d:'Repariert Maschinen: Roboter, Panzer und Hubschrauber. Menschen und Tiere heilt sie nicht.'},
+    {n:'Bauen', d:'Liegen 2 eigene Schrotthaufen bis 70 px nah, baut sie daraus einen Minibot. Alle 6 s.'},
+  ],
+  kuppel: [{n:'Schildkuppel', d:'Fängt feindliche Geschosse ab, die von außen in die Kuppel (70 px) fliegen. Nach 150 Schaden 10 s Pause.'}],
+  spinne: [{n:'Sprung', d:'Alle 10 s springt sie auf einen Fernkämpfer oder Heiler bis 240 px weit, auch über Mauern. Der erste Biss macht doppelt.'}],
+  schweisser: [
+    {n:'Schweißbrenner', d:'Jeder dritte Treffer zündet den Gegner an.'},
+    {n:'Flicken', d:'Bots bis 50 px reparieren 3 LP je Sekunde, er selbst nicht.'},
+  ],
+  magnet: [{n:'Anziehen', d:'Alle 12 s zieht er Gegner aus Metall bis 220 px zu sich und betäubt sie kurz: Ritter, Römer, Soldaten, Roboter.'}],
+  tesla: [{n:'Kettenblitz', d:'Der Blitz springt auf bis zu 5 weitere Gegner bis 80 px. Roboter nehmen doppelten Schaden.'}],
+  mega: [
+    {n:'Stampfen', d:'Jeder Schlag trifft alle Feinde vor ihm und stößt sie zurück.'},
+    {n:'Zerfallen', d:'Beim Tod steigen 4 Minibots aus dem Wrack.'},
+  ],
+  // --- Urzeit ---
+  hoehle: [{n:'Fackel', d:'Jeder vierte Schlag zündet den Gegner an.'}],
+  speer: [{n:'Speerwurf', d:'Speere im Bogen, auch auf Flieger. Römerschilde halten sie ab.'}, {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
+  schamane: [{n:'Kräuterrauch', d:'Jungtiere bis 90 px wachsen doppelt so schnell.'}, {n:'Heilen', d:'Heilt einen Verbündeten, Fliehende zuerst.'}],
+  raptor: [{n:'Anspringen', d:'Alle 10 s springt er einen Fernkämpfer oder Heiler bis 200 px weit an. Der erste Biss macht doppelt.'}],
+  ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden, trifft auch Eigene und Mauern.'}, {n:'Hoch oben', d:'Nahkämpfer am Boden erreichen ihn nicht.'}],
+  anky: [{n:'Panzerplatten', d:'Von vorn halber Schaden durch Schläge, Pfeile und Kugeln.'}, {n:'Schwanzkeule', d:'Alle 8 s fegt er Gegner hinter und neben sich weg.'}],
+  trike: [{n:'Hornwand', d:'Im Lauf von vorn halber Schaden.'}, {n:'Ansturm', d:'Alle 14 s stürmt er 1,2 s geradeaus und schleudert alles zur Seite.'}],
+  rex: [
+    {n:'Ei', d:'Startet als Ei mit 160 LP, schlüpft nach 8 s und wächst bis 24 s zum Riesen.'},
+    {n:'Brüllen', d:'Erwachsen alle 15 s: Feinde bis 110 px mit weniger LP als er fliehen 2,5 s lang.'},
+  ],
+  rexei: [{n:'Schlüpfen', d:'Nicht malbar: so beginnt jeder T-Rex. Nach 8 s schlüpft er.'}],
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 
@@ -214,8 +269,8 @@ for (const k in UNITS) if (UNITS[k].paint === undefined) UNITS[k].paint = true;
 // Block weichen nie aus (dodge.canDodge); Flieger trifft ein Bogenwurf ohnehin nicht.
 // normal 30 % (unteres Ende von "etwa 35 %"): mit 35 % fiel grenadier > krieger an einer Weltform (Balance nach #47)
 export const AGILITY = { flink: .6, normal: .3 };
-export const NIMBLE = new Set(['wolf', 'biene', 'reiter', 'adler', 'einhorn', 'geist', 'vampir']);
-export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0 };
+export const NIMBLE = new Set(['wolf', 'biene', 'reiter', 'adler', 'einhorn', 'geist', 'vampir', 'spinne', 'raptor']);
+export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0, mega: 0, magnet: .1, rex: 0, anky: .05, trike: .1, rexei: 0 };
 for (const k in UNITS) UNITS[k].dodge = NIMBLE.has(k) ? AGILITY.flink : k in HEAVY ? HEAVY[k] : AGILITY.normal;
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
@@ -226,6 +281,34 @@ for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);
 // doppeltem Tempo. So gelten alle Flieger-Regeln von selbst (Physik, Kollision nur mit Fliegern, über Mauern, keine
 // Wegfindung, kein Wald); Nahkämpfer am Boden erreichen sie nicht (world.outOfMelee).
 export const BAT_FORM = new UnitType(Object.assign({}, UNITS.vampir, { fly: 1, flyZ: 22, speed: UNITS.vampir.speed * 2 }));
+
+// --- Urzeit: Jungtiere (abilities.stepGrow) ---
+// Wer T.grow trägt, startet mit YOUNG[t] als u.T (70 % LP, 60 % Schaden, kleiner und leichter, gleiche Schlüssel wie
+// UNITS[t] für V8) und bekommt nach T.grow s wieder UNITS[t] (LP im gleichen Anteil). Der T-Rex startet als Ei (u.T =
+// UNITS.rexei, data egg: 1; er greift nicht an und läuft nicht) und ist von REX_HATCH s bis T.grow s ein Jungtier.
+// Die Zeichnung schrumpft mit (renderer.js: Maßstab u.T.r / UNITS[t].r).
+export const YOUNG_HP = .7, YOUNG_DMG = .6, YOUNG_R = .7, REX_HATCH = 8;
+export const YOUNG = {};
+for (const k in UNITS) {
+  const T = UNITS[k];
+  if (!T.grow) continue;
+  YOUNG[k] = new UnitType(Object.assign({}, T, {
+    hp: T.hp * YOUNG_HP, dmg: T.dmg * YOUNG_DMG, r: Math.round(T.r * YOUNG_R), mass: T.mass * YOUNG_HP,
+    splash: T.splash ? Math.round(T.splash * YOUNG_R) : T.splash, speed: T.speed * 1.05,
+  }));
+}
+// Schrottplatz-Regeln (abilities.js): Schild = SHIELD · LP, lädt nach RECHARGE_T s ohne Treffer mit RECHARGE · LP je s;
+// Blitz ×LIGHTNING; Wasser betäubt Bodenroboter SHORT_T s, danach SHORT_CD s nicht wieder
+export const BOT = { SHIELD: .2, RECHARGE_T: 4, RECHARGE: .1, LIGHTNING: 2, SHORT_T: .8, SHORT_CD: 3 };
+// Schildkuppel: fängt feindliche Geschosse in R px ab (Schütze außerhalb), bis HP Schaden; dann DOWN s Pause
+export const DOME = { R: 70, HP: 150, DOWN: 10 };
+// Maschinen: Roboter (T.bot) und Fahrzeuge. Die Schrauber-Drohne (T.repair) repariert nur sie; Brüllen und Spuk
+// lassen Roboter kalt (abilities.FEARLESS).
+export const MACHINE = new Set(['panzer', 'heli']);
+for (const k in UNITS) if (UNITS[k].bot) MACHINE.add(k);
+// Metall: was der Magnet-Mech anzieht (abilities.MAGNET)
+export const METAL = new Set(['ritter', 'roemer', 'krieger', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'grenadier']);
+for (const k in UNITS) if (UNITS[k].bot && k !== 'mega') METAL.add(k);
 
 // Untote: weder Sanitäter noch Heilwelle heilen sie (sonst verlöre der Zerfall der Ghule seinen Sinn)
 export const UNDEAD = new Set(['ghul']);
@@ -259,6 +342,22 @@ export const COUNTERS = [
   ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
   // Ritter gegen Magier (Feuer und Zauber ×1,5) und Geist gegen Magier (Feuerball trifft ihn voll): als Duell festgehalten
   ['magier', 'ritter', 90], ['magier', 'geist', 90],
+  // Schrottplatz und Urzeit (18.11.): je Einheit ein „schlägt“ und ein „wird geschlagen“ (Stützen nur geschlagen)
+  ['laserbot', 'krieger', 60], ['mg', 'laserbot', 90],
+  ['minibot', 'schuetze', 60], ['ritter', 'minibot', 60],
+  ['spinne', 'moerser', 90], ['krieger', 'spinne', 60],
+  ['schweisser', 'ritter', 60], ['soldat', 'schweisser', 60],
+  ['magnet', 'soldat', 90], ['schuetze', 'magnet', 60],
+  ['tesla', 'biene', 90], ['reiter', 'tesla', 90],
+  ['mega', 'krieger', 96], ['panzerfaust', 'mega', 96],
+  ['kuppel', 'grenadier', 60], ['krieger', 'kuppel', 60], ['wolf', 'drohne', 60],
+  ['hoehle', 'troll', 90], ['krieger', 'hoehle', 60],
+  ['speer', 'troll', 60], ['reiter', 'speer', 60],
+  ['raptor', 'schuetze', 60], ['ritter', 'raptor', 60], ['wolf', 'schamane', 60],
+  ['ptera', 'ritter', 90], ['soldat', 'ptera', 90],
+  ['anky', 'grenadier', 90], ['panzerfaust', 'anky', 90],
+  ['trike', 'soldat', 90], ['panzerfaust', 'trike', 90],
+  ['rex', 'grenadier', 96], ['panzerfaust', 'rex', 96],
 ];
 
 // sp: Tempofaktor für Bodentruppen auf der Zelle (ohne: 1); haz: Lava und Mauer, die Bodentruppen meiden
@@ -281,8 +380,11 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
+// --- Schrottplatz und Urzeit ---
+Object.assign(PLURAL, {minibot:'Minibots',laserbot:'Laserbots',drohne:'Schrauber-Drohnen',kuppel:'Schildkuppeln',spinne:'Springspinnen',schweisser:'Schweißer',magnet:'Magnet-Mechs',tesla:'Teslaspulen',mega:'Mega-Mechs',
+  hoehle:'Höhlenmenschen',speer:'Speerwerfer',schamane:'Schamaninnen',raptor:'Raptoren',ptera:'Flugsaurier',anky:'Ankylosaurier',trike:'Triceratopse',rex:'T-Rexe',rexei:'Dino-Eier'});
 
-export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
+export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['schrott','Schrottplatz'],['urzeit','Urzeit'],['gelaende','Gelände']];
 
 export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:'#ff4d4d',body:'#ef5d55'},gruen:{n:'Grün',c:'#2fbf6b',body:'#4fc07a'},gelb:{n:'Gelb',c:'#ffb800',body:'#ffc533'}};
 
@@ -293,6 +395,8 @@ export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter',
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
 // --- Task 6: Kreaturen --- (Hexe und Zyklop: Geister und Reiter jagen sie bevorzugt)
 RANGED.add('hexe'); RANGED.add('zyklop');
+// Schrottplatz und Urzeit
+RANGED.add('laserbot'); RANGED.add('tesla'); RANGED.add('speer');
 
 // Nachtrag 7 (#47): M2 par 70 → 75 (letztes Mittel): die Schützen weichen den Bomben jetzt aus, 12 Ritter + 4 Grenadiere
 // gewannen nur noch 3–6/8; Ritter-LP oder Schützen-LP zu ändern brach biene > ritter bzw. roemer > schuetze. Smart: 14 + 3.

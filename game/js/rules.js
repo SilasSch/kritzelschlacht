@@ -1,4 +1,4 @@
-// Regeln und Karten für 1 gegen 1 (Online und Code-Duell, 18.11.). Rein: kein DOM, Zufall nur über rand().
+// Regeln und Karten für 1 gegen 1 (Online und Code-Duell, 18.11.; Schrottplatz und Urzeit dazu). Rein: kein DOM, Zufall nur über rand().
 // Regel = welche Einheiten in der Runde erlaubt sind: eine Kategorie, zwei gemischt oder eine Auswahl nach Eigenschaft
 // (Fernkampf, Flieger, billig …). def ist ein Level-artiges Objekt für campaign/index.js unitAllowed/catAllowed.
 // Karte = festes Gelände, spiegelgleich für beide Seiten. Kartengelände gehört niemandem (towner 0) und lässt sich in der
@@ -15,10 +15,14 @@ export const RULES = [
   { id: 'tiere', n: 'Tiere', d: 'Wölfe, Bären, Bienen, Elefanten …', cats: ['tiere'] },
   { id: 'mythisch', n: 'Mythisch', d: 'Magier, Drachen, Vampire, Trolle …', cats: ['mythisch'] },
   { id: 'modern', n: 'Modern', d: 'Soldaten, MGs, Panzer, Hubschrauber …', cats: ['modern'] },
+  { id: 'schrott', n: 'Schrottplatz', d: 'Minibots, Laser, Tesla-Spulen, Mega-Roboter …', cats: ['schrott'] },
+  { id: 'urzeit', n: 'Urzeit', d: 'Höhlenmenschen, Raptoren, Triceratops, T-Rex …', cats: ['urzeit'] },
   { id: 'wildnis', n: 'Armee + Tiere', d: 'Ritter reiten mit Wölfen und Bären', cats: ['armee', 'tiere'] },
   { id: 'maerchen', n: 'Märchenwald', d: 'Mythisch + Tiere', cats: ['mythisch', 'tiere'] },
   { id: 'zeitreise', n: 'Zeitreise', d: 'Armee + Modern: Ritter neben Panzern', cats: ['armee', 'modern'] },
   { id: 'sagen', n: 'Sagen und Stahl', d: 'Mythisch + Modern', cats: ['mythisch', 'modern'] },
+  { id: 'maschinen', n: 'Mensch gegen Maschine', d: 'Schrottplatz + Modern: Roboter neben Panzern', cats: ['schrott', 'modern'] },
+  { id: 'jura', n: 'Jurassic', d: 'Urzeit + Tiere: Dinos neben Wölfen und Bären', cats: ['urzeit', 'tiere'] },
   { id: 'fern', n: 'Nur Fernkampf', d: 'Alles, was schießt, wirft oder zaubert', units: sel(T => T.range >= 20 && !T.heal) },
   { id: 'nah', n: 'Nur Nahkampf', d: 'Schwerter, Zähne, Hörner', units: sel(T => T.range < 20) },
   { id: 'luft', n: 'Luftkampf', d: 'Nur was fliegt', units: sel(T => T.fly) },

@@ -43,7 +43,7 @@ audio.muted = !!save.muted;
 
 const pointer = { x: -999, y: -999, inside: false, erasing: false };
 let stroke = null, undoStack = [], sandSave = null, snap = null, battleKeep = null;
-const BATCH_MS = 8;   // 10× auswerten: Rechenzeit je Bild (ms)
+const BATCH_MS = 12;   // 10× auswerten: Rechenzeit je Bild (ms)
 
 // Ganzes Gelände neu zeichnen und die Wegfindung neu rechnen lassen (nach jeder Änderung an world.terr hier)
 const markAll = () => { touchTerrain(world); renderer.markTerrainDirty(0, 0, world.GW - 1, world.GH - 1); };
@@ -189,7 +189,7 @@ function enterSandbox() {
   ui.hideOverlays();
   if (!game.mission && !game.battle) return;
   leaveBattle();
-  game.mission = null; snap = null;
+  game.mission = null; snap = null; game.paused = false;
   clearWorld();
   if (sandSave) {
     const s = sandSave, mw = Math.min(s.GW, world.GW), mh = Math.min(s.GH, world.GH);

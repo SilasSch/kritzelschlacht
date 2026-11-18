@@ -187,7 +187,11 @@ export function createUI(game) {
   $('bLex').onclick = () => ($('ovLex').hidden ? openLexicon() : closeLexicon());
   $('lexClose').onclick = () => closeLexicon();
   // Esc ist sonst nirgends belegt (input.js); nur bei offenem Lexikon
-  window.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ovLex').hidden) { e.preventDefault(); closeLexicon(); } });
+  window.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('ovLex').hidden) { e.preventDefault(); closeLexicon(); }
+    else if (!$('ovBat').hidden) { e.preventDefault(); hideBattleResult(); }   // Schlachtfeld ansehen; der Reiter holt sie zurück
+  });
 
   function updateInfo() {
     const el = $('info'), sel = game.sel, mis = game.mission || game.battle;
@@ -346,7 +350,11 @@ export function createUI(game) {
   $('resList').onclick = () => { $('ovRes').hidden = true; openMissionList(); };
   $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
   $('mBat').onclick = () => game.enterBattle();
-  $('batGo').onclick = () => { const b = game.battle; if (!b) return; if (b.phase === 'plan') game.startBattle(); else if (b.phase === 'fight') game.editBattle(); };
+  // Auswertung schließen (Esc oder Klick daneben): das Schlachtfeld bleibt zu sehen, der Reiter "Schlacht" zeigt sie wieder
+  function hideBattleResult() { $('ovBat').hidden = true; document.body.classList.remove('bat-res'); }
+  $('ovBat').addEventListener('pointerdown', e => { if (e.target === $('ovBat')) hideBattleResult(); });
+  // blur: sonst würde Enter auf dem fokussierten Knopf (jetzt "Abbrechen") den Kampf abbrechen
+  $('batGo').onclick = e => { e.currentTarget.blur(); const b = game.battle; if (!b) return; if (b.phase === 'plan') game.startBattle(); else if (b.phase === 'fight') game.editBattle(); };
   $('batClear').onclick = () => game.clear();
   $('batSwap').onclick = () => game.swapSides();
   $('batAgain').onclick = () => game.retryBattle();

@@ -40,3 +40,21 @@ test('kein oder kaputter Spielstand ergibt den leeren Stand', () => {
   assert.equal(parseSave('{"muted":true}').muted, true);
   assert.equal(parseSave('kaputt').muted, false);
 });
+
+/* ---------- Eigene Level (Audit 18.11.) ---------- */
+test('eigene Level: alte Stände ohne custom, Prüfung der Form, Obergrenze 30', () => {
+  const lv = id => ({ id, n: 'L ' + id, hint: 'h', budget: 60, par: 46, place: [['unit', 'krieger', .7, .5], ['tRect', 'mauer', .6, .2, .62, .8]] });
+  assert.deepEqual(parseSave('{"stars":{},"muted":false}').custom, []);
+  assert.deepEqual(parseSave(null).custom, []);
+  assert.equal(JSON.parse(serializeSave(parseSave(null))).custom, undefined, 'leer: nicht geschrieben (Stand wie bisher)');
+  const s = parseSave(null);
+  s.custom = [lv('custom-a'), lv('custom-b')];
+  const again = parseSave(serializeSave(s));
+  assert.deepEqual(again.custom, s.custom);
+  // Unsinn fällt weg, doppelte ids einmal
+  const raw = JSON.stringify({ stars: {}, custom: [lv('custom-a'), 5, null, { id: 'x' }, lv('custom-a'), { ...lv('y'), place: [['unit', 'drache?', .5, .5]] }, lv('custom-c')] });
+  assert.deepEqual(parseSave(raw).custom.map(l => l.id), ['custom-a', 'custom-c']);
+  assert.deepEqual(parseSave('{"custom":"kaputt"}').custom, []);
+  const many = JSON.stringify({ custom: Array.from({ length: 40 }, (_, i) => lv('c' + i)) });
+  assert.equal(parseSave(many).custom.length, 30);
+});

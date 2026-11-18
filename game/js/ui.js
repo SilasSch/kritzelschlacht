@@ -6,6 +6,8 @@ import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
 import { armyPoints } from './sim.js';
+/* ---------- Editor (Audit 18.11.) ---------- */
+import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -246,9 +248,11 @@ export function createUI(game) {
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
     if (mis) {
-      $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint;
-      $('misName').title = mis.chapter.n;
+      // eigene Level (Editor, Audit 18.11.) haben kein Kapitel
+      $('misName').textContent = mis.chapter ? `Mission ${mis.idx + 1} · ${mis.def.n}` : `Eigenes Level · ${mis.def.n}`; $('misHint').textContent = mis.def.hint;
+      $('misName').title = mis.chapter ? mis.chapter.n : 'Eigenes Level';
     }
+    if (game.editorUI) game.editorUI.update();   // Editor (Audit 18.11.)
   }
 
   function updateMission() {
@@ -314,6 +318,7 @@ export function createUI(game) {
       if (open) b.onclick = () => openChapter(c.id);
       g.append(b);
     });
+    g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
     $('listBack').hidden = true;
     $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
     $('ovList').hidden = false;
@@ -337,7 +342,10 @@ export function createUI(game) {
     $('ovList').hidden = false;
   }
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
-  const openMissionList = () => (game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+  // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
+  const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
+    : game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+  const openCustomList = () => openCustomListView(game, openChapters);
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
@@ -351,7 +359,8 @@ export function createUI(game) {
     <li><span>Kampfdauer</span>${Math.round(r.time)} s</li>
     ${stats.heroType ? `<li><span>Held der Schlacht</span>${UNITS[stats.heroType].n} mit ${stats.heroK} Siegen</li>` : ''}`;
     // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
-    $('resNext').hidden = !r.win;
+    $('resNext').hidden = !r.win || !!r.custom;   // eigene Level: keine nächste Mission
+    $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
     $('resNext').textContent = r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln';
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
     $('ovRes').hidden = false;
@@ -418,7 +427,7 @@ export function createUI(game) {
     const plan = b.phase === 'plan';
     setText('batHint', plan ? 'Blau malt links, Rot rechts · Gelände überall'
       : b.phase === 'fight' ? `Kampf läuft · ${clock(b.t)}${b.t > 150 ? ' · ab 3:00 entscheidet die Stärke' : ''}` : `Kampf vorbei · ${clock(b.t)}`);
-    $('batClear').hidden = !plan; $('batSwap').hidden = !plan;
+    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan;
     const g = $('batGo');
     setText('batGo', plan ? 'Los!' : 'Abbrechen');
     g.disabled = b.phase === 'done';
@@ -523,7 +532,7 @@ export function createUI(game) {
 
   return {
     updateBattle, batchProgress, batchDone, showBattleResult,
-    refresh, toast, banner, closeBanner, showResult, openMissionList, openChapters, openChapter,
+    refresh, toast, banner, closeBanner, showResult, openMissionList, openChapters, openChapter, openCustomList,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
     hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon, lexiconOpen: () => !$('ovLex').hidden,
   };

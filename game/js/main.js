@@ -92,7 +92,11 @@ const game = {
   chapterUnlocked: id => chapterUnlocked(save.stars, id),
 
   setCat(c) {
-    if (!game.catAllowed(c)) return;
+    // keine echte oder erlaubte Kategorie (z. B. eine 1-gegen-1-Regel wie „Titanen“): erste erlaubte, falls die jetzige nicht passt
+    if (!game.catAllowed(c)) {
+      if (game.catAllowed(game.cat) && game.catKeys(game.cat).includes(game.sel)) return;
+      c = CATEGORIES.map(x => x[0]).find(game.catAllowed) || 'gelaende';
+    }
     game.cat = c;
     if (!game.catKeys(c).includes(game.sel)) game.sel = game.catKeys(c)[0];
     ui.renderUnits();

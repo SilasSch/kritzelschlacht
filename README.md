@@ -70,8 +70,10 @@ Kampf mit fester Saat (Test: `tests/dailyboard.test.js`).
   eintragen und bei der alten `until` = Tag des Updates setzen. Einträge der alten Version zählen dann bis zu diesem Tag
   wie eingetragen (markiert „alte Spielversion“), neue werden nachgerechnet.
 
-**Regeln, Karten, Revanche** (`rules.js`): 14 Regeln (einzelne Kategorien, Mischungen wie Armee + Tiere, Auswahl nach
-Eigenschaft wie Nur Fernkampf, Luftkampf, Kleinvieh) und 6 spiegelgleiche Karten (Feld, Fluss, Furten, Wäldchen, Bollwerk,
-See). Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
+**Regeln, Karten, Revanche** (`rules.js`): Regeln für einzelne Kategorien, Mischungen (Armee + Tiere, Robo-Dinos …),
+Auswahl nach Eigenschaft (Nur Fernkampf, Luftkampf, Dickhäuter …) und Budget-Varianten (`bm`: Sparrunde, Horde, Titanen);
+15 spiegelgleiche Karten, jede lässt einen Weg ohne Lava und Mauer frei (Test). Regeln ohne mindestens 3 Einheiten fallen
+von selbst weg. Die Revanche-Anfrage kommt als Abfrage mitten im Bild mit Ton, Hinweise (Gegner fertig, hat abgestimmt) als
+Leiste oben. Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
 der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Budget neu, beide malen neu.
 Beim Veröffentlichen `js/rules.js` mit hochladen.

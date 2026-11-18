@@ -29,10 +29,31 @@ export const RULES = [
   { id: 'billig', n: 'Kleinvieh', d: 'Nur Einheiten bis 3 Punkte: Masse statt Klasse', units: sel(T => T.cost <= 3) },
   { id: 'elite', n: 'Schwergewichte', d: 'Nur Einheiten ab 7 Punkten', units: sel(T => T.cost >= 7) },
   { id: 'alles', n: 'Alles erlaubt', d: 'Jede Einheit aus jeder Kategorie', cats: null },
-];
+  // weitere Mischungen
+  { id: 'dreiwelten', n: 'Drei Welten', d: 'Armee + Tiere + Mythisch', cats: ['armee', 'tiere', 'mythisch'] },
+  { id: 'safari', n: 'Safari', d: 'Tiere + Modern: Elefanten gegen Panzer', cats: ['tiere', 'modern'] },
+  // nach Eigenschaft (über alle Kategorien, neue Einheiten kommen von selbst dazu)
+  { id: 'boden', n: 'Bodenkrieg', d: 'Alles außer Fliegern', units: sel(T => !T.fly) },
+  { id: 'tempo', n: 'Blitzangriff', d: 'Nur die Schnellen: Reiter, Wölfe, Einhörner …', units: sel(T => T.speed >= 80) },
+  { id: 'dick', n: 'Dickhäuter', d: 'Nur Zähe ab 140 Leben', units: sel(T => T.hp >= 140) },
+  { id: 'mittel', n: 'Mittelklasse', d: 'Nur Einheiten von 3 bis 6 Punkten', units: sel(T => T.cost >= 3 && T.cost <= 6) },
+  { id: 'ohneriesen', n: 'Ohne Riesen', d: 'Alles bis 9 Punkte, keine Drachen, Panzer, Elefanten', units: sel(T => T.cost < 10) },
+  // Budget-Varianten: bm ändert das Budget der Runde
+  { id: 'spar', n: 'Sparrunde', d: 'Halbes Budget, alles erlaubt: jeder Punkt zählt', cats: null, bm: .5 },
+  { id: 'horde', n: 'Horde', d: 'Doppeltes Budget, aber nur Einheiten bis 3 Punkte', units: sel(T => T.cost <= 3), bm: 2 },
+  { id: 'titanen', n: 'Titanen', d: 'Doppeltes Budget, nur Riesen ab 10 Punkten', units: sel(T => T.cost >= 10), bm: 2 },
+  // mit Schrottplatz und Urzeit
+  { id: 'robodino', n: 'Robo-Dinos', d: 'Urzeit + Schrottplatz: T-Rex gegen Mega-Roboter', cats: ['urzeit', 'schrott'] },
+  { id: 'steinzeit', n: 'Steinzeit trifft Ritter', d: 'Urzeit + Armee', cats: ['urzeit', 'armee'] },
+  { id: 'spuk', n: 'Spukfabrik', d: 'Schrottplatz + Mythisch: Geister in der Maschine', cats: ['schrott', 'mythisch'] },
+  // neue Kategorien bekommen hier ihre Regeln; Regeln, für die es (noch) keine 3 Einheiten gibt, fallen von selbst weg
+].filter(r => PAINT.filter(t => (!r.cats || r.cats.includes(UNITS[t].cat)) && (!r.units || r.units.includes(t))).length >= 3
+  && (!r.cats || r.cats.every(c => PAINT.some(t => UNITS[t].cat === c))));
 export const RULE = Object.fromEntries(RULES.map(r => [r.id, r]));
 export const RULE_IDS = RULES.map(r => r.id);
 export const ruleDef = id => { const r = RULE[id] || RULE.alles; return { id: 'online', cats: r.cats || null, units: r.units || null }; };
+// Budget der Runde (Regeln mit bm verdoppeln oder halbieren es)
+export const ruleBudget = (id, budget) => Math.round(budget * ((RULE[id] && RULE[id].bm) || 1));
 export function ruleAllows(id, type) {
   const r = RULE[id], T = UNITS[type];
   if (!r || !T || T.paint === false) return false;
@@ -48,6 +69,15 @@ export const MAPS = [
   { id: 'wald', n: 'Wäldchen', d: 'Wald gibt Deckung gegen Pfeile und Explosionen', mirror: true, t: [['circle', 'wald', .32, .22, .11], ['circle', 'wald', .32, .78, .11], ['circle', 'wald', .5, .5, .1]] },
   { id: 'mauern', n: 'Bollwerk', d: 'Mauern vor beiden Seiten, Lücke in der Mitte', mirror: true, t: [['rect', 'mauer', .4, .1, .415, .4], ['rect', 'mauer', .4, .6, .415, .9]] },
   { id: 'see', n: 'See', d: 'Ein See in der Mitte, Kampf an den Ufern', t: [['circle', 'wasser', .5, .5, .26]] },
+  { id: 'bruecke', n: 'Brücke', d: 'Ein Fluss, nur in der Mitte trockener Fuß', t: [['rect', 'wasser', .47, 0, .53, .42], ['rect', 'wasser', .47, .58, .53, 1]] },
+  { id: 'engpass', n: 'Engpass', d: 'Felswände oben und unten, Durchgang in der Mitte', t: [['rect', 'mauer', .4, 0, .6, .3], ['rect', 'mauer', .4, .7, .6, 1]] },
+  { id: 'vulkan', n: 'Vulkan', d: 'Lava in der Mitte, Wege oben und unten herum', t: [['circle', 'lava', .5, .5, .2]] },
+  { id: 'dschungel', n: 'Dschungel', d: 'Dichter Wald über die ganze Mitte: Deckung für alle', t: [['rect', 'wald', .3, 0, .7, 1]] },
+  { id: 'auwald', n: 'Auwald', d: 'Fluss mit Wald an beiden Ufern', mirror: true, t: [['rect', 'wasser', .475, 0, .525, 1], ['rect', 'wald', .4, .08, .46, .92]] },
+  { id: 'burgen', n: 'Zwei Burgen', d: 'Jede Seite hat eine Mauer mit Toren vor sich', mirror: true, t: [['rect', 'mauer', .25, .12, .265, .4], ['rect', 'mauer', .25, .6, .265, .88], ['rect', 'mauer', .18, .12, .265, .14], ['rect', 'mauer', .18, .86, .265, .88]] },
+  { id: 'labyrinth', n: 'Labyrinth', d: 'Versetzte Mauern: wer durchwill, muss Umwege laufen', mirror: true, t: [['rect', 'mauer', .32, 0, .335, .58], ['rect', 'mauer', .42, .42, .435, 1]] },
+  { id: 'lavaseen', n: 'Lavaseen', d: 'Lava oben und unten, gekämpft wird in der Mitte', t: [['circle', 'lava', .5, .12, .2], ['circle', 'lava', .5, .88, .2]] },
+  { id: 'suempfe', n: 'Sümpfe', d: 'Verstreute Tümpel bremsen jeden Vormarsch', mirror: true, t: [['circle', 'wasser', .3, .25, .09], ['circle', 'wasser', .38, .7, .1], ['circle', 'wasser', .5, .45, .08], ['circle', 'wasser', .44, .1, .06]] },
 ];
 export const MAP = Object.fromEntries(MAPS.map(m => [m.id, m]));
 export const MAP_IDS = MAPS.map(m => m.id);

@@ -11,7 +11,7 @@ import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
 import {
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
-  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound,
+  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf,
 } from '../game/js/online.js';
 import { RULES, RULE_IDS, MAP_IDS, ruleAllows, applyMap, mapParts, resolveVote, mapSVG } from '../game/js/rules.js';
 const allowed = (rule, maxCost = 6) => Object.keys(UNITS).filter(t => ruleAllows(rule, t) && UNITS[t].cost < maxCost);
@@ -70,6 +70,36 @@ test('Karten: spiegelgleich für beide Seiten, Gelände gehört niemandem', () =
     assert.match(mapSVG(id), /^<svg/);
   }
   assert.equal(mapParts('nix').length, 0);
+});
+
+test('Karten: jede Karte lässt Bodentruppen ohne Lava und Mauer von links nach rechts durch', () => {
+  for (const id of MAP_IDS) {
+    const w = createWorld(W, H, 1); applyMap(w, id);
+    const { GW, GH, terr } = w, free = i => terr[i] !== 2 && terr[i] !== 4, seen = new Uint8Array(GW * GH), q = [];
+    for (let gy = 0; gy < GH; gy++) { const i = gy * GW; if (free(i)) { seen[i] = 1; q.push(i); } }
+    let ok = false;
+    while (q.length && !ok) {
+      const i = q.pop(), gx = i % GW;
+      if (gx === GW - 1) ok = true;
+      for (const j of [gx > 0 ? i - 1 : -1, gx < GW - 1 ? i + 1 : -1, i - GW, i + GW]) if (j >= 0 && j < GW * GH && !seen[j] && free(j)) { seen[j] = 1; q.push(j); }
+    }
+    assert.ok(ok, `${id}: kein Durchgang`);
+  }
+});
+
+test('Regeln: Budget-Varianten ändern das Budget der Runde, kommende Kategorien bleiben bis dahin aus', () => {
+  assert.equal(budgetOf({ cat: 'titanen', budget: 150 }), 300);
+  assert.equal(budgetOf({ cat: 'spar', budget: 150 }), 75);
+  assert.equal(budgetOf({ cat: 'armee', budget: 150 }), 150);
+  assert.equal(roundDef({ cat: 'horde', budget: 100 }).budget, 200);
+  const w = createWorld(W, H, 3); w.teamMode = true;
+  for (let i = 0; i < 4; i++) spawn(w, 'drache', 100 + i * 100, 300, 'blau');   // 160 Punkte
+  const txt = packArmy(w, 'blau');
+  assert.equal(unpackArmy(txt, 'blau', W, H, { cat: 'titanen', budget: 100 }).length, 4);
+  assert.throws(() => unpackArmy(txt, 'blau', W, H, { cat: 'titanen', budget: 50 }), /Budget/);
+  const cats = new Set(Object.values(UNITS).map(T => T.cat));
+  for (const r of RULES) if (r.cats) assert.ok(r.cats.every(c => cats.has(c)), `${r.id} braucht eine Kategorie, die es noch nicht gibt`);
+  assert.equal(RULE_IDS.includes('urzeit'), cats.has('urzeit'));
 });
 
 // Eine Seite malt mit den Regeln der Runde (hotseat.js mit def = Kategorie)
@@ -252,6 +282,32 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   assert.equal(C.cfg, null);
   assert.equal(pickPeer([{ isMe: true, presence: { ks: 2 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 } }, { isMe: false, presence: { ks: 2 }, peer: 'p2' }]).peer, 'p2');
   assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150 } } }, { isMe: false, presence: { open: { code: 'zz', budget: 150 } } }]), [{ code: 'KX7P', budget: 150 }]);
+});
+
+test('Online: Hinweise „Gegner hat abgestimmt“ und „Gegner ist fertig“ kommen genau einmal je Runde', () => {
+  const A = createMatch('host', 100, createRng(4)), B = createMatch('guest');
+  hostStart(A); link(A, B);
+  const o = A.cfg.opts;
+  castVote(A, o.rules[0], o.maps[0]);
+  const v1 = link(A, B);
+  assert.equal(v1.evB.filter(e => e === 'peervoted').length, 1, 'Gast sieht: Host hat abgestimmt');
+  castVote(B, o.rules[0], o.maps[0]);
+  const v2 = link(A, B);
+  assert.equal(A.phase, 'paint');
+  assert.ok(!v2.evA.includes('peervoted') || v2.evA.filter(e => e === 'peervoted').length === 1);
+  const wA = createWorld(W, H, 6); wA.teamMode = true;
+  spawn(wA, allowed(A.cfg.cat)[0], 200, 300, 'blau');
+  markReady(A, packArmy(wA, 'blau'));
+  const r1 = link(A, B);
+  assert.equal(r1.evB.filter(e => e === 'peerready').length, 1, 'Gast malt noch und sieht: Host ist fertig');
+  assert.equal(B.phase, 'paint');
+  assert.ok(!link(A, B).evB.includes('peerready'), 'nur einmal');
+  const wB = createWorld(W, H, 7); wB.teamMode = true;
+  spawn(wB, allowed(B.cfg.cat)[0], 1300, 300, 'rot');
+  markReady(B, packArmy(wB, 'rot'));
+  const r2 = link(A, B);
+  assert.ok(!r2.evA.includes('peerready'), 'wer selbst schon fertig ist, bekommt keinen Hinweis mehr');
+  assert.equal(A.phase, 'fight');
 });
 
 // Code-Duell (18.11.): game/js/duel.js über share.js

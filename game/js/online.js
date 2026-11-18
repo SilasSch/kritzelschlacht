@@ -12,7 +12,7 @@
 //   Ergebnis: jeder meldet res; der Host zählt und veröffentlicht score. Nächste Runde, wenn beide want = r + 1 melden.
 import { UNITS } from './data.js';
 import { SHAPES } from './shapes.js';
-import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, draw, resolveVote } from './rules.js';
+import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, ruleBudget, draw, resolveVote } from './rules.js';
 
 export const PROTO = 2;   // 2: Abstimmung über Regel und Karte
 export const ROOM_PREFIX = 'ks1v1-';
@@ -61,7 +61,9 @@ export function randomRound(prev, budget, rand = Math.random) {
   return { ...c, cat: c.opts.rules[0], map: c.opts.maps[0] };
 }
 // Level-artiges Objekt für die Malleiste und paint.js (campaign/index.js unitAllowed, catAllowed): die Regel der Runde
-export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: cfg.budget });
+// Budget, mit dem in der Runde gemalt wird (Grundbudget × Faktor der Regel)
+export const budgetOf = cfg => ruleBudget(cfg.cat, cfg.budget);
+export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: budgetOf(cfg) });
 
 /* ---------- Armee-Pakete ---------- */
 // Jede Einheit in 5 Bytes: Typ (6 Bit) + Form (2 Bit), x und y als 16 Bit in Anteilen der Welt. Base64url.
@@ -114,7 +116,7 @@ export function unpackArmy(text, side, W, H, cfg) {
     cost += UNITS[type].cost;
     out.push({ type, team: side, x, y, shape });
   }
-  if (cfg && cost > cfg.budget + EPS) throw new Error('Budget überschritten');
+  if (cfg && cost > budgetOf(cfg) + EPS) throw new Error('Budget überschritten');
   return out;
 }
 export const splitChunks = (s, n = CHUNK) => { const out = []; for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n)); return out.length ? out : ['']; };
@@ -151,7 +153,7 @@ export function view(m) {
 
 function newRound(m, cfg) {
   m.cfg = cfg; m.phase = cfg.cat ? 'paint' : 'vote'; m.vote = null; m.peerVote = null; m.same = false; m.peerWant = null; m.mine = null; m.chunks = null; m.sendI = 0; m.recv = []; m.theirs = null;
-  m.res = null; m.peerRes = null; m.error = null;
+  m.res = null; m.peerRes = null; m.error = null; m.peerReady = false; m.peerVoted = false;
 }
 
 // Gegner ist da (Host): erste Runde würfeln. Liefert Ereignisse.
@@ -206,7 +208,8 @@ export function officialWinner(m) {
 }
 
 // Neues presence-Objekt des Gegners verarbeiten (p darf null sein: niemand da). Liefert Ereignisse:
-// 'round' (neue Runde, malen), 'xfer' (beide fertig), 'fight' ({ units, seed } in m.fight), 'score', 'error'.
+// 'round' (neue Runde, malen), 'xfer' (beide fertig), 'fight' ({ units, seed } in m.fight), 'score', 'error',
+// 'peerwant' (Gegner will weiter), 'peervoted' (Gegner hat abgestimmt), 'peerready' (Gegner ist mit Malen fertig).
 export function onPeer(m, p, W, H) {
   const ev = [];
   if (!isObj(p) || p.ks !== PROTO) return ev;
@@ -234,6 +237,11 @@ export function onPeer(m, p, W, H) {
   }
   const pw = num(p.want) === r + 1 ? (p.same === true ? 'same' : 'new') : null;
   if (pw !== m.peerWant) { m.peerWant = pw; ev.push('peerwant'); }
+  // Hinweise: Gegner hat abgestimmt / ist mit Malen fertig (nur einmal je Runde melden)
+  const pv = m.phase === 'vote' && isObj(p.vote) && num(p.vote.r) === r;
+  if (pv && !m.peerVoted) { m.peerVoted = true; ev.push('peervoted'); }
+  const pr = (m.phase === 'paint' || m.phase === 'ready') && num(p.ready) === r;
+  if (pr && !m.peerReady) { m.peerReady = true; if (m.phase === 'paint') ev.push('peerready'); }
   // Host: Stimme des Gasts
   if (m.role === 'host' && m.phase === 'vote' && isObj(p.vote) && num(p.vote.r) === r
     && m.cfg.opts.rules.includes(p.vote.rule) && m.cfg.opts.maps.includes(p.vote.map)) {

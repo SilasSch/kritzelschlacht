@@ -40,7 +40,7 @@ export const VERSIONS = {
   v1j0sw5m: { until: '2026-11-18' },   // Luftwaffe: Hubschrauber neu, Jet, Kampfdrohne, Bomber (18.11.)
   v3v8ayv: { until: '2026-11-18' },   // Balance-Runde: Magier 8 und langsamer, Ritter, Sani, Vampir, Gorilla, Meteor, König, Lama, Keil, Synergien, Waldbrand (18.11.)
   v1w2hbq9: { until: '2026-11-18' },   // Bienen 1 Punkt, dafür 24 LP, Stich 4, Gift 5/s, Kugeln ×2,5, Blitze ×1,6 (18.11.)
-  vsjyhqn: { until: '2026-11-18' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.)
+  vsjyhqn: { until: '2026-11-19' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.); bis 19.11., weil das Update kurz vor Mitternacht kam (offene Tabs spielen den 19. noch mit dieser Version)
   v1oqxao2: { until: null },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;

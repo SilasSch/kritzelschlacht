@@ -529,7 +529,8 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
       sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R, tg: t, pass: null });
   }
-  emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0 });
+  // mg: Bug-MG des Panzers (Mündungsversatz mz; Mündungsfeuer und Hülsen in fxcore, Nachtrag 7, #49)
+  emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0, mg: !!mz });
   sound(world, K[3]);
 }
 

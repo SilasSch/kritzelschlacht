@@ -18,8 +18,9 @@ export const TANK_ELEV_MAX = .35;     // Panzerrohr: Erhöhung/Senkung höchsten
 export const TURN_SQUASH = .12;       // Turm beim Umdrehen: so viel höher, wenn er ganz schmal ist
 
 // Panzer: Turm-Mitte in der Wanne, Schildzapfen (Drehpunkt des Rohrs) und Mündung im Turm, Kettenboden
-// mg: Mündung des Bug-MGs (Nachtrag 4, #39) vorn an der Wanne, mgMount: seine Kugelblende (rig.js zeichnet beides)
-export const TANK_GEO = { turret: [-.12, -.38], trunnion: [.42, 0], tip: [1.13, 0], pivotY: .74, mg: [1.42, .03], mgMount: [1.2, .03] };
+// mg: Mündung des Bug-MGs (Nachtrag 4, #39) vorn an der Wanne, mgMount: seine Kugelblende in der Bugplatte (rig.js zeichnet
+// Lafette mit Schutzschild, Lauf mit Kühlmantel und Dämpfer bis zur Mündung, Nachtrag 7, #49)
+export const TANK_GEO = { turret: [-.12, -.38], trunnion: [.42, 0], tip: [1.13, 0], pivotY: .74, mg: [1.6, .02], mgMount: [1.22, .02] };
 // Hubschrauber: Mast, Heckrotor, Kanonen-Halterung und Mündung (in der Halterung). Der Rumpf neigt sich
 // um die Mündung (pivot), damit sie bei jeder Neigung gleich liegt.
 export const HELI_GEO = { mast: [0, -.95], tailRotor: [-1.76, -.38], gun: [.55, .4], gunTip: [.58, 0], rotorFlat: .26 };

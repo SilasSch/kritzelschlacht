@@ -60,11 +60,19 @@ const BOSS_DEF = {
           Ln(c, [[-r * 1.3, r * .15], [r * 1.3, r * .15]], k.dk, 2.4);
           RR(c, -r * .9, -r * .14, r * .5, r * .19, r * .05, k.dk);
           for (const x of [-.25, .12, .5, .85]) E(c, r * x, r * .02, r * .04, r * .04, k.dk, 0);
-          E(c, r * 1.13, -r * .1, r * .08, r * .07, '#ffe9a8', 1);
-          // Bug-MG (Nachtrag 4, #39): Kugelblende und kurzer Lauf bis zur Mündung TANK_GEO.mg (combat.hullMg schießt dort)
-          const mg = TANK_GEO.mg, mb = TANK_GEO.mgMount;
-          Ln(c, [[r * mb[0], r * mg[1]], [r * mg[0], r * mg[1]]], '#2b2e35', 2);
-          E(c, r * mb[0], r * mb[1], r * .075, r * .075, k.dk, 1);
+          E(c, r * .98, -r * .14, r * .08, r * .07, '#ffe9a8', 1);
+          // Bug-MG (Nachtrag 7, #49; vorher ein 2 px dünner Strich): Lauf mit Umriss bis zur Mündung TANK_GEO.mg
+          // (combat.hullMg schießt dort), Kühlmantel mit Löchern, Mündungsdämpfer; darüber die Lafette: Schutzschild in
+          // Teamfarbe an der Bugplatte und die Kugelblende, durch die der Lauf kommt
+          const mg = TANK_GEO.mg, mb = TANK_GEO.mgMount, y = r * mg[1];
+          Ln(c, [[r * mb[0], y], [r * (mg[0] - .05), y]], '#2b2e35', 2.4);
+          RR(c, r * (mb[0] + .13), y - r * .07, r * .17, r * .14, r * .035, '#4a4e57');
+          for (let i = 0; i < 3; i++) E(c, r * (mb[0] + .165 + i * .05), y, r * .017, r * .017, '#1f2126', 0);
+          RR(c, r * (mg[0] - .08), y - r * .055, r * .08, r * .11, r * .02, '#2b2e35');
+          poly(c, r, [[mb[0] - .05, -.15], [mb[0] + .07, -.12], [mb[0] + .09, .18], [mb[0] - .03, .2]], k.col, 1.3);
+          Ln(c, [[r * (mb[0] - .02), -r * .1], [r * mb[0], r * .15]], k.dk, 1, false);
+          E(c, r * (mb[0] + .03), y, r * .085, r * .085, k.dk, 1.2);
+          E(c, r * (mb[0] + .01), y - r * .025, r * .03, r * .025, 'rgba(255,255,255,.35)', 0);
         },
       },
       // Kettenglieder (untere Lauffläche, wandern beim Vorwärtsfahren nach hinten) und Radspeichen, f = Bild

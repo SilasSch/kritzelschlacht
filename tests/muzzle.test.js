@@ -136,3 +136,44 @@ test('Bug-MG: Kugeln zwischen den Kanonenschüssen, aus der gezeichneten MG-Mün
   assert.equal(bullets, 0);
   assert.equal(own.hp, UNITS.krieger.hp);
 });
+
+// Nachtrag 7 (#49): sichtbares Bug-MG mit Lafette; die Zeichnung endet genau an der Mündung der Logik, die Schüsse
+// tragen mg (Mündungsfeuer und Hülsen in fxcore)
+test('Bug-MG sichtbar: Lauf endet an TANK_GEO.mg, Schüsse mit mg-Kennung, Mündungsfeuer und Hülse', async () => {
+  const { drawRigPart } = await import('../game/js/render/rig.js');
+  const { createFxCore, MG_FX } = await import('../game/js/render/fxcore.js');
+  const { step } = await import('../game/js/sim.js');
+  // Zeichen-Aufrufe mitschreiben: größtes x (Punkte, Rechtecke, Ellipsen) und die Bereiche um die MG-Höhe
+  let maxX = -Infinity, nearMg = 0;
+  const R = visR('panzer'), my = TANK_GEO.mg[1] * R;
+  const pt = (x, y) => { if (x > maxX) maxX = x; if (Math.abs(y - my) < R * .25 && x > TANK_GEO.mgMount[0] * R - 3) nearMg++; };
+  const c = new Proxy({}, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'moveTo' || k === 'lineTo') return (x, y) => pt(x, y);
+      if (k === 'roundRect' || k === 'rect') return (x, y, w, h) => { pt(x, y + h / 2); pt(x + w, y + h / 2); };
+      if (k === 'ellipse') return (x, y, rx) => { pt(x + rx, y); pt(x - rx, y); };
+      return () => {};
+    },
+    set(t, k, v) { t[k] = v; return true; },
+  });
+  drawRigPart(c, 'panzer', 'body', 0, 0);
+  assert.ok(Math.abs(maxX - TANK_GEO.mg[0] * R) < 1e-6, `gezeichnete Spitze ${maxX.toFixed(2)} = Mündung ${(TANK_GEO.mg[0] * R).toFixed(2)}`);
+  assert.ok((TANK_GEO.mg[0] - TANK_GEO.mgMount[0]) * R >= 10, 'Lauf mindestens 10 px');
+  assert.ok(nearMg >= 12, `Lafette, Schild, Mantel, Dämpfer: ${nearMg} Punkte`);
+  // Schüsse: das MG trägt mg, die Kanone nicht
+  const w = createWorld(1400, 800, 3); w.teamMode = true;
+  const p = spawn(w, 'panzer', 400, 400, 'blau'); p.abCd = 1e9;
+  for (let k = 0; k < 3; k++) { const e = spawn(w, 'krieger', 560, 380 + k * 20, 'rot'); e.hp = 1e9; e.T = { ...UNITS.krieger, speed: 0 }; }
+  const shots = [];
+  for (let i = 0; i < 60 * 5; i++) { step(w, 1 / 60); for (const e of w.events) if (e.type === 'shot') shots.push(e); w.events.length = 0; }
+  assert.ok(shots.some(e => e.kind === 'bullet' && e.mg === true));
+  assert.ok(shots.filter(e => e.kind === 'shell').every(e => e.mg === false));
+  const core = createFxCore({}, { rand: () => .5 });
+  core.consume([shots.find(e => e.mg)]);
+  const k = core.store.countByKind();
+  assert.ok(k.mgflash === 3 && k.casing === 1 && k.flash === 1, JSON.stringify(k));
+  const cs = core.store.live.find(q => q.k === 'casing');
+  assert.ok(cs.vx * p.face < 0 && cs.vy < 0, 'Hülse fliegt nach hinten oben');
+  assert.ok(MG_FX.caseLife < 1);
+});

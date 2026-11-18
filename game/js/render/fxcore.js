@@ -77,6 +77,11 @@ export const EXHAUST_BURST = 2;
 export const WASH = { life: .9, grow: 2.2, alpha: .22 };
 export const EXHAUST = { life: .9, grow: 2.6, alpha: .34 };
 
+/* ---------- Bug-MG des Panzers (Nachtrag 7, #49) ----------
+   Mündungsfeuer: Blitz (flash, Radius flash) und drei kurze helle Striche (mgflash, Länge len px) in Schussrichtung, life s;
+   Hülse (casing): kleiner Messingstrich, nach hinten (caseV px/s) und oben (caseUp px/s) ausgeworfen, dreht sich und fällt. */
+export const MG_FX = { life: .06, flash: 4.5, len: 9, back: 10, caseLife: .5, caseR: 1.9, caseCol: 0xe0b04a, caseV: [25, 50], caseUp: [70, 110] };
+
 /* ---------- Wasser (Nachtrag 7, #48) ----------
    Waten: Bodentruppen im Wasser werfen alle WADE_T s (nach id versetzt, ohne Zustand je Einheit) einen flachen Ring
    ('wade', wächst von WADE_R0 auf WADE_R1 · r), in Bewegung alle BOW_T s eine kleine Bugwelle ('bow': zwei kurze
@@ -203,6 +208,7 @@ export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 
 export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32, 28, 30, 30];
 // Zauber (Spez. #31): Blitz (bolt, zap), Kanalfunken (mote), Kugel am Himmel (orb) und Meteor glühen auch
 export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame', 'bolt', 'zap', 'mote', 'orb', 'meteor']);
+GLOW_KINDS.add('mgflash');   // Nachtrag 7, #49: Mündungsfeuer des Bug-MGs
 export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
@@ -279,6 +285,8 @@ export function look(p, o) {
     // Wasser (Nachtrag 7, #48): flacher Ring am Boden (Waten, Fontäne), Bugwelle (Strich), Gischt (weiße Wolke)
     case 'wade': o.frame = F.wave; o.r = p.r * (WADE.R0 + (WADE.R1 - WADE.R0) * (1 - a * a)); o.sy = .42; o.alpha = p.a0 * a * Math.min(1, q / .12); o.under = true; break;
     case 'bow': o.frame = F.streak; o.sy = 1.3; o.alpha = p.a0 * a * Math.min(1, q / .15); o.under = true; break;
+    case 'mgflash': o.frame = F.streak; o.sy = .7; o.alpha = Math.min(1, a * 1.6); o.gR = p.r * 1.4; o.gTint = 0xffcf66; o.gAlpha = a * .7; break;
+    case 'casing': o.frame = F.streak; o.sy = 2.4; o.alpha = q < .7 ? 1 : a / .3; break;
     case 'spray': o.frame = F.puff; o.r = p.r * (1 + q * .9); o.alpha = .85 * Math.min(1, q / .06) * a; break;
     case 'plus': o.frame = F.plus; o.tint = 0x2fbf6b; break;
     case 'soul': o.frame = F.soul; o.x = p.x + Math.sin(p.age * 6) * 2; o.tint = 0xffffff; o.alpha = a * .85; break;
@@ -508,6 +516,20 @@ export function createFxCore(hooks = {}, opt = {}) {
       }
     }
     wadeN = n;
+  }
+
+  // Bug-MG des Panzers (shot mit mg, Nachtrag 7, #49): Mündungsfeuer als kurzer Stern in Schussrichtung (zwei Striche und
+  // Blitz mit Glühen) und eine Hülse, die nach hinten oben ausgeworfen wird und fällt (MG_FX)
+  function mgFire(e, y, face) {
+    const F = MG_FX, hasT = Number.isFinite(e.tx) && Number.isFinite(e.ty);
+    const a = hasT ? Math.atan2(e.ty - e.y, e.tx - e.x) : face > 0 ? 0 : Math.PI, ca = Math.cos(a), sa = Math.sin(a);
+    add('flash', e.x + ca * 2, y + sa * 2, F.life, F.flash);
+    for (const s of [0, .55, -.55]) {
+      const p = add('mgflash', e.x + ca * F.len * .5, y + sa * F.len * .5, F.life, s ? F.len * .55 : F.len, 0xfff1a8);
+      if (p) p.rot = a + s;
+    }
+    const b = add('casing', e.x - face * F.back, y - 2, F.caseLife, F.caseR, F.caseCol);
+    if (b) { b.vx = -face * rnd(F.caseV[0], F.caseV[1]); b.vy = -rnd(F.caseUp[0], F.caseUp[1]); b.ay = 520; b.rot = rand() * TAU; b.vrot = rnd(-22, 22); }
   }
 
   // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
@@ -908,6 +930,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (!take('shot')) break;
         // Flieger schießen aus ihrer Höhe (wie pose.projScreen am Start der Bahn)
         const y = e.y - ((e.z || 0) > MUZZLE_Z ? e.z - MUZZLE_Z : 0), face = e.face < 0 ? -1 : 1;
+        if (e.mg) { mgFire(e, y, face); break; }
         add('flash', e.x + face * 3, y, .07, e.kind === 'shell' ? 7 : 3.5);
         if (e.kind === 'shell') for (let i = 0; i < 3; i++) puff('smoke', e.x + face * rnd(5, 12), y + rnd(-3, 3), SMOKE.life * .5, rnd(4, 6));
         break;

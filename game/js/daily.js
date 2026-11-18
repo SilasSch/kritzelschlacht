@@ -1,0 +1,171 @@
+// Tageschallenge (Audit 18.11.): ein Level je Kalendertag, aus dem Datum erzeugt. Rein: kein DOM, kein Math.random,
+// Zufall nur über createRng mit einer Saat aus dem Datum ('YYYY-MM-DD', Ortszeit des Spielers). Alle Spieler bekommen am
+// selben Tag dasselbe Level.
+// Das Level hat das Format der Kampagne (docs/kampagne.md): { id, n, hint, budget, par, units, cats, place, plan }.
+// Gegner: 1–3 Gruppen malbarer Einheiten rechts (x .6–.92 des Missionsrahmens), höchstens ein Boss, zusammen etwa
+// 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
+// mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
+// Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
+import { UNITS, PLURAL, COUNTERS } from './data.js';
+import { createRng } from './rng.js';
+import { F, B, Md } from './campaign/areas.js';
+
+// Bosse: höchstens einer je Tag, nie der Hauptgegner und nie Konter im Plan (zu grob für das Budget)
+export const DAILY_BOSSES = ['panzer', 'heli', 'elefant', 'drache'];
+const isBoss = t => DAILY_BOSSES.includes(t);
+const paintable = t => UNITS[t] && UNITS[t].paint !== false;
+
+// Konter je Gegnertyp: a schlägt b (COUNTERS), nur malbare Nicht-Bosse
+export function countersOf(type) {
+  return COUNTERS.filter(c => c[1] === type && paintable(c[0]) && !isBoss(c[0])).map(c => c[0]);
+}
+// Hauptgegner: malbare Nicht-Bosse mit mindestens zwei Kontern
+export const DAILY_MAIN = [...new Set(COUNTERS.map(c => c[1]))].filter(t => paintable(t) && !isBoss(t) && countersOf(t).length >= 2);
+// Konter, die der Lösungsplan nur nimmt, wenn es keinen anderen gibt: der Bienenschwarm gewinnt dort zu unzuverlässig
+const PLAN_WEAK = new Set(['biene']);
+
+// Datum → 'YYYY-MM-DD' in Ortszeit
+export function dateKey(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+// 'YYYY-MM-DD' → '18.11.'
+export const shortDate = s => { const [, m, d] = s.split('-'); return `${+d}.${+m}.`; };
+
+// FNV-1a über den Text: Saat für createRng
+export function hashStr(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+
+const round5 = v => Math.max(5, Math.round(v / 5) * 5);
+const r2 = v => Math.round(v * 100) / 100;
+const list = a => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} und ${a[a.length - 1]}`);
+const plural = t => PLURAL[t] || UNITS[t].n;
+const isRanged = t => UNITS[t].range > 20 && !UNITS[t].heal;
+
+export function dailyLevel(dateStr) {
+  const rng = createRng(hashStr('kritzel-daily|' + dateStr));
+  const pick = a => a[Math.floor(rng() * a.length)];
+  const shuffle = a => { const b = a.slice(); for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; } return b; };
+  const between = (a, b) => a + rng() * (b - a);
+
+  // Hauptgegner und seine Konter (zwei, manchmal drei)
+  const main = pick(DAILY_MAIN);
+  const mainC = shuffle(countersOf(main));
+  const counters = mainC.slice(0, Math.min(mainC.length, rng() < .35 ? 3 : 2));
+  const total = Math.round(between(70, 140));
+
+  // Gruppen: [typ, Punkte]. Der Hauptgegner hat den größten Teil.
+  const groups = [];
+  const nGroups = 1 + Math.floor(rng() * 3);
+  // Nebengegner: nur Typen, die einer der Konter auch schlägt (sonst wäre der Plan ein Glücksspiel)
+  const side = [...new Set(COUNTERS.filter(c => counters.includes(c[0]) && c[1] !== main && paintable(c[1]) && !isBoss(c[1])).map(c => c[1]))];
+  let rest = total;
+  // Boss (etwa jeder vierte Tag), nur wenn sein Konter mit ins Spiel kommt
+  let boss = null;
+  if (rng() < .28 && total >= 90) {
+    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && UNITS[b].cost <= total * .4);
+    if (cand.length) { boss = pick(cand); rest -= UNITS[boss].cost; }
+  }
+  const sideTypes = shuffle(side).slice(0, nGroups - 1);
+  const mainShare = sideTypes.length ? between(.55, .7) : 1;
+  groups.push([main, rest * mainShare]);
+  sideTypes.forEach(t => groups.push([t, rest * (1 - mainShare) / sideTypes.length]));
+
+  // Aufstellung: Gruppen von vorn (x .6) nach hinten (x .92), y-Band mit etwas Zufall
+  const place = [];
+  let enemyPts = 0;
+  const xs = [[.6, .68], [.7, .78], [.8, .88]];
+  groups.forEach(([t, pts], i) => {
+    const n = Math.max(1, Math.round(pts / UNITS[t].cost));
+    enemyPts += n * UNITS[t].cost;
+    // Fernkämpfer eher hinten, Nahkämpfer vorn
+    const slot = xs[Math.min(xs.length - 1, i)];
+    const y0 = r2(between(.14, .3)), y1 = r2(between(.7, .86));
+    const w = Math.min(slot[1] - slot[0], .02 + n * .0012);
+    const x0 = r2(slot[0] + between(0, slot[1] - slot[0] - w)), x1 = r2(x0 + w);
+    place.push(['rect', t, n, x0, y0, x1, y1]);
+  });
+  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += UNITS[boss].cost; }
+
+  // Gelände in der gegnerischen Hälfte (vor den Gegnern), an etwa jedem zweiten Tag
+  let terrain = null;
+  if (rng() < .55) {
+    terrain = pick(['wasser', 'wald', 'mauer', 'lava']);
+    if (terrain === 'mauer') {
+      const x = r2(between(.52, .56)), y = r2(between(.15, .35));
+      place.unshift(['tRect', 'mauer', x, y, r2(x + .012), r2(y + between(.25, .4))]);
+    } else {
+      const cy = r2(between(.25, .75)), rr = r2(between(.06, terrain === 'lava' ? .08 : .11));
+      place.unshift(['tCircle', terrain, r2(.5 + rr * .7), cy, rr]);
+    }
+  }
+
+  const par = round5(enemyPts * 1.1), budget = round5(enemyPts * 1.5);
+
+  // Lösungsplan: schlägt ein Konter alle Gruppen, nimmt er alles; sonst je Gruppe ihr Konter. Vorrang: nicht in PLAN_WEAK,
+  // dann Nahkämpfer (ein Plan nur aus Fernkämpfern hat niemanden, der die Front hält). Punkte anteilig, zusammen ≤ par.
+  const beats = t => counters.filter(c => COUNTERS.some(k => k[0] === c && k[1] === t));
+  const best = b => { const s = b.filter(c => !PLAN_WEAK.has(c)); return s.find(c => !isRanged(c)) || s[0] || b[0]; };
+  const rectTypes = place.filter(p => p[0] === 'rect').map(p => p[1]);
+  const all = counters.filter(c => rectTypes.every(t => beats(t).includes(c)));
+  const beat = t => (all.length ? best(all) : best(beats(t)));
+  const bossC = boss ? countersOf(boss)[0] : null;
+  const shares = new Map();
+  const assign = (c, pts) => shares.set(c, (shares.get(c) || 0) + pts);
+  for (const p of place) {
+    if (p[0] === 'rect') assign(beat(p[1]), p[2] * UNITS[p[1]].cost);
+    else if (p[0] === 'unit') assign(bossC, UNITS[p[1]].cost);
+  }
+  const smart = [];
+  let cost = 0, melee = 0;
+  for (const [c, pts] of shares) {
+    const n = Math.max(1, Math.floor(pts / enemyPts * par / UNITS[c].cost));
+    const area = isRanged(c) ? B : melee++ ? Md : F;
+    smart.push([c, n, ...area]); cost += n * UNITS[c].cost;
+  }
+  // Rundung kann über par führen: vom teuersten Posten abziehen
+  while (cost > par + 1e-6) {
+    const e = smart.reduce((a, b) => (UNITS[b[0]].cost * b[1] > UNITS[a[0]].cost * a[1] ? b : a));
+    if (e[1] <= 1) break;
+    e[1]--; cost -= UNITS[e[0]].cost;
+  }
+
+  // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen
+  const units = [...new Set([...counters, ...(bossC ? [bossC] : [])])];
+  const want = Math.max(units.length, rng() < .5 ? 5 : 6);
+  const others = shuffle(Object.keys(UNITS).filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
+  while (units.length < want) units.push(others.shift());
+  const shown = shuffle(units);
+
+  const foes = place.filter(p => p[0] !== 'tRect' && p[0] !== 'tCircle')
+    .map(p => (p[0] === 'unit' ? `ein ${UNITS[p[1]].n}` : `${p[2]} ${p[2] === 1 ? UNITS[p[1]].n : plural(p[1])}`));
+  const tName = { wasser: 'ein See', wald: 'ein Wald', mauer: 'eine Mauer', lava: 'Lava' }[terrain];
+  const hint = `${list(shown.map(plural))}. Gegen dich stehen ${list(foes)}${terrain ? `, davor ${tName}` : ''}. Wer schlägt die ${plural(main)}?`;
+
+  // Kategorien der erlaubten Einheiten (ohne 'gelaende'): in der Tageschallenge wird kein Gelände gemalt
+  const cats = [...new Set(units.map(t => UNITS[t].cat))];
+  return {
+    id: 'daily-' + dateStr, n: `Tageschallenge ${shortDate(dateStr)}`, daily: dateStr,
+    hint, budget, par, units: shown, cats, place, main,
+    plan: { smart },
+  };
+}
+
+// Text zum Teilen: 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 64 Punkten ★★★'
+export function shareText(dateStr, r) {
+  const pts = String(Math.round(r.spent * 10) / 10).replace('.', ',');
+  const st = '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars);
+  return `Kritzelschlacht Tageschallenge ${shortDate(dateStr)}: ${r.win ? `gewonnen mit ${pts} Punkten ${st}` : 'verloren'}`;
+}
+
+// Bestwert eines Tages im Spielstand (save.daily) eintragen: weniger Punkte ist besser, ein Sieg schlägt jede Niederlage.
+// Nur Siege werden gespeichert. Liefert den Eintrag des Tages (oder null).
+export function recordDaily(daily, dateStr, r) {
+  if (!r.win) return daily[dateStr] || null;
+  const old = daily[dateStr];
+  if (!old || r.spent < old.spent - 1e-9 || (Math.abs(r.spent - old.spent) < 1e-9 && r.stars > old.stars)) daily[dateStr] = { spent: r2(r.spent), stars: r.stars };
+  return daily[dateStr];
+}

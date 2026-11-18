@@ -13,7 +13,7 @@ const still = e => { e.hp = 1e9; };
 
 // Nachtrag 8 (#51): dazu Zurückweichen höchstens BACK_T s mit Sperre BACK_CD s und das Messer
 test('SNIPER: Werte laut Spez. #28 und #51', () => {
-  assert.deepEqual(SNIPER, { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 5, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 });
+  assert.deepEqual(SNIPER, { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 2, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 });
 });
 
 test('Hält Abstand zum Ziel: bei 380 px (Reichweite 456) kaum Bewegung', () => {

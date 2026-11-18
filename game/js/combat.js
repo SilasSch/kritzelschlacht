@@ -27,7 +27,7 @@ export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 // zurückweichen darf, gilt für KEEP und LIE_MIN als eingeklemmt (liegt und schießt). Gegner höchstens KNIFE_GAP px vom
 // Körperrand (Kontakt): stehen und mit dem Messer wehren (KNIFE_DMG, alle KNIFE_CD s, Art 'melee'), auch auf der Flucht
 // in der Ecke. Das Gewehr schießt weiter nur im Liegen.
-export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 5, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 };
+export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 2, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 };
 // Hysterese: nach dem Zurückweichen legt sich der Scharfschütze erst ab LIE_MIN · Reichweite wieder hin (kein Auf und Ab)
 // Nur im Liegen (Nachtrag 4, #36, ersetzt den Teil von #22, nach dem auch Stehende schießen): stehend schießt er nie, er
 // bewegt sich. Mit Ziel in Reichweite weicht er stehend bis LIE_MIN · Reichweite zurück (auch vor Nahkämpfern) und legt

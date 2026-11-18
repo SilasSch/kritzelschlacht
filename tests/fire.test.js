@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
+import { UNITS } from '../game/js/data.js';
 import { attack, think, ignite, BURN_T, BURN_DPS, BURN_MAX_GEN, SPREAD_DT, SPREAD_P, SPREAD_PAD } from '../game/js/combat.js';
 import { step, placeCircle } from '../game/js/sim.js';
 import { eventSound } from '../game/js/audio.js';
@@ -66,7 +67,7 @@ test('Brand: 8 Schaden/s über 3 s (24), danach aus; kein Dauer-Quetschen, auch 
   ignite(w, k, 0, d);
   let maxHit = 0;
   for (let t = 0; t < 3.5; t += DT) { think(w, k, DT); maxHit = Math.max(maxHit, k.hitT); }
-  near(k.hp, 60 - 24, 1e-6);
+  near(k.hp, UNITS.krieger.hp - 24, 1e-6);
   assert.equal(k.burnT, 0); assert.equal(k.burnGen, 0); assert.equal(k.burnSrc, null);
   assert.equal(maxHit, 0, 'Brand quetscht nicht');
 });
@@ -90,7 +91,7 @@ test('Brand läuft auch bei betäubten Einheiten weiter (think entscheidet dann 
   const w = mkWorld(), k = spawn(w, 'krieger', 300, 300, 'blau'); rebuildHash(w);
   ignite(w, k, 0, null); k.state = 'stun'; k.stunT = 10;
   think(w, k, .5);
-  near(k.hp, 60 - 4, 1e-9);
+  near(k.hp, UNITS.krieger.hp - 4, 1e-9);
 });
 
 /* ---------- Ausbreitung ---------- */
@@ -136,7 +137,7 @@ test('Verteilte Reihe (Abstand 40 px): Feuer springt nicht über', () => {
     const seen = new Set();
     run(w, 4, ww => { for (const u of ww.units) if (u.burnT > 0) seen.add(u.id); });
     assert.deepEqual([...seen], [line[5].id]);
-    near(line[5].hp, 60 - 24, 1e-6);
+    near(line[5].hp, UNITS.krieger.hp - 24, 1e-6);
   }
 });
 

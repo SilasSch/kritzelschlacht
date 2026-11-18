@@ -38,7 +38,7 @@ test('Rückzug: Werte laut Spez. #27 und neue Felder in spawn', () => {
 
 test('Flucht ab 25 %: rennt weg, schneller als sonst, ohne zuzuschlagen', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
-  u.hp = 14;   // 14/60 < 25 %
+  u.hp = 14;   // 14/64 < 25 %
   allies(w, 200, 700);
   const e = spawn(w, 'krieger', 630, 400, 'rot'); e.hp = 1e9; e.cd = 5;   // verfolgt, schlägt aber in 0,5 s nicht
   let swung = false, maxSp = 0;
@@ -52,7 +52,7 @@ test('Flucht ab 25 %: rennt weg, schneller als sonst, ohne zuzuschlagen', () => 
 
 test('über 25 % keine Flucht', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
-  u.hp = 16;
+  u.hp = 17;   // über 25 % (auch mit 64 LP)
   allies(w, 200, 700);
   dummy(w, 'krieger', 630, 400);
   run(w, .3);
@@ -73,11 +73,11 @@ test('Erholung: ohne Feind in 200 px nach SAFE_T s +5 %/s, ab 60 % zurück in de
   assert.equal(u.hp, 14, 'vor SAFE_T keine Erholung');
   run(w, 4.1);
   assert.ok(u.hp > 14, 'LP gestiegen');
-  assert.ok(Math.abs(u.hp - (14 + 4 * MORALE.REGEN * 60)) < 1, `LP ${u.hp}`);
+  assert.ok(Math.abs(u.hp - (14 + 4 * MORALE.REGEN * UNITS.krieger.hp)) < 1, `LP ${u.hp}`);
   assert.equal(u.flee, true, 'unter 60 % flieht er weiter');
   let back = -1;
   run(w, 4, () => { if (back < 0 && !u.flee) back = u.hp; });
-  assert.ok(back >= MORALE.BACK * 60 - 1e-9 && back < MORALE.BACK * 60 + 1, `zurück bei ${back}`);
+  assert.ok(back >= MORALE.BACK * UNITS.krieger.hp - 1e-9 && back < MORALE.BACK * UNITS.krieger.hp + 1, `zurück bei ${back}`);
   assert.equal(u.flee, false);
   assert.ok(s.alive);
 });
@@ -323,14 +323,14 @@ test('Geheilt endet die Flucht: Sanitäter heilt einen Fliehenden mit Feind in S
   assert.equal(u.flee, true);
   run(w, 6, () => { pin(); if (u.safeT > 0) regen = true; if (back < 0 && !u.flee) back = u.hp; });
   assert.equal(regen, false, 'Feind die ganze Zeit in SAFE_R');
-  assert.ok(back >= MORALE.BACK * 60, `Flucht endet bei ${back}`);
+  assert.ok(back >= MORALE.BACK * UNITS.krieger.hp, `Flucht endet bei ${back}`);
   assert.equal(u.flee, false);
   // direkt auf volle LP gesetzt (Bericht des Reviews): Flucht endet im nächsten Schritt
   const w2 = mkWorld(), v = spawn(w2, 'krieger', 700, 400, 'blau');
   v.hp = 14; allies(w2, 300, 700); dummy(w2, 'krieger', 760, 400);
   run(w2, .2);
   assert.equal(v.flee, true);
-  v.hp = 60;
+  v.hp = UNITS.krieger.hp;
   run(w2, DT);
   assert.equal(v.flee, false);
 });

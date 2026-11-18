@@ -800,6 +800,13 @@ void main() {
         projQ.line(x + ca * 1.5, y + sa * 1.5, x + ca * 7, y + sa * 7, 1, 0x9aa3ae);
         projQ.line(x + ca * 6.6, y + sa * 6.6, x + ca * 9.2, y + sa * 9.2, 1.7, 0xe6ebf0);
       }
+      else if (p.kind === 'airbomb') {
+        // Fliegerbombe: dunkler Körper mit Umriss, Leitwerk hinten, rote Spitze
+        projQ.line(x - ca * 6, y - sa * 6, x + ca * 5, y + sa * 5, 6.4, OC);
+        projQ.line(x - ca * 5, y - sa * 5, x + ca * 4, y + sa * 4, 4.4, 0x3a3f4a);
+        projQ.line(x - ca * 7 - sa * 3, y - sa * 7 + ca * 3, x - ca * 7 + sa * 3, y - sa * 7 - ca * 3, 1.6, OC);
+        disc(x + ca * 4.5, y + sa * 4.5, 1.8, 0xe5574f);
+      }
       else if (p.kind === 'bomb' || p.kind === 'mortar') {
         disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
         if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);

@@ -65,7 +65,7 @@ const isMelee = v => v.T.range < 20 && !v.T.heal;
 // Nächster feindlicher Nahkämpfer bis MELEE_R (Ergebnis in MT_V), Feinde und Eigene um einen Punkt (CN_FOE, CN_OWN)
 let MT_W = null, MT_U = null, MT_F = null, MT_V = null, MT_D = 0;
 function meleeTest(v) {
-  if (!isMelee(v) || v.type === 'heli' || isBat(v) || factionOf(MT_W, v) === MT_F) return;   // Fledermausform beißt nicht
+  if (!isMelee(v) || v.T.high || isBat(v) || factionOf(MT_W, v) === MT_F) return;   // Fledermausform beißt nicht
   if (v.hidden && unseen(MT_U, v)) return;   // verstecktes Krokodil (Task 5): der Magier sieht es nicht
   const dx = v.x - MT_U.x, dy = v.y - MT_U.y, d = dx * dx + dy * dy, r = SPELL.MELEE_R + v.T.r;
   if (d <= r * r && d < MT_D) { MT_D = d; MT_V = v; }

@@ -114,7 +114,7 @@ const EN_P = { x: 0, y: 0 };   // Beobachter für world.unseen (der Prüfpunkt)
 function enemyTest(v) {
   // Hubschrauber, Vampire in Fledermausform und der Adler oben erreichen Nahkämpfer nicht (wie world.nearestEnemy); Asche
   // des Phönix und ein verstecktes Krokodil sind kein Gegner (Task 5/6)
-  if (v.type === 'heli' || isBat(v) || aloft(v) || v.ashT > 0 || factionOf(EN_W, v) === EN_F) return;
+  if (v.T.high || isBat(v) || aloft(v) || v.ashT > 0 || factionOf(EN_W, v) === EN_F) return;
   if (v.hidden && unseen(EN_P, v)) return;
   const dx = v.x - EN_X, dy = v.y - EN_Y;
   if (dx * dx + dy * dy <= EN_R2) { EN_HIT = true; return true; }
@@ -271,7 +271,7 @@ export const CHARGE_R = 160, CHARGE_CLAIM = 1, CHARGE_HOLD = 1;
 const CLAIMS = new Map();
 let CH_W = null, CH_F = null, CH_U = null, CH_B = null, CH_S = 0;
 function chargeTest(v) {
-  if (v.type === 'heli' || isBat(v) || factionOf(CH_W, v) === CH_F) return;
+  if (v.T.high || isBat(v) || factionOf(CH_W, v) === CH_F) return;
   if (v.ashT > 0 || (v.hidden && unseen(CH_U, v))) return;   // Asche des Phönix (Task 6), verstecktes Krokodil (Task 5)
   const dx = v.x - CH_U.x, dy = v.y - CH_U.y, d2 = dx * dx + dy * dy;
   if (d2 > CHARGE_R * CHARGE_R) return;

@@ -151,7 +151,7 @@ export function view(m) {
 
 function newRound(m, cfg) {
   m.cfg = cfg; m.phase = cfg.cat ? 'paint' : 'vote'; m.vote = null; m.peerVote = null; m.same = false; m.peerWant = null; m.mine = null; m.chunks = null; m.sendI = 0; m.recv = []; m.theirs = null;
-  m.res = null; m.peerRes = null; m.error = null;
+  m.res = null; m.peerRes = null; m.error = null; m.peerReady = false; m.peerVoted = false;
 }
 
 // Gegner ist da (Host): erste Runde würfeln. Liefert Ereignisse.
@@ -206,7 +206,8 @@ export function officialWinner(m) {
 }
 
 // Neues presence-Objekt des Gegners verarbeiten (p darf null sein: niemand da). Liefert Ereignisse:
-// 'round' (neue Runde, malen), 'xfer' (beide fertig), 'fight' ({ units, seed } in m.fight), 'score', 'error'.
+// 'round' (neue Runde, malen), 'xfer' (beide fertig), 'fight' ({ units, seed } in m.fight), 'score', 'error',
+// 'peerwant' (Gegner will weiter), 'peervoted' (Gegner hat abgestimmt), 'peerready' (Gegner ist mit Malen fertig).
 export function onPeer(m, p, W, H) {
   const ev = [];
   if (!isObj(p) || p.ks !== PROTO) return ev;
@@ -234,6 +235,11 @@ export function onPeer(m, p, W, H) {
   }
   const pw = num(p.want) === r + 1 ? (p.same === true ? 'same' : 'new') : null;
   if (pw !== m.peerWant) { m.peerWant = pw; ev.push('peerwant'); }
+  // Hinweise: Gegner hat abgestimmt / ist mit Malen fertig (nur einmal je Runde melden)
+  const pv = m.phase === 'vote' && isObj(p.vote) && num(p.vote.r) === r;
+  if (pv && !m.peerVoted) { m.peerVoted = true; ev.push('peervoted'); }
+  const pr = (m.phase === 'paint' || m.phase === 'ready') && num(p.ready) === r;
+  if (pr && !m.peerReady) { m.peerReady = true; if (m.phase === 'paint') ev.push('peerready'); }
   // Host: Stimme des Gasts
   if (m.role === 'host' && m.phase === 'vote' && isObj(p.vote) && num(p.vote.r) === r
     && m.cfg.opts.rules.includes(p.vote.rule) && m.cfg.opts.maps.includes(p.vote.map)) {

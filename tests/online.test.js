@@ -254,6 +254,32 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150 } } }, { isMe: false, presence: { open: { code: 'zz', budget: 150 } } }]), [{ code: 'KX7P', budget: 150 }]);
 });
 
+test('Online: Hinweise „Gegner hat abgestimmt“ und „Gegner ist fertig“ kommen genau einmal je Runde', () => {
+  const A = createMatch('host', 100, createRng(4)), B = createMatch('guest');
+  hostStart(A); link(A, B);
+  const o = A.cfg.opts;
+  castVote(A, o.rules[0], o.maps[0]);
+  const v1 = link(A, B);
+  assert.equal(v1.evB.filter(e => e === 'peervoted').length, 1, 'Gast sieht: Host hat abgestimmt');
+  castVote(B, o.rules[0], o.maps[0]);
+  const v2 = link(A, B);
+  assert.equal(A.phase, 'paint');
+  assert.ok(!v2.evA.includes('peervoted') || v2.evA.filter(e => e === 'peervoted').length === 1);
+  const wA = createWorld(W, H, 6); wA.teamMode = true;
+  spawn(wA, allowed(A.cfg.cat)[0], 200, 300, 'blau');
+  markReady(A, packArmy(wA, 'blau'));
+  const r1 = link(A, B);
+  assert.equal(r1.evB.filter(e => e === 'peerready').length, 1, 'Gast malt noch und sieht: Host ist fertig');
+  assert.equal(B.phase, 'paint');
+  assert.ok(!link(A, B).evB.includes('peerready'), 'nur einmal');
+  const wB = createWorld(W, H, 7); wB.teamMode = true;
+  spawn(wB, allowed(B.cfg.cat)[0], 1300, 300, 'rot');
+  markReady(B, packArmy(wB, 'rot'));
+  const r2 = link(A, B);
+  assert.ok(!r2.evA.includes('peerready'), 'wer selbst schon fertig ist, bekommt keinen Hinweis mehr');
+  assert.equal(A.phase, 'fight');
+});
+
 // Code-Duell (18.11.): game/js/duel.js über share.js
 import { encode, decode } from '../game/js/share.js';
 import { challengeData, answerData, duelList, validDuel } from '../game/js/duel.js';

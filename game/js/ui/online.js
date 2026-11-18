@@ -39,6 +39,25 @@ const CSS = `
 .onlbox .sc .blau{color:#3f7cff}.onlbox .sc .rot{color:#ff4d4d}
 .onlbox .muted{color:var(--muted);font-size:12.5px}
 #batOnl.on{background:var(--sel);border-color:var(--selb)}
+.onlban{position:fixed;left:50%;top:84px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;max-width:calc(100vw - 32px);
+  padding:12px 20px;border:2.5px solid var(--ink);border-radius:999px;background:#fff3b0;box-shadow:0 6px 0 var(--ink),0 10px 30px rgba(0,0,0,.2);
+  font:800 17px var(--f-ui);color:var(--ink);pointer-events:auto}
+.onlban[hidden]{display:none}
+.onlban.hi{animation:onlPulse 1.1s ease-in-out 3}
+.onlban .btn,.onlban .go{padding:6px 14px;font-size:15px}
+.onlask{position:fixed;inset:0;z-index:61;display:flex;align-items:center;justify-content:center;background:rgba(20,20,30,.35);pointer-events:auto}
+.onlask[hidden]{display:none}
+.onlask .card{max-width:440px;align-items:center;text-align:center;border-width:3px;animation:onlPop .35s cubic-bezier(.2,1.6,.4,1),onlRing 1.4s ease-out .35s infinite}
+.onlask .big{font-size:54px;line-height:1}
+.onlask h2{margin:0}
+.onlask .btnrow{justify-content:center}
+.onlask .go{font-size:19px;padding:12px 22px}
+.onlbox .peer{display:inline-block;margin-top:4px;padding:4px 10px;border-radius:999px;background:#fff3b0;border:2px solid var(--ink);font-weight:800;color:var(--ink);animation:onlPulse 1.1s ease-in-out infinite}
+@keyframes onlPulse{0%,100%{transform:translateX(var(--tx,0)) scale(1)}50%{transform:translateX(var(--tx,0)) scale(1.06)}}
+.onlban{--tx:-50%}
+@keyframes onlPop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes onlRing{0%{box-shadow:0 0 0 0 rgba(255,196,0,.8)}100%{box-shadow:0 0 0 26px rgba(255,196,0,0)}}
+@media (prefers-reduced-motion:reduce){.onlban.hi,.onlask .card,.onlbox .peer{animation:none}}
 `;
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const SIDE_N = { blau: 'Blau', rot: 'Rot' };
@@ -78,6 +97,66 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   let shown = '';
   const hideCard = () => { ov.hidden = true; shown = ''; card.classList.remove('vote'); ov.classList.remove('onl-round'); if (lobbyUnsub) { lobbyUnsub(); lobbyUnsub = null; } };
   const showCard = (kind, html) => { if (kind !== 'vote') card.classList.remove('vote'); card.innerHTML = html; shown = kind; ov.hidden = false; };
+
+  /* ---------- Hinweise, die man nicht übersieht ---------- */
+  // Leiste oben (kurz oder dauerhaft) und Abfrage in der Mitte (Revanche annehmen / ablehnen), mit Ton
+  const ban = document.createElement('div'); ban.className = 'onlban'; ban.id = 'onlBan'; ban.hidden = true; ban.setAttribute('role', 'status');
+  const ask = document.createElement('div'); ask.className = 'onlask'; ask.id = 'onlAsk'; ask.hidden = true;
+  ask.innerHTML = '<div class="card" role="alertdialog" aria-labelledby="onlAskT"></div>';
+  document.body.append(ban, ask);
+  let banT = 0, sticky = null, askKey = '';
+  const chime = big => { try { audio.init(); audio.play('notify', { kind: big ? 'big' : '' }); } catch (e) { /* ohne Ton */ } };
+  function showBan(o) {
+    ban.innerHTML = o.html; ban.hidden = false;
+    ban.classList.remove('hi'); if (o.hi) { void ban.offsetWidth; ban.classList.add('hi'); }
+    if (o.wire) o.wire();
+  }
+  // kurzer Hinweis; danach wieder der dauerhafte (falls einer da ist)
+  function flash(text, big = false, ms = 4000) {
+    clearTimeout(banT);
+    showBan({ html: `<span>${esc(text)}</span>`, hi: true });
+    chime(big);
+    banT = setTimeout(() => { banT = 0; if (sticky) showBan(sticky); else ban.hidden = true; }, ms);
+  }
+  function setSticky(o) { sticky = o; if (!banT) { if (o) showBan(o); else ban.hidden = true; } }
+  // Stand nach dem Kampf: will der Gegner Revanche / weiter, warte ich, hat er abgelehnt?
+  function updateAsk() {
+    let k = '';
+    if (m && m.cfg && m.phase === 'result') {
+      const waiting = m.want > m.cfg.r, pw = m.peerWant;
+      if (pw === 'same' && !waiting) k = 'same';
+      else if (pw === 'new' && waiting && m.same) k = 'declined';
+      else if (pw === 'new' && !waiting) k = 'new';
+      else if (waiting && !pw) k = m.same ? 'waitSame' : 'waitNew';
+    }
+    if (k === askKey) return;
+    askKey = k;
+    const box = ask.firstChild;
+    if (k === 'same' || k === 'declined') {
+      box.innerHTML = k === 'same'
+        ? `<div class="big">⚔️</div><h2 id="onlAskT">Dein Gegner will eine Revanche!</h2>
+          <p>Gleiche Regel (${esc(CAT_NAME[m.cfg.cat])}), gleiche Karte (${esc(MAP[m.cfg.map].n)}), gleiches Budget. Ihr malt beide neu.</p>
+          <div class="btnrow"><button class="go" id="onlAskYes">Revanche annehmen</button><button class="btn" id="onlAskNo">Ablehnen, neue Abstimmung</button></div>`
+        : `<div class="big">🗳️</div><h2 id="onlAskT">Dein Gegner will lieber neu abstimmen</h2>
+          <p>Keine Revanche: Ihr stimmt über eine neue Regel und Karte ab.</p>
+          <div class="btnrow"><button class="go" id="onlAskNo">Okay, neue Abstimmung</button><button class="btn" id="onlAskLeave">Verlassen</button></div>`;
+      ask.hidden = false;
+      const y = $('onlAskYes'), n = $('onlAskNo'), l = $('onlAskLeave');
+      if (y) y.onclick = () => act(wantNext(m, true));
+      if (n) n.onclick = () => act(wantNext(m, false));
+      if (l) l.onclick = () => { ask.hidden = true; askKey = ''; confirmLeave(); };
+      (y || n).focus();
+      chime(true);
+    } else ask.hidden = true;
+    if (k === 'new') {
+      setSticky({ html: '<span>Dein Gegner will die nächste Runde.</span><button class="go" id="onlBanGo">Los</button>', hi: true,
+        wire: () => { $('onlBanGo').onclick = () => act(wantNext(m, false)); } });
+      chime(false);
+    } else if (k === 'waitSame') setSticky({ html: '<span>⏳ Revanche angefragt, warte auf deinen Gegner …</span>' });
+    else if (k === 'waitNew') setSticky({ html: '<span>⏳ Warte auf deinen Gegner …</span>' });
+    else setSticky(null);
+  }
+  function clearNotes() { clearTimeout(banT); banT = 0; sticky = null; askKey = ''; ban.hidden = true; ask.hidden = true; }
 
   async function openLobby() {
     let pick = ONLINE_DEFAULT;
@@ -167,6 +246,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     clearTimeout(roundT); roundT = setTimeout(() => { if (shown === 'round') hideCard(); }, 5000);
   }
   function goneCard() {
+    chime(true);
     showCard('gone', `<h2 id="onlTitle">Gegner ist weg</h2><p>Die Verbindung zum Gegner ist abgerissen. Kommt er zurück, geht es weiter.</p>
       <div class="btnrow"><button class="btn" id="onlStay">Warten</button><button class="go" id="onlCancel">Spiel verlassen</button></div>`);
     $('onlStay').onclick = hideCard;
@@ -206,7 +286,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (room) try { room.leave(); } catch (e) { /* weg */ }
     if (net) try { net.presence({ open: null }); } catch (e) { /* weg */ }
     room = null; m = null;
-    hideCard();
+    hideCard(); clearNotes();
     const b = battleRef; battleRef = null;
     if (b && game.battle === b) {
       b.hot = null;
@@ -248,8 +328,10 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       else if (e === 'fight') beginFight();
       else if (e === 'error') ui.toast(`Die Armee des Gegners war ungültig (${m.error}). Sie kämpft nicht mit.`);
       else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') decorate();
+      else if (e === 'peerready') flash('✅ Dein Gegner ist fertig mit Malen!');
+      else if (e === 'peervoted' && m.phase === 'vote') flash(m.vote ? '🗳️ Dein Gegner hat auch abgestimmt' : '🗳️ Dein Gegner hat abgestimmt, jetzt du!');
     }
-    publish(); sync();
+    updateAsk(); publish(); sync();
   }
   // Neue Runde: Feld leeren, nicht malen, abstimmen
   function resetField(step, def) {
@@ -308,7 +390,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const myTxt = waiting ? (m.same ? (pw === 'new' ? 'Du willst Revanche, dein Gegner eine neue Runde: drück „Nächste Runde“, um weiterzumachen.' : 'Du willst Revanche, warte auf deinen Gegner …') : 'Warte auf deinen Gegner …') : '';
     box.innerHTML = `<div><div class="muted">Runde ${m.cfg.r} · ${esc(CAT_NAME[m.cfg.cat])} · ${esc(MAP[m.cfg.map].n)} · du bist ${SIDE_N[m.side]}</div>
         <div class="sc"><span class="blau">Blau ${m.score.blau}</span> : <span class="rot">${m.score.rot} Rot</span></div><div class="muted">${esc(note)}</div>
-        ${peerTxt || myTxt ? `<div class="muted"><b>${esc(peerTxt)}</b> ${esc(myTxt)}</div>` : ''}</div>
+        ${peerTxt ? `<div class="peer">${esc(peerTxt)}</div>` : ''}${myTxt ? `<div class="muted">${esc(myTxt)}</div>` : ''}</div>
       <div class="btnrow"><button class="go" id="onlSame"${waiting && m.same ? ' disabled' : ''} title="Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu">Revanche</button>
         <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="Neue Abstimmung über Regel und Karte">Nächste Runde</button><button class="btn" id="onlLeave">Verlassen</button></div>`;
     $('onlNext').onclick = () => act(wantNext(m, false));

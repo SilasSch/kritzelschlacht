@@ -74,6 +74,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       showCard('lobby', `<h2 id="onlTitle">Online 1 gegen 1</h2>
         <p>Das Online-Spiel braucht die Live-Verbindung des Claude-Artefakts. Sie ist hier nicht verfügbar.</p>
         <p class="muted">Öffne das Spiel als Claude-Artefakt und melde dich an. Dein Gegner braucht ebenfalls Zugriff auf das Artefakt (Einladung) und muss angemeldet sein; über einen öffentlichen Link geht es nicht.</p>
+        <p><b>Ohne Anmeldung:</b> Nimm das <b>Code-Duell</b> (Knopf daneben). Du verschickst deine Armee als Code, dein Gegner malt verdeckt dagegen.</p>
         <div class="btnrow"><button class="btn" id="onlCancel">Schließen</button></div>`);
       $('onlCancel').onclick = hideCard; return;
     }

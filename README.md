@@ -30,7 +30,7 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 | Einstieg, Spielfluss | `js/main.js`, `js/ui.js`, `js/ui/*` (Tutorial-Blasen, Editor-Leiste, Teilen-Dialog, Tageschallenge, Hotseat) |
 | Simulation (ohne DOM) | `sim.js`, `world.js`, `combat.js`, `physics.js`, `pathing.js`, `morale.js`, `spells.js`, `abilities.js`, `battle.js` |
 | Inhalte | `data.js` (Einheiten, Gelände, Konter), `campaign/*` (Kapitel, Tutorial), `docs/kampagne.md` |
-| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `online.js` (Online 1 gegen 1), `save.js` |
+| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
 | Netz | `net.js` (Live-Verbindung des Artefakts, `room`-Capability; `?nettest` simuliert sie über BroadcastChannel in mehreren Tabs) |
 | Darstellung | `render/*`, `camera.js` (Zoom auf feste Welt), `glguard.js` (WebGL-Kontextverlust) |
 | Debug | `debug/scenes.js`, `benchhud.js`, `sandbox.js` |
@@ -49,3 +49,6 @@ Für das Artefakt daher den `@font-face`-Block durch den Google-Fonts-Link erset
 **Online 1 gegen 1** braucht beim Veröffentlichen `capabilities: { room: {} }`. Gespielt wird über `presence` (das dürfen
 alle Betrachter), daher keine Themen-Freigaben. Beide Spieler müssen angemeldet sein und Zugriff auf das Artefakt haben;
 über einen öffentlichen Link gibt es keine Live-Verbindung. Lokal testen: zwei Tabs mit `?nettest`.
+
+**Code-Duell** (`duel.js`, `ui/duel.js`) ist das 1 gegen 1 ohne Live-Verbindung: Herausforderung und Antwort als
+`KS1.`-Code (Typ `duel` / `duelres`), geht für jeden, auch über den öffentlichen Link.

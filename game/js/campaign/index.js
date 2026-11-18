@@ -36,20 +36,18 @@ export function unitAllowed(level, type) {
   if (!level) return true;
   return (!level.units || level.units.includes(type)) && (!level.cats || level.cats.includes(T.cat));
 }
-// Gelände malen (der Radierer geht immer). Lava gibt es in Leveln nie zum Malen (Wunsch Silas, 18.11.): sie entschied
-// Missionen zu billig. Als Gelände der Gegner (place) bleibt sie, im Sandkasten und in der Schlacht ist sie malbar.
-export const NO_PAINT_IN_LEVELS = new Set(['lava']);
+// Gelände malen: in Leveln nie (Wunsch Silas, 18.11.: Lava, Mauern und Wasser entschieden Missionen zu billig), nur der
+// Radierer geht immer. Das Gelände der Gegner (place) bleibt; im Sandkasten und in der Schlacht ist alles malbar.
 export function terrainAllowed(level, key) {
   if (!TERRAIN[key]) return false;
-  if (level && NO_PAINT_IN_LEVELS.has(key)) return false;
-  return key === 'radierer' || !level || !level.cats || level.cats.includes('gelaende');
+  return key === 'radierer' || !level;
 }
 // Malbare Einheiten des Levels (paint: false, etwa der Ghul, nie)
 export const paintableUnits = level => Object.keys(UNITS).filter(t => UNITS[t].paint !== false && unitAllowed(level, t));
-// Reiter der Malleiste: Gelände nach terrainAllowed, sonst mindestens eine malbare erlaubte Einheit
+// Reiter der Malleiste: Gelände immer (in Leveln steht dort nur der Radierer), sonst mindestens eine malbare erlaubte Einheit
 export function catAllowed(level, cat) {
   if (!level) return true;
-  if (cat === 'gelaende') return terrainAllowed(level, 'wasser');
+  if (cat === 'gelaende') return true;
   return Object.keys(UNITS).some(t => UNITS[t].cat === cat && UNITS[t].paint !== false && unitAllowed(level, t));
 }
 

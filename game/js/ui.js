@@ -269,6 +269,7 @@ export function createUI(game) {
     $('bSlow').classList.toggle('on', game.slow);
     $('muteIco').innerHTML = game.save.muted ? ICON_MUTED : ICON_SOUND;
     $('bMute').classList.toggle('on', game.save.muted);
+    const vol = $('vol'); if (vol && document.activeElement !== vol) vol.value = Math.round((typeof game.save.volume === 'number' ? game.save.volume : .8) * 100);
   }
 
   function syncBrush() { $('brush').value = game.brush; }
@@ -373,6 +374,7 @@ export function createUI(game) {
   /* ---------- Knöpfe ---------- */
   $('bPause').onclick = () => game.togglePause();
   $('bMute').onclick = () => game.toggleMute();
+  if ($('vol')) $('vol').oninput = e => game.setVolume(e.target.value / 100);
   $('bSpeed').onclick = () => game.cycleSpeed();
   $('bSlow').onclick = () => game.toggleSlow();
   $('bClear').onclick = () => game.clear();

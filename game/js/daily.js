@@ -154,11 +154,35 @@ export function dailyLevel(dateStr) {
   };
 }
 
-// Text zum Teilen: 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 64 Punkten ★★★'
+// Öffentlicher Link des Spiels (Claude-Artefakt) für den Teilen-Text
+export const PUBLIC_URL = 'https://claude.ai/artifact/QtMYbLk6di6csuGhk7YStf';
+// Erste Tageschallenge: Nummer 1
+export const DAILY_EPOCH = '2026-11-18';
+export const dailyNo = dateStr => Math.round((Date.parse(dateStr + 'T00:00:00Z') - Date.parse(DAILY_EPOCH + 'T00:00:00Z')) / 864e5) + 1;
+const MEDAL_ICONS = ['🛡️', '⚡', '🎯'];
+
+// Text zum Teilen (fertig für einen Post, unter 280 Zeichen, ohne die Lösung zu verraten), z. B.
+//   🖍️ Kritzelschlacht · Tageschallenge #1 (18.11.)
+//   ⭐⭐⭐ Sieg mit 64 von 110 Punkten in 0:38
+//   🟦🟦🟦🟦🟦🟦🟦🟥🟥🟥 7 von 10 überlebt
+//   🛡️⚡ Medaillen
+//   Schaffst du's billiger? https://claude.ai/…
+// r: { win, spent, budget, stars, time (s), lost, deployed, medals: { mask } } (alles außer win/spent/stars optional)
 export function shareText(dateStr, r) {
   const pts = String(Math.round(r.spent * 10) / 10).replace('.', ',');
-  const st = '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars);
-  return `Kritzelschlacht Tageschallenge ${shortDate(dateStr)}: ${r.win ? `gewonnen mit ${pts} Punkten ${st}` : 'verloren'}`;
+  const lines = [`🖍️ Kritzelschlacht · Tageschallenge #${dailyNo(dateStr)} (${shortDate(dateStr)})`];
+  if (r.win) {
+    const t = r.time > 0 ? ` in ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, '0')}` : '';
+    lines.push(`${'⭐'.repeat(r.stars)}${'✩'.repeat(3 - r.stars)} Sieg mit ${pts}${r.budget ? ` von ${r.budget}` : ''} Punkten${t}`);
+  } else lines.push('💥 Niederlage. Morgen gibt es eine neue Schlacht.');
+  if (r.deployed > 0) {
+    const alive = Math.max(0, r.deployed - (r.lost || 0)), blue = Math.round(alive / r.deployed * 10);
+    lines.push(`${'🟦'.repeat(blue)}${'🟥'.repeat(10 - blue)} ${alive} von ${r.deployed} überlebt`);
+  }
+  const mask = r.medals ? r.medals.mask : 0;
+  if (r.win && mask) lines.push(MEDAL_ICONS.filter((_, i) => (mask >> i) & 1).join('') + ' Medaillen');
+  lines.push(`${r.win ? 'Schaffst du\'s billiger?' : 'Schaffst du es?'} ${PUBLIC_URL}`);
+  return lines.join('\n');
 }
 
 // Bestwert eines Tages im Spielstand (save.daily) eintragen: weniger Punkte ist besser, ein Sieg schlägt jede Niederlage.

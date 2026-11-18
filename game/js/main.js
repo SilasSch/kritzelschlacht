@@ -299,7 +299,7 @@ function finishMission() {
   if (m.kind === 'tutorial' && win) save.tutorial = true;
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
-  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
+  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, lost: ui.lostBlue(), deployed: army.length, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
     daily, nextLabel: m.chapter || m.custom || daily ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');

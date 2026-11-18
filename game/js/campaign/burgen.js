@@ -20,7 +20,7 @@ export default {
     {
       // Schützen-Spam gewann hier (Pfeile fliegen über die Palisade), darum ohne Schützen; Grenadiere sind unterlegen
       // (Schützen schießen weiter), Krieger werden zerschossen
-      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 62,
+      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 67,   // 14 Ritter (190 LP, 18.11.)
       units: ['krieger', 'ritter', 'grenadier'], cats: ['armee'],
       hint: 'Hinter der Palisade lauern Bogenschützen im Wald. Krieger, Ritter oder Grenadiere: Wer hält den Pfeilhagel aus, bis er drüben ist?',
       place: [
@@ -30,11 +30,11 @@ export default {
         ['rect', 'krieger', 8, .63, .4, .65, .6],
       ],
       answer: ['ritter'],
-      plan: { smart: [['ritter', 13, ...F]], spam: [['krieger', 45, ...F]] },
+      plan: { smart: [['ritter', 14, ...F]], spam: [['krieger', 45, ...F]] },
     },
     {
       // Ohne Krieger: 45 Krieger gewannen an einzelnen Formen bis 4/8 (sie quellen durchs Tor und binden die Reiter)
-      id: 'burg-2', n: 'Das Tor', budget: 92, par: 83,
+      id: 'burg-2', n: 'Das Tor', budget: 92, par: 88,   // 10 Ritter (18.11.)
       units: ['schuetze', 'ritter', 'sani'], cats: ['armee'],
       hint: 'Eine Reiterhorde stürmt auf dein Tor zu, Grenadiere sprengen die Mauer. Schützen, Ritter und Sanitäter: Wer stopft das Tor, und wer schießt über die Mauer?',
       place: [
@@ -43,7 +43,7 @@ export default {
         ['rect', 'reiter', 16, .55, .25, .65, .75],
         ['rect', 'grenadier', 8, .72, .35, .76, .65],
       ],
-      plan: { smart: [['ritter', 9, ...GATE], ['schuetze', 16, ...WIDE]], spam: [['schuetze', 36, ...F]] },
+      plan: { smart: [['ritter', 10, ...GATE], ['schuetze', 16, ...WIDE]], spam: [['schuetze', 36, ...F]] },
     },
     {
       // 23 statt 20 Schützen und Budget 95: 25 Grenadiere gewannen sonst an einzelnen Formen 2/8

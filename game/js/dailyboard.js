@@ -38,7 +38,7 @@ export const SIM_VERSION = simVersion();
 export const VERSIONS = {
   vh9hl1p: { until: '2026-11-18' },   // Stand bei Start der Bestenliste (18.11.)
   v1j0sw5m: { until: '2026-11-18' },   // Luftwaffe: Hubschrauber neu, Jet, Kampfdrohne, Bomber (18.11.)
-  vfbz59x: { until: null },   // Balance-Runde: Magier 8 und langsamer, Ritter, Sani, Vampir, Gorilla, Meteor, König, Lama, Keil, Synergien, Waldbrand (18.11.)
+  v3v8ayv: { until: null },   // Balance-Runde: Magier 8 und langsamer, Ritter, Sani, Vampir, Gorilla, Meteor, König, Lama, Keil, Synergien, Waldbrand (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

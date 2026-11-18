@@ -14,12 +14,12 @@ export default {
       // Drachenatem trifft seit dem Fix bis zur Angriffsreichweite, auch Soldaten auf Abstand (vorher nie): der alte Plan
       // (12 Ritter, 25 Soldaten, 4 Sanitäter, 143) gewann nur noch 0/4; mit Scharfschützen ganz hinten wieder fast immer.
       // par 145 → 177; mit den Kosten der Balance-Runde (Ritter 4,75, Sani 3,5) 183, Budget 190
-      id: 'fin-1', n: 'Zeitreise', budget: 190, par: 183,
+      id: 'fin-1', n: 'Zeitreise', budget: 220, par: 214,   // 18.11.: der Keil der Reiter bricht Schilde, 18 Ritter und 6 Scharfschützen
       units: ['roemer', 'ritter', 'grenadier', 'soldat', 'sniper', 'sani'],
       hint: 'Römer, Ritter, Grenadiere, Soldaten, Scharfschützen und Sanitäter aus allen Zeiten. Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer: Wer fängt die Reiter ab, und wer holt die Drachen herunter?',
       place: [['unit', 'drache', .8, .3], ['unit', 'drache', .8, .7], ['rect', 'reiter', 24, .66, .2, .72, .8], ['rect', 'krieger', 20, .62, .3, .65, .7]],
       plan: {
-        smart: [['ritter', 14, ...F], ['soldat', 24, ...B], ['sniper', 4, ...Deep], ['sani', 4, ...B]],
+        smart: [['ritter', 18, ...F], ['soldat', 24, ...B], ['sniper', 6, ...Deep], ['sani', 4, ...B]],
         spam: [['roemer', 60, ...F]],
       },
     },
@@ -27,14 +27,14 @@ export default {
     // (280 px) schießen weiter und zerlegen die liegenden MGs. Scharfschützen (456 px) holen die Artillerie zuerst.
     // Panzer allein verlieren gegen Trolle und Einhörner, Geister und Phönixe gegen das Feuer der Magier.
     {
-      id: 'fin-2', n: 'Monster gegen Maschinen', budget: 240, par: 205,
+      id: 'fin-2', n: 'Monster gegen Maschinen', budget: 230, par: 205,   // Magier schwächer: MG-Masse gewann (18.11.)
       units: ['mg', 'soldat', 'sniper', 'panzer', 'geist', 'phoenix'],
       hint: 'MG-Schützen, Soldaten, Scharfschützen und Panzer, dazu Geister und Phönixe. Das MG mäht jedes Monster, das herankommt. Aber wer erwischt die Magier und Zyklopen, die von weit hinten zaubern und werfen?',
       place: [['unit', 'drache', .84, .5], ['rect', 'einhorn', 14, .66, .2, .7, .8], ['rect', 'troll', 10, .72, .3, .75, .7],
         ['rect', 'magier', 12, .84, .3, .88, .7], ['rect', 'zyklop', 5, .9, .35, .92, .65]],
       plan: {
         smart: [['mg', 32, ...F], ['sniper', 13, ...B]],
-        spam: [['mg', 68, ...F]],
+        spam: [['mg', 65, ...F]],
       },
     },
     // Die Flut: Das Wasser reicht bis an die eigene Linie. Krokodile lauern darin unsichtbar (erst ab 60 px zu sehen)

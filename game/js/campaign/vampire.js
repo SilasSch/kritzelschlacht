@@ -17,14 +17,14 @@ export default {
     // 0–5/8 je Form, zu unstet für die Spam-Regel). Mit 10 Vampiren gewannen 30–31 Krieger an
     // einzelnen Formen 2–3/8; mit 11 verlieren 31 Krieger (Budget 63) überall, 33 gewannen bis 2/8. Der Krieger-Spam verliert.
     {
-      id: 'vamp-1', n: 'Der Friedhof', budget: 92, par: 90,
+      id: 'vamp-1', n: 'Der Friedhof', budget: 116, par: 114,   // 13 Magier (18.11.)
       units: ['krieger', 'magier'], cats: ['armee', 'mythisch'], answer: ['magier'],
       hint: 'Krieger und Magier. Zwischen den Gräbern warten Vampire und Geister. Feuer trifft Vampire doppelt: Magier ganz hinten, ein paar Krieger davor. Stirbt ein Vampir, zerfallen seine Ghule.',
       place: [
         ['tCircle', 'wald', .6, .25, .05], ['tCircle', 'wald', .6, .75, .05],
         ['rect', 'vampir', 11, .7, .3, .76, .7], ['rect', 'geist', 6, .8, .35, .83, .65],
       ],
-      plan: { smart: [['krieger', 5, ...Md], ['magier', 10, ...Deep]], spam: [['krieger', 31, ...F]] },
+      plan: { smart: [['krieger', 5, ...Md], ['magier', 13, ...Deep]], spam: [['krieger', 31, ...F]] },
     },
     // 2: Hexen schießen über den Fluss, Vampire fliegen als Fledermäuse herüber. Schützen gewinnen das lange Duell mit den
     // Hexen nur, wenn Sanitäter sie heilen (ohne Sanitäter 18/24 statt 24/24 in der Erprobung, mit 2 statt 3 an 1400×1050 nur 6/8); ein paar Krieger vorn
@@ -73,7 +73,7 @@ export default {
     // zerbissen, Phönixe allein verlieren gegen Trolle und Geister. Ohne Magier: Feuer kommt von Brandpfeilen und Phönixen.
     // Ritter vorn, Schützen dahinter, zwei Phönixe und zwei Sanitäter: alles, was das Kapitel gelehrt hat.
     {
-      id: 'vamp-5', n: 'Die Nacht des Grafen', budget: 135, par: 124,
+      id: 'vamp-5', n: 'Die Nacht des Grafen', budget: 135, par: 127,   // 10 Ritter (18.11.)
       units: ['krieger', 'ritter', 'schuetze', 'sani', 'einhorn', 'phoenix'], cats: ['armee', 'mythisch'],
       hint: 'Krieger, Ritter, Schützen, Sanitäter, Einhörner und Phönixe. Hinter dem Lavagraben wartet die Armee des Grafen. Was hast du in dieser Nacht gelernt? Eine zähe Front, Fernkampf über die Lava, Feuer und Heiler.',
       place: [
@@ -82,7 +82,7 @@ export default {
         ['rect', 'geist', 10, .84, .1, .9, .9], ['rect', 'hexe', 6, .9, .2, .95, .8],
       ],
       plan: {
-        smart: [['ritter', 9, ...F], ['schuetze', 22, ...B], ['phoenix', 2, ...B], ['sani', 2, ...Md]],
+        smart: [['ritter', 10, ...F], ['schuetze', 22, ...B], ['phoenix', 2, ...B], ['sani', 2, ...Md]],
         spam: [['krieger', 67, ...F]],
       },
     },

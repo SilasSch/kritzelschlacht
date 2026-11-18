@@ -2,9 +2,16 @@
 // Kein DOM; ui.js baut daraus die Karte beim Hover bzw. bei Auswahl und das Lexikon. Alles wird aus den
 // Spieldaten gelesen, neue Einheiten erscheinen also ohne Zusatzarbeit.
 import { UNITS, COUNTERS, CATEGORIES, RANGED } from './data.js';
+import { SHAPES, SHAPE_HOW, SHAPE_MIN_UNITS } from './shapes.js';
 
 // Gilt für alle Einheiten (Spez. #27); steht einmal im Lexikon statt auf jeder Karte
 export const RETREAT_NOTE = 'Alle Einheiten ziehen sich ab 25 % Leben zurück, erholen sich abseits und kehren ab 60 % in den Kampf zurück. Römer im Block halten bis 15 % durch. Geister und Ghule fliehen nie.';
+
+// Kritzel-Formen (shapes.js) fürs Lexikon: wie man sie malt und was sie bringen
+export const FORMATION_NOTE = `Eine Formation gilt für einen einzelnen Pinselstrich mit mindestens ${SHAPE_MIN_UNITS} Einheiten. ` +
+  'Erkannt wird der Weg des Pinsels, die Einheitenart ist egal. Eine Einblendung und ein Signalhorn bestätigen die Form. ' +
+  'Gegner der KI (Missionen, Tageschallenge) bekommen keine Formationen; im Online-1-gegen-1 und im Hotseat malt der Gegner selbst und kann sie auch nutzen.';
+export const formationCards = () => Object.keys(SHAPES).map(k => ({ k, name: SHAPES[k].n, how: SHAPE_HOW[k], effect: SHAPES[k].d }));
 
 // Punkte (Kosten, Budget) mit bis zu zwei Nachkommastellen und Komma: Bienen kosten 0,55 (Nachtrag 4, #37), eine Stelle
 // zeigte 0,6

@@ -10,6 +10,13 @@ export const SHAPES = {
   linie: { n: 'Schlachtreihe', d: '20 % mehr Leben', hp: 1.2 },
 };
 export const SHAPE_MIN_UNITS = 6;   // weniger Einheiten im Strich: keine Form
+// Lexikon: wie man jede Form malt. Getrennt von SHAPES, weil SHAPES in die Spielversion der Bestenliste eingeht
+// (dailyboard.SIM_VERSION); reiner Text ändert sie so nicht.
+export const SHAPE_HOW = {
+  keil: 'Male einen Pfeil: zwei gerade Schenkel, die Spitze zeigt zum Gegner (steht er rechts, also wie ein „>“).',
+  kreis: 'Male einen geschlossenen Ring: Der Strich endet wieder dort, wo er begann.',
+  linie: 'Male einen langen, fast geraden Strich, egal in welche Richtung.',
+};
 
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 function pathLen(p, i0 = 0, i1 = p.length - 1) {

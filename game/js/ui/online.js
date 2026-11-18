@@ -4,7 +4,7 @@
 // die Armee des Gegners kommt erst zum Kampf in die Welt.
 import {
   createMatch, view, hostStart, markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms,
-  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote,
+  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote, budgetOf,
 } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { getRoom } from '../net.js';
@@ -102,7 +102,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   // Leiste oben (kurz oder dauerhaft) und Abfrage in der Mitte (Revanche annehmen / ablehnen), mit Ton
   const ban = document.createElement('div'); ban.className = 'onlban'; ban.id = 'onlBan'; ban.hidden = true; ban.setAttribute('role', 'status');
   const ask = document.createElement('div'); ask.className = 'onlask'; ask.id = 'onlAsk'; ask.hidden = true;
-  ask.innerHTML = '<div class="card" role="alertdialog" aria-labelledby="onlAskT"></div>';
+  ask.innerHTML = '<div class="card shadow" role="alertdialog" aria-labelledby="onlAskT"></div>';
   document.body.append(ban, ask);
   let banT = 0, sticky = null, askKey = '';
   const chime = big => { try { audio.init(); audio.play('notify', { kind: big ? 'big' : '' }); } catch (e) { /* ohne Ton */ } };
@@ -239,7 +239,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     ov.classList.add('onl-round');
     showCard('round', `<h2 id="onlTitle">${c.rematch ? 'Revanche' : `Runde ${c.r}`}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
       <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(MAP[c.map].n)}</b><br><span class="muted">${esc(MAP[c.map].d)}</span></div></div>
-      <p>${esc(RULE[c.cat].d)}. ${c.budget} Punkte. Du bist <b>${SIDE_N[m.side]}</b> (${m.side === 'blau' ? 'links' : 'rechts'}). Dein Gegner sieht nichts, bis beide fertig sind.</p>
+      <p>${esc(RULE[c.cat].d)}. ${budgetOf(c)} Punkte. Du bist <b>${SIDE_N[m.side]}</b> (${m.side === 'blau' ? 'links' : 'rechts'}). Dein Gegner sieht nichts, bis beide fertig sind.</p>
       <p class="muted">${c.rematch ? 'Gleiches Setup wie eben, ihr malt beide neu.' : `${how(ag.rule, 'Regel')} ${how(ag.map, 'Karte')}`}</p>
       <div class="btnrow"><button class="go" id="onlOk">Los geht's</button></div>`);
     $('onlOk').onclick = hideCard; $('onlOk').focus();
@@ -340,7 +340,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     $('ovBat').hidden = true; document.body.classList.remove('bat-res');
     b.phase = 'plan'; b.stats = null; b.result = null; b.endT = -1; b.t = 0; b.snap = null; b.batchRes = null;
     clearWorld(); world.teamMode = true; undoStack.length = 0;
-    b.hot = { online: true, budget: m.cfg.budget, step, spent: { blau: 0, rot: 0 }, def };
+    b.hot = { online: true, budget: m.cfg.cat ? budgetOf(m.cfg) : m.cfg.budget, step, spent: { blau: 0, rot: 0 }, def };
     return b;
   }
   function beginVote() {
@@ -414,7 +414,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     go.disabled = !(ph === 'paint' || ph === 'vote' || (ph === 'result' && m.want <= c.r));
     const head = c && c.cat ? `Online · Runde ${c.r} · ${CAT_NAME[c.cat]} · ${MAP[c.map].n} · ${scoreText()}` : c ? `Online · Runde ${c.r} · ${scoreText()}` : `Online · Raum ${m.code}`;
     const tail = ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
-      : ph === 'paint' ? `du malst ${m.side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(b.hot.spent[m.side])} / ${c.budget} Punkte`
+      : ph === 'paint' ? `du malst ${m.side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(b.hot.spent[m.side])} / ${budgetOf(c)} Punkte`
       : ph === 'ready' ? 'fertig, der Gegner malt noch' : ph === 'xfer' ? 'decke auf …' : ph === 'fight' ? 'Kampf läuft' : 'Runde vorbei';
     setText($('batHint'), `${head} · ${tail}`);
     // eigene Punkte zeigen, die des Gegners erst im Kampf

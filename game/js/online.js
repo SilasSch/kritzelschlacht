@@ -12,7 +12,7 @@
 //   Ergebnis: jeder meldet res; der Host zählt und veröffentlicht score. Nächste Runde, wenn beide want = r + 1 melden.
 import { UNITS } from './data.js';
 import { SHAPES } from './shapes.js';
-import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, draw, resolveVote } from './rules.js';
+import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, ruleBudget, draw, resolveVote } from './rules.js';
 
 export const PROTO = 2;   // 2: Abstimmung über Regel und Karte
 export const ROOM_PREFIX = 'ks1v1-';
@@ -61,7 +61,9 @@ export function randomRound(prev, budget, rand = Math.random) {
   return { ...c, cat: c.opts.rules[0], map: c.opts.maps[0] };
 }
 // Level-artiges Objekt für die Malleiste und paint.js (campaign/index.js unitAllowed, catAllowed): die Regel der Runde
-export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: cfg.budget });
+// Budget, mit dem in der Runde gemalt wird (Grundbudget × Faktor der Regel)
+export const budgetOf = cfg => ruleBudget(cfg.cat, cfg.budget);
+export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: budgetOf(cfg) });
 
 /* ---------- Armee-Pakete ---------- */
 // Jede Einheit in 5 Bytes: Typ (6 Bit) + Form (2 Bit), x und y als 16 Bit in Anteilen der Welt. Base64url.
@@ -114,7 +116,7 @@ export function unpackArmy(text, side, W, H, cfg) {
     cost += UNITS[type].cost;
     out.push({ type, team: side, x, y, shape });
   }
-  if (cfg && cost > cfg.budget + EPS) throw new Error('Budget überschritten');
+  if (cfg && cost > budgetOf(cfg) + EPS) throw new Error('Budget überschritten');
   return out;
 }
 export const splitChunks = (s, n = CHUNK) => { const out = []; for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n)); return out.length ? out : ['']; };

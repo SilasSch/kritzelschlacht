@@ -11,7 +11,7 @@ import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
 import {
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
-  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound,
+  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf,
 } from '../game/js/online.js';
 import { RULES, RULE_IDS, MAP_IDS, ruleAllows, applyMap, mapParts, resolveVote, mapSVG } from '../game/js/rules.js';
 const allowed = (rule, maxCost = 6) => Object.keys(UNITS).filter(t => ruleAllows(rule, t) && UNITS[t].cost < maxCost);
@@ -70,6 +70,36 @@ test('Karten: spiegelgleich für beide Seiten, Gelände gehört niemandem', () =
     assert.match(mapSVG(id), /^<svg/);
   }
   assert.equal(mapParts('nix').length, 0);
+});
+
+test('Karten: jede Karte lässt Bodentruppen ohne Lava und Mauer von links nach rechts durch', () => {
+  for (const id of MAP_IDS) {
+    const w = createWorld(W, H, 1); applyMap(w, id);
+    const { GW, GH, terr } = w, free = i => terr[i] !== 2 && terr[i] !== 4, seen = new Uint8Array(GW * GH), q = [];
+    for (let gy = 0; gy < GH; gy++) { const i = gy * GW; if (free(i)) { seen[i] = 1; q.push(i); } }
+    let ok = false;
+    while (q.length && !ok) {
+      const i = q.pop(), gx = i % GW;
+      if (gx === GW - 1) ok = true;
+      for (const j of [gx > 0 ? i - 1 : -1, gx < GW - 1 ? i + 1 : -1, i - GW, i + GW]) if (j >= 0 && j < GW * GH && !seen[j] && free(j)) { seen[j] = 1; q.push(j); }
+    }
+    assert.ok(ok, `${id}: kein Durchgang`);
+  }
+});
+
+test('Regeln: Budget-Varianten ändern das Budget der Runde, kommende Kategorien bleiben bis dahin aus', () => {
+  assert.equal(budgetOf({ cat: 'titanen', budget: 150 }), 300);
+  assert.equal(budgetOf({ cat: 'spar', budget: 150 }), 75);
+  assert.equal(budgetOf({ cat: 'armee', budget: 150 }), 150);
+  assert.equal(roundDef({ cat: 'horde', budget: 100 }).budget, 200);
+  const w = createWorld(W, H, 3); w.teamMode = true;
+  for (let i = 0; i < 4; i++) spawn(w, 'drache', 100 + i * 100, 300, 'blau');   // 160 Punkte
+  const txt = packArmy(w, 'blau');
+  assert.equal(unpackArmy(txt, 'blau', W, H, { cat: 'titanen', budget: 100 }).length, 4);
+  assert.throws(() => unpackArmy(txt, 'blau', W, H, { cat: 'titanen', budget: 50 }), /Budget/);
+  const cats = new Set(Object.values(UNITS).map(T => T.cat));
+  for (const r of RULES) if (r.cats) assert.ok(r.cats.every(c => cats.has(c)), `${r.id} braucht eine Kategorie, die es noch nicht gibt`);
+  assert.equal(RULE_IDS.includes('urzeit'), cats.has('urzeit'));
 });
 
 // Eine Seite malt mit den Regeln der Runde (hotseat.js mit def = Kategorie)

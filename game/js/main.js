@@ -807,6 +807,15 @@ function simStep() {
   }
 }
 
+// Finale in Zeitlupe (Ideenrunde 18.11.): hat eine Seite nur noch FINALE.LEFT Einheiten (und waren es am Anfang mehr als
+// FINALE.MIN auf dem Feld), läuft der Kampf mit FINALE.SLOW-fachem Tempo. Nur Darstellung: die Schritte bleiben gleich.
+const FINALE = { LEFT: 2, MIN: 6, SLOW: .5 };
+function finaleSlow(world) {
+  let a = 0, b = 0, n = 0;
+  for (const u of world.units) { n++; if (!u.alive || u.T.paint === false) continue; if (u.team === 'blau') a++; else b++; }
+  return n > FINALE.MIN && a > 0 && b > 0 && Math.min(a, b) <= FINALE.LEFT ? FINALE.SLOW : 1;
+}
+
 let acc = 0, last = performance.now(), uiT = 0;
 const params = new URLSearchParams(location.search);
 
@@ -832,7 +841,8 @@ function frame(now) {
   const w0 = performance.now();
   let simMs = 0, n = 0;
   const m = game.mission, bt = game.battle;
-  const ts = (game.slow ? SLOW : 1) * game.speed * ((m && m.endT >= 0) || (bt && bt.endT >= 0) ? .35 : 1);
+  const fin = (m && m.phase === 'battle') || (bt && bt.phase === 'fight') ? finaleSlow(world) : 1;
+  const ts = (game.slow ? SLOW : 1) * game.speed * ((m && m.endT >= 0) || (bt && bt.endT >= 0) ? .35 : fin);
   // 10× auswerten: rechnet in einer eigenen Welt; die angezeigte steht solange still
   if (bt && bt.batch) pumpBatch(bt);
   if (!game.paused && !game.editor && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {

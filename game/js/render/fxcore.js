@@ -16,6 +16,7 @@ import { cellIndex } from '../world.js';
 import { SYN_COL } from '../synergy.js';
 
 export const FX_CAP = 3000;
+export const STEPS = { MASS: 6, GAP: 1.4, R: .2, COL: '#6b5a48', A: .1 };
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
 
 /* ---------- Wackeln ---------- */
@@ -1164,6 +1165,19 @@ export function createFxCore(hooks = {}, opt = {}) {
 
   // Partikel altern lassen (Spielzeit dt); Flugspuren: Feuerbälle glühen, Raketen ziehen Rauch
   const TR = {};
+  // Fußspuren (Ideenrunde 18.11.): schwere Bodentruppen (Masse ≥ STEPS.MASS: Bär, Elefant, Panzer, Mechs, Dinos) hinterlassen
+  // alle STEPS.GAP · r px einen Abdruck (abwechselnd links und rechts der Laufrichtung), als blasser Decal
+  const stepAt = new WeakMap();
+  function steps(u) {
+    let s = stepAt.get(u);
+    if (!s) { s = { x: u.x, y: u.y, side: 1 }; stepAt.set(u, s); return; }
+    const dx = u.x - s.x, dy = u.y - s.y, d2 = dx * dx + dy * dy, gap = u.T.r * STEPS.GAP;
+    if (d2 < gap * gap) return;
+    if (d2 > 16 * gap * gap) { s.x = u.x; s.y = u.y; return; }   // geschleudert oder versetzt: keine Spur
+    const d = Math.sqrt(d2), nx = -dy / d, ny = dx / d, o = u.T.r * .35 * s.side;
+    decal(u.x + nx * o, u.y + u.T.r * .6 + ny * o * .5, u.T.r * STEPS.R, STEPS.COL, STEPS.A);
+    s.x = u.x; s.y = u.y; s.side = -s.side;
+  }
   function update(dt, world) {
     if (world && dt > 0) {
       const proj = world.proj;
@@ -1205,6 +1219,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         const i = i0 + j < n ? i0 + j : i0 + j - n, u = us[i];
         if (!u.alive) continue;
         if (BOSS.has(u.type)) bossList.push(u);
+        if ((u.T.mass || 1) >= STEPS.MASS && !u.T.fly && u.z < 2) steps(u);
         if (!(u.burnT > 0)) continue;
         all++;
         if (done >= BURN_FX_UNITS) continue;

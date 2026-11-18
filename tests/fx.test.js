@@ -413,3 +413,16 @@ test('Kritzelwörter: große Momente bekommen ein Wort, kleine nicht', () => {
   assert.equal(wordFor({ type: 'spell', k: 'meteor' })[0], 'WUMMS!');
   assert.equal(wordFor({ type: 'hit' }), null);
 });
+
+test('Fußspuren: schwere Bodentruppen hinterlassen Abdrücke, leichte nicht', async () => {
+  const { createFxCore, STEPS } = await import('../game/js/render/fxcore.js');
+  const { UNITS } = await import('../game/js/data.js');
+  const marks = [];
+  const fx = createFxCore({ decal: (x, y, r, c, a) => { if (c === STEPS.COL) marks.push([x, y]); } }, { rand: () => .5 });
+  const mk = type => ({ type, T: UNITS[type], x: 100, y: 100, z: 0, alive: true });
+  const el = mk('elefant'), kr = mk('krieger');
+  const world = { units: [el, kr], proj: [] };
+  for (let i = 0; i < 60; i++) { el.x += 2; kr.x += 2; fx.update(1 / 60, world); }
+  assert.ok(marks.length >= 3, `${marks.length} Abdrücke`);
+  assert.ok(marks.every(m => Math.abs(m[1] - 100) < 40), 'beim Elefanten');
+});

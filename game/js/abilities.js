@@ -24,7 +24,7 @@
 // "Importkreise: jedes Logikmodul lädt als Einstieg" (tests/abilities.test.js) wacht darüber.
 import { UNITS, CELL, TERR_HAZ, BAT_FORM, UNDEAD } from './data.js';
 import { factionOf, query, spawn } from './world.js';
-import { fire, clearShot, hasLineOfFire, fling, hurt } from './combat.js';
+import { fire, clearShot, hasLineOfFire, fling, hurt, heliHover } from './combat.js';
 import { isFleeing } from './morale.js';
 import { leaveBlock } from './formation.js';
 import { FLY_VZ } from './physics.js';
@@ -183,9 +183,8 @@ function heliUpdate(world, u) {
   }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
-  // weiter kreisen wie beim normalen Feuer (combat.think)
-  const s = u.id % 2 ? 1 : -1, sp = u.T.speed * .5;
-  u.mx = -ny * s * sp; u.my = nx * s * sp;
+  // weiter schweben wie beim normalen Feuer (combat.heliHover)
+  heliHover(world, u, nx, ny, d, u.T.range + u.T.r + t.T.r);
   while (u.abK < S.N && u.abT >= u.abK * S.GAP - 1e-9) {
     const a = clearShot(world, u, t, 'rocket');
     if (a) fire(world, u, t, 'rocket', a.x, a.y, S.DMG, S.R);

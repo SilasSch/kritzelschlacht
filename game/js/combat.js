@@ -152,7 +152,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
-  if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
+  if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
   // Schrottplatz: Blitze schlagen in Roboter doppelt ein; Urzeit: Panzerplatten des Ankylosaurus, Hornwand des
   // Triceratops im Lauf (von vorn halber Schaden durch Schläge, Pfeile und Kugeln)
@@ -205,6 +205,10 @@ const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
 // Abgeschossene Flieger, die beim Aufschlag abstürzen (combat.crash); Bienen und Geister fallen nur
+// Hubschrauber (Overhaul 18.11.): gepanzerte Kanzel (Kugeln ×BULLET), Raketen ×ROCKET, Pfeile und Flieger-Nahkampf voll
+// (Schützen sind die Flugabwehr der Armee, Adler und Bienen die der Tiere). Im Gefecht hält er Abstand HOLD × Reichweite
+// und schwebt seitlich hin und her (Periode SWAY_T s, Tempo SWAY × speed), statt das Ziel zu umkreisen (heliHover).
+export const HELI = { BULLET: .75, ROCKET: 1.4, MELEE: 1.5, HOLD: .7, SWAY: .45, SWAY_T: 5, BAND: 40 };
 export const CRASH = new Set(['heli', 'drache']);
 export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;     // Explosion beim Aufschlag des Helis
 export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag des Drachen, ohne Schaden
@@ -997,7 +1001,8 @@ export function think(world, u, dt) {
     }
     attack(world, u, t, d, dx, dy, ax, ay);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
-    else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
+    else if (u.type === 'heli') heliHover(world, u, nx, ny, d, reach);
+    else if (u.type === 'drache') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
   }
   // Scharfschütze ohne Ziel in Reichweite: erst WAIT s warten, dann vorrücken, nie über die Frontgrenze
@@ -1180,6 +1185,17 @@ function lineBlocked(world, u, nx, ny, dt) {
     (mx < 0 && u.x <= 7) || (mx > 0 && u.x >= W - 7) || (my < 0 && u.y <= 7) || (my > 0 && u.y >= H - 7);
   if (stuck) { u.lofFlip = !u.lofFlip; u.lofT = world.time; mx = -mx; my = -my; }
   u.mx = mx; u.my = my;
+}
+
+// Hubschrauber im Gefecht: auf HELI.HOLD × Reichweite heran oder zurück (Band ±BAND px ohne Ruck), dazu seitlich
+// schweben (Sinus über die Weltzeit, je Heli versetzt über u.seed); am Feldrand kehrt das Schweben um.
+export function heliHover(world, u, nx, ny, d, reach) {
+  const T = u.T, H = HELI, want = reach * H.HOLD;
+  const rad = Math.max(-1, Math.min(1, (d - want) / H.BAND)) * T.speed * .6;
+  let side = Math.sin((world.time / H.SWAY_T + u.seed) * Math.PI * 2) * T.speed * H.SWAY;
+  const mx0 = -ny * side, my0 = nx * side, m = T.r + 6;
+  if ((mx0 < 0 && u.x < m) || (mx0 > 0 && u.x > world.W - m) || (my0 < 0 && u.y < m) || (my0 > 0 && u.y > world.H - m)) side = -side;
+  u.mx = nx * rad - ny * side; u.my = ny * rad + nx * side;
 }
 
 // ax/ay (optional): geprüfter Zielpunkt für gerade Schüsse (siehe think)

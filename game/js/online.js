@@ -71,7 +71,7 @@ export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: budgetOf(cfg) });
 // egal wo sie in data.js stehen. Neue Einheiten bei Gelegenheit hier ans Ende von PAINT_FIXED anhängen.
 const PAINT_FIXED = ('krieger schuetze ritter grenadier reiter roemer sani wolf baer biene magier geist drache vampir soldat mg sniper '
   + 'panzerfaust moerser panzer heli troll zyklop hexe phoenix einhorn elefant krokodil gorilla adler bueffel minibot laserbot drohne '
-  + 'kuppel spinne schweisser magnet tesla mega hoehle speer schamane raptor ptera anky trike rex koenig jet kampfdrohne bomber lama flamme pikenier').split(' ');
+  + 'kuppel spinne schweisser magnet tesla mega hoehle speer schamane raptor ptera anky trike rex koenig jet kampfdrohne bomber lama flamme pikenier trommler').split(' ');
 const paintable = t => UNITS[t] && UNITS[t].paint !== false;
 export const PAINT_TYPES = [...PAINT_FIXED, ...Object.keys(UNITS).filter(t => paintable(t) && !PAINT_FIXED.includes(t))];
 const SHAPE_KEYS = [null, ...Object.keys(SHAPES)];

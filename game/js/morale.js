@@ -33,7 +33,7 @@
 // „ohne Erholung“: die LP steigen nicht), ohne Ende über die 60-%-Regel und ohne letztes Gefecht. Er endet nur,
 // wenn fearT abgelaufen ist; liegt das Leben dann bei höchstens FLEE · T.hp, beginnt im nächsten Schritt der
 // normale Rückzug. Betäubt oder in der Luft läuft fearT nicht ab (Vorrang: betäubt > Schreck).
-import { factionOf, outOfMelee, RV_X, RV_Y, RV_T, RV_IN, RV_CK } from './world.js';
+import { factionOf, outOfMelee, RV_X, RV_Y, RV_T, RV_IN, RV_CK, RV_DRUM } from './world.js';
 import { HASH_CELL } from './data.js';
 import { hazardAt, leaveBlock } from './formation.js';
 
@@ -171,7 +171,8 @@ export function updateMorale(world, u, dt) {
     // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen. Geister (Nachtrag 5, #41) fliehen nie: sie heilen
     // sich, indem sie Schaden machen (Lebensraub, combat.js)
     // Königsaura (abilities.KING): wer sie spürt, flieht nicht
-    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || NO_RETREAT.has(u.type) || u.braveT > 0) return false;
+    if (u.hp > (u.formOn || u.rv[RV_DRUM] > world.time ? M.FLEE_FORM : M.FLEE) * T.hp ||   // Trommler: wie im Block erst spät
+       others < M.MIN_ALLIES || NO_RETREAT.has(u.type) || u.braveT > 0) return false;
     // Fluchtbeginn nur vor Nahkämpfern, denen man davonläuft (#50), gedrosselt
     if (u.rv[RV_CK] > 0) { u.rv[RV_CK] -= dt; return false; }
     u.rv[RV_CK] = FLEE_CK + (u.id % 4) * FLEE_STAGGER;

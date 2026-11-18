@@ -34,7 +34,7 @@ import { ignite } from './combat.js';
 import { hazardAt } from './formation.js';
 // --- Task 5: Tiere ---
 import { TERRAIN, RANGED } from './data.js';
-import { cellIndex, unseen, EAGLE_REACH_Z } from './world.js';
+import { cellIndex, unseen, EAGLE_REACH_Z, RV_DRUM } from './world.js';
 import { applyImpulse, GRAVITY, GROUND_FRICTION } from './physics.js';
 // --- Schrottplatz und Urzeit ---
 import { BOT, DOME, METAL, YOUNG, REX_HATCH } from './data.js';
@@ -1318,6 +1318,29 @@ export function stepPike(world, u, dt) {
   emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 3 });
   emit(world, { type: 'ability', k: 'pike', x: u.x, y: u.y, z: 0, R: u.T.r, nx: dx / d, ny: dy / d });
   sound(world, 'thud');
+}
+/* Trommler (18.11., Ideenrunde): alle DT s bekommen Verbündete bis R px (nicht er selbst, keine Maschinen und Untoten)
+   rv[RV_DRUM] = Zeit + HOLD: sie fliehen erst bei MORALE.FLEE_FORM (15 %) statt 25 % (morale.updateMorale). Wer keine
+   andere Verstärkung hat (buffT ≤ 0), läuft ×SPEED (buffT = HOLD, wie das Heulen). Alle PULSE s ein Takt-Zeichen. */
+export const DRUM = { R: 140, DT: .5, HOLD: .8, SPEED: 1.15, DMG: 1.15, PULSE: 2 };
+let DR_W = null, DR_U = null, DR_F = null;
+function drumTest(v) {
+  if (v === DR_U || !v.alive || v.T.bot || UNDEAD.has(v.type) || factionOf(DR_W, v) !== DR_F) return;
+  const dx = v.x - DR_U.x, dy = v.y - DR_U.y;
+  if (dx * dx + dy * dy > DRUM.R * DRUM.R) return;
+  v.rv[RV_DRUM] = DR_W.time + DRUM.HOLD;
+  if (!(v.buffT > 0) || (v.spdMul === DRUM.SPEED && v.dmgMul === DRUM.DMG)) { v.buffT = DRUM.HOLD; v.spdMul = DRUM.SPEED; v.dmgMul = DRUM.DMG; }
+}
+export function stepDrum(world, u, dt) {
+  u.tickT -= dt;
+  if (u.tickT > 0 || u.state !== 'ok') return;
+  u.tickT += DRUM.DT; if (u.tickT <= 0) u.tickT = DRUM.DT;
+  DR_W = world; DR_U = u; DR_F = factionOf(world, u);
+  query(world, u.x, u.y, DRUM.R, drumTest);
+  DR_W = null; DR_U = null; DR_F = null;
+  u.swingT = .2;
+  const k = Math.round(DRUM.PULSE / DRUM.DT);
+  if ((u.id + Math.round(world.time / DRUM.DT)) % k === 0) emit(world, { type: 'ability', k: 'drum', x: u.x, y: u.y, z: 0, R: DRUM.R, face: u.face });
 }
 export function stepBot(world, u, dt) {
   const T = u.T, max = T.hp * BOT.SHIELD;

@@ -1679,6 +1679,7 @@ export function iconURL(t,px=96,vi=0){
     if(t==='wasser')blob('#a8e6f0','#62b9ea');
     if(t==='lava'){blob('#ffb54d','#f2652f');x.fillStyle='#ffd36b';[[38,46],[58,56],[50,40]].forEach(p=>{x.beginPath();x.arc(p[0],p[1],4,0,7);x.fill();});}
     if(t==='wald'){x.fillStyle='#a7d9a0';x.beginPath();x.ellipse(48,54,38,26,0,0,7);x.fill();[[34,48,15],[60,44,17],[48,62,14]].forEach(p=>E(x,p[0],p[1],p[2],p[2],'#4e9f5d',2.4,'#2f6b3b'));}
+    if(t==='dornen'){blob('#c9d3a4','#9fb06a');x.strokeStyle='#4f5e2c';x.lineWidth=3;x.lineCap='round';for(const[a,b]of[[26,58],[46,44],[62,60]]){x.beginPath();x.moveTo(a-10,b+6);x.lineTo(a-4,b-6);x.lineTo(a+2,b+6);x.lineTo(a+8,b-6);x.stroke();x.beginPath();x.moveTo(a-4,b-6);x.lineTo(a-6,b-12);x.moveTo(a+2,b+6);x.lineTo(a+4,b+12);x.stroke();}}
     if(t==='mauer'){x.lineCap='round';x.strokeStyle='#5b5f69';x.lineWidth=22;x.beginPath();x.moveTo(18,70);x.lineTo(78,30);x.stroke();x.strokeStyle='#a3a8b2';x.lineWidth=13;x.stroke();}
     if(t==='radierer'){x.translate(48,50);x.rotate(-.6);x.fillStyle='#ff9fb3';x.strokeStyle=O;x.lineWidth=3;x.beginPath();if(x.roundRect)x.roundRect(-30,-16,60,32,7);else x.rect(-30,-16,60,32);x.fill();x.stroke();x.fillStyle='#7aa7ff';x.fillRect(6,-14.5,22,29);x.beginPath();x.moveTo(6,-16);x.lineTo(6,16);x.stroke();}
   }

@@ -25,7 +25,7 @@ export const PATH_LAVA_CELLS = 1;        // think: gerade Linie über so viele L
 export const PATH_BLOCK_WALL = 1, PATH_BLOCK_LAVA = 2;   // directBlocked: Art der Sperre (0 frei)
 
 const WALL = 4, LAVA = 2;
-const TCOST = [PATH_COST.free, PATH_COST.water, PATH_COST.lava, PATH_COST.forest, 0];   // nach Gelände-id
+const TCOST = [PATH_COST.free, PATH_COST.water, PATH_COST.lava, PATH_COST.forest, 0, 0, PATH_COST.water];   // Dornen (6) wie Wasser meiden   // nach Gelände-id
 const INF = 0x3fffffff;
 const NB = 256, MASK = NB - 1;           // Ring der Bucket-Queue; größter Schritt (120+120)·181>>8 = 169 < 256
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DY = [0, 0, 1, -1, 1, -1, 1, -1];

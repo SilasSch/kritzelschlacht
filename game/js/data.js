@@ -452,6 +452,8 @@ export const TERRAIN = {
   mauer:{n:'Mauer',id:4,cost:.1,haz:true,d:'Blockiert Bodentruppen, bis sie zerschlagen wird.'},
   // Asche (Waldbrand, wildfire.js): entsteht aus verbranntem Wald, frei begehbar, keine Deckung; nicht malbar
   asche:{n:'Asche',id:5,cost:0,paint:false,d:'Verbrannter Wald: keine Deckung mehr.'},
+  // Dornenhecke (Ideenrunde 18.11.): durchlaufbar, aber stachelig (physics.THORN); nur im Sandkasten malbar wie alles Gelände
+  dornen:{n:'Dornen',id:6,cost:.05,sp:.75,d:'Durchlaufbar, aber stachelig: Bodentruppen nehmen 6 Schaden pro Sekunde. Flieger und schwere Brocken wie Panzer merken nichts.'},
   radierer:{n:'Radierer',id:0,cost:0,d:'Entfernt Einheiten und Gelände unter dem Pinsel.'},
 };
 // Nach Gelände-id (0 = frei): Tempofaktor (physics.integrate, formation.march) und Gefahr (formation.hazardAt).

@@ -277,6 +277,7 @@ export function createAudio() {
     wasser: v => { noise(v, 'bandpass', v.f(700, .2), 1300, .1, .08); osc(v, 'sine', v.f(380, .25), 760, .06, .056, { dt: .02 }); },
     lava: v => { noise(v, 'lowpass', 500, 250, .12, .096); osc(v, 'sine', v.f(140, .3), 260, .07, .096, { dt: .03 }); },
     wald: v => { noise(v, 'highpass', v.f(3500, .2), 3000, .05, .08); noise(v, 'highpass', 4500, 4000, .04, .056, { dt: .04 }); },
+    dornen: v => { noise(v, 'highpass', v.f(5000, .2), 4200, .04, .07); osc(v, 'triangle', v.f(1300, .2), 900, .03, .03, { dt: .02 }); },
     mauer: v => { osc(v, 'sine', v.f(95, .15), 60, .07, .16); noise(v, 'bandpass', v.f(700, .2), 500, .06, .096); },
     radierer: v => { osc(v, 'triangle', v.f(950, .15), 760, .06, .032); noise(v, 'bandpass', v.f(2400, .2), 2000, .05, .056); },
   };

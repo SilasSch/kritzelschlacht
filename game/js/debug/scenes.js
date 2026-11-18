@@ -20,6 +20,7 @@ export const SCENES = {
     placeRect(world, 'krieger', 14, .62, .25, .66, .75, 'rot'); spawn(world, 'lama', world.W * .78, world.H * .3, 'rot');
   },
   flamme(world) { world.teamMode = true; tRect(world, 'wald', .5, .15, .62, .4); placeRect(world, 'flamme', 8, .3, .35, .36, .65, 'blau'); placeRect(world, 'krieger', 30, .55, .3, .66, .7, 'rot'); },
+  dornen(world) { world.teamMode = true; tRect(world, 'dornen', .45, .25, .55, .75); placeRect(world, 'krieger', 20, .3, .35, .36, .65, 'blau'); placeRect(world, 'schuetze', 10, .7, .35, .74, .65, 'rot'); },
   stinktier(world) { world.teamMode = true; placeRect(world, 'stinktier', 12, .3, .35, .36, .65, 'blau'); placeRect(world, 'krieger', 20, .62, .3, .7, .7, 'rot'); },
   trommler(world) { world.teamMode = true; placeRect(world, 'krieger', 16, .3, .35, .36, .65, 'blau'); placeRect(world, 'trommler', 2, .22, .45, .24, .55, 'blau'); placeRect(world, 'krieger', 20, .64, .35, .7, .65, 'rot'); },
   adlergriff(world) { world.teamMode = true; placeRect(world, 'adler', 3, .3, .4, .34, .6, 'blau'); placeRect(world, 'krieger', 8, .6, .35, .66, .65, 'rot'); },

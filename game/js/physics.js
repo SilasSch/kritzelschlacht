@@ -28,7 +28,9 @@ export const FLY_VZ = 120;           // Flieger steigen und sinken zu ihrer Flug
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const SLOW = .6;   // Lama-Spucke (combat.SPIT.SLOW, hier ohne Import wegen der Ladereihenfolge)
-const WATER = TERRAIN.wasser.id, LAVA = TERRAIN.lava.id, WALL = TERRAIN.mauer.id;
+const WATER = TERRAIN.wasser.id, LAVA = TERRAIN.lava.id, WALL = TERRAIN.mauer.id, THORNS = TERRAIN.dornen.id;
+// Dornenhecke: DPS Schaden je Sekunde am Boden, nicht ab Masse HEAVY (Panzer, Elefant, Mechs, T-Rex)
+export const THORN = { DPS: 6, HEAVY: 20 };
 
 /* ---------- Impuls ---------- */
 // v += I / Masse. Bei iz > 0 hebt der Körper ab; peakZ wird ab hier gemessen.
@@ -70,6 +72,7 @@ export function integrate(world, dt) {
         // etwa 6 Flammen pro Sekunde, ohne den Spielzufall zu verbrauchen
         if (u.alive && ((world.time * 60 | 0) + u.id) % 10 === 0) world.events.push({ type: 'burn', x: u.x, y: u.y });
       }
+      else if (tt === THORNS && (T.mass || 1) < THORN.HEAVY) hurt(world, u, THORN.DPS * dt, 'thorn', null);
       if (!u.alive) continue;
       if (u.state === 'ok') {
         // Lava (Nachtrag 5, #42): die eine Stelle, an der jede Wunschbewegung am Boden ankommt (Marsch, Fluss, Flucht,

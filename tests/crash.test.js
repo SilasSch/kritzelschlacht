@@ -156,14 +156,17 @@ test('Leiche im Wasser: float → sink → weg, mit splash-Ereignis', () => {
   let t = 0;
   while (ca.state === 'fly' && t < 2) { phys(w); t += DT; }
   assert.equal(ca.state, 'float');
-  const atA = () => w.events.filter(e => e.type === 'splash' && Math.hypot(e.x - ca.x, e.y - ca.y) < 1e-9).length;
+  // Leichen treiben mit der Strömung (Nachtrag 7, #48): der splash liegt am Eintauchpunkt (px/py)
+  const atA = () => w.events.filter(e => e.type === 'splash' && Math.hypot(e.x - ca.px, e.y - ca.py) < 1e-9).length;
+  const x0 = ca.x, y0 = ca.y;
   assert.equal(atA(), 1, 'splash beim Eintauchen');
   run(w, 1.9); assert.equal(ca.state, 'float');
   run(w, .2); assert.equal(ca.state, 'sink');
+  assert.ok(ca.x - x0 > 10 && ca.x - x0 < 20 && ca.y > y0, `treibt mit der Strömung: ${(ca.x - x0).toFixed(1)} px`);
   assert.equal(atA(), 1, 'nur ein splash je Leiche');
   const wet = w.corpses.filter(c => c.state === 'float' || c.state === 'sink');
   assert.ok(wet.length >= 2);
-  for (const c of wet) assert.equal(w.events.filter(e => e.type === 'splash' && e.x === c.x && e.y === c.y).length, 1, `${c.type}/${c.part} genau ein splash`);
+  for (const c of wet) assert.equal(w.events.filter(e => e.type === 'splash' && e.x === c.px && e.y === c.py).length, 1, `${c.type}/${c.part} genau ein splash`);
   run(w, 2.7); assert.ok(w.corpses.includes(ca), 'sinkt noch');
   run(w, .3); assert.ok(!w.corpses.includes(ca), 'untergegangen und entfernt');
   run(w, .5);

@@ -332,12 +332,24 @@ export const PART_CAP = 500;
 export const CORPSE_FADE = 1;        // s
 export const CORPSE_REST = 29;       // s liegen (rest), danach CORPSE_FADE s verblassen: weg nach etwa 30 s
 export const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
+// Strömung (Nachtrag 7, #48): treibende und sinkende Leichen ('float', 'sink') ziehen langsam mit einem festen Vektor
+// (px/s), quer dazu pendelt sie sanft (SWAY px/s, Periode aus der Spielzeit und der Lage beim Eintauchen px/py). Nur
+// solange der nächste Punkt auch Wasser ist: am Ufer bleibt sie hängen. Deterministisch, ohne Zufall.
+export const CURRENT = { x: 7, y: 2.5, SWAY: 2.5, HZ: .35 };
 
 export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null) {
   return { kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y, crash };
 }
 
 const liquid = tt => tt === WATER || tt === LAVA;
+
+// Leiche im Wasser mit der Strömung (CURRENT) um dt weiter, wenn das Ziel auch Wasser ist
+function drift(world, c, dt) {
+  const C = CURRENT, s = Math.sin((world.time * C.HZ + (c.px + c.py) * .013) * Math.PI * 2) * C.SWAY;
+  const l = Math.hypot(C.x, C.y), x = c.x + (C.x - C.y / l * s) * dt, y = c.y + (C.y + C.x / l * s) * dt;
+  if (world.terr[cellIndex(world, x, y)] !== WATER) return;
+  c.x = x; c.y = y;
+}
 
 // Zustand beim Liegenbleiben je nach Gelände tt
 function settle(world, c, tt) {
@@ -372,8 +384,8 @@ export function stepCorpses(world, dt) {
     c.t += dt;
     if (c.fade > 0) { c.fade -= dt; if (c.fade <= 0) continue; }
     else if (c.state === 'rest' && c.t >= CORPSE_REST) c.fade = CORPSE_FADE;   // float/ash enden schon vorher von selbst
-    if (c.state === 'float') { if (c.t >= FLOAT_T) { c.state = 'sink'; c.t -= FLOAT_T; } }
-    else if (c.state === 'sink') { if (c.t >= SINK_T) continue; }
+    if (c.state === 'float') { if (c.t >= FLOAT_T) { c.state = 'sink'; c.t -= FLOAT_T; } drift(world, c, dt); }
+    else if (c.state === 'sink') { if (c.t >= SINK_T) continue; drift(world, c, dt); }
     else if (c.state === 'ash') { if (c.t >= ASH_T) continue; }
     if (c.state === 'fly') {
       c.px = c.x; c.py = c.y;

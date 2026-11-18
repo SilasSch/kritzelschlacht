@@ -12,6 +12,7 @@ import { HELI_CRASH_R, DRAGON_CRASH_R, MUZZLE_Z } from '../combat.js';
 import { shade } from './rig.js';
 import { projScreen, BOSS, BOSS_VIS, CHANNEL_LIFT } from './pose.js';
 import { METEOR, WIND } from '../spells.js';
+import { cellIndex } from '../world.js';
 
 export const FX_CAP = 3000;
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
@@ -75,6 +76,16 @@ export const BOSS_FX_UNITS = 24, EXHAUST_T = .5, EXHAUST_RATE = 14, WASH_RATE = 
 export const EXHAUST_BURST = 2;
 export const WASH = { life: .9, grow: 2.2, alpha: .22 };
 export const EXHAUST = { life: .9, grow: 2.6, alpha: .34 };
+
+/* ---------- Wasser (Nachtrag 7, #48) ----------
+   Waten: Bodentruppen im Wasser werfen alle WADE_T s (nach id versetzt, ohne Zustand je Einheit) einen flachen Ring
+   ('wade', wächst von WADE_R0 auf WADE_R1 · r), in Bewegung alle BOW_T s eine kleine Bugwelle ('bow': zwei kurze
+   Striche schräg nach hinten an der Front). Höchstens WADE_MAX Teile je Bild; ohne Wasser auf der Karte gar keine Prüfung.
+   Fontäne: Explosion oder Felsbrocken im Wasser (blast/creature mit water) statt Staub, Rauch und Krater: Wassersäule
+   aus Tropfen, weiße Gischt und zwei flache Ringe. */
+export const WADE = { T: .6, BOW_T: .22, BOW_L: 8, MAX: 80, R0: .9, R1: 2.2, LIFE: .9, ALPHA: .55, BOW_V: 8, COL: 0xf2fbff };
+export const FOUNTAIN = { drops: 22, column: 5, spray: 3, col: 0x3f9ad8, foam: 0xf2fbff };
+const WATER_ID = 1;
 
 // Glut je Explosion: 14 bis 22, mit dem Radius mehr
 export const emberCount = R => 14 + Math.min(8, Math.round((R > 0 ? R : 0) / 10));
@@ -197,13 +208,14 @@ const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
 // ax = Anker x), das additive Glühen (gR, gTint, gAlpha; gLight: im Bodenlicht-Layer unter den Figuren) und
 // das warme Licht, normal gemischt unter dem Glühen (wR, wTint, wAlpha; wGround: am Boden unter den Figuren).
-// sy: Stauchung quer (1 = rund; Striche der Zauber: Breite unabhängig von der Länge).
+// sy: Stauchung quer (1 = rund; Striche der Zauber: Breite unabhängig von der Länge). under: am Boden unter den Figuren
+// (Ringe und Bugwellen im Wasser, fx.js Ebene 'light').
 // alpha, gAlpha bzw. wAlpha 0: kein Sprite.
 export function look(p, o) {
   const q = p.age / p.life, a = 1 - q;
   o.frame = F.disc; o.x = p.x; o.y = p.y; o.r = p.r; o.rot = p.rot; o.tint = p.col; o.alpha = a; o.ax = .5;
   o.gR = 0; o.gTint = 0xffffff; o.gAlpha = 0; o.gLight = false;
-  o.wR = 0; o.wTint = WARM_TINT; o.wAlpha = 0; o.wGround = false; o.sy = 1;
+  o.wR = 0; o.wTint = WARM_TINT; o.wAlpha = 0; o.wGround = false; o.sy = 1; o.under = false;
   switch (p.k) {
     case 'ember':
       o.r = p.r * (1.6 - a * .6); o.tint = a > .55 ? 0xffd84d : a > .3 ? 0xff8a3d : 0x9aa0aa;
@@ -264,6 +276,10 @@ export function look(p, o) {
       break;
     }
     case 'ring': o.frame = F.ring; o.r = p.r * (1.15 - a * .5); o.alpha = a * .8; break;
+    // Wasser (Nachtrag 7, #48): flacher Ring am Boden (Waten, Fontäne), Bugwelle (Strich), Gischt (weiße Wolke)
+    case 'wade': o.frame = F.wave; o.r = p.r * (WADE.R0 + (WADE.R1 - WADE.R0) * (1 - a * a)); o.sy = .42; o.alpha = p.a0 * a * Math.min(1, q / .12); o.under = true; break;
+    case 'bow': o.frame = F.streak; o.sy = 1.3; o.alpha = p.a0 * a * Math.min(1, q / .15); o.under = true; break;
+    case 'spray': o.frame = F.puff; o.r = p.r * (1 + q * .9); o.alpha = .85 * Math.min(1, q / .06) * a; break;
     case 'plus': o.frame = F.plus; o.tint = 0x2fbf6b; break;
     case 'soul': o.frame = F.soul; o.x = p.x + Math.sin(p.age * 6) * 2; o.tint = 0xffffff; o.alpha = a * .85; break;
     case 'arrow': o.frame = F.arrow; o.ax = 1; o.tint = 0xffffff; o.alpha = Math.min(1, a * 2); o.r = 8; break;
@@ -468,6 +484,32 @@ export function createFxCore(hooks = {}, opt = {}) {
     if (rand() < dt * WISP_RATE) wisp(bx + rnd(-.3, .3) * r, by - r * .9, rnd(1.6, 2.6) * (r > 9 ? r / 9 : 1), SMOKE_COLS[(rand() * 3) | 0]);
   }
 
+  // Ringe und Bugwellen der Watenden (WADE); Takt je Einheit aus der Uhr wadeClk, versetzt nach id
+  let waterVer = -1, hasWater = false, wadeClk = 0, wadeN = 0;
+  const tick = (ph, T, dt) => Math.floor((wadeClk - ph) / T) !== Math.floor((wadeClk - dt - ph) / T);
+  function wading(world, dt) {
+    const us = world.units, terr = world.terr, W = WADE;
+    let n = 0;
+    for (let i = 0; i < us.length && n < W.MAX; i++) {
+      const u = us[i];
+      if (!u.alive || u.T.fly || u.z > 1 || terr[cellIndex(world, u.x, u.y)] !== WATER_ID) continue;
+      const q = (u.id * .6180339887) % 1, r = u.T.r, fy = u.y + r * .8;
+      if (tick(q * W.T, W.T, dt)) { wadeRing(u.x, fy, r, W.LIFE, W.ALPHA); n++; }
+      const vx = (u.mx || 0) * (u.spdMul || 1) + (u.vx || 0), vy = (u.my || 0) * (u.spdMul || 1) + (u.vy || 0), sp = Math.hypot(vx, vy);
+      if (sp > W.BOW_V && tick(q * W.BOW_T, W.BOW_T, dt)) {
+        // Bugwelle: kleines weißes V an der Front (zwei Striche je W.BOW_L px, schräg nach hinten), treibt zurück
+        const nx = vx / sp, ny = vy / sp, a = Math.atan2(ny * .45, nx), bx = u.x + nx * r * .8, by = fy + ny * r * .35;
+        if (terr[cellIndex(world, bx, by)] === WATER_ID) for (const s of [-1, 1]) {
+          const ang = a + Math.PI + s * .6, L = Math.min(W.BOW_L, r * .7), p = add('bow', bx + Math.cos(ang) * L * .5, by + Math.sin(ang) * L * .5, .45, L * .6, W.COL);
+          if (!p) break;
+          p.rot = ang; p.a0 = .8; p.vx = Math.cos(ang) * 10 - nx * 6; p.vy = Math.sin(ang) * 6;
+        }
+        n++;
+      }
+    }
+    wadeN = n;
+  }
+
   // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
   const count = (rate, dt) => { const n = rate * dt, k = n | 0; return k + (rand() < n - k ? 1 : 0); };
   function bossFx(u, dt) {
@@ -499,13 +541,32 @@ export function createFxCore(hooks = {}, opt = {}) {
     }
   }
 
-  // Explosion: Bodenlicht, heller Kern, Glut (Feuer: Flammen), Rauch, Krater, Wackeln
-  function explosion(key, x, y, R, fire, smokeLife) {
+  // Flacher Ring am Boden (Waten, Fontäne): wächst von WADE.R0 · r auf WADE.R1 · r, Deckkraft a0
+  function wadeRing(x, y, r, life, a0) { const p = add('wade', x, y, life, r, WADE.COL); if (p) p.a0 = a0; return p; }
+  // Fontäne im Wasser (statt Glut, Rauch und Krater): Säule aus Tropfen, Gischt, zwei Ringe
+  function fountain(x, y, R) {
+    const F = FOUNTAIN, k = .7 + Math.min(R, 120) / 150;
+    // Tropfen (weiß und kräftig blau, damit sie auf dem Wasser lesbar sind), fliegen hoch und fallen zurück
+    for (let i = 0; i < F.drops; i++) {
+      const p = add('drop', x + rnd(-.15, .15) * R, y, rnd(.6, .9), rnd(2, 3.6), i % 3 ? F.foam : F.col); if (!p) break;
+      p.vx = rnd(-1, 1) * R * .9; p.vy = -rnd(150, 290) * k; p.ay = 560;
+    }
+    // Säule: weiße Gischtballen übereinander, steigen und sinken zurück
+    for (let i = 0; i < F.column; i++) {
+      const p = add('spray', x + rnd(-.08, .08) * R, y - i * R * .12, rnd(.55, .75), Math.max(4, R * (.24 - i * .025)), F.foam); if (!p) break;
+      p.vy = -(60 + i * 45) * k; p.ay = 260; p.drag = 1;
+    }
+    for (let i = 0; i < F.spray; i++) { const p = add('spray', x + rnd(-.35, .35) * R, y - rnd(2, 8), rnd(.5, .7), Math.max(4, R * rnd(.18, .26)), F.foam); if (!p) break; p.vx = rnd(-30, 30); p.vy = -rnd(20, 40); p.drag = 2; }
+    wadeRing(x, y, R * .5, .8, .8); wadeRing(x, y, R * .3, 1.1, .6);
+  }
+  // Explosion: Bodenlicht, heller Kern, Glut (Feuer: Flammen), Rauch, Krater, Wackeln; im Wasser die Fontäne
+  function explosion(key, x, y, R, fire, smokeLife, water = false) {
     shake = Math.max(shake, blastShake(R));
-    crater(x, y, R);
+    if (!water) crater(x, y, R);
     if (!take(key)) return;
     if (lightLive < LIGHT_LIVE_MAX && add('light', x, y, LIGHT_T, LIGHT_RMUL * R)) lightLive++;
     add('core', x, y, .14, Math.max(4, R * .4));
+    if (water) { fountain(x, y, R); return; }
     const n = emberCount(R);
     for (let i = 0; i < n; i++) {
       const a = rand() * TAU, s = rnd(30, 170) * (.7 + Math.min(R, 120) / 200);
@@ -554,6 +615,7 @@ export function createFxCore(hooks = {}, opt = {}) {
     const x = e.x, y = e.y - (e.z || 0), F = CREATURE_FX, R = e.R > 0 ? e.R : 30;
     switch (e.k) {
       case 'boulder':
+        if (e.water) { fountain(x, e.y, R); break; }   // Nachtrag 7, #48
         crater(x, e.y, R * .8);
         wave(x, e.y, R * 1.2, .45, 0xb8a98a);
         for (let i = 0; i < 7; i++) { const a = i / 7 * TAU + rnd(-.3, .3), d = R * rnd(.35, .8); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(4.5, 7)); }
@@ -828,7 +890,7 @@ export function createFxCore(hooks = {}, opt = {}) {
     switch (e.type) {
       case 'blast': {
         for (let i = 0; i < crashPts.length; i += 2) if (Math.abs(crashPts[i] - e.x) < 1 && Math.abs(crashPts[i + 1] - e.y) < 1) return;
-        explosion('blast', e.x, e.y, e.R, e.kind === 'fire', SMOKE.life);
+        explosion('blast', e.x, e.y, e.R, e.kind === 'fire', SMOKE.life, !!e.water);
         return;
       }
       case 'crash': {
@@ -983,6 +1045,12 @@ export function createFxCore(hooks = {}, opt = {}) {
     }
     // Meteor-Kanäle (spells.js): Zielkreis, Strahlen, Kugel, fallender Meteor
     if (world && dt > 0 && world.casts) for (let k = 0; k < world.casts.length && k < SPELL_FX.CAST_FX_MAX; k++) castFx(world.casts[k], dt);
+    // Waten im Wasser (siehe WADE): nur wenn die Karte Wasser hat (gezählt bei jeder Geländeänderung)
+    if (world && dt > 0 && world.units && world.terr) {
+      if (world.terrainVersion !== waterVer) { waterVer = world.terrainVersion; hasWater = world.terr.indexOf(WATER_ID) >= 0; }
+      wadeClk += dt;
+      if (hasWater) wading(world, dt);
+    }
     // brennende Einheiten: höchstens BURN_FX_UNITS je Bild, reihum ab burnCursor
     if (world && dt > 0 && world.units) {
       const us = world.units, n = us.length;
@@ -1025,7 +1093,7 @@ export function createFxCore(hooks = {}, opt = {}) {
     get lod() { return lod; },
     set lod(v) { lod = v > 0 ? Math.min(LOD_MAX, v | 0) : 0; },
     decay(dt) { shake = decayShake(shake, dt); },
-    stats() { return { skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive, burning, burningAll, bosses: bossDone, bossesAll: bossAll, lodSkipped }; },
+    stats() { return { wade: wadeN, hasWater, skipped: Object.assign({}, skipped), dropped: store.dropped, lights: lightLive, burning, burningAll, bosses: bossDone, bossesAll: bossAll, lodSkipped }; },
   };
 }
 

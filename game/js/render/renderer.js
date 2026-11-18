@@ -80,6 +80,72 @@ export function createRenderer(canvasHost) {
   const terrSprite = new PIXI.Sprite();
   L.terrain.addChild(zoneG, zoneText, terrSprite);   // Zone liegt wie früher unter dem Gelände
 
+  /* ---------- Wasser (Nachtrag 7, #48) ----------
+     Wellen und Schaumrand als eine Fläche über dem Gelände (ein Draw-Call, nur wenn die Karte Wasser hat): ein
+     Fragment-Shader liest eine Wassermaske mit einem Texel je Zelle (R = 255 für Wasser), linear gefiltert, also mit
+     weichem Übergang an der Küste. Innen (Maske > .55) ziehen zwei gekreuzte, verbogene Sinuszüge langsam (etwa 14 px/s):
+     helle, in Stücke gebrochene Kammlinien und zart dunklere Täler. Am Rand (Maske .08–.5, auf dem hellen Ufersaum des
+     Geländes) liegt weißer Schaum, dessen Helligkeit als langsame Welle die Küste entlangläuft (kein Gesamtflackern),
+     innen davon eine feine dunkle Linie (Sticker-Akzent #2a2a33). Die Maske folgt den Gelände-Änderungen (drawTerrain)
+     und wird mit dem Gelände hochgeladen. Kein Filter, keine Maske im Szenengraph. */
+  const WATER_VERT = `precision highp float;
+attribute vec2 aVertexPosition;
+uniform mat3 projectionMatrix;
+uniform mat3 translationMatrix;
+varying vec2 vP;
+void main() { vP = aVertexPosition; gl_Position = vec4((projectionMatrix * translationMatrix * vec3(aVertexPosition, 1.0)).xy, 0.0, 1.0); }`;
+  const WATER_FRAG = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 vP;
+uniform sampler2D uMask;
+uniform vec2 uGrid;
+uniform float uTime;
+void main() {
+  float m = texture2D(uMask, vP / uGrid).r;
+  if (m < .04) discard;
+  float t = uTime;
+  vec2 p = vP;
+  float w1 = sin(p.x * .085 + p.y * .03 - t * 1.2 + sin(p.y * .045 + t * .45) * 1.8);
+  float w2 = sin(p.x * .035 - p.y * .07 - t * .9 + sin(p.x * .03 - t * .3) * 1.5);
+  float w = w1 * .6 + w2 * .4;
+  float brk = smoothstep(-.3, .45, sin(p.x * .021 + p.y * .017 + t * .15) + .45 * sin(p.y * .05 - p.x * .013));
+  float crest = smoothstep(.62, .69, w) * (1. - smoothstep(.75, .84, w)) * brk;
+  float trough = smoothstep(-.6, -.92, w1);
+  float inside = smoothstep(.55, .9, m);
+  float band = smoothstep(.08, .22, m) * (1. - smoothstep(.36, .52, m));
+  float pulse = .6 + .4 * sin(t * 1.5 - (p.x + p.y) * .022);
+  float line = smoothstep(.5, .56, m) * (1. - smoothstep(.58, .68, m));
+  float a = trough * .08 * inside;
+  vec3 c = vec3(.18, .45, .68) * a;
+  float k = crest * .5 * inside; c = c * (1. - k) + vec3(.96, .99, 1.) * k; a += k * (1. - a);
+  k = band * pulse * .78; c = c * (1. - k) + vec3(.97, .99, 1.) * k; a += k * (1. - a);
+  k = line * .13; c = c * (1. - k) + vec3(.165, .165, .2) * k; a += k * (1. - a);
+  gl_FragColor = vec4(c, a);
+}`;
+  const WATER_PERIOD = TAU / .15;
+  let waterMesh = null, waterTex = null, waterData = null, waterAny = false, waterDirty = false;
+  function makeWater() {
+    if (waterMesh) { L.terrain.removeChild(waterMesh); waterMesh.destroy(); waterTex.destroy(true); }
+    waterData = new Uint8Array(GW * GH * 4);
+    waterTex = PIXI.Texture.fromBuffer(waterData, GW, GH, { scaleMode: PIXI.SCALE_MODES.LINEAR, mipmap: PIXI.MIPMAP_MODES.OFF, wrapMode: PIXI.WRAP_MODES.CLAMP });
+    const W = GW * CELL, H = GH * CELL;
+    const geo = new PIXI.Geometry().addAttribute('aVertexPosition', [0, 0, W, 0, W, H, 0, H], 2).addIndex([0, 1, 2, 0, 2, 3]);
+    const sh = PIXI.Shader.from(WATER_VERT, WATER_FRAG, { uMask: waterTex, uGrid: new Float32Array([W, H]), uTime: 0 });
+    waterMesh = new PIXI.Mesh(geo, sh); waterMesh.name = 'water'; waterMesh.visible = false;
+    L.terrain.addChild(waterMesh);
+  }
+  // Maske im Gitterbereich neu (aus drawTerrain)
+  function waterCells(terr, x0, y0, x1, y1) {
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) {
+      const i = gy * GW + gx, v = terr[i] === 1 ? 255 : 0;
+      waterData[i * 4] = v; waterData[i * 4 + 3] = 255;
+    }
+    waterDirty = true;
+  }
+
   let rigs = null;           // gebackene Rig-Teile pro Typ (rig.js)
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
   // Neu zu zeichnende Gitterbereiche, einzeln (zwei Treffer weit auseinander ergeben kein Riesenrechteck).
@@ -115,6 +181,7 @@ export function createRenderer(canvasHost) {
       if (t === 4 && whp[i] < 70) { c.strokeStyle = '#3a3d45'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(cx - 4, cy - 3); c.lineTo(cx, cy + 1); c.lineTo(cx + 4, cy - 2); c.stroke(); }
     }
     c.restore();
+    waterCells(terr, x0, y0, x1, y1);
     terrChanged = true;
   }
 
@@ -140,6 +207,7 @@ export function createRenderer(canvasHost) {
     if (terrTex) terrTex.destroy(true);
     terrTex = PIXI.Texture.from(tcv);
     terrSprite.texture = terrTex; terrSprite.scale.set(1 / res);
+    makeWater();
     fx.resize(worldW, worldH, res);   // leert die Decals
     dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
@@ -801,7 +869,11 @@ export function createRenderer(canvasHost) {
     dirtyRects.length = 0;
     if (terrChanged && (terrForce || t - terrUpT >= TERR_UPLOAD || t < terrUpT)) {
       terrTex.update(); terrUpT = t; terrChanged = false; terrForce = false;
+      if (waterDirty) { waterTex.baseTexture.update(); waterDirty = false; waterAny = world.terr.indexOf(1) >= 0; }
     }
+    waterMesh.visible = waterAny;
+    // alle Zeitfaktoren im Shader sind Vielfache von .15: Periode 2π / .15 s, nahtlos
+    if (waterAny) waterMesh.shader.uniforms.uTime = t % WATER_PERIOD;
     drawOverlay(world);
     shadowQ.clear();
     lap('terrain');

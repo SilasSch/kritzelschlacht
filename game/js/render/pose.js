@@ -350,8 +350,8 @@ export function corpseLook(c, t, out = {}) {
     sy = st === 'rest' ? 1 - (1 - REST_SY) * Math.min(1, c.t / SQUASH_T) : REST_SY;
     tint = st === 'ash' ? ASH_TINT : REST_TINT;
     if (st === 'float' || st === 'sink') {
-      // Wippen mit eigener Phase aus der Lage (ändert sich im Wasser nicht)
-      const ph = c.x * .07 + c.y * .05;
+      // Wippen mit eigener Phase aus der Lage beim Eintauchen (px/py; x/y treiben mit der Strömung, physics.CURRENT)
+      const ph = c.px * .07 + c.py * .05;
       dy = Math.sin(TAU * .6 * t + ph) * 1.2;
       rot += Math.sin(TAU * .4 * t + ph) * .08;
       if (st === 'sink') { const q = clamp(c.t / SINK_T, 0, 1); alpha = 1 - q; dy += q * 4; }

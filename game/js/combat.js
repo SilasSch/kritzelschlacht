@@ -108,7 +108,7 @@ export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
-const HC = HASH_CELL, WALL = 4;
+const HC = HASH_CELL, WALL = 4, WATER_ID = 1;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
 const PATH_STUCK_T = 3;      // s Festsitzen an einer dünnen Mauer, nach denen trotz Weg eingeschlagen wird
 export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
@@ -265,7 +265,8 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
     }
     if (any) emit(world, { type: 'terrain', gx0: Math.max(0, g0x - 1), gy0: Math.max(0, g0y - 1), gx1: Math.min(GW - 1, g1x + 1), gy1: Math.min(GH - 1, g1y + 1) });
   }
-  emit(world, { type: 'blast', x, y, R, kind, shake: kind === 'fire' ? 3 : 5 });
+  // water: Einschlag im Wasser (Nachtrag 7, #48), die Effekte zeigen dann eine Fontäne statt Staub und Krater
+  emit(world, { type: 'blast', x, y, R, kind, shake: kind === 'fire' ? 3 : 5, water: world.terr[cellIndex(world, x, y)] === WATER_ID });
   sound(world, kind === 'fire' ? 'fire' : 'boom');
 }
 
@@ -1367,7 +1368,7 @@ function landBoulder(world, p, src) {
     world.debris.push(makeDebris(x, y, rnd(world, 2, 6), Math.cos(a) * sp, Math.sin(a) * sp, rnd(world, 90, 180),
       world.rng() * Math.PI * 2, (world.rng() < .5 ? -1 : 1) * rnd(world, 4, 10)));
   }
-  emit(world, { type: 'creature', k: 'boulder', x, y, R, shake: 4 });
+  emit(world, { type: 'creature', k: 'boulder', x, y, R, shake: 4, water: world.terr[cellIndex(world, x, y)] === WATER_ID });
   sound(world, 'impact');
 }
 

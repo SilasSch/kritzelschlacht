@@ -104,6 +104,7 @@ export function createFx(renderer) {
     layer.addChild(q);
     return { q, n: 0, blend };
   }
+  const under = makePC(L.light, PIXI.BLEND_MODES.NORMAL, 'fxUnder');  // am Boden unter den Figuren (Wasserringe, Nachtrag 7)
   const warm = makePC(L.light, PIXI.BLEND_MODES.NORMAL, 'fxWarm');   // warmes Licht unter dem additiven
   const light = makePC(L.light, PIXI.BLEND_MODES.ADD, 'fxLight');
   const halo = makePC(L.fx, PIXI.BLEND_MODES.NORMAL, 'fxHalo');
@@ -192,7 +193,7 @@ export function createFx(renderer) {
   /* ---------- Bild ---------- */
   const LK = {}, off = { x: 0, y: 0 };
   let maxWarm = 0;
-  let lastT = -1, nMain = 0, nGlow = 0, nLight = 0, nWarm = 0, nHalo = 0;
+  let lastT = -1, nUnder = 0, nMain = 0, nGlow = 0, nLight = 0, nWarm = 0, nHalo = 0;
   function frame(t, simT = 0) {
     const dt = lastT < 0 || t < lastT ? 0 : Math.min(.1, t - lastT);
     lastT = t;
@@ -222,10 +223,10 @@ export function createFx(renderer) {
       look(live[i], LK);
       if (LK.wAlpha > maxWarm) maxWarm = LK.wAlpha;
       if (LK.wAlpha > .004) put(LK.wGround ? warm : halo, tex[F.warm], LK.x, LK.y, LK.wR / FRAME_R[F.warm], 0, LK.wTint, LK.wAlpha, .5);
-      if (LK.alpha > .004) put(main, tex[LK.frame], LK.x, LK.y, Math.max(.001, LK.r) / FRAME_R[LK.frame], LK.rot, LK.tint, LK.alpha, LK.ax, LK.sy);
+      if (LK.alpha > .004) put(LK.under ? under : main, tex[LK.frame], LK.x, LK.y, Math.max(.001, LK.r) / FRAME_R[LK.frame], LK.rot, LK.tint, LK.alpha, LK.ax, LK.sy);
       if (LK.gAlpha > .004) put(LK.gLight ? light : glow, tex[F.soft], LK.x, LK.y, LK.gR / FRAME_R[F.soft], 0, LK.gTint, LK.gAlpha, .5);
     }
-    nMain = finish(main); nGlow = finish(glow); nLight = finish(light); nWarm = finish(warm); nHalo = finish(halo);
+    nUnder = finish(under); nMain = finish(main); nGlow = finish(glow); nLight = finish(light); nWarm = finish(warm); nHalo = finish(halo);
     const s = RM ? 0 : core.shake;
     off.x = s ? (Math.random() - .5) * s : 0; off.y = s ? (Math.random() - .5) * s : 0;
     return off;
@@ -252,7 +253,7 @@ export function createFx(renderer) {
     const r2 = v => Math.round(v * 100) / 100;
     return {
       particles: core.store.count, cap: FX_CAP, byKind,
-      sprites: { main: nMain, glow: nGlow, light: nLight, warm: nWarm, halo: nHalo },
+      sprites: { under: nUnder, main: nMain, glow: nGlow, light: nLight, warm: nWarm, halo: nHalo },
       blend: { main: main.blend, glow: glow.blend, light: light.blend, warm: warm.blend, halo: halo.blend },
       // warme Lichter des letzten Bilds: Bodenlicht-Scheiben (warm) und Halos (halo) mit ihrer größten Deckkraft
       warmLights: { ground: nWarm, halos: nHalo, maxAlpha: r2(maxWarm) },

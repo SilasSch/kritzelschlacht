@@ -33,6 +33,7 @@ import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallen
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
+import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -865,6 +866,9 @@ function updatePad() {
   setPadding(cam, g.top - h.top, h.bottom - g.bottom);
 }
 if (hudGap && typeof ResizeObserver === 'function') new ResizeObserver(updatePad).observe(hudGap);
+// Malleiste per Griff verschiebbar (ui/dragbar.js); die Lage bleibt zwischen Sitzungen erhalten
+const palette = document.querySelector('.palette');
+if (palette) makeDraggable({ el: palette, grip: document.getElementById('palGrip'), reset: document.getElementById('palReset'), host, key: 'kritzelschlacht.palettePos', onMove: updatePad });
 let resizeQueued = false;
 const queueResize = () => { if (resizeQueued) return; resizeQueued = true; requestAnimationFrame(() => { resizeQueued = false; onResize(); }); };
 window.addEventListener('resize', queueResize);

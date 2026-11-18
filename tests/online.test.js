@@ -248,9 +248,12 @@ test('Online: große Armeen gehen in mehreren Stücken über, die presence bleib
   const wA = createWorld(W, H, 3), wB = createWorld(W, H, 4); wA.teamMode = wB.teamMode = true;
   paintSide(wA, 'blau', A.cfg, 'biene', 80); paintSide(wB, 'rot', A.cfg, 'wolf', 10);
   const nA = wA.units.length;
-  assert.ok(nA > 300, `viele Bienen: ${nA}`);
+  assert.ok(nA >= 240, `viele Bienen: ${nA}`);   // Bienen kosten seit 18.11. 1 Punkt
   markReady(A, packArmy(wA, 'blau')); markReady(B, packArmy(wB, 'rot'));
-  assert.ok(A.chunks.length >= 2, `Stücke: ${A.chunks.length}`);
+  // Mehrere Stücke: mit Bienen zu 1 Punkt passt die größte Armee meist in eines; das Zerlegen prüft splitChunks unten
+  assert.ok(A.chunks.length >= 1 && A.chunks.join('') === A.mine, `Stücke: ${A.chunks.length}`);
+  const big = 'x'.repeat(CHUNK * 2 + 5), parts = splitChunks(big);
+  assert.equal(parts.length, 3); assert.equal(parts.join(''), big);
   let maxBytes = 0;
   for (let i = 0; i < 100 && (A.phase !== 'fight' || B.phase !== 'fight'); i++) {
     const va = view(A), vb = view(B);

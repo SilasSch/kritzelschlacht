@@ -30,11 +30,11 @@ export default {
     },
     // Bienen schlagen Elefanten (COUNTERS), und Elefanten fliehen vor Bienen; jeder Nahkampf verliert
     {
-      id: 'wild-2', n: 'Die Elefantenherde', budget: 70, par: 50,
+      id: 'wild-2', n: 'Die Elefantenherde', budget: 75, par: 70,
       units: ['biene', 'baer', 'gorilla', 'elefant'], cats: ['tiere'], answer: ['biene'],
       hint: 'Bienen, Bären, Gorillas und Elefanten. Gegen sechs Elefanten verliert jeder Nahkampf. Doch selbst der größte Dickhäuter hat Angst vor etwas ganz Kleinem.',
       place: [['tCircle', 'wasser', .84, .5, .14], ['rect', 'elefant', 6, .66, .25, .74, .75]],
-      plan: { smart: [['biene', 90, ...B]], spam: [['baer', 7, ...F]] },
+      plan: { smart: [['biene', 70, ...B]], spam: [['baer', 7, ...F]] },
     },
     // Krokodile sind im Wasser schnell und unsichtbar: die watenden Schützen sehen sie erst, wenn es zu spät ist
     {

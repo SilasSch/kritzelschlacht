@@ -19,7 +19,7 @@ export const UNITS = {
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:12,range:90,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
-  biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:7,dmg:3,range:2,speed:135,cd:.45,cost:0.55,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
+  biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:24,dmg:4,range:2,speed:135,cd:.45,cost:1,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
   magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:3.2,cost:8,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},
@@ -355,7 +355,7 @@ export const MSG_NO_PAINT = 'Diese Einheit kann man nicht malen.';
 // Charakterkarten (stark/schwach gegen, cards.js).
 export const COUNTERS = [
   ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60],
-  ['biene', 'ritter', 60], ['biene', 'schuetze', 60], ['krieger', 'biene', 60],
+  ['biene', 'ritter', 60], ['biene', 'schuetze', 60],
   ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
   ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
   ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
@@ -480,8 +480,8 @@ export const MISSIONS = [
   {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
   {n:'Die Festung',budget:122,par:112,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},
-  {n:'Wilde Jagd',budget:120,par:95,cats:['tiere','gelaende'],hint:'Nur Tiere. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',18,.68,.26,.76,.74],['rect','ritter',14,.8,.3,.86,.7]]},
+  {n:'Wilde Jagd',budget:120,par:110,cats:['tiere','gelaende'],hint:'Nur Tiere. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',18,.68,.26,.76,.74],['rect','ritter',14,.8,.3,.86,.7]]},
   {n:'Lavafeld',budget:110,par:93,hint:'Die Lava lässt nur eine Lücke. Bären und Wölfe stürmen durch. Halte sie mit Schützen weit hinten und breit verteilt auf Abstand.',place:[['tRect','lava',.5,0,.56,.42],['tRect','lava',.5,.58,.56,1],['rect','baer',6,.7,.35,.76,.65],['rect','wolf',16,.8,.3,.86,.7]]},
-  {n:'Drachenhort',budget:222,par:220,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',80,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},
+  {n:'Drachenhort',budget:230,par:228,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',36,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},
   {n:'Stahlgewitter',budget:150,par:120,hint:'Zwei Panzer, Infanterie und ein Hubschrauber. Panzerfäuste knacken Panzer. Nahkämpfer erreichen den Hubschrauber nicht.',place:[['unit','panzer',.73,.36],['unit','panzer',.73,.64],['rect','soldat',18,.63,.3,.67,.7],['rect','mg',4,.78,.4,.8,.6],['unit','heli',.86,.5]]},
 ];

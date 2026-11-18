@@ -17,17 +17,17 @@ const PLANS = [
   { smart: [['ritter', 15, ...F], ['grenadier', 3, ...B]], spam: [['krieger', 46, ...F]] },   // Budget 92 (18.11.)
   // M3, M6: Bienen kosten 0,55 statt 0,5 (Nachtrag 4, #37). Task 7: par 85 → 90 bzw. 90 → 95 und 163 bzw. 172 Bienen
   // (154 bzw. 163 gewannen an einzelnen Formen nur 3/8 bzw. 4/8; die alten Pläne hatten 170 bzw. 180)
-  { smart: [['biene', 163, ...F]], spam: [['krieger', 55, ...F]] },
+  { smart: [['biene', 90, ...F]], spam: [['krieger', 55, ...F]] },
   { smart: [['reiter', 30, ...F]], spam: [['krieger', 60, ...F]] },
   { smart: [['magier', 14, ...B]], spam: [['krieger', 55, ...F]] },
   // M6: 163 Bienen hinten (B) statt vorn: der Schwarm sammelt sich, bevor die Reiter da sind (vorn 5/8, hinten 8/8)
-  { smart: [['biene', 172, ...B]], spam: [['wolf', 80, ...F]] },
+  { smart: [['biene', 110, ...B]], spam: [['wolf', 80, ...F]] },
   // M7: Bären und Wölfe kommen durch die Lavalücke (Wegfindung); weit hinten und breit verteilt (beides nötig)
   // schießen die Schützen am längsten, bevor die Tiere heran sind
   { smart: [['schuetze', 37, ...Deep]], spam: [['krieger', 55, ...F]] },
   // M8: Drachenatem trifft seit dem Fix bis zur Angriffsreichweite, auch Schützen auf Abstand (vorher nie): 14 Schützen
   // gewannen nur noch 0/4, 24 Schützen wieder fast immer (par 120 → 140, data.js)
-  { smart: [['schuetze', 24, ...Md], ['magier', 20, ...B]], spam: [['krieger', 85, ...F]] },
+  { smart: [['schuetze', 24, ...Md], ['magier', 21, ...B]], spam: [['krieger', 85, ...F]] },
   // M9: Task 7: Panzerfäuste in der Mitte statt hinten (gleiche Kosten): mit Rückzug kamen sie von hinten zu spät an die
   // Panzer (5/8 an 1400×1050, vorher an einzelnen Formen 6/8); in der Mitte 8/8 an allen Formen
   { smart: [['soldat', 16, ...F], ['panzerfaust', 12, ...Md]], spam: [['krieger', 75, ...F]] },

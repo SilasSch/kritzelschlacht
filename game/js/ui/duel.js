@@ -1,7 +1,7 @@
 // Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung; geht für alle, auch über den öffentlichen Link.
 // Ablauf und Datenformat: duel.js. Gemalt wird wie im Online-Spiel (battle.hot mit online: true, duel: true und
 // def = Kategorie), A links als Blau, B rechts als Rot. Der Kampf läuft über main.js onlineFight mit der Saat aus dem Code.
-import { roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT } from '../online.js';
+import { roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, budgetOf } from '../online.js';
 import { RULES, RULE, MAPS, MAP, RULE_IDS, MAP_IDS, applyMap, mapSVG } from '../rules.js';
 import { challengeData, answerData, duelList } from '../duel.js';
 import { fmtPts } from '../cards.js';
@@ -75,7 +75,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     const c = st.cfg, mp = MAP[c.map] || MAP.feld;
     showCard(`<h2 id="duelTitle">${intro}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
       <div class="row"><div class="mapprev">${mapSVG(mp.id, 220, 124)}</div><div><b>${esc(mp.n)}</b><br><span class="muted">${esc(mp.d)}</span></div></div>
-      <p>${esc(RULE[c.cat].d)}. ${c.budget} Punkte. Du bist <b>${SIDE_N[side]}</b> (${side === 'blau' ? 'links' : 'rechts'}).
+      <p>${esc(RULE[c.cat].d)}. ${budgetOf(c)} Punkte. Du bist <b>${SIDE_N[side]}</b> (${side === 'blau' ? 'links' : 'rechts'}).
       ${side === 'blau' ? 'Wenn du fertig bist, bekommst du den Code für deinen Gegner.' : 'Die Armee deines Gegners bleibt verdeckt, bis du „Fertig“ drückst.'}</p>
       <div class="btnrow"><button class="go" id="duelOk">Los geht's</button></div>`);
     $('duelOk').onclick = hideCard; $('duelOk').focus();
@@ -89,7 +89,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     $('ovBat').hidden = true; document.body.classList.remove('bat-res');
     clearWorld(); world.teamMode = true; undoStack.length = 0;
     applyMap(world, cfg.map || 'feld'); markAll();
-    b.hot = { online: true, duel: true, budget: cfg.budget, step: side || 'online', spent: { blau: 0, rot: 0 }, def: roundDef(cfg) };
+    b.hot = { online: true, duel: true, budget: budgetOf(cfg), step: side || 'online', spent: { blau: 0, rot: 0 }, def: roundDef(cfg) };
     game.setCat(cfg.cat);
     ui.updateBattle(); ui.updateCounts(); ui.updateControls();
   }
@@ -116,7 +116,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     sync();
   }
   const showChallenge = () => shareDlg.showCode(encode(challengeData(st.cfg, st.a)), 'Herausforderung',
-    `Kategorie ${CAT_NAME[st.cfg.cat]}, ${st.cfg.budget} Punkte. Schick diesen Code deinem Gegner. Er öffnet das Spiel, klickt „Code laden“ und fügt ihn ein. Seinen Antwort-Code lädst du danach genauso, dann siehst du euren Kampf.`);
+    `Kategorie ${CAT_NAME[st.cfg.cat]}, ${budgetOf(st.cfg)} Punkte. Schick diesen Code deinem Gegner. Er öffnet das Spiel, klickt „Code laden“ und fügt ihn ein. Seinen Antwort-Code lädst du danach genauso, dann siehst du euren Kampf.`);
   const showAnswer = () => shareDlg.showCode(encode(st.data), 'Antwort-Code',
     'Schick diesen Code zurück an deinen Gegner. Mit „Code laden“ sieht er genau diesen Kampf.');
 
@@ -162,7 +162,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     if (!box) { box = document.createElement('div'); box.className = 'onlbox'; box.id = 'duelRes'; $('ovBat').querySelector('.btnrow').before(box); }
     const me = st.role === 'b' ? 'rot' : 'blau', w = r && r.winner;
     const note = w === 'draw' ? 'Unentschieden.' : w === me ? 'Du gewinnst das Duell!' : 'Dein Gegner gewinnt das Duell.';
-    box.innerHTML = `<div><div class="muted">Code-Duell · ${esc(CAT_NAME[st.cfg.cat])} · ${st.cfg.budget} Punkte · du bist ${SIDE_N[me]}</div>
+    box.innerHTML = `<div><div class="muted">Code-Duell · ${esc(CAT_NAME[st.cfg.cat])} · ${budgetOf(st.cfg)} Punkte · du bist ${SIDE_N[me]}</div>
         <div class="sc">${esc(note)}</div>
         <div class="muted">${st.role === 'b' ? 'Schick den Antwort-Code zurück, dann sieht dein Gegner diesen Kampf. Revanche: gleiches Setup, du malst neu und schickst eine neue Herausforderung.' : 'Revanche: gleiche Regel, Karte und Budget, du malst neu und schickst eine neue Herausforderung.'}</div></div>
       <div class="btnrow">${st.role === 'b' ? '<button class="go" id="duelAnswer">Antwort-Code</button>' : ''}<button class="go" id="duelRematch">Revanche</button><button class="btn" id="duelEnd">Duell beenden</button></div>`;
@@ -187,7 +187,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     setText(go, label);
     go.disabled = !(side || (st.role === 'a' && st.a) || (st.role === 'b' && st.data && b.phase === 'done'));
     const head = `Code-Duell · ${CAT_NAME[c.cat]} · ${(MAP[c.map] || MAP.feld).n}`;
-    const tail = side ? `du malst ${side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(h.spent[side])} / ${c.budget} Punkte`
+    const tail = side ? `du malst ${side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(h.spent[side])} / ${budgetOf(c)} Punkte`
       : st.role === 'a' ? 'Code verschickt · die Antwort mit „Code laden“ einfügen'
       : b.phase === 'fight' ? 'Kampf läuft' : 'Kampf vorbei';
     setText($('batHint'), `${head} · ${tail}`);

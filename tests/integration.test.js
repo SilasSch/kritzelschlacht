@@ -37,7 +37,7 @@ test('Froschfluch: der Elefant (Task 5) ist immun wie die Bosse und der Ghul', (
 });
 
 test('FEARLESS: Elefant furchtlos gegen Brüllen und Spuk, Bienen erschrecken ihn trotzdem', () => {
-  assert.deepEqual([...FEARLESS].sort(), ['drache', 'drohne', 'elefant', 'heli', 'kuppel', 'laserbot', 'magnet', 'mega', 'minibot', 'panzer', 'schweisser', 'spinne', 'tesla']);
+  assert.deepEqual([...FEARLESS].sort(), ['bomber', 'drache', 'drohne', 'elefant', 'heli', 'jet', 'kampfdrohne', 'kuppel', 'laserbot', 'magnet', 'mega', 'minibot', 'panzer', 'schweisser', 'spinne', 'tesla']);
   const w = mkWorld(), g = spawn(w, 'geist', 300, 300, 'blau'), e = spawn(w, 'elefant', 380, 300, 'rot');
   g.tg = e; rebuildHash(w);
   assert.equal(ABILITY.geist.ready(w, g), false, 'Spuk wirkt nicht');

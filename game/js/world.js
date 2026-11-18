@@ -48,7 +48,7 @@ export const isBat = v => v.batT > 0 && !!v.T.fly;
 // Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
 // Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
 export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
-export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v) || aloft(v)) && groundMelee(u);
+export const outOfMelee = (u, v) => (v.T.high || isBat(v) || aloft(v)) && groundMelee(u);
 // --- Task 5: Tiere ---
 // Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist
 // (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
@@ -109,6 +109,8 @@ export function spawn(world, type, x, y, team) {
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
     pathT: 0, pathBlk: 0,
+    // Lufteinheiten (air.js): Blickrichtung, Rest des Überflugs, Bomben des laufenden Teppichs und Takt bis zur nächsten
+    hx: .5, hy: .5, passT: .5, bombK: 0, bombT: .5, droneN: 0, mslCd: .5, mslK: 0, mslT: .5,
     // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):
     // px/py (physics.integrate; NaN = noch keine Lage vor dem Schritt), bounced/impact (Abheben), fx/fy
     // (Blickrichtung; 0/0 = noch keine: kein Flankenbonus), follow (Sanitäter). Zahlenfelder starten als Zahl
@@ -179,6 +181,7 @@ export function spawn(world, type, x, y, team) {
   // Task 6: Takte nach id versetzt (nicht alle Einhörner und Phönixe im selben Schritt), ohne world.rng
   u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.auraAt = -9; u.trailT = (u.id % 4) * .06;
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
+  u.hx = 0; u.hy = 0; u.passT = 0; u.bombT = 0; u.mslCd = 0; u.mslT = 0;   // Lufteinheiten (air.js)
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
   u.braveT = 0;   // Königsaura: als Double angelegt
@@ -247,7 +250,7 @@ export function nearestEnemy(world, u) {
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
           // Nahkämpfer am Boden: kein Hubschrauber, keine Fledermausform, kein Adler oben (Review Task 5: sonst stehen sie unter ihm)
-          if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v) || aloft(v)))) continue;
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || isBat(v) || aloft(v)))) continue;
           if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser

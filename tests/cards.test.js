@@ -24,7 +24,7 @@ test('jede Einheit hat eine Karte', () => {
 test('Werte: das Maximum aller Einheiten ergibt 1, mehr ist mehr', () => {
   assert.equal(unitCard('panzer').stats.hp, 1);
   assert.equal(unitCard('sniper').stats.range, 1);   // 456 px seit Nachtrag 4 (#36), vor dem Mörser (420)
-  assert.equal(unitCard('biene').stats.speed, 1);
+  assert.equal(unitCard('jet').stats.speed, 1);   // 18.11.: der Kampfjet (230) vor der Biene (135)
   assert.equal(unitCard('drache').stats.cost, 1);
   assert.ok(unitCard('ritter').stats.hp > unitCard('krieger').stats.hp);
   assert.ok(unitCard('reiter').stats.speed > unitCard('ritter').stats.speed);
@@ -49,7 +49,7 @@ test('Konter', () => {
     assert.equal(new Set(c.strong).size, c.strong.length);
   }
   // Task 7: jede neue Einheit schlägt mindestens eine und wird von mindestens einer geschlagen (Duell im Prüfstand)
-  for (const t of ['vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel']) {
+  for (const t of ['vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel', 'jet', 'kampfdrohne', 'bomber']) {
     assert.ok(unitCard(t).strong.length >= 1 && unitCard(t).weak.length >= 1, t);
   }
   // Schrottplatz und Urzeit: jede Einheit wird von einer geschlagen, die kämpfenden schlagen auch eine

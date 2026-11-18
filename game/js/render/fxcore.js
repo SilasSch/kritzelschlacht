@@ -536,6 +536,7 @@ export function createFxCore(hooks = {}, opt = {}) {
   }
 
   // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
+  const HELI_SMOKE = { HALF: .5, LOW: .25, RATE: 9, RATE_LOW: 20 };
   const count = (rate, dt) => { const n = rate * dt, k = n | 0; return k + (rand() < n - k ? 1 : 0); };
   function bossFx(u, dt) {
     const r = u.T.r * (BOSS_VIS[u.type] || 1), face = u.face < 0 ? -1 : 1;
@@ -556,6 +557,16 @@ export function createFxCore(hooks = {}, opt = {}) {
       return;
     }
     const heli = u.type === 'heli';
+    // Overhaul 18.11.: angeschlagener Heli raucht am Triebwerk (unter halben LP), unter einem Viertel mit Funken
+    if (heli && u.hp < u.T.hp * HELI_SMOKE.HALF) {
+      const lo = u.hp < u.T.hp * HELI_SMOKE.LOW, ex = u.x - face * r * .15, ey = u.y - u.z - r * .85;
+      for (let n = count(lo ? HELI_SMOKE.RATE_LOW : HELI_SMOKE.RATE, dt); n > 0; n--) {
+        const p = add('exhaust', ex + rnd(-3, 3), ey + rnd(-2, 2), EXHAUST.life * rnd(1.4, 2), rnd(3, 4.5), lo ? 0x3a3a40 : SMOKE_COLS[(rand() * 3) | 0] - 0x101010);
+        if (!p) break;
+        p.vx = -face * rnd(14, 30) - (u.mx || 0) * .4; p.vy = -rnd(16, 30); p.drag = 1.2; p.rot = rand() * TAU; p.vrot = rnd(-.8, .8);
+      }
+      if (lo && rand() < dt * 8) { const p = add('ember', ex, ey, rnd(.2, .4), rnd(2, 3)); if (p) { p.vx = rnd(-60, 60); p.vy = -rnd(20, 70); p.drag = DRAG; } }
+    }
     if (!(u.z > 1) || (heli && u.z >= WASH_Z) || (!heli && u.z >= WASH_Z * 1.5)) return;
     const gy = u.y + r * 1.05;
     for (let n = count(heli ? WASH_RATE : GUST_RATE, dt); n > 0; n--) {
@@ -1148,7 +1159,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       const proj = world.proj;
       for (let i = 0; i < proj.length; i++) {
         const p = proj[i];
-        if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow') continue;
+        if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow' && p.kind !== 'aam') continue;
         projScreen(p, TR);
         if (p.kind === 'firearrow') {
           if (rand() < dt * 24) { const f = add('fire', TR.x, TR.y, .18, rnd(1.4, 2.2)); if (f) { f.vx = rnd(-8, 8); f.vy = -rnd(5, 15); f.drag = DRAG; } }

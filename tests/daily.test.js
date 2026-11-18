@@ -2,14 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UNITS } from '../game/js/data.js';
-import { dailyLevel, dateKey, shortDate, shareText, PUBLIC_URL, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES, dcost, DAILY_COUNTERS as COUNTERS } from '../game/js/daily.js';
+import { dailyLevel, dateKey, shortDate, shareText, PUBLIC_URL, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES, DAILY_COUNTERS as COUNTERS, costOf } from '../game/js/daily.js';
 import { validateCampaign, unitAllowed, terrainAllowed } from '../game/js/campaign/index.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult } from '../game/js/sim.js';
 import { placePlan } from '../tools/plans.mjs';
 
 const days = n => Array.from({ length: n }, (_, i) => dateKey(new Date(2026, 10, 1 + i)));
-const enemyPts = L => L.place.reduce((a, p) => a + (p[0] === 'rect' || p[0] === 'circle' ? p[2] * dcost(p[1]) : p[0] === 'unit' ? dcost(p[1]) : 0), 0);   // feste Kosten (daily.DAILY_COST)
+const enemyPts = L => L.place.reduce((a, p) => a + (p[0] === 'rect' || p[0] === 'circle' ? p[2] * costOf(p[1]) : p[0] === 'unit' ? costOf(p[1]) : 0), 0);   // feste Kosten (daily.DAILY_COST)
 
 test('dateKey und shortDate: Ortszeit, YYYY-MM-DD und 18.11.', () => {
   assert.equal(dateKey(new Date(2026, 10, 18, 23, 59)), '2026-11-18');

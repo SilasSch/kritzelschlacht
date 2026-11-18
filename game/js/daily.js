@@ -12,28 +12,20 @@ import { UNITS, PLURAL } from './data.js';
 export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
   'geist', 'drache', 'vampir', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli', 'troll', 'zyklop', 'hexe',
   'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
-// Feste Kosten (Stand 18.11., vor der Balance-Runde): Kostenänderungen in data.js dürfen alte Tage ebenfalls nicht
-// verändern. Nur für den Aufbau des Levels; gespielt wird mit den aktuellen Kosten.
-export const DAILY_COST = { krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4 };
-export const dcost = t => DAILY_COST[t] ?? UNITS[t].cost;
 const inPool = t => DAILY_POOL.includes(t);
-// Feste Konter (Stand 18.11., data.COUNTERS innerhalb von DAILY_POOL): spätere Änderungen an COUNTERS verändern die Tage nicht
-export const DAILY_COUNTERS = [
-  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60], ['ritter', 'reiter', 60], ['biene', 'ritter', 60], ['biene',
-  'schuetze', 60], ['krieger', 'biene', 60], ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60], ['reiter',
-  'schuetze', 60], ['reiter', 'grenadier', 60], ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
-  ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90], ['panzer', 'krieger', 105],
-  ['panzer', 'soldat', 105], ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90], ['roemer',
-  'schuetze', 60], ['roemer', 'krieger', 60], ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier',
-  'roemer', 60], ['moerser', 'roemer', 90], ['mg', 'adler', 90], ['adler', 'sniper', 90], ['vampir', 'zyklop', 90],
-  ['magier', 'vampir', 90], ['troll', 'bueffel', 90], ['krieger', 'troll', 90], ['zyklop', 'grenadier', 90],
-  ['reiter', 'zyklop', 90], ['hexe', 'baer', 90], ['schuetze', 'hexe', 90], ['phoenix', 'vampir', 90], ['soldat',
-  'phoenix', 90], ['einhorn', 'schuetze', 90], ['ritter', 'einhorn', 90], ['elefant', 'grenadier', 96],
-  ['panzerfaust', 'elefant', 96], ['biene', 'elefant', 96], ['krokodil', 'bueffel', 90], ['schuetze', 'krokodil', 90],
-  ['gorilla', 'grenadier', 90], ['ritter', 'gorilla', 90], ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
-  ['magier', 'ritter', 90], ['magier', 'geist', 90]
-];
+// Konter und Kosten der Auswahl, eingefroren am 18.11.: Balance-Änderungen (data.js) verändern die Tage nicht.
+// Die Kämpfe selbst laufen mit den aktuellen Werten (Bestenliste: SIM_VERSION in dailyboard.js).
+const DAILY_COUNTERS_TXT = `ritter>krieger ritter>schuetze ritter>reiter biene>ritter biene>schuetze krieger>biene wolf>schuetze wolf>grenadier
+reiter>schuetze reiter>grenadier magier>krieger grenadier>krieger panzerfaust>panzer panzerfaust>heli soldat>heli
+panzer>krieger panzer>soldat mg>biene mg>krieger sniper>ritter roemer>schuetze roemer>krieger grenadier>roemer
+reiter>roemer magier>roemer moerser>roemer mg>adler adler>sniper vampir>zyklop magier>vampir troll>bueffel
+krieger>troll zyklop>grenadier reiter>zyklop hexe>baer schuetze>hexe phoenix>vampir soldat>phoenix einhorn>schuetze
+ritter>einhorn elefant>grenadier panzerfaust>elefant biene>elefant krokodil>bueffel schuetze>krokodil
+gorilla>grenadier ritter>gorilla bueffel>grenadier ritter>bueffel magier>ritter magier>geist`;
+export const DAILY_COUNTERS = DAILY_COUNTERS_TXT.split(/\s+/).map(p => p.split('>')).filter(c => UNITS[c[0]] && UNITS[c[1]]);
 const COUNTERS = DAILY_COUNTERS;
+export const DAILY_COST = {krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4};
+export const costOf = t => DAILY_COST[t] ?? UNITS[t].cost;
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
@@ -93,8 +85,8 @@ export function dailyLevel(dateStr) {
   // Boss (etwa jeder vierte Tag), nur wenn sein Konter mit ins Spiel kommt
   let boss = null;
   if (rng() < .28 && total >= 90) {
-    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && dcost(b) <= total * .4);
-    if (cand.length) { boss = pick(cand); rest -= dcost(boss); }
+    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && costOf(b) <= total * .4);
+    if (cand.length) { boss = pick(cand); rest -= costOf(boss); }
   }
   const sideTypes = shuffle(side).slice(0, nGroups - 1);
   const mainShare = sideTypes.length ? between(.55, .7) : 1;
@@ -106,8 +98,8 @@ export function dailyLevel(dateStr) {
   let enemyPts = 0;
   const xs = [[.6, .68], [.7, .78], [.8, .88]];
   groups.forEach(([t, pts], i) => {
-    const n = Math.max(1, Math.round(pts / dcost(t)));
-    enemyPts += n * dcost(t);
+    const n = Math.max(1, Math.round(pts / costOf(t)));
+    enemyPts += n * costOf(t);
     // Fernkämpfer eher hinten, Nahkämpfer vorn
     const slot = xs[Math.min(xs.length - 1, i)];
     const y0 = r2(between(.14, .3)), y1 = r2(between(.7, .86));
@@ -115,7 +107,7 @@ export function dailyLevel(dateStr) {
     const x0 = r2(slot[0] + between(0, slot[1] - slot[0] - w)), x1 = r2(x0 + w);
     place.push(['rect', t, n, x0, y0, x1, y1]);
   });
-  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += dcost(boss); }
+  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += costOf(boss); }
 
   // Gelände in der gegnerischen Hälfte (vor den Gegnern), an etwa jedem zweiten Tag
   let terrain = null;
@@ -143,8 +135,8 @@ export function dailyLevel(dateStr) {
   const shares = new Map();
   const assign = (c, pts) => shares.set(c, (shares.get(c) || 0) + pts);
   for (const p of place) {
-    if (p[0] === 'rect') assign(beat(p[1]), p[2] * dcost(p[1]));
-    else if (p[0] === 'unit') assign(bossC, dcost(p[1]));
+    if (p[0] === 'rect') assign(beat(p[1]), p[2] * costOf(p[1]));
+    else if (p[0] === 'unit') assign(bossC, costOf(p[1]));
   }
   // Lösungsplan mit den aktuellen Kosten (er muss spielbar bleiben); das Level selbst nutzt die festen Kosten
   const smart = [];

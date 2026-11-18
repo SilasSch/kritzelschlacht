@@ -65,9 +65,17 @@ Kampf mit fester Saat (Test: `tests/dailyboard.test.js`).
 - Live-Artefakt: gemeinsame Liste in der Datenbank des Artefakts, `scores/<Spieler-id>`. Veröffentlichen mit
   `capabilities: { room: {}, db: { rules: [{ path: 'scores', read: 'view', write: 'owner' }, { path: 'scores/{self}', write: 'interact' }] }, user: { scopes: ['profile'] } }`
   (die Regeln stehen auch in `dailyboard.DB_RULES`). Eintragen dürfen nur Eingeladene mit Recht „Mitwirkende“ oder höher.
+- Balance-Updates: Jeder Eintrag trägt die Spielversion (`dailyboard.SIM_VERSION`, Prüfsumme der Einheitenwerte der
+  Tageschallenge plus `SIM_REV`). Ändern sich Werte, schlägt `tests/dailyboard.test.js` fehl: neue Version in `VERSIONS`
+  eintragen und bei der alten `until` = Tag des Updates setzen. Einträge der alten Version zählen dann bis zu diesem Tag
+  wie eingetragen (markiert „alte Spielversion“), neue werden nachgerechnet.
 
-**Regeln, Karten, Revanche** (`rules.js`): 14 Regeln (einzelne Kategorien, Mischungen wie Armee + Tiere, Auswahl nach
-Eigenschaft wie Nur Fernkampf, Luftkampf, Kleinvieh) und 6 spiegelgleiche Karten (Feld, Fluss, Furten, Wäldchen, Bollwerk,
-See). Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
+**Regeln, Karten, Revanche** (`rules.js`): Regeln für einzelne Kategorien, Mischungen (Armee + Tiere, Robo-Dinos …),
+Auswahl nach Eigenschaft (Nur Fernkampf, Luftkampf, Dickhäuter …) und Budget-Varianten (`bm`: Sparrunde, Horde, Titanen);
+15 spiegelgleiche Karten, jede lässt einen Weg ohne Lava und Mauer frei (Test). Regeln ohne mindestens 3 Einheiten fallen
+von selbst weg. Die Revanche-Anfrage kommt als Abfrage mitten im Bild mit Ton, Hinweise (Gegner fertig, hat abgestimmt) als
+Leiste oben. Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
 der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Budget neu, beide malen neu.
+Online gibt es „Aufgeben“ (beim Malen, Warten und im Kampf): die Runde geht an den Gegner (`giveUp`, presence `gave`).
+Im Code-Duell gibt es kein Aufgeben, dort läuft der Kampf ohne Gegner am anderen Ende ab.
 Beim Veröffentlichen `js/rules.js` mit hochladen.

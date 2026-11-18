@@ -5,7 +5,7 @@
 //   - Auf diesem Gerät (überall, auch über den öffentlichen Link): eigene Siege und eingefügte Ergebnis-Codes von Freunden.
 // Jeder Eintrag wird hier nachgerechnet (createCheck in Häppchen); gezählt wird nur das nachgerechnete Ergebnis.
 import { dateKey, shortDate } from '../daily.js';
-import { createCheck, checkNow, rankEntries, resultCode, addLocal, cleanBoard, cleanName, mergeOwn, dayEntries, BOARD_KEEP, NAME_MAX } from '../dailyboard.js';
+import { createCheck, checkNow, stampOf, SIM_VERSION, rankEntries, resultCode, addLocal, cleanBoard, cleanName, mergeOwn, dayEntries, BOARD_KEEP, NAME_MAX } from '../dailyboard.js';
 import { fmtPts } from '../cards.js';
 
 const KEY = 'kritzel-dailyboard';
@@ -46,19 +46,21 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   const results = new Map();   // date|army → { res } | { error } | null (läuft)
   const queue = [];
   let pumping = false;
-  const keyOf = (date, a) => date + '|' + a;
-  function want(date, a) {
-    const k = keyOf(date, a);
+  // Schlüssel mit Spielversion: derselbe Kampf kann unter einer anderen Version anders ausgehen (dailyboard.js SIM_VERSION)
+  const verOf = st => (st && st.v) || SIM_VERSION;
+  const keyOf = (date, a, st) => date + '|' + verOf(st) + '|' + a;
+  function want(date, a, st) {
+    const k = keyOf(date, a, st);
     if (results.has(k)) return results.get(k);
-    results.set(k, null); queue.push({ k, c: createCheck(date, a) });
+    results.set(k, null); queue.push({ k, c: createCheck(date, a, undefined, st) });
     if (!pumping) { pumping = true; setTimeout(pump, 0); }
     return null;
   }
   // Sofort (für den Vergleich mit dem eigenen alten Eintrag): Ergebnis oder null bei ungültigem Eintrag
-  function resultNow(date, a) {
-    const k = keyOf(date, a);
+  function resultNow(date, a, st) {
+    const k = keyOf(date, a, st);
     let r = results.get(k);
-    if (!r) { const c = checkNow(date, a); r = c.error ? { error: c.error } : { res: c.result }; results.set(k, r); }
+    if (!r) { const c = checkNow(date, a, st); r = c.error ? { error: c.error } : { res: c.result }; results.set(k, r); }
     return r.res || null;
   }
   const better = (res, old) => !old || !old.win || rankEntries([{ res, at: 1 }, { res: old, at: 0 }])[0].res === res;
@@ -99,11 +101,11 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   async function submitLive(date, army, res) {
     if (!live.db || !live.me || writing) return;
     const own = myDoc(), old = own && own.days && own.days[date];
-    if (old && old.a === army) return;
-    if (old && !better(res, resultNow(date, old.a))) return;   // der alte Eintrag ist besser
+    if (old && old.a === army && verOf(old) === SIM_VERSION) return;
+    if (old && !better(res, resultNow(date, old.a, old))) return;   // der alte Eintrag ist besser
     writing = true;
     try {
-      const doc = mergeOwn(own, date, army);
+      const doc = mergeOwn(own, date, army, Date.now(), undefined, res);
       if (store.name) doc.n = store.name;
       await live.db.collection('scores').doc(live.me).set(doc);
       toast('In die Live-Bestenliste eingetragen.');
@@ -125,7 +127,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
       if (seen.has(e.a)) continue; seen.add(e.a);
       out.push({ ...e, me: !!e.me, code: !e.me });
     }
-    for (const e of out) { const r = want(date, e.a); e.res = r && r.res; e.error = r && r.error; e.pending = !r; }
+    for (const e of out) { const r = want(date, e.a, e); e.res = r && r.res; e.error = r && r.error; e.pending = !r; }
     return out;
   }
 
@@ -151,7 +153,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     let place = 0;
     return ranked.concat(bad).map(e => {
       const win = e.res && e.res.win, rk = win ? ++place : '';
-      const ck = e.pending ? 'prüft …' : e.error ? `✗ ${esc(e.error)}` : win ? '✓ nachgerechnet' : '✗ verloren';
+      const ck = e.pending ? 'prüft …' : e.error ? `✗ ${esc(e.error)}` : e.res.old ? '≈ alte Spielversion' : win ? '✓ nachgerechnet' : '✗ verloren';
       const tag = e.me ? '<span class="tag">du</span>' : e.code ? '<span class="tag">Code</span>' : '';
       return `<tr class="${rk === 1 ? 'r1 ' : ''}${e.me ? 'me ' : ''}${e.error || (e.res && !win) ? 'bad' : ''}">
         <td class="rk">${rk}</td><td>${esc(nameOf(e))}${tag}</td>
@@ -185,7 +187,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     $('boardName').oninput = e => { store.name = cleanName(e.target.value); persist(); };
     $('boardMine').onclick = async () => {
       if (!mine) return;
-      const code = await encode(resultCode(day, mine.a, store.name));
+      const code = await encode(resultCode(day, mine.a, store.name, mine.res, verOf(mine)));
       shareDlg.showCode(code, 'Ergebnis teilen', `Tageschallenge ${shortDate(day)}: ${fmtPts(mine.res.spent)} Punkte. Wer den Code mit „Code laden“ oder in der Bestenliste einfügt, sieht dich dort. Der Kampf wird nachgerechnet.`);
     };
     $('boardAdd').onclick = async () => {
@@ -200,7 +202,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   function addCode(d) {
     if (!d || d.k !== 'dailyres') throw new Error('Das ist kein Ergebnis der Tageschallenge.');
     if (d.d < days()[0]) throw new Error('Dieses Ergebnis ist älter als eine Woche.');
-    addLocal(store.days, d.d, { n: d.n || 'Unbekannt', a: d.a });
+    addLocal(store.days, d.d, { n: d.n || 'Unbekannt', a: d.a, ...(d.sv ? { v: d.sv, r: d.r } : {}) });
     store.days = cleanBoard(store.days); persist();
     toast(`${d.n || 'Ergebnis'} eingetragen, wird nachgerechnet.`);
     open(d.d);
@@ -208,10 +210,10 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
 
   // Sieg im Spiel (main.js finishMission): das Ergebnis ist schon das nachgerechnete (gleicher Schnappschuss, gleiche Saat)
   function onWin(date, army, res) {
-    results.set(keyOf(date, army), { res });
+    results.set(keyOf(date, army, null), { res });
     const old = (store.days[date] || []).find(e => e.me);
-    if (!old || better(res, resultNow(date, old.a))) {
-      addLocal(store.days, date, { n: store.name, a: army, me: true });
+    if (!old || better(res, resultNow(date, old.a, old))) {
+      addLocal(store.days, date, { n: store.name, a: army, me: true, ...stampOf(res) });
       store.days = cleanBoard(store.days); persist();
     }
     submitLive(date, army, res);

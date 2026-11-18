@@ -10,7 +10,8 @@ import { packArmy } from '../game/js/online.js';
 import { encode, decode } from '../game/js/share.js';
 import { placePlan } from '../tools/plans.mjs';
 import { placeDaily, dailySnapshot, fightSeed, armyOf, checkNow, createCheck, rankEntries, resultCode, validResult,
-  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP } from '../game/js/dailyboard.js';
+  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP, SIM_VERSION, VERSIONS, acceptOld, stampOf } from '../game/js/dailyboard.js';
+import { PAINT_TYPES } from '../game/js/online.js';
 
 const D = '2026-11-18';
 function smartArmy(date) {
@@ -99,4 +100,38 @@ test('Ablage: lokale Liste und Live-Dokument behalten nur die letzten Tage, ein 
   assert.equal(doc.days['2026-11-19'].a, 'a9');
   const docs = [{ id: 'u1', data: doc }, { id: 'u2', data: { days: { '2026-11-19': { a: 'zz', at: 5 } } } }, { id: 'u3', data: { days: { '2026-11-19': { a: 3 } } } }];
   assert.deepEqual(dayEntries(docs, '2026-11-19').map(e => e.uid), ['u1', 'u2']);
+});
+
+test('Spielversion: die aktuelle steht in VERSIONS (nach einem Balance-Update dort eintragen, siehe dailyboard.js)', () => {
+  assert.ok(VERSIONS[SIM_VERSION], `Neue Spielversion ${SIM_VERSION}: in dailyboard.js VERSIONS eintragen und bei der alten until = Tag des Updates setzen`);
+  assert.equal(VERSIONS[SIM_VERSION].until, null);
+  assert.equal(Object.values(VERSIONS).filter(v => v.until === null).length, 1);
+});
+
+test('Spielversion: alte Einträge zählen wie eingetragen, aber nur bis zum letzten Tag ihrer Version', () => {
+  const a = smartArmy(D), res = checkNow(D, a).result;
+  // aktuelle Version: nachgerechnet, die Behauptung zählt nicht
+  const fake = { v: SIM_VERSION, r: { win: true, spent: 1, time: 1, stars: 3 } };
+  assert.deepEqual(checkNow(D, a, fake).result, res);
+  // alte Version (bis 18.11.): wie eingetragen am 18., danach nicht mehr; unbekannte Version nie
+  VERSIONS.valt = { until: D };
+  try {
+    const old = { v: 'valt', r: { win: true, spent: 60, time: 12.5, stars: 3 } };
+    assert.deepEqual(checkNow(D, a, old).result, { win: true, spent: 60, time: 12.5, stars: 3, old: true });
+    assert.ok(checkNow('2026-11-19', a, old).error);
+    assert.ok(checkNow(D, a, { v: 'vgibtsnicht', r: old.r }).error);
+    assert.equal(acceptOld(D, 'valt', { win: true, spent: -5, time: 3, stars: 3 }), null);
+    assert.equal(acceptOld(D, 'valt', null), null);
+  } finally { delete VERSIONS.valt; }
+  // Stempel gehen in die Ablage mit
+  const b = addLocal({}, D, { n: 'A', a, ...stampOf(res) });
+  assert.equal(cleanBoard(b)[D][0].v, SIM_VERSION);
+  assert.equal(mergeOwn(null, D, a, 1, undefined, res).days[D].v, SIM_VERSION);
+  assert.equal(dayEntries([{ id: 'u', data: mergeOwn(null, D, a, 1, undefined, res) }], D)[0].r.spent, res.spent);
+});
+
+test('Armee-Codes: neue Einheiten nur hinten anhängen (Typ = Index in PAINT_TYPES, 6 Bit)', () => {
+  const fixed = 'krieger,schuetze,ritter,grenadier,reiter,roemer,sani,wolf,baer,biene,magier,geist,drache,vampir,soldat,mg,sniper,panzerfaust,moerser,panzer,heli,troll,zyklop,hexe,phoenix,einhorn,elefant,krokodil,gorilla,adler,bueffel'.split(',');
+  assert.deepEqual(PAINT_TYPES.slice(0, fixed.length), fixed);
+  assert.ok(PAINT_TYPES.length <= 64);
 });

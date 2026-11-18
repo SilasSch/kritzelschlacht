@@ -5,6 +5,7 @@
 import { UNITS, TERRAIN, CATEGORIES, CELL } from './data.js';
 import { MISSION_ASPECT } from './world.js';
 import { STONE_WALL } from './spells.js';
+import { tr } from './i18n.js';
 
 export const CUSTOM_MAX = 30;           // höchstens so viele eigene Level im Spielstand
 export const NAME_MAX = 40, HINT_MAX = 140;
@@ -100,7 +101,7 @@ export function levelFromWorld(world, meta = {}) {
 
 // Kann das Level getestet, geteilt oder gespeichert werden? Liefert null oder eine Meldung
 export function levelProblem(level) {
-  if (!level.place.some(p => p[0] === 'unit')) return 'Male zuerst Gegner rechts der gestrichelten Linie.';
+  if (!level.place.some(p => p[0] === 'unit')) return tr('Male zuerst Gegner rechts der gestrichelten Linie.');
   return null;
 }
 
@@ -136,6 +137,6 @@ export function levelEnemyPoints(l) {
 // Liste eigener Level: eines ein- oder ersetzen (replaceId: das bearbeitete), neueste zuerst. Liefert { list, error }
 export function upsertCustom(list, level, replaceId = null) {
   const out = list.filter(l => l.id !== level.id && l.id !== replaceId);
-  if (out.length >= CUSTOM_MAX) return { list, error: `Höchstens ${CUSTOM_MAX} eigene Level. Lösche zuerst eines.` };
+  if (out.length >= CUSTOM_MAX) return { list, error: tr('Höchstens {n} eigene Level. Lösche zuerst eines.', { n: CUSTOM_MAX }) };
   return { list: [level, ...out], error: null };
 }

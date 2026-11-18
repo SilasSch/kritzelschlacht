@@ -2,10 +2,11 @@
 // und erklärt einen Schritt. Ein Schritt endet, wenn done() wahr wird (main.js fragt alle 0,25 s) oder über "Weiter".
 // steps: [{ text, at: () => Element | { x, y } (Bildschirm) | null, done?: () => bool, next?: 'Weiter' }]
 // onStep(i): nach jedem Schritt ab dem zweiten (z. B. für einen Ton)
+import { tr } from '../i18n.js';
 export function createCoach(host, onStep = null) {
   const el = document.createElement('div');
   el.className = 'coach'; el.hidden = true;
-  el.innerHTML = '<div class="coach-b"><p></p><div class="coach-row"><span class="coach-n"></span><button class="mini coach-next"></button><button class="mini coach-skip">Tutorial beenden</button></div></div>';
+  el.innerHTML = `<div class="coach-b"><p></p><div class="coach-row"><span class="coach-n"></span><button class="mini coach-next"></button><button class="mini coach-skip">${tr('Tutorial beenden')}</button></div></div>`;
   host.append(el);
   const p = el.querySelector('p'), nBox = el.querySelector('.coach-n'), next = el.querySelector('.coach-next'), skip = el.querySelector('.coach-skip');
   let steps = [], i = -1, onEnd = null;

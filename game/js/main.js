@@ -29,6 +29,8 @@ import { levelFromWorld, levelProblem, upsertCustom, isLevel } from './editor.js
 import { encode, decode, battleData, applyBattle, levelData } from './share.js';
 import { createShareDialog } from './ui/sharedialog.js';
 import { createEditorBar } from './ui/editorbar.js';
+import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallenge (Audit 18.11.)
+import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -111,6 +113,7 @@ const game = {
   clear() {
     const m = game.mission, b = game.battle;
     if (game.editor) { clearWorld(); world.teamMode = true; rebuildHash(world); ui.updateCounts(); game.editorUI.tick(); return; }   // Editor (Audit 18.11.)
+    if (hotseat.clear()) return;   // Hotseat (Audit 18.11.): nur die eigene Hälfte
     if (b) {
       if (b.phase !== 'plan') return;
       clearWorld(); world.teamMode = true; rebuildHash(world);
@@ -137,6 +140,7 @@ const game = {
     if (!s) { ui.toast('Nichts zum Rückgängigmachen.'); return; }
     const spent = undoStroke(world, s);
     if (m) m.spent = spent;
+    hotseat.onUndo(spent);   // Hotseat (Audit 18.11.)
     markAll(); ui.updateMission(); ui.updateBattle(); ui.updateCounts();
   },
 
@@ -208,9 +212,12 @@ function enterSandbox() {
 }
 
 /* ---------- Missionen ---------- */
-// x: id eines Levels (campaign/) oder Index der Grundausbildung, oder ein eigenes Level (Objekt, Editor; custom: 'editor'
-// zurück in den Editor, 'list' zur Liste der eigenen Level; ohne Kapitel und ohne Sterne)
+// x: id eines Levels (campaign/) oder Index der Grundausbildung, die Tageschallenge (Objekt oder 'daily-YYYY-MM-DD'), oder
+// ein eigenes Level (Objekt, Editor; custom: 'editor' zurück in den Editor, 'list' zur Liste der eigenen Level; ohne Kapitel
+// und ohne Sterne)
 function loadMission(x, custom = null) {
+  const d = dailyInfo(x);
+  if (d) { loadLevelDef(d.level, { kind: 'daily' }); return; }
   if (x && typeof x === 'object') { loadLevelDef(x, { custom: custom || 'list' }); return; }
   const e = levelInfo(levelId(x)); if (!e) return;
   loadLevelDef(e.level, { chapter: e.chapter, idx: e.li });
@@ -272,6 +279,8 @@ function finishMission() {
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
   const camp = m.kind === 'campaign';
   if (win && camp) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
+  // Tageschallenge (Audit 18.11.): keine Kampagnensterne, der Bestwert des Tages kommt in save.daily
+  const daily = m.def.daily ? { date: m.def.daily, best: recordDaily(save.daily, m.def.daily, { win, spent: m.spent, stars }) } : null;
   // Medaillen (medals.js): nur für Kampagnenlevel gespeichert, angezeigt immer
   const army = snap && snap.id === m.id ? snap.units : [];
   const got = earnedMedals({ win, lost: ui.lostBlue(), deployed: army.length, time: m.t, types: new Set(army.map(u => u.type)).size });
@@ -281,7 +290,7 @@ function finishMission() {
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
   m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
-    nextLabel: m.chapter || m.custom ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+    daily, nextLabel: m.chapter || m.custom || daily ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
 }
@@ -612,9 +621,11 @@ const actions = {
     if (!game.mission) ui.closeBanner();
     stroke = createStroke(game.mission ? game.mission.spent : 0);
     stroke.first = true; stroke.blocked = false; stroke.path = [];
+    if (hotseat.painter()) stroke.spent = hotseat.spent();   // Hotseat (Audit 18.11.): Rückgängig kennt die Ausgaben
   },
   paintAt(wx, wy, erase) {
     if (!stroke) return;
+    if (hotseat.paintAt(stroke, wx, wy, erase)) return;   // Hotseat (Audit 18.11.): eigene Hälfte, eigenes Budget
     const m = game.mission;
     if (stroke.first) {
       stroke.first = false;
@@ -683,6 +694,23 @@ function enemyRanges() {
   for (const u of world.units) if (u.alive && u.team !== PLAYER && u.T.range >= 20 && !u.T.heal) out.push({ x: u.x, y: u.y, r: u.T.range });
   return out;
 }
+
+/* ---------- Tageschallenge (Audit 18.11.) ---------- */
+// Ein Level je Tag (daily.js). Läuft als Mission ohne Kapitel (mis.chapter null, mis.idx -1); loadMission nimmt auch das
+// Level selbst oder seine id 'daily-YYYY-MM-DD' (für „Nochmal planen“).
+function dailyInfo(x) {
+  const def = x && typeof x === 'object' && x.daily ? x : typeof x === 'string' && /^daily-\d{4}-\d{2}-\d{2}$/.test(x) ? dailyLevel(x.slice(6)) : null;
+  return def ? { level: def, li: -1, chapter: null } : null;
+}
+// Level direkt laden (ohne Kampagne)
+function loadLevel(def) { loadMission(def); }
+game.loadLevel = loadLevel;
+game.playDaily = () => loadLevel(dailyLevel(dateKey()));
+
+/* ---------- Hotseat-Versus (Audit 18.11.) ---------- */
+// Schlacht-Modus: Blau und Rot malen nacheinander verdeckt mit eigenem Budget (hotseat.js, ui/hotseat.js)
+const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, startBattle, markAll, rebuildHash, undoStack });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || hotseat.covered(); }
 
 /* ---------- Schleife ---------- */
 function drainEvents() {
@@ -772,6 +800,7 @@ function frame(now) {
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
+  hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }

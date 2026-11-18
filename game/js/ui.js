@@ -9,6 +9,7 @@ import { armyPoints } from './sim.js';
 import { MEDALS, hasMedal } from './medals.js';
 /* ---------- Editor (Audit 18.11.) ---------- */
 import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
+import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -307,6 +308,7 @@ export function createUI(game) {
     $('listTitle').textContent = 'Kampagne';
     $('listText').textContent = 'Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.';
     const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
+    dailyCard(g, game);   // Tageschallenge (Audit 18.11.): Karte ganz oben
     CHAPTERS.forEach((c, ci) => {
       const b = document.createElement('button'); b.className = 'ch'; b.dataset.ch = c.id;
       const p = chapterProgress(game.save.stars, c.id), empty = !p.total, open = !empty && game.chapterUnlocked(c.id);
@@ -374,6 +376,7 @@ export function createUI(game) {
     $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
     $('resNext').textContent = r.nextLabel || (r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln');
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
+    dailyResult(r, toast);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
 
@@ -454,6 +457,7 @@ export function createUI(game) {
     const g = $('batGo');
     setText('batGo', plan ? 'Los!' : 'Abbrechen');
     g.disabled = b.phase === 'done';
+    if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
   }
 
   // Verlauf: zwei Linien (Teamfarben, 2 px) über der Zeit, eine Achse; Namen am Linienende, Hover mit Fadenkreuz und Werten

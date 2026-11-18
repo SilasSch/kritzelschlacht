@@ -1,4 +1,4 @@
-// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted }.
+// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted, daily }.
 // main.js liest und schreibt localStorage[SAVE_KEY] damit.
 // Kampagne (Spez. #52): Sterne hängen an der festen id des Levels (campaign/). Alte Stände zählen die 9 Missionen der
 // Grundausbildung nach Index 0–8; parseSave übersetzt sie in deren ids (LEGACY_IDS). serializeSave schreibt die Sterne
@@ -25,7 +25,25 @@ export function parseSave(text) {
   save.medals = medals;
   save.tutorial = !!save.tutorial;
   save.custom = parseCustom(save.custom);
+  save.daily = cleanDaily(save.daily);
   return save;
+}
+
+/* ---------- Tageschallenge (Audit 18.11.) ---------- */
+// daily: { 'YYYY-MM-DD': { spent, stars } }, der Bestwert je Tag (game/js/daily.js recordDaily). Behalten werden nur die
+// letzten DAILY_KEEP Tage (nach Datum); Unlesbares fällt weg.
+export const DAILY_KEEP = 30;
+export function cleanDaily(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  const keys = Object.keys(raw).filter(k => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort();
+  for (const k of keys) {
+    const v = raw[k], spent = v && Number(v.spent);
+    if (!v || typeof v !== 'object' || !(spent >= 0) || !Number.isFinite(spent)) continue;
+    out[k] = { spent, stars: starVal(v.stars) };
+  }
+  for (const k of Object.keys(out).slice(0, -DAILY_KEEP)) delete out[k];
+  return out;
 }
 
 // { '0': 3, 'ga-2': 1, 'burg-1': 2 } → { 'ga-1': 3, 'ga-2': 1, 'burg-1': 2 }; je Level der beste Wert, alter Index oder id
@@ -46,6 +64,9 @@ export function serializeSave(save) {
   LEGACY_IDS.forEach((id, i) => { if (stars[id]) stars[i] = stars[id]; });
   const out = { stars, muted: save.muted, medals: save.medals || {}, tutorial: !!save.tutorial };
   if (save.custom && save.custom.length) out.custom = parseCustom(save.custom);
+  // daily nur, wenn es Einträge gibt
+  const daily = cleanDaily(save.daily);
+  if (Object.keys(daily).length) out.daily = daily;
   return JSON.stringify(out);
 }
 

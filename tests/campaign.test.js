@@ -201,8 +201,10 @@ test('Kapitelfilter: selectLevels und parseArgs', () => {
   // Namen und Saaten der Grundausbildung wie vor dem Umbau (gleiche Ergebnisse der Prüfung)
   assert.deepEqual(ga.map(e => e.tag), ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9']);
   ga.forEach((e, i) => assert.equal(e.seed(3), 1000 * (i + 1) + 3));
-  assert.deepEqual(selectLevels('burgen'), []);
-  assert.equal(selectLevels('burgen,grundausbildung').length, 9);
+  // Kapitel werden nach und nach gefüllt: Mehrfachauswahl gegen die tatsächliche Levelzahl prüfen
+  const burg = chapterById('burgen').levels.length;
+  assert.equal(selectLevels('burgen').length, burg);
+  assert.equal(selectLevels('burgen,grundausbildung').length, 9 + burg);
   assert.throws(() => selectLevels('gibtsnicht'), /unbekanntes Kapitel/);
   assert.deepEqual(parseArgs(['missions', '8', '--chapter=rom', '1400x875']), { chapter: 'rom', pos: ['missions', '8', '1400x875'] });
   assert.deepEqual(parseArgs(['newspam']), { chapter: null, pos: ['newspam'] });
@@ -218,10 +220,12 @@ test('newspam-Regel neuer Kapitel: jede erlaubte Einheit verliert ≥ 6/8, auße
 
 test('balance.mjs --chapter: leeres Kapitel ist OK, unbekanntes bricht mit Exitcode 2 ab', () => {
   const run = (...a) => spawnSync(process.execPath, [path.join(ROOT, 'tools/balance.mjs'), ...a], { encoding: 'utf8' });
-  for (const cmd of ['missions', 'newspam']) {
-    const r = run(cmd, '1', '1400x875', '--chapter=burgen');
+  // Ein noch leeres Kapitel (falls es eines gibt) muss mit „keine Level“ und Exitcode 0 durchlaufen
+  const empty = CHAPTERS.find(c => !c.levels.length);
+  if (empty) for (const cmd of ['missions', 'newspam']) {
+    const r = run(cmd, '1', '1400x875', `--chapter=${empty.id}`);
     assert.equal(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /keine Level in burgen/);
+    assert.match(r.stdout, new RegExp(`keine Level in ${empty.id}`));
     assert.match(r.stdout, /OK/);
   }
   const bad = run('missions', '1', '1400x875', '--chapter=gibtsnicht');

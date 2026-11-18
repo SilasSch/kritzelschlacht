@@ -158,6 +158,8 @@ export function spawn(world, type, x, y, team) {
     dmgOut: .5, orig: null,
     // Bomben ausweichen (dodge.js, Nachtrag 7, #47): Restzeit des Hüpfers (s; Wunschbewegung ruht, physics.integrate)
     hopT: .5,
+    // König (abilities.KING): Restzeit seiner Aura auf dieser Einheit (s; mutig: flieht nicht, Nahkampf stärker)
+    braveT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -168,9 +170,11 @@ export function spawn(world, type, x, y, team) {
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
+  u.braveT = 0;   // Königsaura: als Double angelegt
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
-  if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
+  // erste Abklingzeit: A.first (FIRST_CD, abilities.js), sonst die normale; nach id gestreut wie bisher
+  if (A) { const q = u.id * .6180339887; u.abCd = (A.first ?? A.cd) * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);

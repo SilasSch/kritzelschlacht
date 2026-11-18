@@ -14,6 +14,7 @@ import { castSpell, spellReact, FIREBALL } from './spells.js';
 import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepFrog, stepFrogCurse, phoenixAsh } from './abilities.js';
 // --- Task 5: Tiere ---
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
+import { stepKingAura, kingFall, KING } from './abilities.js';
 import { aloft, unseen } from './world.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
 
@@ -194,6 +195,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
@@ -216,6 +218,7 @@ export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag
 function die(world, v, src, kind) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
   releaseUnit(world, v);
+  if (v.type === 'koenig') kingFall(world, v);   // Königsmord: eigene Truppen erschrecken
   if (kind === 'melee' && riseGhoul(world, v, src)) {
     emit(world, {
       type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team, ghoul: true,
@@ -859,6 +862,7 @@ export function think(world, u, dt) {
   if (u.meteorCd > 0) u.meteorCd -= dt;
   // Verstärkung (Heulen, abilities.js) läuft ab
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
+  if (u.braveT > 0) u.braveT -= dt;   // Königsaura läuft ab (abilities.KING)
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
@@ -880,6 +884,7 @@ export function think(world, u, dt) {
   if (u.type === 'troll') stepTroll(u, dt);
   else if (u.type === 'phoenix') { stepTrail(world, u, dt); if (!u.alive) return; }
   else if (u.type === 'einhorn') stepAura(world, u, dt);
+  else if (u.type === 'koenig') stepKingAura(world, u, dt);
   // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
   if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
@@ -1200,7 +1205,8 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     }
     default: {
       u.swingT = .25;
-      let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen)
+      let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen, Schlachtruf)
+      if (u.braveT > 0) a *= KING.AURA_DMG;   // Königsaura
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;

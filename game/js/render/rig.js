@@ -289,6 +289,24 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.75, -r * .75]], '#e6ebf0', 2.2); Ln(c, [[r * .52, -r * .02], [r * 1.08, r * .5]], '#8a5a2b', 1.8); },
     },
   },
+  // König: Teamfarbe, roter Umhang hinter dem Körper, goldene Krone, Schwert mit goldenem Griff
+  koenig: {
+    eyes: eyePair(.28, -.02, .27),
+    body(c, r, k, f) {
+      poly(c, r, [[-.35, -.55], [-1.25, .95], [.1, .9]], '#b8323a', 1.3);
+      feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col);
+      E(c, 0, r * .55, r * .78, r * .2, '#f4f1e8', 1);
+      whites(c, r, this.eyes);
+    },
+    headgear(c, r) {
+      poly(c, r, [[-.6, -.72], [-.66, -1.32], [-.33, -1.0], [0, -1.42], [.33, -1.0], [.66, -1.32], [.6, -.72]], '#ffc533', 1.4);
+      E(c, 0, -r * 1.12, r * .1, r * .1, '#e5574f', 0); E(c, -r * .45, -r * .92, r * .07, r * .07, '#3f7cff', 0); E(c, r * .45, -r * .92, r * .07, r * .07, '#3f7cff', 0);
+    },
+    weapon: {
+      grip: [.8, .26], axis: Math.atan2(-1.05, .97), swing: 1,
+      draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.95, -r * .95]], '#eef2f6', 2.6); Ln(c, [[r * .5, -r * .02], [r * 1.1, r * .55]], '#ffc533', 2.2); E(c, r * .66, r * .44, r * .12, r * .12, '#ffc533', 1); },
+    },
+  },
   schuetze: {
     eyes: eyePair(.28, .05, .27),
     body(c, r, k, f) { feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes); },

@@ -17,7 +17,7 @@ export default {
     // 0–5/8 je Form, zu unstet für die Spam-Regel). Mit 10 Vampiren gewannen 30–31 Krieger an
     // einzelnen Formen 2–3/8; mit 11 verlieren 31 Krieger (Budget 63) überall, 33 gewannen bis 2/8. Der Krieger-Spam verliert.
     {
-      id: 'vamp-1', n: 'Der Friedhof', budget: 72, par: 70,
+      id: 'vamp-1', n: 'Der Friedhof', budget: 92, par: 90,
       units: ['krieger', 'magier'], cats: ['armee', 'mythisch'], answer: ['magier'],
       hint: 'Krieger und Magier. Zwischen den Gräbern warten Vampire und Geister. Feuer trifft Vampire doppelt: Magier ganz hinten, ein paar Krieger davor. Stirbt ein Vampir, zerfallen seine Ghule.',
       place: [

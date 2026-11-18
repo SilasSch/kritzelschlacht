@@ -354,7 +354,7 @@ export const VAMP_FX = {
   riseClods: 7, riseWisps: 4, riseSoil: '#4a4036', riseClod: 0x7a6a55, riseMist: 0xb6c7a8,
   dust: 4, bits: 6, bitCol: 0x8f9c84,
 };
-const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
+const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a, king: 0xffc533, kingFall: 0x6f7a8c };
 /* ---------- Task 6: Kreaturen (Spez. #34) ----------
    creature-Ereignis (abilities.js, combat.js), Budget-Art ability. boulder: Felseinschlag ohne Feuer (Staubwelle bis R,
    Staubwolken am Rand, Steinsplitter, Krater, Wackeln über e.shake); frog / unfrog: grünes Wölkchen mit Funkeln (Fluch
@@ -714,6 +714,18 @@ export function createFxCore(hooks = {}, opt = {}) {
           p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
         }
         break;
+      // König (abilities.KING): Aura als leiser goldener Ring, Schlachtruf als kräftige Welle mit Funken, Königsmord grau
+      case 'kingAura': wave(x, e.y, R, 1.1, WAVE_COL.king); break;
+      case 'kingCry': {
+        wave(x, e.y, R, .7, WAVE_COL.king);
+        for (let i = 0; i < 8; i++) {
+          const a = i / 8 * TAU + rnd(-.2, .2), s = rnd(120, 160);
+          const p = add('shout', x + Math.cos(a) * 14, y - 10 + Math.sin(a) * 10, .4, 5, WAVE_COL.king); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
+        }
+        break;
+      }
+      case 'kingFall': wave(x, e.y, R, .9, WAVE_COL.kingFall); break;
       case 'howl': {
         wave(x, e.y, R, .6, WAVE_COL.howl);
         const face = e.face < 0 ? -1 : 1;

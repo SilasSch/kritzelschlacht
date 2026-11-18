@@ -494,7 +494,9 @@ test('Verfolgung: 12 Römer holen 10 zurückweichende Schützen schneller ein al
   };
   for (const seed of [1, 2]) {
     const before = trial(seed, false), after = trial(seed, true);
-    assert.ok(after < 13 && after < before * .8, `Saat ${seed}: Zusammenstoß nach ${after.toFixed(2)} s statt ${before.toFixed(2)} s`);
+    // Nachtrag 8 (#50): beschossene Römer fliehen nicht mehr, auch ohne FORM_CHASE holt der Block schneller auf (Saat 1:
+    // 16,7 → 11,8 s); der Vorsprung durch FORM_CHASE bleibt, darum 0,9 statt 0,8
+    assert.ok(after < 13 && after < before * .9, `Saat ${seed}: Zusammenstoß nach ${after.toFixed(2)} s statt ${before.toFixed(2)} s`);
   }
 });
 

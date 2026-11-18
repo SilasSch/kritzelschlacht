@@ -406,7 +406,8 @@ test('Form bleibt gleich: neue Felder für alle Einheiten, eine Schlacht mit all
   for (let i = 0; i < 4; i++) spawn(w, 'krokodil', 600 + i * 40, 400, 'blau');
   rebuildHash(w);
   const evs = new Set();
-  run(w, 8, e => { for (const ev of e) if (ev.type === 'ability') evs.add(ev.k); });
+  // Nachtrag 8 (#50): Elefanten fliehen nicht mehr, die Schlacht verläuft anders; 12 statt 8 s, bis jede Fähigkeit vorkam
+  run(w, 12, e => { for (const ev of e) if (ev.type === 'ability') evs.add(ev.k); });
   assert.deepEqual(w.units.filter(u => Object.keys(u).join() !== keys).map(u => u.type), []);
   for (const f of ['seenT', 'herdCd', 'beatCd', 'beeCd']) assert.ok(w.units.every(u => typeof u[f] === 'number'), f);
   assert.ok(w.units.every(u => typeof u.hidden === 'boolean' && (u.grabbed === null || typeof u.grabbed === 'object')));

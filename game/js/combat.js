@@ -800,8 +800,9 @@ function retreat(world, u, dt) {
   if (outOfMelee(u, t)) return;   // Hubschrauber, Fledermausform
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
   if (d > T.range + T.r + t.T.r) {
-    // Bedrohung außer Reichweite (Fernkämpfer): nach dem Festnageln auf sie los, statt stehend beschossen zu werden
-    if (u.cornerT > MORALE.CORNER_T) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d; }
+    // Bedrohung außer Reichweite: ein Fernkämpfer nach dem Festnageln, auf ihn los, statt stehend beschossen zu werden. Ein
+    // Nahkämpfer knapp außer Reichweite nicht (#50): er rennt weiter davon (sonst Hin und Her zwischen Flucht und Gegenwehr)
+    if (u.cornerT > MORALE.CORNER_T && t.T.range >= 20) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.face = dx < 0 ? -1 : 1; u.fx = dx / d; u.fy = dy / d; }
     return;
   }
   u.face = dx < 0 ? -1 : 1;

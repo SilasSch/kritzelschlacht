@@ -1,13 +1,17 @@
 // Rückzug und Erholung (Spez. #27, Task 5): ab 25 % LP flieht jede Einheit (Römer im Block erst ab 15 %),
 // weg vom nächsten Feind und zu den eigenen Leuten, 1,2× so schnell, ohne anzugreifen; eingeholt oder in die
 // Ecke gedrängt wehrt sie sich. Ohne Feind in 200 px erholt sie sich nach 2 s um 5 % der LP je s und kehrt ab
-// 60 % zurück. Sanitäter heilen Fliehende zuerst. Liegende stehen erst auf. Gilt auch für die Bosse.
+// 60 % zurück. Sanitäter heilen Fliehende zuerst. Liegende stehen erst auf.
+// Nachtrag 8, #50: geflohen wird nur vor Nahkämpfern, denen man davonläuft (Fernkämpfer auch unter Beschuss), zu einem
+// Sammelpunkt hinter den eigenen Truppen, wo die Einheit stehen bleibt. Bienen, Ghule, Geister, Frösche, Panzer, Drache
+// und Elefant fliehen nie.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn, rebuildHash, cellIndex, setCell, nearestEnemy } from '../game/js/world.js';
+import { createWorld, spawn, rebuildHash, cellIndex, setCell, nearestEnemy, RV_X, RV_Y, RV_IN } from '../game/js/world.js';
 import { think, PRONE_UP_T } from '../game/js/combat.js';
 import { step } from '../game/js/sim.js';
-import { MORALE, updateMorale, updateCentroids, fleeSteer, CORNER_PAD, PIN_HOLD } from '../game/js/morale.js';
+import { MORALE, updateMorale, updateCentroids, fleeSteer, CORNER_PAD, PIN_HOLD, NO_RETREAT, RALLY, FLEE_MELEE_R } from '../game/js/morale.js';
+import { FEARLESS } from '../game/js/abilities.js';
 import { poseUnit, FEAR_PUPIL } from '../game/js/render/pose.js';
 import { UNITS } from '../game/js/data.js';
 
@@ -55,13 +59,17 @@ test('über 25 % keine Flucht', () => {
   assert.equal(u.flee, false);
 });
 
+// #50: Auslöser ist jetzt ein Nahkämpfer, der danach stehen bleibt (vorher ein Sanitäter außerhalb SAFE_R: vor ihm
+// allein flieht ein Krieger nicht mehr). Erholung und Rückkehr wie bisher.
 test('Erholung: ohne Feind in 200 px nach SAFE_T s +5 %/s, ab 60 % zurück in den Kampf', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 400, 400, 'blau');
   u.hp = 14;
-  allies(w, 380, 420);   // näher als HOME_NEAR: er bleibt stehen
-  const s = spawn(w, 'sani', 400 + MORALE.SAFE_R + 60, 400, 'rot');   // Gegner außerhalb SAFE_R, bewegt sich nicht
-  run(w, MORALE.SAFE_T - .1);
+  allies(w, 380, 420);
+  const s = dummy(w, 'krieger', 425, 400); s.state = 'stun'; s.stunT = 1e9;
+  run(w, DT);
   assert.equal(u.flee, true);
+  s.x = 400 + MORALE.SAFE_R + 600; s.y = 400;   // Feind weit weg (bewegt sich nicht)
+  run(w, MORALE.SAFE_T - .1);
   assert.equal(u.hp, 14, 'vor SAFE_T keine Erholung');
   run(w, 4.1);
   assert.ok(u.hp > 14, 'LP gestiegen');
@@ -74,9 +82,10 @@ test('Erholung: ohne Feind in 200 px nach SAFE_T s +5 %/s, ab 60 % zurück in de
   assert.ok(s.alive);
 });
 
+// #50: schon auf der Flucht (ein Krieger beginnt vor einem Schützen allein keine mehr)
 test('Feind in SAFE_R: keine Erholung', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 400, 400, 'blau');
-  u.hp = 14;
+  u.hp = 14; u.flee = true;
   allies(w, 100, 700);
   const e = dummy(w, 'schuetze', 400 + MORALE.SAFE_R - 40, 400);
   run(w, 4, () => { e.x = u.x + MORALE.SAFE_R - 40; e.y = u.y; });
@@ -84,9 +93,10 @@ test('Feind in SAFE_R: keine Erholung', () => {
   assert.equal(u.safeT, 0);
 });
 
+// #50: vor einem Wolf (100 gegen 62,4 px/s) beginnt keine Flucht mehr; hier war er schon auf der Flucht
 test('Eingeholt wehrt sich: ein schnellerer Feind klebt an ihm, nach CORNER_T schlägt er zurück', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
-  u.hp = 14;
+  u.hp = 14; u.flee = true;
   allies(w, 100, 700);
   const wolf = dummy(w, 'wolf', 625, 400);   // 100 px/s gegen 62 px/s
   let hp = wolf.hp, early = false;
@@ -125,8 +135,12 @@ test('Römer im Block halten länger: bei 20 % keine Flucht, bei 14 % schon, dan
   u.hp = .2 * UNITS.roemer.hp;
   run(w, .2);
   assert.equal(u.flee, false); assert.equal(u.formOn, true);
+  // #50: nur beschossen flieht er nicht; bei 14 % mit einem Krieger in FLEE_MELEE_R schon
   u.hp = .14 * UNITS.roemer.hp;
   run(w, DT);
+  assert.equal(u.flee, false, 'nur Fernkämpfer: keine Flucht');
+  dummy(w, 'krieger', u.x + 40, u.y);
+  run(w, .3);   // Fluchtbeginn gedrosselt (FLEE_CK)
   assert.equal(u.flee, true); assert.equal(u.formOn, false);
   run(w, .6);   // nach der Neubildung gehört er zu keinem Block
   assert.equal(u.form, 0); assert.equal(u.formOn, false);
@@ -208,16 +222,21 @@ test('Sanitäter bevorzugt Fliehende', () => {
   assert.equal(s.tg, near);
 });
 
-test('Panzer, Hubschrauber und Drache fliehen auch', () => {
+// #50 ersetzt den Teil von #27: Panzer und Drache fliehen nie, der Hubschrauber (Fernkämpfer) zieht sich zurück
+test('Hubschrauber zieht sich zurück, Panzer und Drache fliehen nie', () => {
   for (const type of ['panzer', 'heli', 'drache']) {
     const w = mkWorld(), u = spawn(w, type, 600, 400, 'blau');
     u.hp = .2 * UNITS[type].hp;
     const e = dummy(w, 'soldat', 690, 400);
+    dummy(w, 'krieger', 630, 400);
     allies(w, 250, 400);
     const d0 = dist(u, e);
-    run(w, 1);
-    assert.equal(u.flee, true, type);
-    assert.ok(dist(u, e) > d0 + 20, `${type}: Abstand ${dist(u, e)}`);
+    let fled = false;
+    run(w, 1, () => { if (u.flee) fled = true; });
+    if (type === 'heli') {
+      assert.equal(fled, true, type);
+      assert.ok(dist(u, e) > d0 + 20, `${type}: Abstand ${dist(u, e)}`);
+    } else assert.equal(fled, false, type);
   }
 });
 
@@ -295,9 +314,10 @@ test('Geheilt endet die Flucht: Sanitäter heilt einen Fliehenden mit Feind in S
   u.hp = 14;
   allies(w, 300, 700);
   const s = spawn(w, 'sani', 660, 400, 'blau');
-  const e = dummy(w, 'schuetze', 850, 400);
-  // Sanitäter bleibt neben ihm, der Schütze 150 px vor ihm (in SAFE_R: keine eigene Erholung)
-  const pin = () => { s.x = u.x - 40; s.y = u.y; e.x = u.x + 150; e.y = u.y; };
+  // #50: Bedrohung ein Krieger (vor einem Schützen allein flieht er nicht mehr)
+  const e = dummy(w, 'krieger', 800, 400);
+  // Sanitäter bleibt neben ihm, der Krieger 100 px vor ihm (in SAFE_R: keine eigene Erholung)
+  const pin = () => { s.x = u.x - 40; s.y = u.y; e.x = u.x + 100; e.y = u.y; };
   let back = -1, regen = false;
   run(w, .1, pin);
   assert.equal(u.flee, true);
@@ -307,7 +327,7 @@ test('Geheilt endet die Flucht: Sanitäter heilt einen Fliehenden mit Feind in S
   assert.equal(u.flee, false);
   // direkt auf volle LP gesetzt (Bericht des Reviews): Flucht endet im nächsten Schritt
   const w2 = mkWorld(), v = spawn(w2, 'krieger', 700, 400, 'blau');
-  v.hp = 14; allies(w2, 300, 700); dummy(w2, 'schuetze', 850, 400);
+  v.hp = 14; allies(w2, 300, 700); dummy(w2, 'krieger', 760, 400);
   run(w2, .2);
   assert.equal(v.flee, true);
   v.hp = 60;
@@ -315,9 +335,10 @@ test('Geheilt endet die Flucht: Sanitäter heilt einen Fliehenden mit Feind in S
   assert.equal(v.flee, false);
 });
 
+// #50: der Krieger beginnt vor einem Schützen allein keine Flucht; hier ist er schon auf der Flucht und festgenagelt
 test('Festgenagelt in der Ecke: wehrt sich gegen einen Schützen, statt stehend beschossen zu werden', () => {
   const w = mkWorld(), u = spawn(w, 'krieger', 14, 14, 'blau');
-  u.hp = 14;
+  u.hp = 14; u.flee = true;
   allies(w, 600, 700);
   const e = dummy(w, 'schuetze', 14 + 106, 14 + 106);   // 150 px schräg vor der Ecke
   const d0 = dist(u, e);
@@ -382,4 +403,93 @@ test('Geist flieht nicht unter 25 % und heilt sich durch seine Treffer', () => {
   assert.equal(fled, false, 'keine Flucht');
   assert.ok(g.hp > 8, `heilt durch Treffer: ${g.hp}`);
   assert.ok(e.hp < 1e9, 'hat zugeschlagen');
+});
+
+/* ---------- Nachtrag 8, #50: besserer Rückzug ---------- */
+test('#50: Werte und die Liste derer, die nie fliehen', () => {
+  assert.deepEqual([...NO_RETREAT].sort(), ['biene', 'drache', 'elefant', 'frosch', 'geist', 'ghul', 'panzer']);
+  assert.equal(FLEE_MELEE_R, 120);
+  assert.equal(RALLY.D, 120); assert.equal(RALLY.REPICK, 2);
+});
+
+test('#50: Bienen mit 10 % LP fliehen nie, auch mit einem Krieger daneben', () => {
+  const w = mkWorld(), B = [];
+  for (let k = 0; k < 6; k++) { const b = spawn(w, 'biene', 600 + k * 6, 400, 'blau'); b.hp = .1 * UNITS.biene.hp; B.push(b); }
+  allies(w, 200, 700);
+  dummy(w, 'krieger', 620, 400);
+  let fled = false;
+  run(w, 2, () => { for (const b of B) if (b.alive && b.flee) fled = true; });
+  assert.equal(fled, false);
+});
+
+test('#50: 10 Krieger mit 20 % LP nur unter Pfeilen fliehen nicht und rücken weiter vor', () => {
+  const w = mkWorld(), K = [];
+  for (let k = 0; k < 10; k++) { const u = spawn(w, 'krieger', 400 + (k % 2) * 20, 300 + k * 20, 'blau'); u.hp = .2 * UNITS.krieger.hp; K.push(u); }
+  const A = [];
+  for (let k = 0; k < 4; k++) { const a = spawn(w, 'schuetze', 700, 340 + k * 40, 'rot'); a.T = { ...UNITS.schuetze, dmg: .01, speed: 0 }; a.hp = 1e9; A.push(a); }
+  const x0 = K.reduce((s, u) => s + u.x, 0) / K.length;
+  let fled = false, shots = 0;
+  run(w, 4, () => { for (const u of K) if (u.flee) fled = true; for (const a of A) if (a.fireT === 0) shots++; });
+  assert.equal(fled, false, 'keine Flucht');
+  assert.ok(shots > 0 && K.some(u => u.hp < .2 * UNITS.krieger.hp), `unter Beschuss (${shots} Schüsse)`);
+  const x1 = K.reduce((s, u) => s + u.x, 0) / K.length;
+  assert.ok(x1 > x0 + 100, `rücken vor: ${x0.toFixed(0)} → ${x1.toFixed(0)}`);
+});
+
+test('#50: Krieger mit 20 % LP und Feind daneben: zum Sammelpunkt hinter den eigenen, steht dort, erholt sich, kehrt bei 60 % zurück', () => {
+  const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
+  u.hp = .2 * UNITS.krieger.hp;
+  const A = allies(w, 300, 400);
+  const e = spawn(w, 'krieger', 625, 400, 'rot'); e.hp = 1e9; e.cd = 1e9; e.T = { ...UNITS.krieger, speed: 0 };
+  run(w, .1);
+  assert.equal(u.flee, true);
+  // Sammelpunkt hinter den Verbündeten (vom Feind aus gesehen)
+  assert.ok(u.rv[RV_X] < A[0].x, `Sammelpunkt x ${u.rv[RV_X]}`);
+  for (let k = 0; k < 15 / DT && !u.rv[RV_IN]; k++) run(w, DT);
+  assert.equal(u.rv[RV_IN], 1, 'angekommen');
+  assert.ok(Math.hypot(u.x - u.rv[RV_X], u.y - u.rv[RV_Y]) <= RALLY.ARRIVE + 1);
+  const x0 = u.x, y0 = u.y;
+  let maxMove = 0;
+  run(w, 2, () => { maxMove = Math.max(maxMove, Math.hypot(u.x - x0, u.y - y0)); });
+  assert.ok(maxMove < 2, `steht still (${maxMove.toFixed(2)} px)`);
+  assert.ok(u.hp > .2 * UNITS.krieger.hp, 'erholt sich');
+  let back = -1;
+  run(w, 15, () => { if (back < 0 && !u.flee) back = u.hp; });
+  assert.ok(back >= MORALE.BACK * UNITS.krieger.hp - 1e-9 && back < MORALE.BACK * UNITS.krieger.hp + 1, `zurück bei ${back}`);
+});
+
+test('#50: kein Wackeln: in 5 s Flucht wechselt die Laufrichtung höchstens zweimal das Vorzeichen', () => {
+  for (const [ex, ey] of [[625, 400], [600, 425], [580, 385]]) {
+    const w = mkWorld(), u = spawn(w, 'krieger', 600, 400, 'blau');
+    u.hp = .2 * UNITS.krieger.hp;
+    allies(w, 250, 600);
+    dummy(w, 'krieger', ex, ey);   // verfolgt (langsamer als der Fliehende)
+    let sx = 0, sy = 0, cx = 0, cy = 0, n = 0;
+    run(w, 5, () => {
+      if (!u.flee) return;
+      n++;
+      if (Math.abs(u.mx) > 1) { const s = Math.sign(u.mx); if (sx && s !== sx) cx++; sx = s; }
+      if (Math.abs(u.my) > 1) { const s = Math.sign(u.my); if (sy && s !== sy) cy++; sy = s; }
+    });
+    assert.ok(n > 200, 'flieht');
+    assert.ok(cx <= 2 && cy <= 2, `Vorzeichenwechsel x ${cx}, y ${cy}`);
+  }
+});
+
+test('#50: Schreck wirkt weiter auf Wölfe (und Bienen), nicht auf Furchtlose', () => {
+  // Brüllen des Bären (abilities.roar): erschreckt alle Feinde in ROAR.R außer den Furchtlosen
+  const w = mkWorld(), bear = spawn(w, 'baer', 560, 420, 'blau');
+  bear.cd = 1e9; bear.hp = 1e9;
+  const W = [dummy(w, 'wolf', 600, 400), dummy(w, 'wolf', 600, 440)], b = dummy(w, 'biene', 610, 420);
+  const tank = dummy(w, 'panzer', 560, 480), ele = dummy(w, 'elefant', 520, 380);
+  allies(w, 1000, 700, 'rot');
+  rebuildHash(w); updateCentroids(w, DT);
+  const d0 = W.map(v => v.x);
+  bear.abCd = 0; think(w, bear, DT);
+  assert.ok(FEARLESS.has('panzer') && FEARLESS.has('elefant'));
+  run(w, 1);
+  assert.ok(W.every(v => v.fearT > 0), 'Wölfe erschreckt');
+  assert.ok(b.fearT > 0, 'Biene erschreckt');
+  assert.ok(W.every((v, i) => v.x > d0[i] + 20), 'Wölfe laufen weg');
+  assert.equal(tank.fearT, 0); assert.equal(ele.fearT, 0);
 });

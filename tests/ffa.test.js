@@ -3,11 +3,11 @@
 // laufen zum Schwerpunkt ihres Typs, Römer aller Teams bilden einen Block, kein Absturz, kein NaN.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn } from '../game/js/world.js';
+import { createWorld, spawn, RV_X, RV_Y, RV_T } from '../game/js/world.js';
 import { step, placeRect, placeCircle } from '../game/js/sim.js';
 import { SNIPER } from '../game/js/combat.js';
 import { UNITS } from '../game/js/data.js';
-import { HOME_W, HOME_NEAR } from '../game/js/morale.js';
+import { RALLY } from '../game/js/morale.js';
 
 const DT = 1 / 60;
 const mk = (seed = 5) => { const w = createWorld(1400, 800, seed); w.teamMode = false; return w; };
@@ -75,17 +75,10 @@ test('FFA Demo-Schlacht mit Römern, Scharfschützen und Sanitätern: 30 s ohne 
   placeRect(w, 'roemer', 20, .6, .3, .68, .5, 'blau');
   placeRect(w, 'sniper', 4, .7, .8, .74, .9, 'rot');
   placeRect(w, 'sani', 4, .05, .4, .08, .6, 'gruen');
-  // Erwartete Fluchtrichtung wie morale.fleeSteer: weg vom Feind plus HOME_W zum Schwerpunkt c (zieht der auf den
-  // Feind zu, nur sein seitlicher Anteil). Verglichen mit dem Schwerpunkt des eigenen Typs und, als Gegenprobe, dem
-  // des eigenen Teams (das im FFA nichts bedeutet).
-  const dir = (u, c) => {
-    const t = u.tg, ex = u.x - t.x, ey = u.y - t.y, l = Math.hypot(ex, ey), ax = ex / l, ay = ey / l;
-    let dx = ax, dy = ay;
-    const hx = c.x - u.x, hy = c.y - u.y, hl = Math.hypot(hx, hy);
-    if (hl > HOME_NEAR) { let nx = hx / hl, ny = hy / hl; const k = nx * ax + ny * ay; if (k < 0) { nx -= k * ax; ny -= k * ay; } dx += HOME_W * nx; dy += HOME_W * ny; }
-    const m = Math.hypot(dx, dy); return [dx / m, dy / m];
-  };
-  const match = (u, c) => { const [dx, dy] = dir(u, c), m = Math.hypot(u.mx, u.my); return (dx * u.mx + dy * u.my) / m > .97; };
+  // Nachtrag 8 (#50): Fliehende laufen zu einem Sammelpunkt hinter dem Schwerpunkt ihres Typs (im FFA die Fraktion), nicht
+  // mehr in eine Mischrichtung (vorher HOME_W). Geprüft: der Sammelpunkt liegt nah am Schwerpunkt des eigenen Typs und,
+  // als Gegenprobe, seltener nah am Schwerpunkt des eigenen Teams (das im FFA nichts bedeutet).
+  const near = (u, c) => Math.hypot(u.rv[RV_X] - c.x, u.rv[RV_Y] - c.y) <= RALLY.D + 3 * RALLY.SPREAD + 120;
   let flee = 0, byType = 0, byTeam = 0;
   run(w, 30, i => {
     if (i % 30) return;
@@ -93,17 +86,17 @@ test('FFA Demo-Schlacht mit Römern, Scharfschützen und Sanitätern: 30 s ohne 
     for (const v of w.units) if (v.alive && !v.flee) { const o = team.get(v.team) || { x: 0, y: 0, n: 0 }; o.x += v.x; o.y += v.y; o.n++; team.set(v.team, o); }
     for (const o of team.values()) { o.x /= o.n; o.y /= o.n; }
     for (const u of w.units) {
-      if (!u.alive || !u.flee || u.state !== 'ok' || !u.tg || !u.tg.alive || !(u.mx || u.my) || u.cornerT > 0) continue;
+      if (!u.alive || !u.flee || u.state !== 'ok' || u.rv[RV_T] < -1) continue;
       const c = w.cent.get(u.type), tc = team.get(u.team);
       if (!c || !c.n || !tc) continue;
       flee++;
-      if (match(u, c)) byType++;
-      if (match(u, tc)) byTeam++;
+      if (near(u, c)) byType++;
+      if (near(u, tc)) byTeam++;
     }
   });
   assert.ok(finite(w), 'kein NaN');
   assert.ok(w.units.filter(u => !u.alive).length >= 20, 'es wurde gekämpft');
   assert.ok(flee >= 20, `Fluchtproben ${flee}`);
-  assert.ok(byType >= .8 * flee, `Richtung zum eigenen Typ ${byType}/${flee}`);
+  assert.ok(byType >= .8 * flee, `Sammelpunkt beim eigenen Typ ${byType}/${flee}`);
   assert.ok(byTeam < .6 * flee, `Gegenprobe Team ${byTeam}/${flee}`);
 });

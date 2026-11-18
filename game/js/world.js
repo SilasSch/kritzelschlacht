@@ -33,6 +33,11 @@ export function createWorld(W, H, seed = 1) {
   return world;
 }
 
+// Felder in u.rv (Float64Array): Sammelpunkt der Flucht x/y, world.time seiner Wahl (−9 = keiner), dort angekommen (0/1),
+// Drossel des Fluchtbeginns (s; morale.js, #50); Scharfschütze: Zeit im laufenden Zurückweichen, Sperre danach, Abklingzeit
+// des Messers (s; combat.js, #51)
+export const RV_X = 0, RV_Y = 1, RV_T = 2, RV_IN = 3, RV_CK = 4, RV_BACK = 5, RV_BCD = 6, RV_KNIFE = 7, RV_N = 8;
+
 // Fraktion: im Teammodus das Team, sonst die Art u.kin (beim Spawn der Typ; Ghule tragen die ihres Vampirs, Spez. #32)
 export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
 
@@ -158,6 +163,7 @@ export function spawn(world, type, x, y, team) {
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
+  u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;

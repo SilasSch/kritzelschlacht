@@ -2,13 +2,15 @@
 // (nach Brand und Luft/Betäubung) und steuert bei true die Flucht (fleeSteer) statt des normalen Verhaltens;
 // sim.step ruft updateCentroids nach updateFormations.
 //
-// Flucht beginnt bei hp ≤ FLEE · T.hp, für Römer im marschierenden Block (formOn) erst bei FLEE_FORM; ein
+// Flucht beginnt bei hp ≤ FLEE · T.hp, für Römer im marschierenden Block (formOn) erst bei FLEE_FORM, und nur vor
+// Nahkämpfern, denen man davonläuft (Nachtrag 8, #50: FLEE_MELEE_R; Fernkämpfer auch unter Beschuss); ein
 // fliehender Römer verlässt den Block sofort (formation.js nimmt Fliehende in keinen Block auf). Bedrohung u.tg:
 // der nächste Gegner bis FLEE_LOOK px (2 · SAFE_R), gesucht über den Spatial Hash in Ringen um u (bricht ab, sobald
 // kein näherer mehr möglich ist), gedrosselt alle FLEE_SCAN s (+ id % 4 · FLEE_STAGGER, gestaffelt; Takt über u.rt,
 // das die Zielsuche auf der Flucht nicht braucht). Dazwischen gilt der gemerkte Gegner mit seiner aktuellen Lage.
-// Weiter als SAFE_R zählt er nicht als Gefahr, die Einheit läuft aber weiter von ihm weg: sonst bliebe sie knapp
-// außerhalb von SAFE_R stehen, ein langsamer Verfolger käme immer wieder heran, und sie erholte sich nie.
+// Die Flucht führt zu einem Sammelpunkt hinter der eigenen Fraktion (RALLY, beim Fluchtbeginn gewählt); dort bleibt
+// die Einheit stehen (kein Hin und Her an einer Distanzgrenze). Der Schreck steuert wie früher: weg vom Feind, zum
+// Schwerpunkt gemischt.
 // Erholung: ist SAFE_T s lang kein Gegner in SAFE_R (u.safeT), steigen die LP um REGEN · T.hp je s; ab BACK · T.hp
 // endet die Flucht (u.rt = 0: think sucht gleich ein neues Ziel).
 // Letztes Gefecht: fliehen (anfangen und weiter fliehen) nur, solange die eigene Fraktion mindestens MIN_ALLIES
@@ -31,15 +33,26 @@
 // „ohne Erholung“: die LP steigen nicht), ohne Ende über die 60-%-Regel und ohne letztes Gefecht. Er endet nur,
 // wenn fearT abgelaufen ist; liegt das Leben dann bei höchstens FLEE · T.hp, beginnt im nächsten Schritt der
 // normale Rückzug. Betäubt oder in der Luft läuft fearT nicht ab (Vorrang: betäubt > Schreck).
-import { factionOf } from './world.js';
+import { factionOf, outOfMelee, RV_X, RV_Y, RV_T, RV_IN, RV_CK } from './world.js';
 import { HASH_CELL } from './data.js';
 import { hazardAt, leaveBlock } from './formation.js';
 
 // Fliehend oder erschreckt: das eine Prädikat für Blockmitgliedschaft, Schwerpunkte, Zielwahl, Sanitäter, att und
 // Angstaugen (Vorgabe 1 der Abschlussprüfung)
 export const isFleeing = u => u.flee || u.fearT > 0;
-// Fliehen nie (Rückzug #27): Ghule (hirnlos) und Geister (#41: heilen sich durch Schaden). Schreck wirkt trotzdem.
-export const NO_RETREAT = new Set(['ghul', 'geist']);
+// Fliehen nie (Rückzug #27, Nachtrag 8 #50): Ghule (hirnlos), Geister (#41: heilen sich durch Schaden), Bienen, Frösche,
+// Panzer, Drache und Elefant. Schreck (fearT) wirkt trotzdem, soweit nicht furchtlos (abilities.FEARLESS).
+export const NO_RETREAT = new Set(['ghul', 'geist', 'biene', 'frosch', 'panzer', 'drache', 'elefant']);
+// Fluchtbeginn (Nachtrag 8, #50): geflohen wird nur vor Nahkämpfern (Reichweite < 20, nicht selbst fliehend, die u
+// erreichen können) in FLEE_MELEE_R px, denen man davonläuft (ihr Tempo < T.speed · SPEED). Ein Nahkämpfer, auf den nur
+// geschossen wird, flieht nicht ("Flucht nach vorn"); ein Fernkämpfer zieht sich zurück, außer ein Nahkämpfer, dem er
+// nicht davonläuft, ist nah (dann wehrt er sich). Entschieden wird nur beim Fluchtbeginn (gedrosselt alle FLEE_CK s).
+export const FLEE_MELEE_R = 120, FLEE_CK = .2;
+// Sammelpunkt (#50): beim Fluchtbeginn Schwerpunkt der eigenen Fraktion minus D px in Feindrichtung (world.cent ex/ey),
+// seitlich nach id um SPREAD px gestaffelt, in der Karte, nicht auf Lava/Mauer, mindestens SAFE_R von der Bedrohung.
+// Dort (ARRIVE px) bleibt die Einheit stehen, bis sie bei BACK zurückkehrt; weggeschoben läuft sie erst ab LEAVE px
+// zurück. Ist die Bedrohung in SAFE_R des Sammelpunkts, gibt es höchstens alle REPICK s einen neuen.
+export const RALLY = { D: 120, SPREAD: 16, ARRIVE: 10, LEAVE: 40, REPICK: 2, AWAY_W: 1.5 };
 
 // CORNER_T: .3 statt 1,5 s (Task 7): wer eingeholt wird, wehrt sich fast sofort. Mit 1,5 s standen Fliehende im
 // Bienenschwarm wehrlos und langsame Nahkämpfer verloren gegen schnelle (krieger > biene, mg > biene, ritter > reiter).
@@ -158,13 +171,26 @@ export function updateMorale(world, u, dt) {
     // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen. Geister (Nachtrag 5, #41) fliehen nie: sie heilen
     // sich, indem sie Schaden machen (Lebensraub, combat.js)
     if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || NO_RETREAT.has(u.type)) return false;
+    // Fluchtbeginn nur vor Nahkämpfern, denen man davonläuft (#50), gedrosselt
+    if (u.rv[RV_CK] > 0) { u.rv[RV_CK] -= dt; return false; }
+    u.rv[RV_CK] = FLEE_CK + (u.id % 4) * FLEE_STAGGER;
+    const m = nearestMelee(world, u, FLEE_MELEE_R);
+    const outrun = m !== null && m.T.speed * m.spdMul < T.speed * M.SPEED;
+    if (T.range < 20 ? !outrun : m !== null && !outrun) return false;
     c.n--;
-    u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = null; u.run = 0;
+    u.flee = true; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.tg = m; u.run = 0;
     // Römer verlassen den Block (formation.rebuild nimmt Fliehende nicht wieder auf)
     if (u.formOn) leaveBlock(u);
+    watchThreat(world, u, dt);
+    pickRally(world, u);
   }
   else if (others < M.MIN_ALLIES) { endFlee(u, c); return false; }   // letztes Gefecht
-  watchThreat(world, u, dt);
+  else {
+    watchThreat(world, u, dt);
+    // noch kein Sammelpunkt (von außen auf die Flucht gesetzt) oder Bedrohung am Sammelpunkt: neu, höchstens alle REPICK s
+    const t = u.tg;
+    if (u.rv[RV_T] < -1 || (t && t.alive && world.time - u.rv[RV_T] >= RALLY.REPICK && (t.x - u.rv[RV_X]) ** 2 + (t.y - u.rv[RV_Y]) ** 2 <= SAFE_R2)) pickRally(world, u);
+  }
   if (u.safeT >= M.SAFE_T) {
     const hp = u.hp + M.REGEN * T.hp * dt;
     u.hp = hp < T.hp ? hp : T.hp;
@@ -191,9 +217,61 @@ function watchThreat(world, u, dt) {
 }
 // Flucht endet (erholt oder letztes Gefecht): zählt wieder als kämpfende Einheit der Fraktion, sucht gleich ein Ziel
 function endFlee(u, c) {
-  u.flee = false; u.safeT = 0; u.cornerT = 0; u.rt = 0;
+  u.flee = false; u.safeT = 0; u.cornerT = 0; u.rt = 0; u.rv[RV_T] = -9; u.rv[RV_IN] = 0;
   if (c) c.n++;
 }
+
+// Nächster Nahkämpfer-Gegner (Reichweite < 20, nicht fliehend, erreicht u) höchstens R px von u (Hash-Zellen im Quadrat)
+function nearestMelee(world, u, R) {
+  const { HW, HH, hash } = world, f = factionOf(world, u), ux = u.x, uy = u.y;
+  const gx0 = clamp((ux - R) / HC | 0, 0, HW - 1), gx1 = clamp((ux + R) / HC | 0, 0, HW - 1);
+  const gy0 = clamp((uy - R) / HC | 0, 0, HH - 1), gy1 = clamp((uy + R) / HC | 0, 0, HH - 1);
+  let best = null, bd = R * R;
+  for (let gy = gy0; gy <= gy1; gy++) for (let gx = gx0; gx <= gx1; gx++) {
+    const cell = hash[gy * HW + gx];
+    for (let i = 0; i < cell.length; i++) {
+      const v = cell[i];
+      if (!v.alive || v.T.range >= 20 || isFleeing(v)) continue;
+      const d = (v.x - ux) ** 2 + (v.y - uy) ** 2;
+      if (d <= bd && factionOf(world, v) !== f && !outOfMelee(v, u)) { bd = d; best = v; }
+    }
+  }
+  return best;
+}
+
+// Sammelpunkt (RALLY) hinter der eigenen Fraktion für u setzen (u.rv[RV_X]/Y, u.rv[RV_T] = world.time, u.rv[RV_IN] = 0)
+function pickRally(world, u) {
+  const c = world.cent.get(factionOf(world, u)), t = u.tg && u.tg.alive ? u.tg : null, r = u.T.r;
+  u.rv[RV_T] = world.time; u.rv[RV_IN] = 0;
+  if (!c || !c.n) { u.rv[RV_X] = u.x; u.rv[RV_Y] = u.y; return; }
+  let ex = 0, ey = 0;
+  if (c.has) { ex = c.ex; ey = c.ey; }
+  else if (t) { const l = Math.hypot(t.x - c.x, t.y - c.y); if (l > 1e-6) { ex = (t.x - c.x) / l; ey = (t.y - c.y) / l; } }
+  const s = ((u.id % 7) - 3) * RALLY.SPREAD;
+  let x = c.x - ex * RALLY.D - ey * s, y = c.y - ey * RALLY.D + ex * s;
+  // nicht in SAFE_R der Bedrohung: von ihr weg auf SAFE_R hinausschieben
+  if (t) {
+    const qx = x - t.x, qy = y - t.y, q = Math.hypot(qx, qy);
+    if (q < MORALE.SAFE_R) {
+      if (q > 1e-6) { x = t.x + qx / q * MORALE.SAFE_R; y = t.y + qy / q * MORALE.SAFE_R; }
+      else { x = t.x - ex * MORALE.SAFE_R; y = t.y - ey * MORALE.SAFE_R; }
+    }
+  }
+  const m = r + EDGE + PROBE[1] + 2;
+  x = clamp(x, m, world.W - m); y = clamp(y, m, world.H - m);
+  // Bodentruppen: nicht auf Lava oder Mauer (Ringe um den Punkt, sonst der Schwerpunkt selbst)
+  if (!u.T.fly && (!world.flow || world.flow.hazards > 0) && rallyHaz(world, x, y, r)) {
+    let ok = false;
+    for (let k = 1; k <= 6 && !ok; k++) for (let j = 0; j < 8; j++) {
+      const px = clamp(x + D8X[j] * 20 * k, m, world.W - m), py = clamp(y + D8Y[j] * 20 * k, m, world.H - m);
+      if (!rallyHaz(world, px, py, r)) { x = px; y = py; ok = true; break; }
+    }
+    if (!ok) { x = clamp(c.x, m, world.W - m); y = clamp(c.y, m, world.H - m); }
+  }
+  u.rv[RV_X] = x; u.rv[RV_Y] = y;
+}
+const rallyHaz = (world, x, y, r) => hazardAt(world, x, y) || hazardAt(world, x + r + 6, y) || hazardAt(world, x - r - 6, y) ||
+  hazardAt(world, x, y + r + 6) || hazardAt(world, x, y - r - 6);
 
 /* ---------- Steuerung ---------- */
 // Fluchtbewegung von u (auch für spätere Schreck-Zustände): weg von der Bedrohung u.tg (falls gesetzt und am
@@ -202,6 +280,7 @@ function endFlee(u, c) {
 // Bodentruppen meiden Lava, Mauern und den Kartenrand, Flieger nur den Rand. Liefert true, wenn keine
 // Fluchtrichtung frei ist (festgenagelt: u steht).
 export function fleeSteer(world, u, dt) {
+  if (u.flee) return rallySteer(world, u, dt);
   const T = u.T, t = u.tg && u.tg.alive ? u.tg : null;
   let ax = 0, ay = 0;
   if (t) {
@@ -240,6 +319,59 @@ export function fleeSteer(world, u, dt) {
     if (rl > 1e-6) { dx += rx / rl; dy += ry / rl; l = Math.hypot(dx, dy); if (l > 1e-6) { dx /= l; dy /= l; } }
   }
   const sp = T.speed * MORALE.SPEED;
+  u.mx = dx * sp; u.my = dy * sp; u.fx = dx; u.fy = dy;
+  if (dx < -.2) u.face = -1; else if (dx > .2) u.face = 1;
+  return false;
+}
+
+// Flucht (u.flee, #50): zum Sammelpunkt (u.rv[RV_X]/Y), dort stehen (u.rv[RV_IN]), erst ab RALLY.LEAVE px Abweichung zurück.
+// Kein Lauf auf die Bedrohung zu: ist sie näher als SAFE_R, wird der Anteil zu ihr hin herausgenommen und AWAY_W weg von ihr
+// dazugemischt (beides stetig mit dem
+// Abstand gewichtet: voll ab SAFE_R / 2, null ab SAFE_R, also kein Kippen an einer Grenze). Gelände wie
+// fleeSteer. Liefert true, wenn festgenagelt.
+function rallySteer(world, u, dt) {
+  const T = u.T, t = u.tg && u.tg.alive ? u.tg : null;
+  if (u.rv[RV_T] < -1) pickRally(world, u);
+  const hx = u.rv[RV_X] - u.x, hy = u.rv[RV_Y] - u.y, hl = Math.hypot(hx, hy);
+  if (u.rv[RV_IN] && hl > RALLY.LEAVE) u.rv[RV_IN] = 0;
+  if (!u.rv[RV_IN] && hl <= RALLY.ARRIVE) u.rv[RV_IN] = 1;
+  if (u.rv[RV_IN]) {
+    u.mx = 0; u.my = 0;
+    if (t) { const fx = t.x - u.x; if (fx < -.2) u.face = -1; else if (fx > .2) u.face = 1; }
+    return false;
+  }
+  let dx = hx / hl, dy = hy / hl, ax = 0, ay = 0, wt = 0;
+  if (t) {
+    const ex = u.x - t.x, ey = u.y - t.y, l = Math.hypot(ex, ey);
+    if (l > 1e-6) { ax = ex / l; ay = ey / l; } else { ax = u.face < 0 ? -1 : 1; }
+    wt = clamp((MORALE.SAFE_R - l) / (.5 * MORALE.SAFE_R), 0, 1);
+    if (wt > 0) {
+      const k = dx * ax + dy * ay;
+      if (k < 0) { dx -= wt * k * ax; dy -= wt * k * ay; }
+      dx += RALLY.AWAY_W * wt * ax; dy += RALLY.AWAY_W * wt * ay;
+      const q = Math.hypot(dx, dy);
+      dx /= q; dy /= q;
+    }
+  }
+  const fly = !!T.fly, haz = !fly && (!world.flow || world.flow.hazards > 0);
+  if (blocked(world, u, dx, dy, haz)) {
+    let bs = -Infinity, bx = 0, by = 0;
+    const away = wt > 0;
+    for (let k = 0; k < FLEE_DIRS; k++) {
+      const s = DIRX[k] * dx + DIRY[k] * dy;
+      if (s > bs && (!away || DIRX[k] * ax + DIRY[k] * ay >= BACK_COS) && !blocked(world, u, DIRX[k], DIRY[k], haz)) { bs = s; bx = DIRX[k]; by = DIRY[k]; }
+    }
+    if (bs === -Infinity) { u.mx = 0; u.my = 0; return true; }   // festgenagelt
+    dx = bx; dy = by;
+  }
+  if (haz) {
+    let rx = 0, ry = 0;
+    for (let k = 0; k < 8; k++) if (hazardAt(world, u.x + D8X[k] * AVOID, u.y + D8Y[k] * AVOID)) { rx -= D8X[k]; ry -= D8Y[k]; }
+    const rl = Math.hypot(rx, ry);
+    if (rl > 1e-6) { dx += rx / rl; dy += ry / rl; const l = Math.hypot(dx, dy); if (l > 1e-6) { dx /= l; dy /= l; } }
+  }
+  let sp = T.speed * MORALE.SPEED;
+  if (sp * dt > hl) sp = hl / dt;   // nicht über den Sammelpunkt hinaus
   u.mx = dx * sp; u.my = dy * sp; u.fx = dx; u.fy = dy;
   if (dx < -.2) u.face = -1; else if (dx > .2) u.face = 1;
   return false;

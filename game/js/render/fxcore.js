@@ -18,7 +18,7 @@ import { SYN_COL } from '../synergy.js';
 export const FX_CAP = 3000;
 export const STINK_COL = 0xa8c24a, STINK_CLOUD = 0xc4d36a;
 export const STEPS = { MASS: 6, GAP: 1.4, R: .2, COL: '#6b5a48', A: .1 };
-export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
+export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24, impact: 64 };
 
 /* ---------- Wackeln ---------- */
 // Explosion: max(shake, min(12, R/6)). Abklingen je Sekunde wie früher ×0.85 je Bild bei 60 fps.
@@ -84,6 +84,38 @@ export const EXHAUST = { life: .9, grow: 2.6, alpha: .34 };
    Mündungsfeuer: Blitz (flash, Radius flash) und drei kurze helle Striche (mgflash, Länge len px) in Schussrichtung, life s;
    Hülse (casing): kleiner Messingstrich, nach hinten (caseV px/s) und oben (caseUp px/s) ausgeworfen, dreht sich und fällt. */
 export const MG_FX = { life: .06, flash: 4.5, len: 9, back: 10, caseLife: .5, caseR: 1.9, caseCol: 0xe0b04a, caseV: [25, 50], caseUp: [70, 110] };
+
+/* ---------- Schüsse (Overhaul 18.11.) ----------
+   Mündungsfeuer je Waffe (shot-Ereignis; Schlüssel 'Schütze:Art', sonst die Art): Blitz (flash, Radius px), Stern aus
+   drei Strahlen (ray: Länge px des mittleren, life s), Rauchwölkchen (smoke), Hülse (casing), Druckring an der Mündung
+   (ring px), Rückstrahl nach hinten (back: Wölkchen hinter dem Rohr, Panzerfaust), Rauch nach oben (up, Mörser),
+   Leuchtspur von der Mündung bis zum Zielpunkt (tracer: [Breite, Farbe], kurz stehend, Scharfschütze), Funken (sparks)
+   bzw. Zauberfunken in Farbe col (Hexe, Feuerball), Tröpfchen (drops, Lama). Budget-Art shot. */
+export const GUN_FX = {
+  'soldat:bullet': { flash: 4.2, ray: 10, life: .08, smoke: 1, casing: true },
+  'mg:bullet': { flash: 3.8, ray: 9, life: .06, casing: true },
+  'sniper:bullet': { flash: 6, ray: 16, life: .09, smoke: 2, casing: true, ring: 9, tracer: [2.6, 0xffc23d] },
+  'heli:bullet': { flash: 4.4, ray: 10, life: .05, casing: true },
+  'jet:bullet': { flash: 4.2, ray: 12, life: .05 },
+  bullet: { flash: 4, ray: 9, life: .06, smoke: 1 },
+  shell: { flash: 9, ray: 18, life: .1, smoke: 4, ring: 15 },
+  rocket: { flash: 5, ray: 8, life: .08, smoke: 1, back: 3 },
+  'heli:rocket': { flash: 4.5, ray: 8, life: .07, smoke: 2 },
+  mortar: { flash: 6, ray: 9, life: .09, smoke: 3, up: true, ring: 10 },
+  fire: { flash: 4.5, sparks: 5, col: 0xff8a3d },
+  hex: { flash: 3.5, sparks: 5, col: 0x7be06a },
+  spit: { drops: 3 },
+};
+// Leuchtspur der Kugeln im Flug (renderer.drawProjectiles) je Schütze: [Länge px, Breite px, Farbe]; Mitte hell, Ende blass
+export const TRACER = {
+  soldat: [13, 1.8, 0xffb52e], mg: [11, 1.6, 0xffa22a], sniper: [30, 2.4, 0xffd84d], heli: [13, 2, 0xff9a2a],
+  jet: [16, 2, 0xff8a3d], panzer: [10, 1.6, 0xffa22a], _: [12, 1.8, 0xffb52e],
+};
+// Einschläge: Kugel im Körper (Blitz, Funken entgegen der Flugrichtung; Scharfschütze größer mit Ring), Kugel im Boden
+// (Staubwölkchen und Erdkrumen) bzw. in der Mauer (Steinsplitter und Funke). Budget-Art impact.
+export const IMPACT_FX = { flash: 2.6, sparks: 2, bigFlash: 4.5, bigSparks: 5, bigRing: 9, dirt: 2, dirtCol: 0xb8a98a, chipCol: 0x8d929c };
+// Explosionen: dunkler Druckring (wave, Radius RING · R) und Erdbrocken (CLODS) zusätzlich zu Kern, Glut und Rauch
+export const BLAST_FX = { RING: 1.15, RING_T: .32, CLODS: 5, CLOD_COL: 0x6b5a48 };
 
 /* ---------- Wasser (Nachtrag 7, #48) ----------
    Waten: Bodentruppen im Wasser werfen alle WADE_T s (nach id versetzt, ohne Zustand je Einheit) einen flachen Ring
@@ -211,7 +243,7 @@ export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 
 export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32, 28, 30, 30];
 // Zauber (Spez. #31): Blitz (bolt, zap), Kanalfunken (mote), Kugel am Himmel (orb) und Meteor glühen auch
 export const GLOW_KINDS = new Set(['ember', 'fire', 'flash', 'core', 'light', 'jet', 'spark', 'flame', 'bolt', 'zap', 'mote', 'orb', 'meteor']);
-GLOW_KINDS.add('mgflash');   // Nachtrag 7, #49: Mündungsfeuer des Bug-MGs
+GLOW_KINDS.add('mgflash'); GLOW_KINDS.add('tracer');   // Nachtrag 7, #49: Mündungsfeuer des Bug-MGs
 export const WARM_KINDS = new Set(['light', 'flash', 'fire', 'jet', 'flame']);
 const PL = {};
 // Aussehen eines Partikels in out: normales Sprite (frame, x, y, r = Anzeigeradius, rot, tint, alpha,
@@ -288,6 +320,8 @@ export function look(p, o) {
     // Wasser (Nachtrag 7, #48): flacher Ring am Boden (Waten, Fontäne), Bugwelle (Strich), Gischt (weiße Wolke)
     case 'wade': o.frame = F.wave; o.r = p.r * (WADE.R0 + (WADE.R1 - WADE.R0) * (1 - a * a)); o.sy = .42; o.alpha = p.a0 * a * Math.min(1, q / .12); o.under = true; break;
     case 'bow': o.frame = F.streak; o.sy = 1.3; o.alpha = p.a0 * a * Math.min(1, q / .15); o.under = true; break;
+    // Leuchtspur des Scharfschützen: steht kurz, blendet dann aus, glüht warm
+    case 'tracer': o.frame = F.streak; o.alpha = q < .3 ? 1 : a / .7; o.sy = p.sy; o.gR = p.r * .3; o.gTint = 0xffcf66; o.gAlpha = a * .4; break;
     case 'mgflash': o.frame = F.streak; o.sy = .7; o.alpha = Math.min(1, a * 1.6); o.gR = p.r * 1.4; o.gTint = 0xffcf66; o.gAlpha = a * .7; break;
     case 'casing': o.frame = F.streak; o.sy = 2.4; o.alpha = q < .7 ? 1 : a / .3; break;
     case 'spray': o.frame = F.puff; o.r = p.r * (1 + q * .9); o.alpha = .85 * Math.min(1, q / .06) * a; break;
@@ -537,6 +571,66 @@ export function createFxCore(hooks = {}, opt = {}) {
     if (b) { b.vx = -face * rnd(F.caseV[0], F.caseV[1]); b.vy = -rnd(F.caseUp[0], F.caseUp[1]); b.ay = 520; b.rot = rand() * TAU; b.vrot = rnd(-22, 22); }
   }
 
+  // Mündungsfeuer je Waffe (GUN_FX): Blitz, Strahlenstern, Rauch, Hülse, Druckring, Rückstrahl, Leuchtspur, Funken
+  function muzzle(e, y, face, F) {
+    const hasT = Number.isFinite(e.tx) && Number.isFinite(e.ty);
+    let a = hasT ? Math.atan2(e.ty - e.y, e.tx - e.x) : face > 0 ? 0 : Math.PI;
+    if (F.up) a = -Math.PI / 2 + face * .45;
+    const ca = Math.cos(a), sa = Math.sin(a), x = e.x;
+    if (F.flash) add('flash', x + ca * 2, y + sa * 2, F.life || .07, F.flash);
+    if (F.ray) for (const s of [0, .6, -.6]) {
+      const L = s ? F.ray * .5 : F.ray, p = add('mgflash', x + ca * L * .55, y + sa * L * .55, F.life, L, 0xfff1a8);
+      if (p) p.rot = a + s * rnd(.8, 1.1);
+    }
+    for (let i = 0; i < (F.smoke || 0); i++) {
+      const p = add('wisp', x + ca * rnd(4, 10), y + sa * rnd(4, 10) - 2, rnd(.45, .7), rnd(2.2, 3.4) + (F.ring ? 1.5 : 0), 0xb7bcc4); if (!p) break;
+      p.vx = ca * rnd(20, 45) + WISP.wind; p.vy = sa * rnd(20, 45) - rnd(10, 25); p.drag = 2.5; p.rot = rand() * TAU;
+    }
+    if (F.ring) add('wave', x + ca * 4, y + sa * 4, .18, F.ring, 0x2a2a33);
+    for (let i = 0; i < (F.back || 0); i++) {
+      const p = add('wisp', x - ca * rnd(10, 16), y - sa * rnd(10, 16), rnd(.5, .8), rnd(2.5, 4), 0xc7c2b8); if (!p) break;
+      p.vx = -ca * rnd(40, 80) + rnd(-10, 10); p.vy = -sa * rnd(40, 80) - rnd(5, 15); p.drag = 3; p.rot = rand() * TAU;
+    }
+    if (F.casing) {
+      const M = MG_FX, b = add('casing', x - face * 6, y - 1, M.caseLife, M.caseR * .9, M.caseCol);
+      if (b) { b.vx = -face * rnd(M.caseV[0], M.caseV[1]); b.vy = -rnd(M.caseUp[0], M.caseUp[1]); b.ay = 520; b.rot = rand() * TAU; b.vrot = rnd(-22, 22); }
+    }
+    if (F.tracer && hasT) {
+      const tx = e.tx, ty = e.ty - 4;
+      const t = seg('tracer', x, y, tx, ty, F.tracer[0], .2, F.tracer[1]); if (t) t.a0 = 1;
+      seg('tracer', x, y, tx, ty, F.tracer[0] * .35, .2, 0xffffff);
+    }
+    for (let i = 0; i < (F.sparks || 0); i++) {
+      const b = a + rnd(-.7, .7), sp = rnd(30, 80), p = add('dot', x + ca * 3, y + sa * 3, rnd(.18, .3), rnd(.9, 1.5), F.col); if (!p) break;
+      p.vx = Math.cos(b) * sp; p.vy = Math.sin(b) * sp - 15; p.drag = 3;
+    }
+    for (let i = 0; i < (F.drops || 0); i++) {
+      const p = add('drop', x + ca * 3, y + sa * 3, rnd(.2, .32), rnd(.9, 1.4), 0xdcecf5); if (!p) break;
+      const b = a + rnd(-.4, .4), sp = rnd(50, 110); p.vx = Math.cos(b) * sp; p.vy = Math.sin(b) * sp - 20; p.ay = 300;
+    }
+  }
+  // Kugel trifft einen Körper (Bildschirmpunkt x, y): Blitz und Funken zurück gegen die Flugrichtung a
+  function bulletHit(e) {
+    const I = IMPACT_FX, big = e.ut === 'sniper', y = e.y - (e.z || 0) - 5, a = (e.a || 0) + Math.PI;
+    add('flash', e.x, y, big ? .1 : .06, big ? I.bigFlash : I.flash);
+    const n = big ? I.bigSparks : I.sparks;
+    for (let i = 0; i < n; i++) {
+      const b = a + rnd(-.9, .9), sp = rnd(50, big ? 150 : 100), p = add('spark', e.x, y, rnd(.12, .25), rnd(.8, 1.2)); if (!p) break;
+      p.vx = Math.cos(b) * sp; p.vy = Math.sin(b) * sp - 20; p.ay = 200; p.drag = 2;
+    }
+    if (big) add('wave', e.x, y, .2, I.bigRing, 0x2a2a33);
+  }
+  // Kugel im Boden: Staubwölkchen und Erdkrumen; in der Mauer: Steinsplitter und ein Funke
+  function bulletMiss(e) {
+    const I = IMPACT_FX, wall = !!e.wall, n = I.dirt + (e.ut === 'sniper' ? 2 : 0);
+    if (!wall) puff('dust', e.x, e.y, DUST.life * .6, e.ut === 'sniper' ? 4.5 : 3);
+    else add('flash', e.x, e.y - 3, .05, 2.4);
+    for (let i = 0; i < n; i++) {
+      const p = add('dot', e.x, e.y - 1, rnd(.3, .45), rnd(.8, 1.4), wall ? I.chipCol : I.dirtCol); if (!p) break;
+      p.vx = rnd(-35, 35) - Math.cos(e.a || 0) * 20; p.vy = -rnd(40, 90); p.ay = 320;
+    }
+  }
+
   // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
   const HELI_SMOKE = { HALF: .5, LOW: .25, RATE: 9, RATE_LOW: 20 };
   const count = (rate, dt) => { const n = rate * dt, k = n | 0; return k + (rand() < n - k ? 1 : 0); };
@@ -605,6 +699,12 @@ export function createFxCore(hooks = {}, opt = {}) {
     if (lightLive < LIGHT_LIVE_MAX && add('light', x, y, LIGHT_T, LIGHT_RMUL * R)) lightLive++;
     add('core', x, y, .14, Math.max(4, R * .4));
     if (water) { fountain(x, y, R); return; }
+    if (R >= 16) add('wave', x, y, BLAST_FX.RING_T, R * BLAST_FX.RING, OUTLINE);
+    if (!fire) for (let i = 0; i < BLAST_FX.CLODS; i++) {
+      const a = -Math.PI / 2 + rnd(-1.1, 1.1), sp = rnd(80, 160) * (.7 + Math.min(R, 120) / 200);
+      const p = add('dot', x + rnd(-3, 3), y, rnd(.45, .7), rnd(1.4, 2.4), BLAST_FX.CLOD_COL); if (!p) break;
+      p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp; p.ay = 420;
+    }
     const n = emberCount(R);
     for (let i = 0; i < n; i++) {
       const a = rand() * TAU, s = rnd(30, 170) * (.7 + Math.min(R, 120) / 200);
@@ -1062,12 +1162,12 @@ export function createFxCore(hooks = {}, opt = {}) {
       }
       case 'shot': {
         if (e.kind === 'breath') { if (take('jet')) jet(e); break; }
-        if (e.kind !== 'bullet' && e.kind !== 'shell' && e.kind !== 'rocket') break;
-        if (!take('shot')) break;
+        const G = GUN_FX[e.ut + ':' + e.kind] || GUN_FX[e.kind];
+        if (!G || !take('shot')) break;
         // Flieger schießen aus ihrer Höhe (wie pose.projScreen am Start der Bahn)
         const y = e.y - ((e.z || 0) > MUZZLE_Z ? e.z - MUZZLE_Z : 0), face = e.face < 0 ? -1 : 1;
         if (e.mg) { mgFire(e, y, face); break; }
-        add('flash', e.x + face * 3, y, .07, e.kind === 'shell' ? 7 : 3.5);
+        muzzle(e, y, face, G);
         if (e.kind === 'shell') for (let i = 0; i < 3; i++) puff('smoke', e.x + face * rnd(5, 12), y + rnd(-3, 3), SMOKE.life * .5, rnd(4, 6));
         break;
       }
@@ -1128,6 +1228,11 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'hit':
+        if (e.kind === 'bullet' && take('impact')) bulletHit(e);
+        else if ((e.kind === 'arrow' || e.kind === 'pilum' || e.kind === 'firearrow') && take('impact')) {
+          // Pfeil im Ziel: zwei Holzsplitter
+          for (let i = 0; i < 2; i++) { const p = add('dot', e.x + rnd(-2, 2), e.y - 6, rnd(.25, .4), rnd(.8, 1.2), 0xa5692f); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(30, 70); p.ay = 260; }
+        }
         if (e.flank && take('misc')) { const p = add('dot', e.x, e.y - 10, .35, 2.6, 0xffb800); if (p) { p.vx = rnd(-20, 20); p.vy = -40; p.drag = DRAG; } }
         break;
       case 'block': {
@@ -1165,6 +1270,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         }
         // Speer: steckt schräg im Boden (Spitze nach unten, Schaft zeigt zurück zum Werfer)
         else if (e.kind === 'pilum') { const p = add('pilum', e.x, e.y, 2.5, 8), a = e.a || 0; if (p) p.rot = Math.atan2(Math.abs(Math.sin(a)) * .5 + .6, Math.cos(a)); }
+        else if (e.kind === 'bullet') bulletMiss(e);
         else dots(e.x, e.y, 1, 20, .25, 1.5, 1.5, 0xb8a98a);
         break;
       case 'ignite': {
@@ -1219,6 +1325,14 @@ export function createFxCore(hooks = {}, opt = {}) {
       const proj = world.proj;
       for (let i = 0; i < proj.length; i++) {
         const p = proj[i];
+        if (p.kind === 'bomb' || p.kind === 'mortar') {
+          // Granate: Lunte sprüht Funken; Mörsergranate: dünner Rauchfaden (Steine der Flugsaurier: nichts)
+          if (p.stone) continue;
+          projScreen(p, TR);
+          if (p.kind === 'bomb') { if (rand() < dt * 22) { const f = add('spark', TR.x + 2, TR.y - 4, rnd(.15, .25), rnd(.7, 1.1)); if (f) { f.vx = rnd(-25, 25); f.vy = -rnd(10, 40); f.ay = 160; } } }
+          else if (rand() < dt * 14) wisp(TR.x - Math.cos(TR.a) * 5, TR.y - Math.sin(TR.a) * 5, rnd(1.4, 2.2), 0xb7bcc4);
+          continue;
+        }
         if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow' && p.kind !== 'aam') continue;
         projScreen(p, TR);
         if (p.kind === 'firearrow') {

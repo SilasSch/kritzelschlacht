@@ -5,7 +5,7 @@ import { UNITS, PLURAL, TERRAIN, CELL } from '../game/js/data.js';
 import { createWorld, spawn, rebuildHash, nearestEnemy, outOfMelee, aloft, EAGLE_REACH_Z, HIDE_R, setCell } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { think, attack } from '../game/js/combat.js';
-import { ABILITY, FEARLESS, NO_GHOUL, TIERE, BEE_FEAR, CHEST_BEAT, TRAMPLE, HERD, CROC, THROW, SWOOP, scare } from '../game/js/abilities.js';
+import { ABILITY, FEARLESS, NO_GHOUL, TIERE, BEE_FEAR, CHEST_BEAT, TRAMPLE, HERD, CROC, THROW, SWOOP, GRAB, scare } from '../game/js/abilities.js';
 import { isFleeing } from '../game/js/morale.js';
 import { unitCard, cardTypes } from '../game/js/cards.js';
 import { createFxCore } from '../game/js/render/fxcore.js';
@@ -245,9 +245,10 @@ test('Brustklopfen: beim ersten Kontakt, schwächere Feinde in 70 px fliehen 1,5
 });
 
 /* ---------- Adler ---------- */
-test('Adler stößt auf einen Schützen herab, obwohl ein Krieger näher ist; erster Treffer ×3, danach steigt er', () => {
+// Ziel ist ein Lama (Fernkämpfer, zu schwer zum Packen): kleine Ziele packt er stattdessen (Test unten)
+test('Adler stößt auf einen Fernkämpfer herab, obwohl ein Krieger näher ist; erster Treffer ×3, danach steigt er', () => {
   const w = mkWorld(), a = spawn(w, 'adler', 300, 400, 'blau');
-  const k = dummy(w, 'krieger', 380, 400), s = dummy(w, 'schuetze', 520, 400);
+  const k = dummy(w, 'krieger', 380, 400), s = dummy(w, 'lama', 520, 400);
   a.abCd = 0;
   rebuildHash(w);
   assert.equal(nearestEnemy(w, a), k, 'normal wäre der Krieger dran');
@@ -265,6 +266,34 @@ test('Adler stößt auf einen Schützen herab, obwohl ein Krieger näher ist; er
   let top = 0;
   run(w, 1.2, () => { top = Math.max(top, a.z); });
   assert.ok(top > UNITS.adler.flyZ - 3, `steigt wieder (${top})`);
+});
+
+test('Adler packt zu: hebt einen Schützen hoch, trägt ihn zurück und lässt ihn fallen', () => {
+  const w = mkWorld(), a = spawn(w, 'adler', 300, 400, 'blau'), s = dummy(w, 'schuetze', 480, 400);
+  a.abCd = 0;
+  rebuildHash(w);
+  let grab = -1, drop = null, top = 0, xMax = 0;
+  for (let i = 0; i < 360 && !drop; i++) {
+    step(w, DT);
+    for (const e of w.events) { if (e.k === 'grab') grab = i; if (e.k === 'drop') drop = e; }
+    w.events.length = 0;
+    if (grab >= 0) { top = Math.max(top, s.z); xMax = Math.max(xMax, s.x); }
+  }
+  assert.ok(grab >= 0, 'gepackt');
+  assert.ok(drop, 'fallen gelassen');
+  assert.ok(top >= GRAB.Z - GRAB.HANG - 8, `hochgehoben (${top})`);
+  assert.ok(s.x < 480, `zurückgetragen (x ${s.x.toFixed(0)})`);
+  assert.equal(s.state, 'air', 'fällt');
+  assert.ok(1e9 - s.hp >= GRAB.DMG + UNITS.adler.dmg * .85 - 1e-6, 'Schaden beim Fallenlassen');
+});
+
+test('Adler packt keine schweren Gegner', () => {
+  const w = mkWorld(), a = spawn(w, 'adler', 300, 400, 'blau'); dummy(w, 'ritter', 480, 400);
+  a.abCd = 0;
+  rebuildHash(w);
+  let grab = false;
+  for (let i = 0; i < 300; i++) { step(w, DT); if (w.events.some(e => e.k === 'grab')) grab = true; w.events.length = 0; }
+  assert.ok(!grab);
 });
 
 test('Adler: Nahkämpfer erreichen ihn oben nicht, unten schon', () => {

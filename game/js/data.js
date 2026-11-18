@@ -73,7 +73,7 @@ export const UNITS = {
   krokodil:{n:'Krokodil',cat:'tiere',col:'#5e8a4a',r:11,hp:120,dmg:16,range:3,speed:50,cd:1,cost:4.75,mass:2,swim:1.6,land:.7,tier:1,d:'Im Wasser schnell und fast unsichtbar, an Land langsam. Packt aus dem Hinterhalt zu.'},
   gorilla:{n:'Gorilla',cat:'tiere',col:'#4a4552',r:12,hp:200,dmg:22,range:3,speed:52,cd:.95,cost:6,mass:3,tier:1,d:'Starker Nahkämpfer. Wirft Gegner in die Menge und schlägt sich auf die Brust.'},
   // Task 7: Kosten 3 → 4 (Spam gewann M7 öfter als der Geist; Nahkämpfer erreichen ihn oben nicht)
-  adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
+  adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Kleine Gegner packt er, trägt sie fort und lässt sie fallen. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
   lama:{n:'Lama',cat:'tiere',col:'#efe4d2',r:11,hp:90,dmg:9,range:185,speed:50,cd:1.3,cost:3.5,mass:1.5,d:'Spuckt auf Abstand, auch auf Flieger. Wen die Spucke trifft, der wird 2 s lang langsamer.'},
   bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
   // --- Schrottplatz (5. Kategorie, 18.11.): Roboter (bot: 1). Kategorie-Regeln in abilities.js (Block "Schrottplatz"):

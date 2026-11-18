@@ -1,7 +1,7 @@
 // Geduldige Scharfschützen (Spez. #28): halten Abstand, warten ohne Ziel, bleiben hinter der Front, weichen zurück.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWorld, spawn, rebuildHash } from '../game/js/world.js';
+import { createWorld, spawn, rebuildHash, RV_BACK } from '../game/js/world.js';
 import { think, SNIPER, LIE_MIN } from '../game/js/combat.js';
 import { updateCentroids } from '../game/js/morale.js';
 import { UNITS } from '../game/js/data.js';
@@ -11,8 +11,9 @@ const mkWorld = () => { const w = createWorld(1600, 800, 7); w.teamMode = true; 
 const run = (w, u, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { w.time += DT; rebuildHash(w); updateCentroids(w, DT); think(w, u, DT); u.x += u.mx * DT; u.y += u.my * DT; if (each) each(); } };
 const still = e => { e.hp = 1e9; };
 
-test('SNIPER: Werte laut Spez. #28', () => {
-  assert.deepEqual(SNIPER, { KEEP: .6, WAIT: 3, BEHIND: 40 });
+// Nachtrag 8 (#51): dazu Zurückweichen höchstens BACK_T s mit Sperre BACK_CD s und das Messer
+test('SNIPER: Werte laut Spez. #28 und #51', () => {
+  assert.deepEqual(SNIPER, { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 5, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 });
 });
 
 test('Hält Abstand zum Ziel: bei 380 px (Reichweite 456) kaum Bewegung', () => {
@@ -107,4 +108,42 @@ test('Nahkämpfer nah: steht, schießt nicht und weicht zurück', () => {
   const x0 = u.x;
   run(w, u, 1.5, () => { assert.notEqual(u.fireT, 0, 'kein Schuss'); assert.equal(u.stance, 'stand'); });
   assert.ok(u.x < x0 - 30, `weicht zurück: ${(u.x - x0).toFixed(0)}`);
+});
+
+/* ---------- Nachtrag 8, #51: kurzes Zurückweichen, Messer ---------- */
+test('#51: von einem gleich schnellen Krieger gejagt: höchstens 2 s zurück, dann Messer, der Krieger verliert LP', async () => {
+  const { step } = await import('../game/js/sim.js');
+  const w = mkWorld(), u = spawn(w, 'sniper', 600, 400, 'blau');
+  for (let k = 0; k < 4; k++) { const a = spawn(w, 'krieger', 100, 300 + k * 30, 'blau'); a.state = 'stun'; a.stunT = 1e9; a.hp = 1e9; }
+  const e = spawn(w, 'krieger', 760, 400, 'rot');
+  e.T = { ...UNITS.krieger, speed: UNITS.sniper.speed, dmg: 0 }; e.hp = 1e4;
+  u.cd = 1e9;   // das Gewehr bleibt hier stumm: nur das Messer trifft
+  let back = 0, knifed = 0;
+  for (let i = 0; i < 60 * 8; i++) {
+    const x0 = u.x;
+    step(w, 1 / 60); w.events.length = 0;
+    if (u.x < x0 - .2) back += 1 / 60;
+    if (u.swingT === .25) knifed++;
+  }
+  assert.ok(back <= 2.1, `weicht ${back.toFixed(2)} s zurück`);
+  assert.ok(knifed >= 3, `Messerstiche ${knifed}`);
+  assert.ok(e.hp < 1e4, 'Krieger verliert LP');
+  assert.ok(u.alive && u.stance === 'stand');
+});
+
+test('#51: vor einem langsameren Verfolger höchstens BACK_T s am Stück zurück, dann BACK_CD s Pause', () => {
+  const w = mkWorld(), u = spawn(w, 'sniper', 600, 400, 'blau'), e = spawn(w, 'krieger', 700, 400, 'rot'); still(e); e.T = { ...UNITS.krieger, speed: 20 };
+  u.cd = 1e9;
+  let run1 = 0, longest = 0, starts = [], t = 0, prev = false;
+  run(w, u, 9, () => {
+    t += DT;
+    e.x -= 20 * DT;   // kommt langsam heran
+    const b = u.rv[RV_BACK] > 0;
+    if (b && !prev) starts.push(t);
+    if (b) { run1 += DT; longest = Math.max(longest, run1); } else run1 = 0;
+    prev = b;
+  });
+  assert.ok(starts.length >= 1, 'weicht zurück');
+  assert.ok(longest <= SNIPER.BACK_T + 2 * DT, `am Stück ${longest.toFixed(2)} s`);
+  for (let k = 1; k < starts.length; k++) assert.ok(starts[k] - starts[k - 1] >= SNIPER.BACK_CD, `Pause ${(starts[k] - starts[k - 1]).toFixed(2)} s`);
 });

@@ -57,7 +57,8 @@ test('FFA Scharfschützen: ohne eigene Front rücken sie nach der Wartezeit vor 
   run(w, 2);
   assert.ok(s.x > 230, `rückt vor: ${s.x.toFixed(0)}`);
   const w2 = mk(), s2 = spawn(w2, 'sniper', 600, 400, 'gelb');
-  const e = dummy(w2, 'krieger', 600 + UNITS.sniper.range * .5, 400, 'gelb'); e.state = 'stun'; e.stunT = 1e9;
+  // #51: zurückgewichen wird nur vor Langsameren (Scharfschütze 40 px/s), darum ein Krieger mit 20 px/s
+  const e = dummy(w2, 'krieger', 600 + UNITS.sniper.range * .5, 400, 'gelb'); e.state = 'stun'; e.stunT = 1e9; e.T = { ...UNITS.krieger, speed: 20 };
   run(w2, 1);
   assert.ok(e.x - s2.x > UNITS.sniper.range * .5 + 10, `weicht zurück: ${(e.x - s2.x).toFixed(0)}`);
   assert.ok(finite(w) && finite(w2));

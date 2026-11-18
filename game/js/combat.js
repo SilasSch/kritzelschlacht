@@ -2,7 +2,7 @@
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng(). Effekte und Töne
 // werden als Ereignisse in world.events geschrieben.
 import { CELL, HASH_CELL, UNITS, PATH_RECHECK, UNDEAD } from './data.js';
-import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat } from './world.js';
+import { factionOf, cellIndex, query, nearestEnemy, touchTerrain, outOfMelee, isBat, RV_BACK, RV_BCD, RV_KNIFE } from './world.js';
 import { flowDir, directBlocked, pathOpen, PATH_BASH_DETOUR, PATH_BASH_MIN, PATH_BLOCK_LAVA } from './pathing.js';
 import { applyImpulse, makeCorpse, makeDebris, WALL_CLEAR_Z, LAUNCH_VZ, MAX_FLING } from './physics.js';
 import { bossMuzzle, hasMuzzle, tankMgMuzzle } from './muzzle.js';
@@ -22,15 +22,37 @@ export const LINE = new Set(['krieger', 'ritter', 'soldat']);
 // Geduldige Scharfschützen (Spez. #28): mit Ziel in Reichweite rückt er nicht weiter vor (er hält, wo er schießen kann, also vor Reichweite; ein eigener HOLD-Wert wäre nie wirksam); ohne Ziel
 // in Reichweite WAIT s warten, dann vorrücken, aber höchstens bis BEHIND px hinter die eigene Frontlinie
 // (morale: world.cent front); Feind näher als KEEP · Reichweite: zurückweichen (stehend, nicht liegend).
-export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40 };
+// Nachtrag 8, #51: zurückweichen (vor KEEP bzw. LIE_MIN, vor Nahkämpfern nah) nur vor langsameren Bedrohungen (eigenes
+// Tempo > ihres) und höchstens BACK_T s je Mal (u.rv[RV_BACK]), danach BACK_CD s Sperre (u.rv[RV_BCD]); wer nicht
+// zurückweichen darf, gilt für KEEP und LIE_MIN als eingeklemmt (liegt und schießt). Gegner höchstens KNIFE_GAP px vom
+// Körperrand (Kontakt): stehen und mit dem Messer wehren (KNIFE_DMG, alle KNIFE_CD s, Art 'melee'), auch auf der Flucht
+// in der Ecke. Das Gewehr schießt weiter nur im Liegen.
+export const SNIPER = { KEEP: .6, WAIT: 3, BEHIND: 40, BACK_T: 2, BACK_CD: 5, KNIFE_GAP: 12, KNIFE_DMG: 6, KNIFE_CD: .8 };
 // Hysterese: nach dem Zurückweichen legt sich der Scharfschütze erst ab LIE_MIN · Reichweite wieder hin (kein Auf und Ab)
 // Nur im Liegen (Nachtrag 4, #36, ersetzt den Teil von #22, nach dem auch Stehende schießen): stehend schießt er nie, er
 // bewegt sich. Mit Ziel in Reichweite weicht er stehend bis LIE_MIN · Reichweite zurück (auch vor Nahkämpfern) und legt
 // sich dann hin; sonst (Linie verdeckt, Sperre proneCd) weicht er seitlich aus. Eingeklemmt (Kartenrand, Mauer: pinned)
-// gelten KEEP und LIE_MIN nicht: dann liegt und schießt er auch auf nähere Ziele. In der Ecke (Rückzug) wehrt er sich nicht.
+// gelten KEEP und LIE_MIN nicht: dann liegt und schießt er auch auf nähere Ziele. In der Ecke (Rückzug) wehrt er sich nur
+// mit dem Messer (#51).
 export const LIE_MIN = .75;
 const PIN_EDGE = 16;
 const pinned = (world, u) => u.blk > .3 || u.x < PIN_EDGE || u.y < PIN_EDGE || u.x > world.W - PIN_EDGE || u.y > world.H - PIN_EDGE;
+// #51: darf vor t zurückweichen (schneller als t, keine Sperre); sonst wie eingeklemmt
+const canBack = (u, t) => u.rv[RV_BCD] <= 0 && u.T.speed * u.spdMul > t.T.speed * t.spdMul;
+const noBack = (world, u, t) => pinned(world, u) || !canBack(u, t);
+// Messer: t in Kontakt (höchstens KNIFE_GAP px zwischen den Körpern) und am Boden erreichbar
+const knifeReach = (u, t, d) => d - u.T.r - t.T.r <= SNIPER.KNIFE_GAP && t.type !== 'heli' && !isBat(t) && !aloft(t);
+function knife(world, u, t, dx) {
+  u.face = dx < 0 ? -1 : 1;
+  if (u.rv[RV_KNIFE] > 0) return;
+  u.rv[RV_KNIFE] = SNIPER.KNIFE_CD; u.swingT = .25;
+  hurt(world, t, SNIPER.KNIFE_DMG * (.85 + world.rng() * .3), 'melee', u);
+  emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee' });
+  sound(world, 'hit');
+}
+// Zurückweichen: Zeit zählen, nach BACK_T s Sperre; endet es früher, beginnt die Sperre auch
+function backStep(u, dt) { const r = u.rv; r[RV_BACK] += dt; if (r[RV_BACK] >= SNIPER.BACK_T) { r[RV_BACK] = 0; r[RV_BCD] = SNIPER.BACK_CD; } }
+function endBack(u) { const r = u.rv; if (r[RV_BACK] > 0) { r[RV_BACK] = 0; r[RV_BCD] = SNIPER.BACK_CD; } }
 // Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
 // Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
 export const KITE = new Set(['schuetze', 'soldat']);
@@ -796,7 +818,8 @@ function retreat(world, u, dt) {
   // festgenagelt (keine freie Fluchtrichtung): sofort in die Ecke gedrängt, PIN_HOLD s lang (morale.js)
   if (fleeSteer(world, u, dt)) u.cornerT = MORALE.CORNER_T + PIN_HOLD;
   const t = u.tg;
-  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser' || u.type === 'sniper') return;
+  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser') return;
+  if (u.type === 'sniper') { const dx = t.x - u.x, d = Math.hypot(dx, t.y - u.y); if (knifeReach(u, t, d)) knife(world, u, t, dx); return; }   // #51
   if (outOfMelee(u, t)) return;   // Hubschrauber, Fledermausform
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
   if (d > T.range + T.r + t.T.r) {
@@ -824,6 +847,7 @@ export function think(world, u, dt) {
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
+  if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
   if (T.tier) stepAnimal(world, u, dt);   // Task 5: Zeiten der Tiere, Versteck des Krokodils
   if (u.fleeT > 0) u.fleeT -= dt;
   // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
@@ -925,9 +949,13 @@ export function think(world, u, dt) {
     // Magier: Zauberbuch statt Feuerball (spells.castSpell: Meteor, Feuerball, Blitz, Windstoß, Steinwand); lädt er, steht er
     if (u.type === 'magier') { if (u.cd <= 0) castSpell(world, u, t); return; }
     // Scharfschütze stehend: kein Schuss (nur liegend, stance), sondern zurück auf LIE_MIN oder seitlich ausweichen
+    // #51: in Kontakt Messer; zurück nur vor Langsameren und höchstens BACK_T s, sonst stehen (Nahkämpfer nah) oder ausweichen
     if (u.type === 'sniper') {
-      if ((d < T.range * LIE_MIN && !pinned(world, u)) || meleeNear(world, u)) { u.mx = -nx * T.speed; u.my = -ny * T.speed; }
-      else lineBlocked(world, u, nx, ny, dt);
+      if (knifeReach(u, t, d)) { endBack(u); knife(world, u, t, dx); return; }
+      const mn = meleeNear(world, u);
+      if (((d < T.range * LIE_MIN && !pinned(world, u)) || mn) && canBack(u, t)) { u.mx = -nx * T.speed; u.my = -ny * T.speed; backStep(u, dt); return; }
+      endBack(u);
+      if (!mn) lineBlocked(world, u, nx, ny, dt);
       return;
     }
     // Gerade Schüsse: Zielpunkt (Vorhalt + Streuung) ziehen und die echte Bahn prüfen. Steht ein
@@ -1080,7 +1108,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
   const T = u.T;
   switch (u.stance) {
     case 'prone': {
-      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP && !pinned(world, u))) { standUp(u); return true; }
+      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP && !noBack(world, u, t))) { standUp(u); return true; }
       if (u.cd > 0) return true;
       const kind = STRAIGHT_KIND[u.type];
       if (!lofCheck(world, u, t, kind)) {
@@ -1093,7 +1121,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
       return true;
     }
     default: {
-      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * LIE_MIN && !pinned(world, u)) || meleeNear(world, u)) return false;
+      if (u.proneCd > 0 || d > reach || (u.type === 'sniper' && d < T.range * LIE_MIN && !noBack(world, u, t)) || meleeNear(world, u)) return false;
       // Echter Zielcheck vor dem Hinlegen (nicht nur blockedT: das beginnt bei 0 und wird von lineBlocked
       // auch ohne freie Linie zurückgesetzt): nur mit freier Bahn hinlegen, sonst stehend weiter (Ausweichen)
       const kind = STRAIGHT_KIND[u.type];

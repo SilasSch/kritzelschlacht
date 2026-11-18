@@ -2,6 +2,7 @@
 // Rein Darstellung: liest die Ereignisse der Welt (consume), zeichnet in einen eigenen Layer (Weltkoordinaten).
 // Je Wort: kurzes Aufploppen (Skala POP), dann Ausblenden über LIFE s, leichte Neigung. Gedrosselt: höchstens ein Wort
 // je GAP s (Echtzeit) und höchstens N gleichzeitig; ein neues Wort nahe (NEAR px) einem lebenden ersetzt keins.
+import { tr } from '../i18n.js';   // Sprache (18.11.): wordFor bleibt deutsch (Tests), übersetzt wird beim Zeichnen
 export const WORDS = { N: 5, LIFE: .75, POP: .12, GAP: .3, NEAR: 60, RISE: 18 };
 // Ereignis → [Wort, Farbe] oder null
 export function wordFor(e) {
@@ -39,7 +40,7 @@ export function createWords(PIXI, layer) {
       if (pool.some(p => p.live && (p.x - x) ** 2 + (p.y - y) ** 2 < WORDS.NEAR ** 2)) continue;
       const p = pool.find(q => !q.live) || pool.reduce((a, b) => (b.age > a.age ? b : a));
       p.live = true; p.age = 0; p.x = x; p.y = y; p.rot = (rnd() - .5) * .5;
-      p.t.text = w[0]; p.t.style.fill = w[1]; p.t.visible = true;
+      p.t.text = tr(w[0]); p.t.style.fill = w[1]; p.t.visible = true;
       last = now;
     }
   }

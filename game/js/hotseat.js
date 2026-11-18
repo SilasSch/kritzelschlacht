@@ -5,11 +5,12 @@
 // Die Oberfläche dazu: ui/hotseat.js.
 import { TERRAIN, CELL } from './data.js';
 import { stamp, paintTerrain, canPaintAt } from './paint.js';
+import { tr } from './i18n.js';
 
 export const HOT_BUDGETS = [100, 150, 250];
 export const HOT_DEFAULT = 150;
 export const SIDE_NAME = { blau: 'Blau', rot: 'Rot' };
-export const MSG_OTHER_SIDE = side => `${SIDE_NAME[side]} malt nur auf der ${side === 'blau' ? 'linken' : 'rechten'} Hälfte.`;
+export const MSG_OTHER_SIDE = side => tr(side === 'blau' ? 'Blau malt nur auf der linken Hälfte.' : 'Rot malt nur auf der rechten Hälfte.');
 
 export function createHot(budget = HOT_DEFAULT) {
   return { budget: HOT_BUDGETS.includes(budget) ? budget : HOT_DEFAULT, step: 'blau', spent: { blau: 0, rot: 0 } };
@@ -45,7 +46,7 @@ export function hotPaint(world, hot, stroke, x, y, R, sel, first) {
 // Seite fertig? Nur mit mindestens einer eigenen Einheit. Liefert die Meldung, wenn nicht.
 export function finishSide(world, hot) {
   const side = painter(hot); if (!side) return null;
-  if (!world.units.some(u => u.alive && u.team === side)) return `Male zuerst eine Armee für ${SIDE_NAME[side]}.`;
+  if (!world.units.some(u => u.alive && u.team === side)) return tr(side === 'blau' ? 'Male zuerst eine Armee für Blau.' : 'Male zuerst eine Armee für Rot.');
   hot.step = side === 'blau' ? 'coverRot' : 'coverGo';
   return null;
 }

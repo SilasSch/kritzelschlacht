@@ -470,8 +470,12 @@ function aimPoint(world, u, t, kind) {
   const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2] * (u.stance === 'prone' ? PRONE_SPREAD : 1);
   // Vorhalt mit der tatsächlichen Bewegung (u.rvx/u.rvy, sim.step), nicht der gewünschten (u.mx/u.my): sonst zielten
   // Schützen an Lava und Mauern ins Leere, wo das Ziel hin will, aber nicht hinkommt (Fehler von Silas, 18.11.)
-  AIM.x = t.x + t.rvx * lead * .8 + rnd(world, -sp, sp);
-  AIM.y = t.y + t.rvy * lead * .8 + rnd(world, -sp, sp);
+  // Nur wer fast steht, obwohl er laufen will (steckt fest, unter 8 px/s), wird mit der tatsächlichen Bewegung vorgehalten; sonst wie
+  // bisher mit der gewünschten (die Balance der Kampagne ist darauf eingestellt).
+  const rv2 = t.rvx * t.rvx + t.rvy * t.rvy, stuck = rv2 < 64 && rv2 < .02 * (t.mx * t.mx + t.my * t.my);
+  const vx = stuck ? t.rvx : t.mx, vy = stuck ? t.rvy : t.my;
+  AIM.x = t.x + vx * lead * .8 + rnd(world, -sp, sp);
+  AIM.y = t.y + vy * lead * .8 + rnd(world, -sp, sp);
   return AIM;
 }
 

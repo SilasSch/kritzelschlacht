@@ -199,6 +199,6 @@ test('Rückgängig und Sandkasten behalten reborn: der Phönix steht nur einmal 
   assert.ok(!q.alive);
   // main.js braucht das DOM: saveSandbox und enterSandbox im Quelltext
   const main = fs.readFileSync(new URL('../game/js/main.js', import.meta.url), 'utf8');
-  assert.match(main, /reborn: u\.reborn \}\)\)/, 'saveSandbox sichert reborn');
+  assert.match(main, /reborn: u\.reborn(, shape: u\.shape)? \}\)\)/, 'saveSandbox sichert reborn');
   assert.match(main, /n\.hp = u\.hp; n\.reborn = u\.reborn;/, 'enterSandbox stellt reborn her');
 });

@@ -834,6 +834,12 @@ void main() {
       for (let y = 0; y < world.H; y += 20) zoneG.moveTo(mx, y).lineTo(mx, Math.min(world.H, y + 10));
       sideB.position.set(mx - 10, world.H * .5 + 5); sideR.position.set(mx + 10, world.H * .5 + 5);
     }
+    // Reichweiten der Gegner in der Planung (Audit 18.11.): { x, y, r } je Fernkämpfer, blass rot
+    const rg = overlay.ranges;
+    if (rg && rg.length) {
+      zoneG.lineStyle(1.2, 0xe5574f, .28);
+      for (const c of rg) zoneG.beginFill(0xff4d4d, .025).drawCircle(c.x, c.y, c.r).endFill();
+    }
     overG.clear();
     if (overlay.brushR > 0) {
       const er = overlay.erase;

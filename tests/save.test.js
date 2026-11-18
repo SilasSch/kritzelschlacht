@@ -10,9 +10,9 @@ test('alter Spielstand (Index 0–8) wird gelesen und in Level-ids übersetzt (S
   assert.deepEqual(s.stars, { 'ga-1': 3, 'ga-2': 2 });
   assert.equal(s.muted, true);
   // geschrieben: ids, dazu der alte Index der Grundausbildung (ein älteres Spiel sieht die Sterne weiter)
-  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 0: 3, 1: 2 }, muted: true });
+  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 0: 3, 1: 2 }, muted: true, medals: {}, tutorial: false });
   s.stars['ga-3'] = 1; s.stars['burg-1'] = 2; s.muted = false;
-  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2, 0: 3, 1: 2, 2: 1 }, muted: false });
+  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2, 0: 3, 1: 2, 2: 1 }, muted: false, medals: {}, tutorial: false });
   // neu lesen verliert nichts und bleibt stabil
   const again = parseSave(serializeSave(s));
   assert.deepEqual(again.stars, { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2 });
@@ -39,4 +39,14 @@ test('kein oder kaputter Spielstand ergibt den leeren Stand', () => {
   }
   assert.equal(parseSave('{"muted":true}').muted, true);
   assert.equal(parseSave('kaputt').muted, false);
+});
+
+test('Medaillen und Tutorial: lesen, prüfen, schreiben', () => {
+  const s = parseSave(JSON.stringify({ stars: {}, medals: { 'ga-1': 5, 'x': 'kaputt', 'y': -1 }, tutorial: 1 }));
+  assert.deepEqual(s.medals, { 'ga-1': 5 });
+  assert.equal(s.tutorial, true);
+  const back = parseSave(serializeSave(s));
+  assert.deepEqual(back.medals, { 'ga-1': 5 }); assert.equal(back.tutorial, true);
+  const empty = parseSave(null);
+  assert.deepEqual(empty.medals, {}); assert.equal(empty.tutorial, false);
 });

@@ -291,6 +291,29 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .split i{display:block;height:100%}
 .bbatch .res{font-weight:800}
 @media (max-width:820px){.bgrid{grid-template-columns:1fr}}
+/* ---------- Audit 18.11.: Tutorial, Replay, Hinweis, Medaillen ---------- */
+.coach{position:absolute;z-index:7;width:300px;pointer-events:none;--ax:50%}
+.coach-b{pointer-events:auto;position:relative;background:var(--ink);color:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 10px 26px rgba(30,35,60,.25);font-size:14px;line-height:1.4;animation:pop .3s cubic-bezier(.3,1.7,.5,1) both}
+.coach-b::before{content:"";position:absolute;top:-7px;left:var(--ax);width:14px;height:14px;background:var(--ink);transform:translateX(-50%) rotate(45deg)}
+.coach.up{transform:translateY(-100%)}
+.coach.up .coach-b::before{top:auto;bottom:-7px}
+.coach-b p{margin:0 0 8px}
+.coach-row{display:flex;align-items:center;gap:8px}
+.coach-n{color:#aab0c0;font-size:12px;margin-right:auto}
+.coach .mini{background:#fff;color:var(--ink)}
+.coach .coach-skip{background:transparent;color:#cfd3dd;border-color:#555a66}
+.replaybar{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:6;display:flex;align-items:center;gap:10px;padding:6px 8px 6px 14px;border-radius:999px;font-size:14px}
+.replaybar b{font-family:var(--f-logo);font-weight:400;letter-spacing:1px;color:var(--go)}
+.rhint{background:#fff4ef;border:1.5px solid #ffc7ad;border-radius:12px;padding:10px 12px;color:#7a3a1c!important;font-size:14px}
+.medals{display:flex;gap:8px;flex-wrap:wrap}
+.medals span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1.5px solid var(--line);font-size:13px;color:var(--muted);background:var(--soft)}
+.medals span.on{border-color:var(--gold);color:var(--ink);background:#fff8e0}
+.medals span.new{animation:stamp .4s cubic-bezier(.3,1.8,.5,1) both}
+.lv .md{font-size:12px;letter-spacing:2px;min-height:15px}
+.lv .md i{font-style:normal;opacity:.18}
+.lv .md i.on{opacity:1}
+.btn.on{background:var(--sel);border-color:var(--selb)}
+.welcome p b{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -318,6 +341,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
     <div class="misbar shadow p" id="misBar" hidden>
       <div class="mt"><div class="mn" id="misName"></div><div class="mh" id="misHint"></div></div>
       <div class="budget"><div class="bbar"><i id="budFill"></i></div><span id="budTxt"></span></div>
+      <button class="btn on" id="misRange" title="Reichweiten der gegnerischen Fernkämpfer anzeigen (R)" aria-pressed="true">Reichweiten</button>
       <button class="btn" id="misList">Übersicht</button>
       <button class="go" id="misGo">Los!</button>
     </div>
@@ -360,8 +384,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
       <h2 id="resTitle">Sieg!</h2>
       <div class="stars" id="resStars"></div>
       <ul class="stats" id="resStats"></ul>
+      <p class="rhint" id="resHint" hidden></p>
+      <div class="medals" id="resMedals"></div>
       <div class="btnrow">
         <button class="go" id="resNext">Nächste Mission</button>
+        <button class="btn" id="resReplay" title="Die letzten Sekunden in Zeitlupe">Replay</button>
         <button class="btn" id="resRetry">Nochmal planen</button>
         <button class="btn" id="resList">Übersicht</button>
       </div>
@@ -386,6 +413,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
         <button class="go" id="batAgain">Nochmal</button>
         <button class="btn" id="batTen">10× auswerten</button>
         <button class="btn" id="batEdit">Aufstellung ändern</button>
+        <button class="btn" id="batReplay" title="Die letzten Sekunden in Zeitlupe">Replay</button>
       </div>
     </div>
   </div>
@@ -395,7 +423,17 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
       <h2 id="listTitle">Kampagne</h2>
       <p id="listText">Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.</p>
       <div class="lvgrid" id="lvGrid"></div>
-      <div class="btnrow"><button class="btn" id="listBack" hidden>← Alle Kapitel</button><button class="btn" id="listClose">Zurück zum Sandkasten</button></div>
+      <div class="btnrow"><button class="btn" id="listBack" hidden>← Alle Kapitel</button><button class="btn" id="listTut">Tutorial</button><button class="btn" id="listClose">Zurück zum Sandkasten</button></div>
+    </div>
+  </div>
+
+  <div class="replaybar shadow p" id="replayBar" hidden><b>Replay</b><span id="replayTxt">Zeitlupe</span><button class="mini" id="replaySkip">Überspringen (Esc)</button></div>
+
+  <div class="ov" id="ovWelcome" hidden>
+    <div class="card shadow welcome" role="dialog" aria-labelledby="welTitle">
+      <h2 id="welTitle">Willkommen!</h2>
+      <p>In der <b>Kritzelschlacht</b> malst du deine Armee aufs Feld und schaust zu, wie sie kämpft. Eine kurze Übungsmission zeigt dir in einer Minute, wie es geht.</p>
+      <div class="btnrow"><button class="go" id="welTut">Tutorial spielen</button><button class="btn" id="welSkip">Erst mal rumkritzeln</button></div>
     </div>
   </div>
 

@@ -11,13 +11,18 @@ const starVal = v => { const n = Math.floor(Number(v)); return n > 0 ? Math.min(
 
 // Text aus localStorage (oder null) → Spielstand; Unlesbares ergibt den leeren Stand.
 export function parseSave(text) {
-  const save = { stars: {}, muted: false };
+  const save = { stars: {}, muted: false, medals: {}, tutorial: false };
   try {
     const s = JSON.parse(text || 'null');
     if (s && typeof s === 'object' && !Array.isArray(s)) Object.assign(save, s);
   } catch (e) { /* kein oder kaputter Speicher */ }
   if (!save.stars || typeof save.stars !== 'object' || Array.isArray(save.stars)) save.stars = {};
   save.stars = migrateStars(save.stars);
+  // Audit 18.11.: Medaillen je Level (Bitmaske, medals.js) und ob das Tutorial gespielt oder übersprungen wurde
+  const md = save.medals, medals = {};
+  if (md && typeof md === 'object' && !Array.isArray(md)) for (const k of Object.keys(md)) { const v = Math.floor(Number(md[k])); if (v > 0) medals[k] = v & 7; }
+  save.medals = medals;
+  save.tutorial = !!save.tutorial;
   return save;
 }
 
@@ -37,5 +42,5 @@ export function migrateStars(raw) {
 export function serializeSave(save) {
   const stars = { ...save.stars };
   LEGACY_IDS.forEach((id, i) => { if (stars[id]) stars[i] = stars[id]; });
-  return JSON.stringify({ stars, muted: save.muted });
+  return JSON.stringify({ stars, muted: save.muted, medals: save.medals || {}, tutorial: !!save.tutorial });
 }

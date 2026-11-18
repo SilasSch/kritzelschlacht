@@ -8,7 +8,7 @@ import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
 import { createStats } from './stats.js';
-import { snapshotBattle, restoreBattle, mirrorBattle, createBatch } from './battle.js';
+import { snapshotBattle, restoreBattle, mirrorBattle, createBatch, resetFight } from './battle.js';
 import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
@@ -18,6 +18,11 @@ import { SCENES } from './debug/scenes.js';
 import { seedDemo as seedDemoScene, randomBattle as randomScene } from './sandbox.js';
 import { SAVE_KEY, parseSave, serializeSave } from './save.js';
 import { guardContext } from './glguard.js';
+import { classifyStroke, applyShape, SHAPES, SHAPE_MIN_UNITS } from './shapes.js';
+import { defeatHint } from './hints.js';
+import { earnedMedals } from './medals.js';
+import { createCoach } from './ui/coach.js';
+import TUTORIAL from './campaign/tutorial.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -58,6 +63,8 @@ const game = {
   battle: null,
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
+  // Audit 18.11.: Reichweiten der Gegner in der Planung zeigen; laufendes Replay (oder null)
+  showRanges: true, replayState: null,
 
   // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3), in einem Level nur
   // die erlaubten (units, cats; Spez. #52). Die Tasten folgen den sichtbaren Plätzen.
@@ -127,6 +134,9 @@ const game = {
   },
 
   enterSandbox,
+  toggleRanges() { game.showRanges = !game.showRanges; ui.updateRanges(); },
+  replay: startReplay, endReplay, replaying: () => !!game.replayState, canReplay,
+  startTutorial, skipTutorial() { save.tutorial = true; persist(); },
   enterBattle, startBattle, retryBattle, editBattle, runBatch, cancelBatch, swapSides,
   loadMission,
   go() { const m = game.mission; if (!m) return; if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission(); },
@@ -134,6 +144,7 @@ const game = {
   // "Nächste Mission": das nächste Level im Kapitel, nach dem letzten die Kapitelübersicht
   nextMission() {
     const m = game.mission; if (!m) return;
+    if (!m.chapter) { ui.openChapters(); return; }   // Tutorial und andere Level ohne Kapitel: zur Kampagne
     const n = nextLevel(m.id);
     if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
   },
@@ -161,13 +172,14 @@ function saveSandbox() {
     // Ghule (nicht malbar) gehören zur Schlacht ihres Vampirs, sie kommen nicht mit zurück
     // Task 6: ein verfluchter Frosch kommt als er selbst zurück (u.frogFrom), die Asche des Phönix mit halben LP; reborn
     // geht mit (ein schon wiedergeborener Phönix steht nicht noch einmal auf)
-    units: world.units.filter(u => u.alive && (u.T.paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn })),
+    units: world.units.filter(u => u.alive && (u.T.paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn, shape: u.shape })),
     GW: world.GW, GH: world.GH, terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
     teamMode: world.teamMode,
   };
 }
 
 function enterSandbox() {
+  endReplay(true);
   ui.hideOverlays();
   if (!game.mission && !game.battle) return;
   leaveBattle();
@@ -181,7 +193,7 @@ function enterSandbox() {
       if (s.towner[a] === 2) continue;   // Steinwände der Magier (spells.js) gehörten zur Schlacht
       world.terr[b] = s.terr[a]; world.towner[b] = s.towner[a]; world.whp[b] = s.whp[a];
     }
-    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = u.hp; n.reborn = u.reborn; }
+    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = u.hp; n.reborn = u.reborn; if (u.shape) applyShape(n, u.shape, false); }
     markAll(); rebuildHash(world);
   } else { world.teamMode = false; seedDemo(); }
   ui.closeBanner(); ui.refresh();
@@ -191,18 +203,23 @@ function enterSandbox() {
 // x: id eines Levels (campaign/) oder Index der Grundausbildung
 function loadMission(x) {
   const e = levelInfo(levelId(x)); if (!e) return;
+  loadLevelDef(e.level, { chapter: e.chapter, idx: e.li });
+}
+// Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind }
+function loadLevelDef(def, opts = {}) {
+  endReplay(true);
   if (!game.mission && !game.battle) saveSandbox();
   leaveBattle();
   clearWorld();
-  const def = e.level;
   buildMission(world, def);
-  game.mission = { id: def.id, idx: e.li, chapter: e.chapter, def, budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null };
+  game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, kind: opts.kind || (opts.chapter ? 'campaign' : 'level'), def,
+    budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
   game.paused = false;
   // Auswahl auf eine erlaubte Kategorie und Einheit setzen (units, cats)
   if (!game.catAllowed(game.cat)) game.cat = CATEGORIES.map(c => c[0]).find(game.catAllowed) || 'gelaende';
   if (!game.catKeys(game.cat).includes(game.sel)) game.sel = game.catKeys(game.cat)[0];
   markAll();
-  ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh();
+  ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh(); ui.updateRanges();
 }
 
 function startMission() {
@@ -211,10 +228,12 @@ function startMission() {
   if (!(world.facCount.get(PLAYER) > 0)) { ui.toast('Male zuerst deine Armee.'); return; }
   snap = {
     id: m.id, spent: m.spent, GW: world.GW, GH: world.GH,
-    units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y })),
+    units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y, shape: u.shape })),
     terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
   };
   m.phase = 'battle'; m.t = 0; m.endT = -1; m.result = null;
+  // Replay (Audit 18.11.): Kampf aus festem Zustand starten, damit er sich genau wiederholen lässt
+  m.fight = beginFight();
   undoStack.length = 0; ui.resetBattle(); audio.init();
   ui.updateMission(); ui.updateControls();
 }
@@ -228,19 +247,101 @@ function retryMission() {
   if (s.GW === world.GW && s.GH === world.GH) {
     for (let k = 0; k < world.terr.length; k++) if (s.towner[k]) { world.terr[k] = s.terr[k]; world.towner[k] = 1; world.whp[k] = s.whp[k]; }
   }
-  for (const u of s.units) spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), PLAYER);
+  for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), PLAYER); if (u.shape) applyShape(n, u.shape); }
   game.mission.spent = s.spent; snap = s;
   markAll(); rebuildHash(world); ui.updateMission(); ui.updateCounts();
 }
 
 function finishMission() {
   const m = game.mission; if (!m) return;
-  const win = m.result === 'win';
+  const win = m.result === 'win', timeUp = m.t > 180;
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
-  if (win) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
+  const camp = m.kind === 'campaign';
+  if (win && camp) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
+  // Medaillen (medals.js): nur für Kampagnenlevel gespeichert, angezeigt immer
+  const army = snap && snap.id === m.id ? snap.units : [];
+  const got = earnedMedals({ win, lost: ui.lostBlue(), deployed: army.length, time: m.t, types: new Set(army.map(u => u.type)).size });
+  const before = camp ? save.medals[m.id] || 0 : 0;
+  if (camp && got) save.medals[m.id] = before | got;
+  if (m.kind === 'tutorial' && win) save.tutorial = true;
   persist();
-  ui.showResult({ win, timeUp: m.t > 180, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!nextLevel(m.id) });
+  const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
+  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)),
+    nextLabel: m.chapter ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+  ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
+}
+
+/* ---------- Replay (Audit 18.11.) ---------- */
+// Jeder Kampf beginnt mit resetFight (battle.js) aus einem Schnappschuss und einer Saat; danach ist er deterministisch.
+// Das Replay stellt denselben Anfang her, rechnet ohne Zeichnen bis REPLAY_S s vor das Ende und spielt den Rest in
+// Zeitlupe (REPLAY_SPEED) ab. Danach erscheint die Auswertung wieder.
+const REPLAY_S = 6, REPLAY_TAIL = 1, REPLAY_SPEED = .35, REPLAY_FF_MS = 14;
+function beginFight() {
+  const f = { snap: snapshotBattle(world), seed: (Math.random() * 2 ** 31) | 0 };
+  resetFight(world, f.snap, f.seed);
+  renderer.fx.clear(); markAll();
+  return f;
+}
+function fightSrc() {
+  const m = game.mission, b = game.battle;
+  if (m && m.phase === 'done' && m.fight && m.res) return { f: m.fight, T: m.t };
+  if (b && b.phase === 'done' && b.fight && b.result) return { f: b.fight, T: b.t };
+  return null;
+}
+function canReplay() { return !!fightSrc(); }
+function startReplay() {
+  const src = fightSrc(); if (!src) return;
+  ui.hideOverlays(); ui.closeBanner();
+  resetFight(world, src.f.snap, src.f.seed);
+  world.events.length = 0; renderer.fx.clear(); markAll();
+  game.replayState = { t: 0, from: Math.max(0, src.T - REPLAY_S), to: src.T + REPLAY_TAIL, play: false, acc: 0 };
+  game.paused = false;
+  ui.replayBar(true, 'wird vorbereitet …');
+}
+// Ende des Replays: Auswertung wieder zeigen (quiet: ohne, beim Wechsel des Modus)
+function endReplay(quiet = false) {
+  if (!game.replayState) return;
+  game.replayState = null; ui.replayBar(false);
+  if (quiet) return;
+  const m = game.mission, b = game.battle;
+  if (m && m.res) ui.showResult(m.res); else if (b && b.result) ui.showBattleResult(b.result);
+}
+function replayFrame(realDt) {
+  const r = game.replayState;
+  if (!r.play) {
+    const end = performance.now() + REPLAY_FF_MS;
+    while (r.t < r.from && performance.now() < end) { step(world, STEP); world.events.length = 0; r.t += STEP; }
+    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, `Zeitlupe · letzte ${Math.round(r.to - r.from)} s`); }
+    else ui.replayBar(true, `wird vorbereitet … ${Math.round(r.t / r.from * 100)} %`);
+    return;
+  }
+  if (game.paused) { renderer.fx.update(realDt * .5, null); return; }
+  r.acc += realDt * REPLAY_SPEED * (game.slow ? SLOW : 1);
+  let n = 0;
+  while (r.acc >= STEP && n < MAX_STEPS) { step(world, STEP); r.t += STEP; r.acc -= STEP; n++; }
+  const ev = world.events;
+  renderer.consume(ev);
+  for (const e of ev) { const k = eventSound(e); if (k) audio.play(k); }
+  ev.length = 0;
+  renderer.fx.update(realDt * REPLAY_SPEED, world);
+  if (r.t >= r.to) endReplay();
+}
+
+/* ---------- Tutorial (Audit 18.11.) ---------- */
+const coach = createCoach(host);
+function startTutorial() {
+  loadLevelDef(TUTORIAL, { kind: 'tutorial' });
+  const $ = id => document.getElementById(id);
+  const own = () => world.units.some(u => u.alive && u.team === PLAYER);
+  const m = () => game.mission;
+  coach.start([
+    { text: 'Unten ist deine Malleiste. Der Krieger ist schon gewählt, die Zahl rechts unten ist sein Preis in Punkten.', at: () => $('units'), next: 'Weiter' },
+    { text: 'Male mit gedrückter Maustaste links der gestrichelten Linie. Jeder Strich setzt Krieger, solange dein Budget reicht.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), done: own },
+    { text: 'Tipp: Ein Strich als Pfeil mit der Spitze nach rechts macht einen Sturmkeil, ein Kreis einen Igel, eine lange Linie eine Schlachtreihe.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), next: 'Weiter' },
+    { text: 'Fertig? Dann drück „Los!“.', at: () => $('misGo'), done: () => m() && m().kind === 'tutorial' && m().phase !== 'plan' },
+    { text: 'Jetzt kämpfen sie von allein. Rot verliert, wenn niemand mehr steht.', at: () => $('misBar'), done: () => !m() || m().kind !== 'tutorial' || m().phase === 'done' },
+  ], () => { save.tutorial = true; persist(); });
 }
 
 /* ---------- Schlacht (Spez. #45, #46) ---------- */
@@ -250,6 +351,7 @@ function finishMission() {
 const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
 
 function enterBattle() {
+  endReplay(true);
   const cur = game.battle;
   if (cur) {
     // schon in der Schlacht (Reiter erneut geklickt, etwa bei offener Missionsliste): nach dem Kampf die Auswertung zeigen
@@ -299,6 +401,7 @@ function startBattle() {
 
 // Kampf aus dem aktuellen Stand der Welt (frisch aufgestellt) beginnen
 function fight(b) {
+  b.fight = beginFight();   // Replay (Audit 18.11.)
   b.stats = createStats(world);
   b.phase = 'fight'; b.t = 0; b.endT = -1; b.result = null; b.evFrom = world.events.length;
   undoStack.length = 0; game.paused = false; audio.init();
@@ -383,7 +486,7 @@ const actions = {
     audio.init();
     if (!game.mission) ui.closeBanner();
     stroke = createStroke(game.mission ? game.mission.spent : 0);
-    stroke.first = true; stroke.blocked = false;
+    stroke.first = true; stroke.blocked = false; stroke.path = [];
   },
   paintAt(wx, wy, erase) {
     if (!stroke) return;
@@ -403,6 +506,7 @@ const actions = {
       if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
     } else {
+      stroke.path.push([wx, wy]);   // Kritzel-Formen (shapes.js)
       const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.curTeam, m, phase);
       if (r.placed) { audio.play('pop'); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
@@ -410,6 +514,7 @@ const actions = {
   },
   strokeEnd() {
     pointer.erasing = false;
+    if (stroke && !stroke.blocked) shapeStroke(stroke);
     if (stroke && !stroke.blocked && !strokeEmpty(stroke)) {
       undoStack.push(stroke);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -432,6 +537,26 @@ const actions = {
   // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
   keysBlocked: () => ui.lexiconOpen(),
 };
+
+// Kritzel-Formen (Audit 18.11.): Form des Strichs erkennen und seinen Einheiten den Bonus geben. Der Gegner steht in
+// Missionen rechts; in der Schlacht und im Sandkasten gegenüber der Hälfte, in der der Strich begann.
+function shapeStroke(s) {
+  const us = s.units.filter(u => u.alive);
+  if (us.length < SHAPE_MIN_UNITS || !s.path || s.path.length < 3) return;
+  const dir = game.mission ? 1 : s.path[0][0] < world.W / 2 ? 1 : -1;
+  const k = classifyStroke(s.path, game.brush, dir);
+  if (!k) return;
+  for (const u of us) applyShape(u, k);
+  ui.toast(`${SHAPES[k].n}! ${us.length} ${us.length === 1 ? 'Einheit' : 'Einheiten'}: ${SHAPES[k].d}`);
+  audio.play('win');
+}
+
+// Reichweiten der gegnerischen Fernkämpfer (Planung einer Mission), für renderer.setOverlay
+function enemyRanges() {
+  const out = [];
+  for (const u of world.units) if (u.alive && u.team !== PLAYER && u.T.range >= 20 && !u.T.heal) out.push({ x: u.x, y: u.y, r: u.T.range });
+  return out;
+}
 
 /* ---------- Schleife ---------- */
 function drainEvents() {
@@ -485,6 +610,13 @@ if (fpsBox) { fpsBox.className = 'fps'; fpsBox.textContent = '… fps'; host.app
 function frame(now) {
   // Kontext verloren (glguard.js): nicht rechnen und nicht zeichnen, bis er zurück ist
   if (gl.lost) { last = now; requestAnimationFrame(frame); return; }
+  if (game.replayState) {
+    const dt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+    replayFrame(dt);
+    renderer.setOverlay({ brushR: 0, missionZoneX: null, battleMidX: null, ranges: null });
+    renderer.draw(world, cam, now / 1000);
+    requestAnimationFrame(frame); return;
+  }
   const rawMs = now - last;
   const realDt = Math.min(.05, Math.max(0, rawMs / 1000)); last = now;
   const w0 = performance.now();
@@ -512,10 +644,11 @@ function frame(now) {
     erase: game.sel === 'radierer' || pointer.erasing,
     missionZoneX: m && m.phase === 'plan' ? zoneX(world) : null,
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
+    ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
   renderer.draw(world, cam, now / 1000);
 
-  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); }
+  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); coach.tick(); }
   // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)
@@ -582,6 +715,8 @@ if (new URLSearchParams(location.search).has('debug')) {
 }
 seedDemo();
 if (bench.n) bench.start();
+// Erster Start (Audit 18.11.): Willkommen mit Tutorial, solange es weder gespielt noch übersprungen wurde
+else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
 const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });

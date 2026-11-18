@@ -4,7 +4,7 @@ import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
 import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
-import { createCamera, resizeCamera } from './camera.js';
+import { createCamera, resizeCamera, worldSizeFor } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
 import { createStats } from './stats.js';
@@ -30,12 +30,10 @@ function persist() { try { localStorage.setItem(SAVE_KEY, serializeSave(save)); 
 /* ---------- Welt, Kamera, Renderer ---------- */
 const host = document.getElementById('app');
 const viewport = () => ({ vw: Math.max(280, host.clientWidth || innerWidth), vh: Math.max(280, host.clientHeight || innerHeight) });
-// Grundzoom wie früher `zoom`: Einheiten sind in der Standardansicht gleich groß wie im alten Spiel
-const baseZoomFor = (vw, vh) => clamp(Math.min(vw / 1400, vh / 820), .55, 1.15);
-
+// Weltgröße und Grundzoom aus dem Viewport (camera.worldSizeFor: begrenztes Seitenverhältnis und Größe, Rest ist Rand)
 let { vw, vh } = viewport();
-let bz = baseZoomFor(vw, vh);
-const world = createWorld(vw / bz, vh / bz, (Math.random() * 2 ** 31) | 0);
+let ws = worldSizeFor(vw, vh);
+const world = createWorld(ws.W, ws.H, (Math.random() * 2 ** 31) | 0);
 const cam = createCamera(vw, vh, world.W, world.H);
 const renderer = createRenderer(host);
 renderer.resize(vw, vh);
@@ -664,8 +662,8 @@ function frame(now) {
 function onResize() {
   const v = viewport();
   if (v.vw === vw && v.vh === vh) return;
-  vw = v.vw; vh = v.vh; bz = baseZoomFor(vw, vh);
-  resizeWorld(world, vw / bz, vh / bz);
+  vw = v.vw; vh = v.vh; ws = worldSizeFor(vw, vh);
+  resizeWorld(world, ws.W, ws.H);
   resizeCamera(cam, vw, vh, world.W, world.H);
   renderer.resize(vw, vh);
   // Rückgängig kennt Zellindizes des alten Gitters: Verlauf leeren und einen laufenden Strich sperren

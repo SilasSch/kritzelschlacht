@@ -65,6 +65,12 @@ export function createRenderer(canvasHost) {
   app.stage.addChild(scene);
   const L = {};
   for (const n of LAYERS) { L[n] = new PIXI.Container(); L[n].name = n; scene.addChild(L[n]); }
+  // Spielfeld als weißes Blatt: passt die Welt nicht genau in die Ansicht (32:9, Hochformat; camera.worldSizeFor),
+  // bleibt rundherum ein grauer Rand, damit man sieht, wo gemalt werden kann
+  const paper = new PIXI.Graphics();
+  scene.addChildAt(paper, 0); paper.visible = false;
+  let paperW = 0, paperH = 0, edge = false;
+  const EDGE_BG = 0xeceef4, PAPER_LINE = 0xd9dce6;
   const fx = createFx({ layers: L, app });   // Effekte: Decals, Bodenlicht, Partikel, Wackeln
 
   /* ---------- Gelände (Offscreen-Canvas, Code aus drawTerrain) ---------- */
@@ -889,6 +895,14 @@ void main() {
     const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
+    if (paperW !== world.W || paperH !== world.H) {
+      paperW = world.W; paperH = world.H;
+      paper.clear().beginFill(0xffffff).drawRect(0, 0, paperW, paperH).endFill();
+      paper.lineStyle(2, PAPER_LINE, 1, 1).drawRect(0, 0, paperW, paperH);
+    }
+    // Rand nur, wenn die Welt sichtbar kleiner ist als die Ansicht (sonst bliebe beim Wackeln ein grauer Saum)
+    const e = cam.viewW / cam.zoom > world.W + 8 || cam.viewH / cam.zoom > world.H + 8;
+    if (e !== edge) { edge = e; app.renderer.background.color = e ? EDGE_BG : 0xffffff; paper.visible = e; }
     lap('fx');
   }
 

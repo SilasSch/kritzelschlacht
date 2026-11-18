@@ -50,3 +50,17 @@ export function resizeCamera(cam, viewW, viewH, worldW, worldH) {
   cam.y = cy - viewH / cam.zoom / 2;
   return clampCamera(cam);
 }
+
+// Weltgröße zum Viewport: Welt = Viewport / Grundzoom bz, aber nur in einem vernünftigen Rahmen.
+// - Seitenverhältnis der Welt zwischen WORLD_ASPECT_MIN und WORLD_ASPECT_MAX (5:4 bis 21:9). Breiter (32:9) oder
+//   höher (Hochformat) wird nicht mehr Welt, sondern Rand: die Kamera zentriert die Welt (clampCamera).
+// - Grundzoom wie früher (Einheiten gleich groß wie im alten Spiel, .55–1.15), auf großen Bildschirmen aber so weit
+//   größer, dass die Welt höchstens WORLD_MAX_W × WORLD_MAX_H groß wird (sonst 4452 px Weg auf 5120×1440).
+// Bis 1920×1080 ändert sich nichts. Liefert { bz, W, H } (W, H in Weltpixeln).
+export const WORLD_ASPECT_MIN = 1.25, WORLD_ASPECT_MAX = 2.4, WORLD_MAX_W = 2200, WORLD_MAX_H = 1050;
+export function worldSizeFor(vw, vh) {
+  const ew = Math.min(vw, vh * WORLD_ASPECT_MAX), eh = Math.min(vh, vw / WORLD_ASPECT_MIN);
+  const base = Math.min(1.15, Math.max(.55, Math.min(ew / 1400, eh / 820)));
+  const bz = Math.max(base, ew / WORLD_MAX_W, eh / WORLD_MAX_H);
+  return { bz, W: ew / bz, H: eh / bz };
+}

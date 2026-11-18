@@ -4,23 +4,27 @@ export const HASH_CELL = 40;
 export const PATH_RECHECK = .25;   // s zwischen zwei Linienprüfungen der Wegfindung je Einheit (combat.think)
 
 export const UNITS = {
+  // Balance 18.11. (Wünsche aus dem Spiel, Kosten-Nutzen-Messung): Magier Kosten 5 → 6, Ritter LP 200 → 190 und Kosten 4,5 →
+  // 4,75, Sanitäter Heilung 10 → 12 und Reichweite 90 → 140 (vorher floh er vor jedem Nahkampf, bevor er heilen konnte),
+  // Vampir Kosten 8 → 7, Phönix Kosten 9,25 → 8,5 (hält den Konter phoenix > vampir), Gorilla Schaden 18 → 22. Wo der
+  // Lösungsplan einer Mission dadurch teurer wurde, steigt par (und bei ga-5, vamp-1 das Budget) um genau diese Differenz.
   krieger:{n:'Krieger',cat:'armee',col:'#5b8def',r:9,hp:64,dmg:12,range:3,speed:52,cd:.8,cost:2,mass:1,d:'Marschiert in Reihe und umzingelt Gegner. Treffer von hinten machen +35 %.'},
   schuetze:{n:'Schütze',cat:'armee',col:'#6cc067',r:9,hp:40,dmg:12,range:210,speed:44,cd:1.2,cost:2.5,mass:1,d:'Schießt Pfeile und weicht Nahkämpfern aus.'},
-  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:200,dmg:20,range:3,speed:34,cd:1.05,cost:4.5,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Stark gegen Krieger, Schützen und Reiter. Bienenschwärme, Scharfschützen, Bomben und Feuer setzen ihm zu.'},
+  ritter:{n:'Ritter',cat:'armee',col:'#b4bcc8',r:11,hp:190,dmg:20,range:3,speed:34,cd:1.05,cost:4.75,mass:2,d:'Ab 3 Rittern Schildwall: kaum Schaden durch Pfeile und Schwerter. Stark gegen Krieger, Schützen und Reiter. Bienenschwärme, Scharfschützen, Bomben und Feuer setzen ihm zu.'},
   grenadier:{n:'Grenadier',cat:'armee',col:'#e5574f',r:9,hp:45,dmg:20,range:170,splash:42,speed:44,cd:2.8,cost:4,mass:1,d:'Wirft Bomben. Sprengt auch Mauern.'},
   reiter:{n:'Reiter',cat:'armee',col:'#d9a35b',r:13,hp:120,dmg:17,range:4,speed:115,cd:1.1,cost:3,mass:3,d:'Reitet über die Flanke an, stürmt durch die Reihen und wendet.'},
   // Task 7: LP 95 → 100 (römer > schuetze stand an zwei Formen bei 1–2/4)
   roemer:{n:'Römer',cat:'armee',col:'#c94a3a',r:10,hp:100,dmg:15,range:3,speed:47,cd:.9,cost:3,mass:1.4,pilum:20,d:'Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.'},
-  sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:10,range:90,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
+  sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:12,range:140,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
   biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:7,dmg:3,range:2,speed:135,cd:.45,cost:0.55,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
-  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:5,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
+  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:6,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},
   // Vampir (Spez. #32): Biss mit Lebensraub, Fledermausform (BAT_FORM, unten) und Ghule (abilities.js); Teamfarbe am Umhang
   // Task 7: Kosten 6 → 8, LP 160 → 130: 20 Vampire gewannen M4 bis 8/8 und M7 bis 8/8 (Spam muss verlieren)
-  vampir:{n:'Vampir',cat:'mythisch',col:'#7a2944',r:10,hp:130,dmg:18,range:3,speed:54,cd:.8,cost:8,mass:1.2,d:'Beißt und heilt sich dabei. Auf langen Wegen und auf der Flucht fliegt er als Fledermausschwarm. Wen er totbeißt, steht als Ghul auf.'},
+  vampir:{n:'Vampir',cat:'mythisch',col:'#7a2944',r:10,hp:130,dmg:18,range:3,speed:54,cd:.8,cost:7,mass:1.2,d:'Beißt und heilt sich dabei. Auf langen Wegen und auf der Flucht fliegt er als Fledermausschwarm. Wen er totbeißt, steht als Ghul auf.'},
   // Ghul (Festlegung 3): nicht malbar, entsteht nur durch den tödlichen Biss eines Vampirs; langsam, schwach, zerfällt
   ghul:{n:'Ghul',cat:'mythisch',col:'#8f9c84',r:9,hp:40,dmg:7,range:3,speed:32,cd:1.1,cost:1,mass:1,paint:false,d:'Entsteht durch den Biss eines Vampirs. Langsam, schwach und hirnlos. Zerfällt mit der Zeit und mit seinem Vampir.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
@@ -44,7 +48,7 @@ export const UNITS = {
   zyklop:{n:'Zyklop',cat:'mythisch',col:'#d0a983',r:15,hp:220,dmg:30,range:280,splash:34,speed:29,cd:3.3,cost:12,mass:5,d:'Mythische Artillerie: wirft Felsbrocken im Bogen über Mauern und Köpfe. Im Nahkampf unbeholfen.'},
   hexe:{n:'Hexe',cat:'mythisch',col:'#6a4c8c',r:9,hp:55,dmg:10,range:200,speed:58,cd:1.3,cost:5,fly:1,flyZ:24,mass:.8,d:'Fliegt niedrig auf dem Besen und schießt grüne Zauber. Verwandelt Gegner kurz in harmlose Frösche.'},
   // Task 7: Kosten 7 → 9,5 (Spam gewann M4 und M7 öfter als der Geist)
-  phoenix:{n:'Phönix',cat:'mythisch',col:'#ff8a3d',r:11,hp:110,dmg:12,range:3,speed:88,cd:.8,cost:9.25,fly:1,flyZ:26,mass:1,d:'Feuervogel mit Feuerspur, die Bodentruppen anzündet. Steht einmal pro Schlacht aus seiner Asche wieder auf.'},
+  phoenix:{n:'Phönix',cat:'mythisch',col:'#ff8a3d',r:11,hp:110,dmg:12,range:3,speed:88,cd:.8,cost:8.5,fly:1,flyZ:26,mass:1,d:'Feuervogel mit Feuerspur, die Bodentruppen anzündet. Steht einmal pro Schlacht aus seiner Asche wieder auf.'},
   einhorn:{n:'Einhorn',cat:'mythisch',col:'#f4f0fa',r:13,hp:150,dmg:16,range:4,speed:105,cd:1.1,cost:4.5,mass:3,d:'Schneller Sturmläufer mit dem Horn voran. Heilt Verbündete in der Nähe ein wenig.'},
   frosch:{n:'Frosch',cat:'mythisch',col:'#5cb85c',r:6,hp:20,dmg:0,range:3,speed:30,cd:1,cost:0,mass:.5,paint:false,d:'Entsteht durch Froschfluch: ein verwandelter Gegner. Harmlos, hüpft weg und wird nach 5 s wieder er selbst.'},
   // --- Task 5: Tiere (Spez. #33; Verhalten in abilities.js, Block "Task 5") ---
@@ -54,7 +58,7 @@ export const UNITS = {
   elefant:{n:'Elefant',cat:'tiere',col:'#9aa0ab',r:20,hp:900,dmg:30,range:4,speed:36,cd:1.6,cost:24,mass:25,tier:1,d:'Langsamer, riesiger Dickhäuter. Trampelt alle 20 s durch die Reihen. Brüllen und Spuk lassen ihn kalt, vor Bienen flieht er.'},
   // Task 7: Kosten 4 → 4,5 (Spam gewann M4, die Flussmission, bis 4/8)
   krokodil:{n:'Krokodil',cat:'tiere',col:'#5e8a4a',r:11,hp:120,dmg:16,range:3,speed:50,cd:1,cost:4.75,mass:2,swim:1.6,land:.7,tier:1,d:'Im Wasser schnell und fast unsichtbar, an Land langsam. Packt aus dem Hinterhalt zu.'},
-  gorilla:{n:'Gorilla',cat:'tiere',col:'#4a4552',r:12,hp:200,dmg:18,range:3,speed:52,cd:.95,cost:6,mass:3,tier:1,d:'Starker Nahkämpfer. Wirft Gegner in die Menge und schlägt sich auf die Brust.'},
+  gorilla:{n:'Gorilla',cat:'tiere',col:'#4a4552',r:12,hp:200,dmg:22,range:3,speed:52,cd:.95,cost:6,mass:3,tier:1,d:'Starker Nahkämpfer. Wirft Gegner in die Menge und schlägt sich auf die Brust.'},
   // Task 7: Kosten 3 → 4 (Spam gewann M7 öfter als der Geist; Nahkämpfer erreichen ihn oben nicht)
   adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
   bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
@@ -307,13 +311,13 @@ RANGED.add('hexe'); RANGED.add('zyklop');
 // Koordinaten: x in Anteilen des Missionsrahmens (world.frameX), y in Anteilen von H, Radien in Anteilen
 // von H. Einheiten gehören dem Team 'rot'.
 export const MISSIONS = [
-  {n:'Erster Zusammenstoß',budget:60,par:42,hint:'Wähle Krieger, male deine Armee links der Linie und drück Los. Für drei Sterne: Ritter halten mehr aus.',place:[['rect','krieger',24,.70,.36,.80,.64]]},
-  {n:'Pfeilregen',budget:95,par:75,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
+  {n:'Erster Zusammenstoß',budget:60,par:43,hint:'Wähle Krieger, male deine Armee links der Linie und drück Los. Für drei Sterne: Ritter halten mehr aus.',place:[['rect','krieger',24,.70,.36,.80,.64]]},
+  {n:'Pfeilregen',budget:95,par:79,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
   {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
-  {n:'Die Festung',budget:80,par:70,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},
+  {n:'Die Festung',budget:94,par:84,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},
   {n:'Wilde Jagd',budget:120,par:95,cats:['tiere','gelaende'],hint:'Nur Tiere. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',18,.68,.26,.76,.74],['rect','ritter',14,.8,.3,.86,.7]]},
   {n:'Lavafeld',budget:110,par:85,hint:'Die Lava lässt nur eine Lücke. Bären und Wölfe stürmen durch. Halte sie mit Schützen weit hinten und breit verteilt auf Abstand.',place:[['tRect','lava',.5,0,.56,.42],['tRect','lava',.5,.58,.56,1],['rect','baer',6,.7,.35,.76,.65],['rect','wolf',16,.8,.3,.86,.7]]},
-  {n:'Drachenhort',budget:170,par:120,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',80,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},
+  {n:'Drachenhort',budget:170,par:131,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',80,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},
   {n:'Stahlgewitter',budget:150,par:120,hint:'Zwei Panzer, Infanterie und ein Hubschrauber. Panzerfäuste knacken Panzer. Nahkämpfer erreichen den Hubschrauber nicht.',place:[['unit','panzer',.73,.36],['unit','panzer',.73,.64],['rect','soldat',18,.63,.3,.67,.7],['rect','mg',4,.78,.4,.8,.6],['unit','heli',.86,.5]]},
 ];

@@ -25,7 +25,7 @@ export default {
       // Trolle heilen 3 % je s, Feuer stoppt das 4 s lang. 12 Magier allein verlieren (0/4), mit 2 Trollen davor
       // gewinnen sie sicher: die Trolle halten, die Feuerbälle stoppen die Heilung. Trolle und Einhörner allein heilen
       // die Gegner nie herunter.
-      id: 'aka-1', n: 'Die Trollbrücke', budget: 88, par: 76,
+      id: 'aka-1', n: 'Die Trollbrücke', budget: 88, par: 87,
       units: ['magier', 'troll', 'einhorn'], cats: CATS, answer: ['magier'],
       hint: 'Magier, Trolle und Einhörner. Trolle heilen sich ständig, nur Feuer stoppt das. Ein paar eigene Trolle halten die Brücke, dahinter brennt es.',
       place: [
@@ -79,7 +79,7 @@ export default {
       // ums Ziel), Zyklopen tief im großen Krater, außer Reichweite der Magier. Magier allein verlieren nach 180 s,
       // Phönixe allein am Drachen und den Kriegern, Trolle und Einhörner kommen nicht in den Krater. Budget 145: mit 160
       // gewannen 35 Einhörner an 1400×1050 3/8 (der Sturzflug des Drachen schleudert einzelne in den Krater).
-      id: 'aka-5', n: 'Drachenhort II', budget: 145, par: 130,
+      id: 'aka-5', n: 'Drachenhort II', budget: 145, par: 141,
       units: ['magier', 'troll', 'phoenix', 'einhorn'], cats: CATS,
       hint: 'Magier, Trolle, Phönixe und Einhörner. Drei Magier nah beieinander rufen einen Meteor in den dichtesten Haufen. Der Hort liegt tief im Krater, weit über jede Zauberreichweite.',
       place: [

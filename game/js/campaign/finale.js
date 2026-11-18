@@ -11,7 +11,7 @@ export default {
     // Zeitreise: Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer. Ritter fangen die Reiter ab,
     // Soldaten dahinter holen die Drachen herunter, Sanitäter halten die Ritter lange genug am Leben.
     {
-      id: 'fin-1', n: 'Zeitreise', budget: 180, par: 145,
+      id: 'fin-1', n: 'Zeitreise', budget: 180, par: 146,
       units: ['roemer', 'ritter', 'grenadier', 'soldat', 'sniper', 'sani'],
       hint: 'Römer, Ritter, Grenadiere, Soldaten, Scharfschützen und Sanitäter aus allen Zeiten. Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer: Wer fängt die Reiter ab, und wer holt die Drachen herunter?',
       place: [['unit', 'drache', .8, .3], ['unit', 'drache', .8, .7], ['rect', 'reiter', 24, .66, .2, .72, .8], ['rect', 'krieger', 20, .62, .3, .65, .7]],
@@ -69,7 +69,7 @@ export default {
     // Magier, an die nur Scharfschützen herankommen (456 px über 0,3 H Lava; MG, Panzerfaust und Magier reichen nicht).
     // Jede Einheit allein scheitert an einem Teil des Heers.
     {
-      id: 'fin-5', n: 'Endschlacht', budget: 350, par: 300,
+      id: 'fin-5', n: 'Endschlacht', budget: 350, par: 303,
       units: ['ritter', 'schuetze', 'sani', 'mg', 'panzerfaust', 'sniper', 'magier'],
       hint: 'Ritter, Schützen, Sanitäter, MG-Schützen, Panzerfäuste, Scharfschützen und Magier gegen das ganze Heer: Reiter, Elefanten, Panzer, Drachen und Mörser auf der Lavainsel. Jeder Gegner hat seinen Konter. Brauchst du sie alle?',
       place: [['tCircle', 'lava', .87, .5, .45, .15],

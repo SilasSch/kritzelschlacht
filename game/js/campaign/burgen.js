@@ -20,7 +20,7 @@ export default {
     {
       // Schützen-Spam gewann hier (Pfeile fliegen über die Palisade), darum ohne Schützen; Grenadiere sind unterlegen
       // (Schützen schießen weiter), Krieger werden zerschossen
-      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 60,
+      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 62,
       units: ['krieger', 'ritter', 'grenadier'], cats: ['armee'],
       hint: 'Hinter der Palisade lauern Bogenschützen im Wald. Krieger, Ritter oder Grenadiere: Wer hält den Pfeilhagel aus, bis er drüben ist?',
       place: [
@@ -34,7 +34,7 @@ export default {
     },
     {
       // Ohne Krieger: 45 Krieger gewannen an einzelnen Formen bis 4/8 (sie quellen durchs Tor und binden die Reiter)
-      id: 'burg-2', n: 'Das Tor', budget: 92, par: 81,
+      id: 'burg-2', n: 'Das Tor', budget: 92, par: 83,
       units: ['schuetze', 'ritter', 'sani'], cats: ['armee'],
       hint: 'Eine Reiterhorde stürmt auf dein Tor zu, Grenadiere sprengen die Mauer. Schützen, Ritter und Sanitäter: Wer stopft das Tor, und wer schießt über die Mauer?',
       place: [
@@ -47,7 +47,7 @@ export default {
     },
     {
       // 23 statt 20 Schützen und Budget 95: 25 Grenadiere gewannen sonst an einzelnen Formen 2/8
-      id: 'burg-3', n: 'Die Bresche', budget: 95, par: 80,
+      id: 'burg-3', n: 'Die Bresche', budget: 95, par: 82,
       units: ['krieger', 'ritter', 'grenadier'], cats: ['armee'],
       hint: 'Eine geschlossene Burg voller Schützen und Bombenwerfer. Krieger, Ritter und Grenadiere: Bomben reißen die Mauer auf, aber wer fängt solange die Pfeile ab?',
       place: [
@@ -76,7 +76,7 @@ export default {
     {
       // Ohne Reiter: 50 Reiter gewannen die offene Festung (Tor) zuverlässig, auch gegen 10–18 Ritter. Türme bei y = .24
       // und .76 (nicht am Rand: dort lagen sie unter Missionsleiste und Malleiste); sie halten den Ritter-Spam auf.
-      id: 'burg-5', n: 'Die große Festung', budget: 160, par: 140,
+      id: 'burg-5', n: 'Die große Festung', budget: 160, par: 142,
       units: ['krieger', 'schuetze', 'ritter', 'grenadier', 'sani', 'roemer'], cats: ['armee'],
       hint: 'Türme voller Grenadiere, ein Schildwall im Tor, Römer, Schützen und Reiter im Hof. Krieger, Schützen, Ritter, Grenadiere, Sanitäter und Römer: Was du in diesem Kapitel gelernt hast, brauchst du jetzt zusammen.',
       place: [

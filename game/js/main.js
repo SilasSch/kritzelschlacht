@@ -10,7 +10,7 @@ import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zon
 import { createStats } from './stats.js';
 import { snapshotBattle, restoreBattle, mirrorBattle, createBatch, resetFight } from './battle.js';
 import { createRenderer } from './render/renderer.js';
-import { createAudio, eventSound } from './audio.js';
+import { createAudio } from './audio.js';
 import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
 import { createBenchHud } from './benchhud.js';
@@ -51,6 +51,8 @@ const renderer = createRenderer(host);
 renderer.resize(vw, vh);
 const audio = createAudio();
 audio.muted = !!save.muted;
+audio.setVolume(typeof save.volume === 'number' ? save.volume : .8);
+audio.bindUI(document);
 
 const pointer = { x: -999, y: -999, inside: false, erasing: false };
 let stroke = null, undoStack = [], sandSave = null, snap = null, battleKeep = null;
@@ -106,6 +108,12 @@ const game = {
   cycleSpeed() { game.speed = game.speed === 1 ? 2 : game.speed === 2 ? 4 : 1; ui.updateControls(); },
   toggleSlow() { game.slow = !game.slow; ui.updateControls(); },
   toggleMute() { audio.init(); save.muted = !save.muted; audio.muted = save.muted; persist(); ui.updateControls(); },
+  // Lautstärke 0..1 (Regler am Ton-Knopf); ein Regler über 0 hebt die Stummschaltung auf
+  setVolume(v) {
+    audio.init(); audio.setVolume(v); save.volume = audio.volume;
+    if (save.muted && v > 0) { save.muted = false; audio.muted = false; ui.updateControls(); }
+    persist();
+  },
 
   clear() {
     const m = game.mission, b = game.battle;
@@ -250,7 +258,7 @@ function startMission() {
   m.phase = 'battle'; m.t = 0; m.endT = -1; m.result = null;
   // Replay (Audit 18.11.): Kampf aus festem Zustand starten, damit er sich genau wiederholen lässt
   m.fight = beginFight();
-  undoStack.length = 0; ui.resetBattle(); audio.init();
+  undoStack.length = 0; ui.resetBattle(); audio.init(); audio.play('go');
   ui.updateMission(); ui.updateControls();
 }
 
@@ -318,6 +326,7 @@ function startReplay() {
   game.replayState = { t: 0, from: Math.max(0, src.T - REPLAY_S), to: src.T + REPLAY_TAIL, play: false, acc: 0 };
   game.paused = false;
   ui.replayBar(true, 'wird vorbereitet …');
+  audio.init(); audio.play('whoosh');
 }
 // Ende des Replays: Auswertung wieder zeigen (quiet: ohne, beim Wechsel des Modus)
 function endReplay(quiet = false) {
@@ -342,14 +351,14 @@ function replayFrame(realDt) {
   while (r.acc >= STEP && n < MAX_STEPS) { step(world, STEP); r.t += STEP; r.acc -= STEP; n++; }
   const ev = world.events;
   renderer.consume(ev);
-  for (const e of ev) { const k = eventSound(e); if (k) audio.play(k); }
+  audio.onEvents(ev, cam, true);   // Replay in Zeitlupe: tiefer
   ev.length = 0;
   renderer.fx.update(realDt * REPLAY_SPEED, world);
   if (r.t >= r.to) endReplay();
 }
 
 /* ---------- Tutorial (Audit 18.11.) ---------- */
-const coach = createCoach(host);
+const coach = createCoach(host, () => audio.play('tab'));
 function startTutorial() {
   loadLevelDef(TUTORIAL, { kind: 'tutorial' });
   const $ = id => document.getElementById(id);
@@ -425,7 +434,7 @@ function fight(b) {
   b.fight = beginFight();   // Replay (Audit 18.11.)
   b.stats = createStats(world);
   b.phase = 'fight'; b.t = 0; b.endT = -1; b.result = null; b.evFrom = world.events.length;
-  undoStack.length = 0; game.paused = false; audio.init();
+  undoStack.length = 0; game.paused = false; audio.init(); audio.play('go');
   ui.hideOverlays(); ui.updateBattle(); ui.updateControls(); ui.updateCounts();
 }
 
@@ -637,7 +646,7 @@ const actions = {
     const sel = erase ? 'radierer' : game.sel, phase = m ? m.phase : null;
     if (TERRAIN[sel]) {
       const r = paintTerrain(world, stroke, wx, wy, game.brush, sel, m, phase);
-      if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); ui.updateBattle(); }
+      if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); ui.updateBattle(); audio.play('scribble', { kind: sel }); }
       if (r.warning) ui.toast(r.warning);
     } else {
       stroke.path.push([wx, wy]);   // Kritzel-Formen (shapes.js)
@@ -667,6 +676,7 @@ const actions = {
   eraser() { if (game.catAllowed('gelaende')) { game.cat = 'gelaende'; game.sel = 'radierer'; ui.renderUnits(); } },
   undo: () => game.undo(),
   togglePause: () => game.togglePause(),
+  toggleMute: () => game.toggleMute(),
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
   // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
   keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen(),
@@ -682,7 +692,7 @@ function shapeStroke(s) {
   if (!k) return;
   for (const u of us) applyShape(u, k);
   ui.toast(`${SHAPES[k].n}! ${us.length} ${us.length === 1 ? 'Einheit' : 'Einheiten'}: ${SHAPES[k].d}`);
-  audio.play('win');
+  audio.play('horn');   // Formbonus: Signalhorn
 }
 
 // Reichweiten der gegnerischen Fernkämpfer (Planung einer Mission), für renderer.setOverlay
@@ -713,12 +723,8 @@ const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
 function drainEvents() {
   const ev = world.events;
   renderer.consume(ev);        // Gelände-Änderungen und Effekte (fx.js, mit Budget je Bild)
-  for (let i = 0; i < ev.length; i++) {
-    const e = ev[i];
-    const k = eventSound(e);   // sound-Ereignisse und die Physik-Geräusche land/impact, splash, crash
-    if (k) audio.play(k);
-    ui.onEvent(e);
-  }
+  audio.onEvents(ev, cam, game.slow);   // Töne mit Stereo nach Bildlage; Zeitlupe klingt tiefer
+  for (let i = 0; i < ev.length; i++) ui.onEvent(ev[i]);
   ev.length = 0;
   if (game.battle) game.battle.evFrom = 0;
 }

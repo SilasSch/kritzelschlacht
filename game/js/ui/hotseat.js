@@ -68,6 +68,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     $('hotNext').onclick = () => (rot ? beginRot() : fightNow());
     ov.classList.add('hot-cover');
     shown = step; ov.hidden = false;
+    audio.play('whoosh');   // Karte wechselt; 'go' kommt mit dem Kampfbeginn
     $('hotNext').focus();
   }
   function hideCard() { ov.hidden = true; shown = ''; }

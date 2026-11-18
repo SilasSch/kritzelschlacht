@@ -1,7 +1,8 @@
 // Sprechblasen fürs Tutorial (Audit 18.11.): eine Blase mit Pfeil zeigt auf ein Element (oder einen Punkt auf dem Feld)
 // und erklärt einen Schritt. Ein Schritt endet, wenn done() wahr wird (main.js fragt alle 0,25 s) oder über "Weiter".
 // steps: [{ text, at: () => Element | { x, y } (Bildschirm) | null, done?: () => bool, next?: 'Weiter' }]
-export function createCoach(host) {
+// onStep(i): nach jedem Schritt ab dem zweiten (z. B. für einen Ton)
+export function createCoach(host, onStep = null) {
   const el = document.createElement('div');
   el.className = 'coach'; el.hidden = true;
   el.innerHTML = '<div class="coach-b"><p></p><div class="coach-row"><span class="coach-n"></span><button class="mini coach-next"></button><button class="mini coach-skip">Tutorial beenden</button></div></div>';
@@ -30,6 +31,7 @@ export function createCoach(host) {
     i = k;
     const s = steps[i];
     if (!s) { stop(true); return; }
+    if (i > 0 && onStep) onStep(i);
     p.textContent = s.text;
     nBox.textContent = `${i + 1}/${steps.length}`;
     next.hidden = !s.next; next.textContent = s.next || '';

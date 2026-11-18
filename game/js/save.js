@@ -1,4 +1,4 @@
-// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted, daily }.
+// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted, volume (0..1, optional), medals, tutorial, custom, daily }.
 // main.js liest und schreibt localStorage[SAVE_KEY] damit.
 // Kampagne (Spez. #52): Sterne hängen an der festen id des Levels (campaign/). Alte Stände zählen die 9 Missionen der
 // Grundausbildung nach Index 0–8; parseSave übersetzt sie in deren ids (LEGACY_IDS). serializeSave schreibt die Sterne
@@ -63,6 +63,7 @@ export function serializeSave(save) {
   const stars = { ...save.stars };
   LEGACY_IDS.forEach((id, i) => { if (stars[id]) stars[i] = stars[id]; });
   const out = { stars, muted: save.muted, medals: save.medals || {}, tutorial: !!save.tutorial };
+  if (typeof save.volume === 'number') out.volume = Math.max(0, Math.min(1, save.volume));
   if (save.custom && save.custom.length) out.custom = parseCustom(save.custom);
   // daily nur, wenn es Einträge gibt
   const daily = cleanDaily(save.daily);

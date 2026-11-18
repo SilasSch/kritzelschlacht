@@ -16,6 +16,7 @@ import { cellIndex } from '../world.js';
 import { SYN_COL } from '../synergy.js';
 
 export const FX_CAP = 3000;
+export const STINK_COL = 0xa8c24a, STINK_CLOUD = 0xc4d36a;
 export const STEPS = { MASS: 6, GAP: 1.4, R: .2, COL: '#6b5a48', A: .1 };
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
 
@@ -741,6 +742,20 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'kingFall': wave(x, e.y, R, .9, WAVE_COL.kingFall); break;
+      // Stinktier (abilities.STINK): grüngelbe Wolke aus großen, langsam wabernden Puffs
+      case 'stink': {
+        for (let i = 0; i < 14; i++) {
+          const a = rand() * TAU, d = R * Math.sqrt(rand()) * .85;
+          const q = add('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6 - 4, (e.T || 2) * rnd(.8, 1.1), rnd(10, 18), STINK_CLOUD); if (!q) break;
+          q.vx = rnd(-5, 5); q.vy = -rnd(2, 6); q.rot = rand() * TAU; q.vrot = rnd(-.4, .4);
+        }
+        for (let i = 0; i < 8; i++) {
+          const a = rand() * TAU, d = R * Math.sqrt(rand()) * .8;
+          const p = add('dot', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6 - 6, (e.T || 2) * rnd(.6, 1), rnd(3, 5), STINK_COL); if (!p) break;
+          p.vx = rnd(-6, 6); p.vy = -rnd(4, 10); p.drag = 1;
+        }
+        break;
+      }
       // Trommler (abilities.DRUM): leiser Ring in Takt-Farbe und zwei Noten
       case 'drum': {
         wave(x, e.y, R, .8, WAVE_COL.king);

@@ -981,6 +981,23 @@ Object.assign(DEF, {
       whites(c, r, this.eyes);
     },
   },
+  // Stinktier: schwarz mit weißem Streifen über Rücken und buschigem Schwanz, spitze Schnauze
+  stinktier: {
+    eyes: eyePair(1.0, -.25, .16),
+    body(c, r, k, f) {
+      const l = f ? r * .18 : -r * .18;
+      [-r * .55, -r * .2, r * .3, r * .6].forEach((x, i) => Ln(c, [[x, r * .45], [x + (i % 2 ? l : -l), r * .9]], '#1e1c22', 2));
+      E(c, -r * 1.15, -r * .75, r * .62, r * .85, '#2e2b33');
+      E(c, -r * 1.12, -r * .8, r * .2, r * .62, '#f4f4f6', 0);
+      E(c, 0, r * .12, r * 1.05, r * .62, '#2e2b33');
+      E(c, -r * .05, -r * .32, r * .75, r * .16, '#f4f4f6', 0);
+      E(c, r * .95, -r * .12, r * .48, r * .4, '#2e2b33');
+      E(c, r * 1.38, 0, r * .12, r * .1, '#ffb3c1', 1);
+      Ln(c, [[r * .62, -r * .38], [r * 1.05, -r * .3]], '#f4f4f6', 2, false);
+      E(c, r * .6, r * .3, r * .3, r * .1, k.col, 0);
+      whites(c, r, this.eyes);
+    },
+  },
   // Büffel: dunkler Körper mit Buckel, zottiger Kopf, helle geschwungene Hörner
   bueffel: {
     eyes: eyePair(1.0, -.32, .15),

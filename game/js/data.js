@@ -78,6 +78,8 @@ export const UNITS = {
   // Task 7: Kosten 3 → 4 (Spam gewann M7 öfter als der Geist; Nahkämpfer erreichen ihn oben nicht)
   adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Kleine Gegner packt er, trägt sie fort und lässt sie fallen. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
   lama:{n:'Lama',cat:'tiere',col:'#efe4d2',r:11,hp:90,dmg:9,range:185,speed:50,cd:1.3,cost:3.5,mass:1.5,d:'Spuckt auf Abstand, auch auf Flieger. Wen die Spucke trifft, der wird 2 s lang langsamer.'},
+  // Stinktier (18.11., Ideenrunde): kleiner Nahkämpfer, bei Gefahr Stinkwolke (abilities.STINK), Gegner darin erschrecken
+  stinktier:{n:'Stinktier',cat:'tiere',col:'#2e2b33',r:8,hp:70,dmg:10,range:3,speed:56,cd:.8,cost:2.5,mass:.8,d:'Bei Gefahr eine Stinkwolke: Gegner darin erschrecken und rennen weg. Maschinen, Ghule und Furchtlose riechen nichts.'},
   bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
   // --- Schrottplatz (5. Kategorie, 18.11.): Roboter (bot: 1). Kategorie-Regeln in abilities.js (Block "Schrottplatz"):
   // Schild aus 20 % der LP, der sich nach 4 s ohne Treffer auflädt; Blitz macht doppelten Schaden; Wasser schließt kurz.
@@ -258,6 +260,10 @@ const ABIL = {
     {n:'Sturzflug', d:'Alle 10 s stößt er auf ein Ziel herab, am liebsten auf Fernkämpfer. Der erste Treffer macht dreifachen Schaden.'},
     {n:'Hoch oben', d:'Nahkämpfer erreichen ihn nur, wenn er zum Angriff herabstößt.'},
   ],
+  stinktier: [{n:'Stinkwolke', d:'Kommt ein Gegner nah, bläst es alle 8 s eine Wolke: Gegner darin erschrecken und rennen weg. Maschinen riechen nichts.'}],
+  pikenier: [{n:'Pikenwall', d:'Stürmende Reiter, Büffel, Elefanten und Co. prallen an der Pike ab und sind kurz betäubt. Gegen sie doppelter Schaden.'}],
+  trommler: [{n:'Takt', d:'Verbündete bis 140 px laufen und schlagen 15 % stärker und fliehen erst bei 15 % statt 25 % Leben.'}],
+  flamme: [{n:'Flammenkegel', d:'Trifft alle im kurzen Kegel vor ihm, auch Bienen und Geister, und zündet sie an. Setzt Wald in Brand.'}],
   lama: [
     {n:'Spucke', d:'Trifft am Boden und in der Luft. Getroffene sind 2 s lang 40 % langsamer.'},
     {n:'Auf Abstand', d:'Weicht Nahkämpfern aus wie ein Schütze.'},
@@ -393,6 +399,8 @@ export const COUNTERS = [
   // Pikenier (18.11.): bricht jeden Ansturm, verliert gegen Fußvolk und Schützen
   ['pikenier', 'reiter', 90], ['pikenier', 'bueffel', 90], ['pikenier', 'elefant', 96],
   ['krieger', 'pikenier', 90], ['schuetze', 'pikenier', 90],
+  // Stinktier (18.11.): Wolke treibt Fußvolk auseinander; Ritter, Wölfe und Schützen kommen damit klar
+  ['stinktier', 'krieger', 90], ['ritter', 'stinktier', 90], ['wolf', 'stinktier', 90], ['schuetze', 'stinktier', 90],
   ['gorilla', 'grenadier', 90], ['ritter', 'gorilla', 90],
   ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
   // Ritter gegen Magier (Feuer und Zauber ×1,5) und Geist gegen Magier (Feuerball trifft ihn voll): als Duell festgehalten
@@ -457,7 +465,7 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
 Object.assign(PLURAL, {koenig:'Könige', lama:'Lamas'});
-Object.assign(PLURAL, {flamme:'Flammenwerfer', pikenier:'Pikeniere', trommler:'Trommler'});
+Object.assign(PLURAL, {flamme:'Flammenwerfer', pikenier:'Pikeniere', trommler:'Trommler', stinktier:'Stinktiere'});
 Object.assign(PLURAL, {jet:'Kampfjets',kampfdrohne:'Kampfdrohnen',bomber:'Bomber'});
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 // --- Schrottplatz und Urzeit ---

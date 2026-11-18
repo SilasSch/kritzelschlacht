@@ -146,6 +146,8 @@ export function spawn(world, type, x, y, team) {
     // Schlacht-Statistik (stats.js, Spez. #46): ausgeteilter Schaden an Gegnern (combat.hurt, ohne Friendly Fire; Kills in
     // kills) und der Typ beim Einsatz (stats.createStats; ein Frosch zählt als dieser). Für alle anderen 0 bzw. null.
     dmgOut: .5, orig: null,
+    // Bomben ausweichen (dodge.js, Nachtrag 7, #47): Restzeit des Hüpfers (s; Wunschbewegung ruht, physics.integrate)
+    hopT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -155,6 +157,7 @@ export function spawn(world, type, x, y, team) {
   u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.auraAt = -9; u.trailT = (u.id % 4) * .06;
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
+  u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;

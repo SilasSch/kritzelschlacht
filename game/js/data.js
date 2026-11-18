@@ -206,6 +206,14 @@ for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 // nachträglich angehängte), mixed 1,7 → 1,5 ms.
 // paint: false = nicht malbar (Ghul; Vorgabe 3: main.js catKeys und randomBattle, bench.js und ui.js filtern), sonst true.
 for (const k in UNITS) if (UNITS[k].paint === undefined) UNITS[k].paint = true;
+// Wendigkeit (Nachtrag 7, #47): Chance, einer Bombe, Granate, Mörsergranate oder einem Felsbrocken auszuweichen
+// (dodge.js). Jede Einheit trägt den Schlüssel dodge (gleiche Form für V8): flink etwa 60 %, normal etwa 35 % (Infanterie,
+// Magier, Gorilla und alle übrigen, auch Frosch und Ghul), schwer 0–10 %. Liegende MG- und Scharfschützen und Römer im
+// Block weichen nie aus (dodge.canDodge); Flieger trifft ein Bogenwurf ohnehin nicht.
+export const AGILITY = { flink: .6, normal: .35 };
+export const NIMBLE = new Set(['wolf', 'biene', 'reiter', 'adler', 'einhorn', 'geist', 'vampir']);
+export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0 };
+for (const k in UNITS) UNITS[k].dodge = NIMBLE.has(k) ? AGILITY.flink : k in HEAVY ? HEAVY[k] : AGILITY.normal;
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
 for (const k in UNITS) UNITS[k] = new UnitType(UNITS[k]);

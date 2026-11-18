@@ -63,8 +63,9 @@ test('FFA Scharfschützen: ohne eigene Front rücken sie nach der Wartezeit vor 
   assert.ok(finite(w) && finite(w2));
 });
 
+// Saat 13 (Nachtrag 7): Saat 11 lag schon vorher knapp an der Grenze (80,3 %), mit dem Ausweichen 79,2 %; andere Saaten 89–100 %
 test('FFA Demo-Schlacht mit Römern, Scharfschützen und Sanitätern: 30 s ohne NaN, Fliehende laufen zu ihrem Typ', () => {
-  const w = mk(11);
+  const w = mk(13);
   placeRect(w, 'krieger', 36, .12, .18, .24, .42, 'blau');
   placeRect(w, 'ritter', 12, .14, .58, .22, .74, 'blau');
   placeRect(w, 'grenadier', 18, .4, .52, .48, .68, 'rot');

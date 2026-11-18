@@ -904,6 +904,8 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
+      // Ausweich-Hüpfer (Nachtrag 7, #47): kleiner Staubstoß am Absprung, gegen die Sprungrichtung
+      case 'dodge': if (take('misc')) for (let i = 0; i < 2; i++) { const p = add('dot', e.x - (e.nx || 0) * 4, e.y + 2, .35, rnd(1.4, 2.2), 0xcdc6b4); if (p) { p.vx = -(e.nx || 0) * rnd(20, 40) + rnd(-10, 10); p.vy = -(e.ny || 0) * rnd(10, 20) - rnd(8, 18); p.drag = DRAG; } } break;
       case 'spell': if (take('spell')) spell(e); break;
       case 'ability': if (take('ability')) ability(e); break;
       case 'vamp': if (take('ability')) vamp(e); break;

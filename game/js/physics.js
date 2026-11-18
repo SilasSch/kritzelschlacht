@@ -75,6 +75,8 @@ export function integrate(world, dt) {
         // Schreck, Sturm, Block, Ausweichen, Fähigkeiten, Sanitäter). In der Lava: auf kürzestem Weg hinaus, vor allem
         // anderen; sonst kein Schritt hinein (lavaGuard).
         let mx = u.mx, my = u.my;
+        // Ausweich-Hüpfer (dodge.js): solange er läuft, trägt nur der Stoß (u.vx/u.vy), die Wunschbewegung ruht
+        if (u.hopT > 0) { u.hopT -= dt; mx = 0; my = 0; }
         if (tt === LAVA) { if (lavaEscape(world, u)) { mx = LV.x * T.speed; my = LV.y * T.speed; if (LV.x < -.2) u.face = -1; else if (LV.x > .2) u.face = 1; } }
         else if ((mx !== 0 || my !== 0) && lavaGuard(world, u, mx, my)) { mx = LV.x; my = LV.y; }
         wx = mx * sp * u.spdMul; wy = my * sp * u.spdMul;

@@ -97,7 +97,7 @@ export function mortarVolley(world) {
     const x1 = cx + Math.cos(a) * d, y1 = cy + Math.sin(a) * d;
     const dist = Math.hypot(x1 - src.x, y1 - src.y), dur = .9 + dist / PROJECTILES.mortar.speed;
     world.proj.push({ kind: 'mortar', arc: true, x0: src.x, y0: src.y, x1, y1, t: dur, dur, h: dist * .55,
-      x: x1, y: y1, z: 0, tz: 0, f, src, dmg: T.dmg, R: T.splash });
+      x: x1, y: y1, z: 0, tz: 0, f, src, dmg: T.dmg, R: T.splash, dg: true });   // dg: landen sofort, kein Ausweichen
   }
   return VOLLEY_N;
 }

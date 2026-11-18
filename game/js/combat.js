@@ -15,6 +15,7 @@ import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepF
 // --- Task 5: Tiere ---
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
 import { aloft, unseen } from './world.js';
+import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -512,8 +513,9 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
   const dmg = dmgO !== undefined ? dmgO : kind === 'pilum' ? T.pilum : T.dmg, R = RO !== undefined ? RO : T.splash || 0;
   if (P.arc) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
+    // dg: Ausweichwürfe schon gemacht (dodge.js; nur Bomben, Mörsergranaten und Felsbrocken würfeln)
     world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
-      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R });
+      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R, dg: !DODGE_KINDS.has(kind) });
   } else {
     // Gerade: fliegt vom Körper des Schützen (Boden-x/y) zum Zielpunkt und prüft jeden Schritt das Segment;
     // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
@@ -1266,6 +1268,8 @@ export function stepProjectiles(world, dt) {
     if (p.arc) {
       const q = p.t < p.dur ? p.t / p.dur : 1;
       p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = Math.sin(q * Math.PI) * p.h;
+      // Ausweichen (dodge.js, Nachtrag 7, #47): einmal je Geschoss, DODGE.LEAD s vor dem Einschlag (kurze Würfe sofort)
+      if (!p.dg && p.t >= p.dur - DODGE.LEAD) rollDodges(world, p);
       if (p.t < p.dur) continue;
       proj.splice(i, 1);
       landArc(world, p, p.src.alive ? p.src : null);

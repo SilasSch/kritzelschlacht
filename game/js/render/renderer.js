@@ -13,6 +13,7 @@ import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
 import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, dragonHead, drawnMuzzle } from './pose.js';
 import { bossMuzzle, TURN_SQUASH } from '../muzzle.js';
 import { PRONE } from '../combat.js';
+import { DODGE, DODGE_KINDS } from '../dodge.js';
 import { createFx } from './fx.js';
 import { createQuadBatch, newMat, mat, mul } from './quads.js';
 
@@ -193,6 +194,25 @@ export function createRenderer(canvasHost) {
     c.setTransform(RING_RES, 0, 0, RING_RES, c.canvas.width / 2, c.canvas.height / 2);
     c.strokeStyle = '#fff'; c.lineWidth = 3; c.beginPath(); c.ellipse(0, 0, RING_R * 1.12, RING_R * .42, 0, 0, TAU); c.stroke();
   });
+  // Zielkreis der Bomben, Mörsergranaten und Felsbrocken (Nachtrag 7, #47): flache Ellipse (TARGET_R × TARGET_R · .45) im
+  // Sticker-Stil, dunkler Rand O mit hellem Innenstrich und vier kurzen Kerben; per tint gefärbt (der Rand bleibt dunkel)
+  const TARGET_RES = 4, TARGET_R = 20, TARGET_SY = .45;
+  const targetTex = canvasTex(Math.ceil((TARGET_R * 2 + 8) * TARGET_RES), Math.ceil((TARGET_R * 2 * TARGET_SY + 8) * TARGET_RES), c => {
+    c.setTransform(TARGET_RES, 0, 0, TARGET_RES, c.canvas.width / 2, c.canvas.height / 2);
+    c.lineCap = 'round';
+    const ring = (w, col) => {
+      c.strokeStyle = col; c.lineWidth = w;
+      c.beginPath(); c.ellipse(0, 0, TARGET_R, TARGET_R * TARGET_SY, 0, 0, TAU); c.stroke();
+      c.beginPath();
+      for (const [x, y] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const ex = x * TARGET_R, ey = y * TARGET_R * TARGET_SY;
+        c.moveTo(ex * .72, ey * .72); c.lineTo(ex * 1.12, ey * 1.12);
+      }
+      c.stroke();
+    };
+    ring(3, O); ring(1.3, '#fff');
+  });
+  const TARGET_TINT = 0xff8a7a;
   // Mauerbrocken: 3 kleine graue Steine (Radius 2.6–3.6 Welt-px)
   const STONE_RES = 4;
   const stoneTex = [2.6, 3.1, 3.6].map((r, k) => canvasTex(Math.ceil((r * 2 + 3) * STONE_RES), Math.ceil((r * 2 + 3) * STONE_RES), c => {
@@ -292,7 +312,7 @@ export function createRenderer(canvasHost) {
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
   const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
-    debris: 0, debrisFlying: 0, projShadows: 0, shadowLevels: [0, 0, 0] };
+    debris: 0, debrisFlying: 0, projShadows: 0, targets: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
   // Nächster verbundener Ritter (Schildwall) ohne Closure je Ritter und Bild
@@ -388,7 +408,8 @@ export function createRenderer(canvasHost) {
         const k = 1 - .6 * u.batT; p.sx *= k; p.sy *= k;
       }
       const vi = tm && rig.teamed ? TEAM_INDEX[u.team] || 0 : 0, fr = p.frame, face = u.face < 0 ? -1 : 1;
-      const A = rig.anchors, X = rig.tex, sy = u.y - u.z;
+      // Ausweich-Hüpfer (dodge.js): Figur auf einem flachen Bogen angehoben, der Schatten bleibt am Boden
+      const A = rig.anchors, X = rig.tex, sy = u.y - u.z - (u.hopT > 0 ? Math.sin(Math.PI * u.hopT / DODGE.HOP_T) * DODGE.HOP_H : 0);
       const pr = p.prone;
       // Drehung wirkt nach der Spiegelung (Weltrichtung): spin > 0 dreht im Uhrzeigersinn (Flug nach rechts)
       const rot = p.tilt + p.spin + p.lie;
@@ -659,13 +680,18 @@ export function createRenderer(canvasHost) {
   function disc(x, y, r, col) { projQ.addPart(softTex[0], null, x, y, 0, r / 31, r / 31, .5, .5, col, 1); }
   function drawProjectiles(world) {
     projQ.clear();
-    let ns = 0;
+    let ns = 0, nt = 0;
     const OC = C(O);
     for (const p of world.proj) {
       projScreen(p, PS);
       const x = PS.x, y = PS.y, ca = Math.cos(PS.a), sa = Math.sin(PS.a);
       if (p.arc) {
         const q = p.t < p.dur ? p.t / p.dur : 1, rx = PROJ_SHADOW[p.kind] || 3;
+        // Zielkreis am Einschlagpunkt (Nachtrag 7, #47): blendet über den Flug ruhig ein und zieht sich leicht zusammen
+        if (DODGE_KINDS.has(p.kind) && p.R > 0) {
+          const k = Math.min(18, p.R * .45) * (1.12 - .12 * q) / TARGET_R / TARGET_RES, a = .3 + .5 * Math.min(1, q * 1.6);
+          shadowQ.addPart(targetTex, null, p.x1, p.y1, 0, k, k, .5, .5, TARGET_TINT, a); nt++;
+        }
         shadowParams(p.z, SH);
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
@@ -696,7 +722,7 @@ export function createRenderer(canvasHost) {
       else if (p.kind === 'hex') { disc(x, y, 4.4, 0x3f9a4a); disc(x, y, 2.9, 0x9df58a); disc(x, y, 1.3, 0xeaffd8); }
       else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
     }
-    stats.projShadows = ns;
+    stats.projShadows = ns; stats.targets = nt;
   }
 
   // Sternchen über betäubten Figuren (Zustand der Welt, kein Effekt aus Ereignissen): Scheiben aus softTex[0]
@@ -822,7 +848,7 @@ export function createRenderer(canvasHost) {
     return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
       debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
       stances: { ...stats.stances },
-      projShadows: stats.projShadows, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
+      projShadows: stats.projShadows, targets: stats.targets, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
   }
 
   return { app, canvas: view, layers: L, fx, resize, markTerrainDirty, draw, prepare, present, gpuFinish, countObjects, prepMs, setOverlay, consume, debugRig, debugPhysics };

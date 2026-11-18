@@ -23,6 +23,12 @@ import { defeatHint } from './hints.js';
 import { earnedMedals } from './medals.js';
 import { createCoach } from './ui/coach.js';
 import TUTORIAL from './campaign/tutorial.js';
+/* ---------- Editor und Teilen (Audit 18.11.) ---------- */
+import { EDITOR } from './paint.js';
+import { levelFromWorld, levelProblem, upsertCustom, isLevel } from './editor.js';
+import { encode, decode, battleData, applyBattle, levelData } from './share.js';
+import { createShareDialog } from './ui/sharedialog.js';
+import { createEditorBar } from './ui/editorbar.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -88,7 +94,7 @@ const game = {
   setBrush(v) { game.brush = clamp(Math.round(v), 10, 150); ui.syncBrush(); },
   setTeam(k) { game.curTeam = k; ui.buildChips(); },
   setTeamMode(on) {
-    if (game.mission || game.battle) { ui.updateMode(); return; }
+    if (game.mission || game.battle || game.editor) { ui.updateMode(); return; }
     world.teamMode = !!on; world.contested = false;
     rebuildHash(world); ui.updateMode(); ui.updateCounts();
   },
@@ -104,6 +110,7 @@ const game = {
 
   clear() {
     const m = game.mission, b = game.battle;
+    if (game.editor) { clearWorld(); world.teamMode = true; rebuildHash(world); ui.updateCounts(); game.editorUI.tick(); return; }   // Editor (Audit 18.11.)
     if (b) {
       if (b.phase !== 'plan') return;
       clearWorld(); world.teamMode = true; rebuildHash(world);
@@ -120,7 +127,7 @@ const game = {
     }
     clearWorld(); ui.updateCounts();
   },
-  dice() { if (game.mission || game.battle) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
+  dice() { if (game.mission || game.battle || game.editor) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
 
   undo() {
     const m = game.mission, b = game.battle;
@@ -146,7 +153,8 @@ const game = {
     const m = game.mission; if (!m) return;
     if (!m.chapter) { ui.openChapters(); return; }   // Tutorial und andere Level ohne Kapitel: zur Kampagne
     const n = nextLevel(m.id);
-    if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
+    if (m.custom) game.customBack();   // eigenes Level (Audit 18.11.)
+    else if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
   },
 };
 // Index der Grundausbildung (alte Aufrufe, Debug) → id
@@ -181,8 +189,8 @@ function saveSandbox() {
 function enterSandbox() {
   endReplay(true);
   ui.hideOverlays();
-  if (!game.mission && !game.battle) return;
-  leaveBattle();
+  if (!game.mission && !game.battle && !game.editor) return;
+  leaveBattle(); leaveEditor();
   game.mission = null; snap = null; game.paused = false;
   clearWorld();
   if (sandSave) {
@@ -200,20 +208,24 @@ function enterSandbox() {
 }
 
 /* ---------- Missionen ---------- */
-// x: id eines Levels (campaign/) oder Index der Grundausbildung
-function loadMission(x) {
+// x: id eines Levels (campaign/) oder Index der Grundausbildung, oder ein eigenes Level (Objekt, Editor; custom: 'editor'
+// zurück in den Editor, 'list' zur Liste der eigenen Level; ohne Kapitel und ohne Sterne)
+function loadMission(x, custom = null) {
+  if (x && typeof x === 'object') { loadLevelDef(x, { custom: custom || 'list' }); return; }
   const e = levelInfo(levelId(x)); if (!e) return;
   loadLevelDef(e.level, { chapter: e.chapter, idx: e.li });
 }
-// Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind }
+// Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
 function loadLevelDef(def, opts = {}) {
   endReplay(true);
-  if (!game.mission && !game.battle) saveSandbox();
-  leaveBattle();
+  if (!game.mission && !game.battle && !game.editor) saveSandbox();
+  leaveBattle(); leaveEditor();
   clearWorld();
   buildMission(world, def);
-  game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, kind: opts.kind || (opts.chapter ? 'campaign' : 'level'), def,
+  game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, def,
+    kind: opts.kind || (opts.chapter ? 'campaign' : opts.custom ? 'custom' : 'level'),
     budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
+  if (opts.custom) game.mission.custom = opts.custom;
   game.paused = false;
   // Auswahl auf eine erlaubte Kategorie und Einheit setzen (units, cats)
   if (!game.catAllowed(game.cat)) game.cat = CATEGORIES.map(c => c[0]).find(game.catAllowed) || 'gelaende';
@@ -241,9 +253,11 @@ function startMission() {
 // "Nochmal planen" / "Besser planen" / "Abbrechen": Mission neu laden und den Plan wiederherstellen
 function retryMission() {
   const m = game.mission; if (!m) return;
-  if (!snap || snap.id !== m.id) { loadMission(m.id); return; }
+  // Kampagne über die id, alle anderen (eigenes Level, Tutorial, Tageschallenge) über das Level-Objekt
+  const again = () => (m.chapter ? loadMission(m.id) : loadLevelDef(m.def, { kind: m.kind, custom: m.custom }));
+  if (!snap || snap.id !== m.id) { again(); return; }
   const s = snap;
-  loadMission(s.id);
+  again();
   if (s.GW === world.GW && s.GH === world.GH) {
     for (let k = 0; k < world.terr.length; k++) if (s.towner[k]) { world.terr[k] = s.terr[k]; world.towner[k] = 1; world.whp[k] = s.whp[k]; }
   }
@@ -266,8 +280,8 @@ function finishMission() {
   if (m.kind === 'tutorial' && win) save.tutorial = true;
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
-  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)),
-    nextLabel: m.chapter ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
+    nextLabel: m.chapter || m.custom ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
 }
@@ -362,7 +376,8 @@ function enterBattle() {
     }
     return;
   }
-  if (!game.mission) saveSandbox();
+  if (!game.mission && !game.editor) saveSandbox();
+  leaveEditor();
   game.mission = null; snap = null;
   clearWorld();
   world.teamMode = true;
@@ -479,6 +494,116 @@ function finishBattle() {
   audio.play(b.result.winner === 'draw' ? 'lose' : 'win');
 }
 
+/* ---------- Editor und Teilen (Audit 18.11.) ---------- */
+// Level-Editor: game.editor ist edState ({ meta: { n, hint, budget, cats }, savedId, keep }), solange der Editor offen ist,
+// sonst null. Gemalt werden Gegner (paint.EDITOR: Rot, nur rechts der Mallinie) und Gelände überall; die Simulation steht.
+// Beim Verlassen (Testen, anderer Modus) merkt sich keep die Aufstellung (snapshotBattle), der Reiter „Editor“ und
+// „Zum Editor“ nach dem Testen stellen sie wieder her. Eigene Level liegen im Spielstand (save.custom, save.js) und laufen
+// als Mission ohne Kapitel (loadMission(level, custom)). Teilen per Code: share.js, Dialog ui/sharedialog.js.
+let edState = null;
+const newMeta = () => ({ n: '', hint: '', budget: '', cats: null });
+game.editor = null;
+const shareDlg = createShareDialog(host);
+const editorUI = createEditorBar(game);
+game.editorUI = editorUI;
+
+// level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
+function enterEditor(level = null) {
+  ui.hideOverlays();
+  if (game.editor && !level) return;
+  if (!game.mission && !game.battle && !game.editor) saveSandbox();
+  leaveBattle(); leaveEditor();
+  game.mission = null; snap = null; game.paused = false;
+  clearWorld();
+  if (!edState) edState = { meta: newMeta(), savedId: null, keep: null };
+  if (level) {
+    edState.meta = { n: level.n, hint: level.hint || '', budget: level.budget, cats: level.cats || null };
+    edState.savedId = save.custom.some(l => l.id === level.id) ? level.id : null;
+    buildMission(world, level);
+  } else if (edState.keep) restoreBattle(world, edState.keep);
+  world.teamMode = true;
+  game.editor = edState;
+  markAll(); rebuildHash(world);
+  editorUI.fill();
+  ui.closeBanner(); ui.refresh();
+}
+function leaveEditor() {
+  if (!game.editor) return;
+  edState.keep = snapshotBattle(world);
+  game.editor = null;
+}
+// Das Level aus dem Editor oder null (mit Meldung, etwa ohne Gegner)
+function editorLevel() {
+  if (!game.editor) return null;
+  rebuildHash(world);
+  const lv = levelFromWorld(world, edState.meta), bad = levelProblem(lv);
+  if (bad) { ui.toast(bad); return null; }
+  return lv;
+}
+function editorTest() { const lv = editorLevel(); if (lv) loadMission(lv, 'editor'); }
+function editorShare() {
+  const lv = editorLevel(); if (!lv) return;
+  shareDlg.showCode(encode(levelData(lv)), 'Level teilen', 'Wer diesen Code mit „Code laden“ einfügt, kann dein Level spielen.');
+}
+function saveCustom(lv, replaceId = null) {
+  const r = upsertCustom(save.custom, lv, replaceId);
+  if (r.error) { ui.toast(r.error); return false; }
+  save.custom = r.list; persist();
+  return true;
+}
+function editorSave() {
+  const lv = editorLevel(); if (!lv) return;
+  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast('Gespeichert unter Missionen → Eigene Level.'); }
+}
+const customById = id => save.custom.find(l => l.id === id) || null;
+function playCustom(id) { const l = customById(id); if (l) loadMission(l, 'list'); }
+function editCustom(id) { const l = customById(id); if (l) enterEditor(l); }
+function shareCustom(id) {
+  const l = customById(id); if (!l) return;
+  shareDlg.showCode(encode(levelData(l)), 'Level teilen', `„${l.n}“: Wer diesen Code mit „Code laden“ einfügt, kann das Level spielen.`);
+}
+function deleteCustom(id) {
+  save.custom = save.custom.filter(l => l.id !== id); persist();
+  if (edState && edState.savedId === id) edState.savedId = null;
+}
+// „Übersicht“ und „Weiter“ in einem eigenen Level: zurück in den Editor bzw. zur Liste der eigenen Level
+function customBack() {
+  const m = game.mission;
+  if (m && m.custom === 'editor') enterEditor(); else ui.openCustomList();
+}
+function shareBattle() {
+  const b = game.battle; if (!b || b.phase !== 'plan') return;
+  const n = sideCounts();
+  if (!n.blau && !n.rot) { ui.toast('Male zuerst eine Aufstellung.'); return; }
+  shareDlg.showCode(encode(battleData(world)), 'Schlacht teilen', 'Wer diesen Code mit „Code laden“ einfügt, bekommt genau diese Aufstellung samt Gelände.');
+}
+// Code laden: Schlacht (in die Planung des Schlacht-Modus) oder eigenes Level (gespeichert und gleich als Mission)
+async function loadCode(text) {
+  const d = await decode(text);
+  if (d.k === 'battle') {
+    if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
+    clearWorld(); world.teamMode = true;
+    applyBattle(world, d);
+    game.battle.snap = null;
+    markAll(); rebuildHash(world);
+    ui.updateBattle(); ui.updateCounts();
+    ui.toast('Schlacht geladen.');
+    return;
+  }
+  const lv = d.level;
+  if (!isLevel(lv)) throw new Error('Der Code passt nicht zu dieser Version des Spiels.');
+  if (!customById(lv.id) && saveCustom(lv)) ui.toast(`„${lv.n}“ unter Eigene Level gespeichert.`);
+  loadMission(lv, 'list');
+}
+const openCodeLoad = () => shareDlg.openLoad(loadCode);
+
+Object.assign(game, {
+  enterEditor: () => enterEditor(), editorTest, editorShare, editorSave, customBack,
+  playCustom, editCustom, shareCustom, deleteCustom, openCodeLoad, loadCode, shareBattle, toast: msg => ui.toast(msg),
+});
+document.getElementById('mEd').onclick = () => game.enterEditor();
+document.getElementById('bCode').onclick = () => openCodeLoad();
+document.getElementById('batShare').onclick = () => shareBattle();
 
 /* ---------- Malen (Eingabe -> paint.js) ---------- */
 const actions = {
@@ -497,6 +622,7 @@ const actions = {
       if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? 'Während des Kampfes wird nicht gemalt.' : 'Plane neu, um weiter zu malen.'); stroke.blocked = true; }
       else if (b && b.phase !== 'plan') { ui.toast(b.phase === 'fight' ? 'Während des Kampfes wird nicht gemalt.' : 'Ändere die Aufstellung, um weiter zu malen.'); stroke.blocked = true; }
       else if (m && wx > zoneX(world)) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
+      else if (game.editor && !erase && UNITS[game.sel] && wx <= zoneX(world)) ui.toast('Gegner nur rechts der gestrichelten Linie, Gelände überall.');
     }
     if (stroke.blocked) return;
     pointer.erasing = erase;
@@ -507,7 +633,7 @@ const actions = {
       if (r.warning) ui.toast(r.warning);
     } else {
       stroke.path.push([wx, wy]);   // Kritzel-Formen (shapes.js)
-      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.curTeam, m, phase);
+      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.editor ? EDITOR : game.curTeam, m, phase);
       if (r.placed) { audio.play('pop'); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
     }
@@ -535,7 +661,7 @@ const actions = {
   togglePause: () => game.togglePause(),
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
   // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
-  keysBlocked: () => ui.lexiconOpen(),
+  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen(),
 };
 
 // Kritzel-Formen (Audit 18.11.): Form des Strichs erkennen und seinen Einheiten den Bonus geben. Der Gegner steht in
@@ -625,7 +751,7 @@ function frame(now) {
   const ts = (game.slow ? SLOW : 1) * game.speed * ((m && m.endT >= 0) || (bt && bt.endT >= 0) ? .35 : 1);
   // 10× auswerten: rechnet in einer eigenen Welt; die angezeigte steht solange still
   if (bt && bt.batch) pumpBatch(bt);
-  if (!game.paused && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {
+  if (!game.paused && !game.editor && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {
     acc += realDt * ts;
     while (acc >= STEP && n < MAX_STEPS) { const s0 = performance.now(); simStep(); simMs += performance.now() - s0; acc -= STEP; n++; }
     if (n >= MAX_STEPS) acc = 0;
@@ -642,13 +768,13 @@ function frame(now) {
   renderer.setOverlay({
     brushX: pointer.x, brushY: pointer.y, brushR: pointer.inside && canPaint ? game.brush : 0,
     erase: game.sel === 'radierer' || pointer.erasing,
-    missionZoneX: m && m.phase === 'plan' ? zoneX(world) : null,
+    missionZoneX: (m && m.phase === 'plan') || game.editor ? zoneX(world) : null,
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
   renderer.draw(world, cam, now / 1000);
 
-  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); coach.tick(); }
+  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }
   // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)

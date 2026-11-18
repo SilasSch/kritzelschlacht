@@ -4,6 +4,7 @@
 // Grundausbildung nach Index 0–8; parseSave übersetzt sie in deren ids (LEGACY_IDS). serializeSave schreibt die Sterne
 // der Grundausbildung zusätzlich unter dem alten Index, damit ein älteres Spiel (auch kritzelschlacht.html) sie weiter sieht.
 import { LEGACY_IDS } from './campaign/grundausbildung.js';
+import { isLevel, CUSTOM_MAX } from './editor.js';
 
 export const SAVE_KEY = 'kritzelschlacht-v1';
 
@@ -23,6 +24,7 @@ export function parseSave(text) {
   if (md && typeof md === 'object' && !Array.isArray(md)) for (const k of Object.keys(md)) { const v = Math.floor(Number(md[k])); if (v > 0) medals[k] = v & 7; }
   save.medals = medals;
   save.tutorial = !!save.tutorial;
+  save.custom = parseCustom(save.custom);
   return save;
 }
 
@@ -42,5 +44,20 @@ export function migrateStars(raw) {
 export function serializeSave(save) {
   const stars = { ...save.stars };
   LEGACY_IDS.forEach((id, i) => { if (stars[id]) stars[i] = stars[id]; });
-  return JSON.stringify({ stars, muted: save.muted, medals: save.medals || {}, tutorial: !!save.tutorial });
+  const out = { stars, muted: save.muted, medals: save.medals || {}, tutorial: !!save.tutorial };
+  if (save.custom && save.custom.length) out.custom = parseCustom(save.custom);
+  return JSON.stringify(out);
+}
+
+/* ---------- Eigene Level (Audit 18.11.) ---------- */
+// custom: Liste eigener Level (editor.js), neueste zuerst. Ungültige und doppelte (gleiche id) fallen weg, höchstens CUSTOM_MAX.
+export function parseCustom(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [], ids = new Set();
+  for (const l of raw) {
+    if (out.length >= CUSTOM_MAX) break;
+    if (!isLevel(l) || ids.has(l.id)) continue;
+    ids.add(l.id); out.push(l);
+  }
+  return out;
 }

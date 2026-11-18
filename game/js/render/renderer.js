@@ -16,6 +16,8 @@ import { bossMuzzle, TURN_SQUASH } from '../muzzle.js';
 import { PRONE } from '../combat.js';
 import { DODGE, DODGE_KINDS } from '../dodge.js';
 import { createFx } from './fx.js';
+import { createWords } from './words.js';
+const LASER_T = 1.5;   // Sniper-Laser: so lange vor dem Schuss sichtbar (s)
 import { createQuadBatch, newMat, mat, mul } from './quads.js';
 
 const O = '#2a2a33';
@@ -462,6 +464,18 @@ void main() {
         links.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); links.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
       }
     }
+    // Sniper-Laser (Ideenrunde 18.11.): liegender Scharfschütze mit Ziel zeigt in den letzten LASER_T s vor dem Schuss eine
+    // gestrichelte rote Ziellinie und einen Punkt auf dem Ziel, immer kräftiger, je näher der Schuss ist
+    for (const u of groundList) {
+      if (u.type !== 'sniper' || u.state !== 'ok' || u.stance !== 'prone' || !(u.cd < LASER_T)) continue;
+      const g = u.tg;
+      if (!g || !g.alive) continue;
+      const k = 1 - Math.max(0, u.cd) / LASER_T, a = .15 + .5 * k;
+      const x0 = u.x + u.face * u.T.r * 2, y0 = u.y - u.z + 3, x1 = g.x, y1 = g.y - g.z - g.T.r * .3;
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+      for (let d = 0; d < L - 4; d += 14) { const e = Math.min(L - 4, d + 8); links.line(x0 + ux * d, y0 + uy * d, x0 + ux * e, y0 + uy * e, 1.5, 0xff3b3b, a); }
+      ring(x1, y1, 2.5 + 1.5 * k, 8, 2, 0xff3b3b, .4 + .5 * k);
+    }
     // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit, blinkt bei Treffern) und Bot-Schild beim Treffer
     for (const u of groundList) {
       if (u.domeHp > 0) ring(u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
@@ -870,7 +884,13 @@ void main() {
 
   /* ---------- Ereignisse ----------
      Gelände-Änderungen aus dem Kampf markieren das Gelände (Upload gedrosselt); alles andere sind Effekte. */
+  // Kritzelwörter über allen Effekten (words.js)
+  const wordLayer = new PIXI.Container();
+  L.fx.addChild(wordLayer);
+  const words = createWords(PIXI, wordLayer);
+  let wordT = -1;
   function consume(events) {
+    words.consume(events, performance.now() / 1000);
     for (let i = 0; i < events.length; i++) {
       const e = events[i];
       if (e.type === 'terrain' && e.kind !== 'ash') markTerrainDirty(e.gx0, e.gy0, e.gx1, e.gy1, false);
@@ -962,6 +982,7 @@ void main() {
     drawProjectiles(world);
     flyPool.finish();
     lap('proj');
+    words.update(wordT < 0 || t < wordT ? 0 : Math.min(.1, t - wordT)); wordT = t;
     const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);

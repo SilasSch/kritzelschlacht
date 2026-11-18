@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import EN, { EN_PLURAL } from '../game/js/lang/en.js';
-import { tr, setLang, unitName, unitPlural, detectLang, LANG } from '../game/js/i18n.js';
+import { tr, setLang, unitName, unitPlural, detectLang, remember, LANG } from '../game/js/i18n.js';
 import { UNITS, PLURAL } from '../game/js/data.js';
 import { dataStrings } from './i18n-data.mjs';
 import { scanSource, looksGerman } from './i18n-scan.mjs';
@@ -34,6 +34,28 @@ test('i18n: Vorauswahl nach ?lang, gespeicherter Wahl und Browsersprache', () =>
   assert.equal(detectLang(env('', null, ['de-AT', 'en'])), 'de');
   assert.equal(detectLang(env('', null, ['en-US', 'de'])), 'en');
   assert.equal(detectLang(env('', null, ['fr-FR'])), 'en');
+});
+
+test('i18n: Wechsel ohne Adressänderung, gemerkt in localStorage, sessionStorage und window.name (Artefakt-Rahmen)', () => {
+  const box = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, v) }; };
+  const broken = { getItem() { throw new Error('gesperrt'); }, setItem() { throw new Error('gesperrt'); } };
+  const nav = { languages: ['de-DE'] };
+  // Speicher geht: Wahl kommt nach dem Neuladen zurück, auch gegen ?lang= im Link
+  const a = { document: {}, location: { search: '?lang=de' }, localStorage: box(), sessionStorage: box(), name: '', navigator: nav };
+  remember('en', a);
+  assert.equal(a.localStorage.getItem('kritzelschlacht-lang'), 'en');
+  assert.equal(detectLang(a), 'en');
+  // Kein Speicher (gesperrter Rahmen): window.name trägt die Wahl, fremder Inhalt darin bleibt erhalten
+  const b = { document: {}, location: { search: '' }, localStorage: broken, sessionStorage: broken, name: 'fremd', navigator: nav };
+  remember('en', b);
+  assert.equal(detectLang(b), 'en');
+  assert.match(b.name, /^fremd;/);
+  remember('de', b);
+  assert.equal(detectLang(b), 'de');
+  assert.equal(b.name.match(/kritzelschlacht-lang/g).length, 1);
+  // i18n.js ändert die Adresse nie (eingebetteter Rahmen)
+  const src = fs.readFileSync(path.join(JS, 'i18n.js'), 'utf8').replace(/\/\/.*$/gm, '');
+  assert.ok(!/location\.(replace|assign|href\s*=)|history\./.test(src), 'i18n.js darf die Adresse nicht ändern');
 });
 
 test('i18n: alle Spieldaten haben eine englische Übersetzung (Einheiten, Fähigkeiten, Synergien, Gelände, Level, Regeln, Karten)', () => {

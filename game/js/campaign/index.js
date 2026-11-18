@@ -36,9 +36,12 @@ export function unitAllowed(level, type) {
   if (!level) return true;
   return (!level.units || level.units.includes(type)) && (!level.cats || level.cats.includes(T.cat));
 }
-// Gelände malen (der Radierer geht immer)
+// Gelände malen (der Radierer geht immer). Lava gibt es in Leveln nie zum Malen (Wunsch Silas, 18.11.): sie entschied
+// Missionen zu billig. Als Gelände der Gegner (place) bleibt sie, im Sandkasten und in der Schlacht ist sie malbar.
+export const NO_PAINT_IN_LEVELS = new Set(['lava']);
 export function terrainAllowed(level, key) {
   if (!TERRAIN[key]) return false;
+  if (level && NO_PAINT_IN_LEVELS.has(key)) return false;
   return key === 'radierer' || !level || !level.cats || level.cats.includes('gelaende');
 }
 // Malbare Einheiten des Levels (paint: false, etwa der Ghul, nie)

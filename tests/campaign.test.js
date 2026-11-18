@@ -232,3 +232,12 @@ test('balance.mjs --chapter: leeres Kapitel ist OK, unbekanntes bricht mit Exitc
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /unbekanntes Kapitel/);
 });
+
+test('Lava ist in keinem Level malbar, im Sandkasten und in der Schlacht schon', async () => {
+  const { terrainAllowed, LEVELS } = await import('../game/js/campaign/index.js');
+  for (const { level } of LEVELS) {
+    assert.equal(terrainAllowed(level, 'lava'), false, level.id);
+    assert.equal(terrainAllowed(level, 'radierer'), true, level.id);
+  }
+  assert.equal(terrainAllowed(null, 'lava'), true);
+});

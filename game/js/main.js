@@ -3,7 +3,7 @@
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
-import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
+import { step, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
@@ -12,15 +12,15 @@ import { snapshotBattle, restoreBattle, mirrorBattle, createBatch } from './batt
 import { createRenderer } from './render/renderer.js';
 import { createAudio, eventSound } from './audio.js';
 import { hurt, blast } from './combat.js';
-import { FORM } from './formation.js';
 import { createUI } from './ui.js';
-import { buildBench, SCENARIOS } from './bench.js';
-import { createRng } from './rng.js';
+import { createBenchHud } from './benchhud.js';
+import { SCENES } from './debug/scenes.js';
+import { seedDemo as seedDemoScene, randomBattle as randomScene } from './sandbox.js';
 import { SAVE_KEY, parseSave, serializeSave } from './save.js';
+import { guardContext } from './glguard.js';
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const rnd = (a, b) => a + Math.random() * (b - a);
 
 /* ---------- Speicher ---------- */
 let save;
@@ -152,41 +152,8 @@ function clearWorld() {
   renderer.fx.clear(); markAll(); rebuildHash(world);
 }
 
-function seedDemo() {
-  clearWorld();
-  tCircle(world, 'wasser', .66, .52, .2); tCircle(world, 'wald', .3, .78, .09);
-  placeRect(world, 'krieger', 36, .12, .18, .24, .42, 'blau');
-  placeRect(world, 'ritter', 12, .14, .58, .22, .74, 'blau');
-  placeRect(world, 'grenadier', 18, .4, .52, .48, .68, 'rot');
-  placeRect(world, 'reiter', 9, .42, .12, .52, .26, 'rot');
-  placeCircle(world, 'biene', 40, .9, .2, .07, 'gelb');
-  placeRect(world, 'schuetze', 14, .86, .62, .92, .84, 'gruen');
-  markAll(); rebuildHash(world);
-}
-
-function randomBattle() {
-  clearWorld();
-  const ter = ['wasser', 'wald', 'lava', 'mauer'];
-  for (let i = 0; i < 2; i++) {
-    const k = ter[Math.random() * ter.length | 0];
-    if (k === 'mauer') { const x = rnd(.4, .58), y = rnd(.1, .4); tRect(world, k, x, y, x + .012, y + rnd(.25, .45)); }
-    else tCircle(world, k, rnd(.35, .65), rnd(.25, .75), rnd(.06, .14));
-  }
-  const types = Object.keys(UNITS).filter(k => k !== 'drache' && UNITS[k].paint !== false);
-  const spots = [[.06, .1], [.06, .6], [.78, .1], [.78, .6]];
-  const nf = 3 + (Math.random() * 2 | 0), teams = Object.keys(TEAMS);
-  for (let i = 0; i < nf; i++) {
-    const t = types[Math.random() * types.length | 0], [sx, sy] = spots[i];
-    const n = Math.max(2, Math.round(60 / UNITS[t].cost));
-    placeRect(world, t, Math.min(n, 60), sx, sy, sx + .14, sy + .28, teams[i]);
-    if (Math.random() < .4) {
-      const t2 = types[Math.random() * types.length | 0];
-      placeRect(world, t2, Math.max(1, Math.min(Math.round(30 / UNITS[t2].cost), 30)), sx + .02, sy + .05, sx + .12, sy + .22, teams[i]);
-    }
-  }
-  if (Math.random() < .25) spawn(world, 'drache', world.W * .5, world.H * .1, teams[Math.random() * nf | 0]);
-  markAll(); rebuildHash(world);
-}
+function seedDemo() { clearWorld(); seedDemoScene(world); markAll(); rebuildHash(world); }
+function randomBattle() { clearWorld(); randomScene(world); markAll(); rebuildHash(world); }
 
 /* ---------- Sandkasten sichern ---------- */
 function saveSandbox() {
@@ -481,7 +448,7 @@ function drainEvents() {
 }
 
 function simStep() {
-  if (bench && bench.tick) bench.tick(bench.k++);   // ?bench&scenario=blastcrowd: Salven im Takt der Schritte
+  bench.tick();
   step(world, STEP);
   const m = game.mission, b = game.battle;
   if (b) {
@@ -508,115 +475,16 @@ function simStep() {
 let acc = 0, last = performance.now(), uiT = 0;
 const params = new URLSearchParams(location.search);
 
-/* ---------- Leistungsprobe ?bench=N (Task 13) ----------
-   Baut die Szene aus bench.js (mixed mit N Einheiten; &scenario=blastcrowd: Bienenschwarm mit Salven) im
-   Sandkasten und zeigt oben links fps, Sim-ms und Render-ms je Bild, die Bilddauer (Mittel und Spitze), die
-   Einheiten und die Fx-Detailstufe. Die Anzeige ist maschinenlesbar (key=value), dazu jede Sekunde
-   window.__bench = { fps, simMs, simStepMs, steps, renderMs, frameMs, frameMaxMs, units, lod, t, scenario,
-   history (eine Zeile je Sekunde), summary(fromSec), restart() }. Sim-ms: alle Simulationsschritte des Bilds;
-   Render-ms: der Rest der Arbeit im Bild (Ereignisse, Effekte, Zeichnen); Bilddauer: Abstand der Bilder. */
-const benchN = params.has('bench') ? clamp(parseInt(params.get('bench'), 10) || 2000, 4, 10000) : 0;
-const benchScen = SCENARIOS.includes(params.get('scenario')) ? params.get('scenario') : 'mixed';   // mixed, mixed2, blastcrowd
-const BENCH_HISTORY = 600;
-let bench = null, benchBox = null;
 
-// Szene (neu) aufbauen und die Messung von vorn beginnen; mit ?debug auch als __kritzel.bench(n, scenario)
-function startBench(n = benchN || 2000, scenario = benchScen) {
-  if (!benchBox) { benchBox = document.createElement('div'); benchBox.className = 'fps'; benchBox.textContent = 'bench …'; host.append(benchBox); }
-  if (game.mission || game.battle) game.enterSandbox();
-  clearWorld();
-  // &seed=N: feste Saat, damit Szene und Verlauf (die Simulation) bei jedem Lauf gleich sind
-  const seed = parseInt(params.get('seed'), 10);
-  if (Number.isFinite(seed)) world.rng = createRng(seed);
-  const tick = buildBench(world, scenario, n);
-  markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
-  const hist = bench ? bench.out.history : [];
-  hist.length = 0;
-  bench = { tick, k: 0, t: 0, n: 0, sim: 0, steps: 0, render: 0, frame: 0, frameMax: 0, boxN: 0, boxT: 0, boxSim: 0, boxRender: 0, boxFrame: 0,
-    scenario, out: { scenario, fps: 0, simMs: 0, simStepMs: 0, steps: 0, renderMs: 0, frameMs: 0, frameMaxMs: 0, units: 0, lod: 0, t: 0,
-      history: hist, summary: benchSummary, measure: benchMeasure, restart: () => startBench(n, scenario) } };
-  window.__bench = bench.out;
-  return scenario;
-}
-// Messung mit angehaltener Schleife: warm Schritte (mit Zeichnen) vorweg, dann frames Bilder je aus einem
-// Schritt + Ereignissen + fx.update (simFx), renderer.prepare (draw, JS), renderer.present (render: PIXI
-// durchläuft und bündelt die Szene) und gl.finish (gpuWait). Liefert avg/p95 je Teil, die Teile von draw
-// (drawParts), die Anzeigeobjekte je Ebene (counts) und den Zustand der Szene.
-function benchMeasure(frames = 60, opt = {}) {
-  const warm = opt.warm ?? 30, wasPaused = game.paused;
-  game.paused = true;
-  let t = performance.now() / 1000;
-  // simFx = Schritt (sim, je Teil aus sim.SIM_TIME) + Ereignisse (events) + fx.update (fxUpdate)
-  const SF = { sim: 0, events: 0, fxUpdate: 0 };
-  const one = () => {
-    const a = performance.now(); simStep();
-    const b = performance.now(); drainEvents();
-    const c = performance.now(); renderer.fx.update(STEP, world);
-    SF.sim += b - a; SF.events += c - b; SF.fxUpdate += performance.now() - c;
-  };
-  for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
-  SF.sim = SF.events = SF.fxUpdate = 0;
-  const ms0 = Float64Array.from(SIM_TIME.ms);
-  const S = { simFx: [], draw: [], render: [], gpuWait: [], total: [] }, parts = {};
-  for (let i = 0; i < frames; i++) {
-    const a = performance.now(); one();
-    const b = performance.now(); renderer.prepare(world, cam, t += STEP);
-    const c = performance.now(); renderer.present();
-    const d = performance.now(); renderer.gpuFinish();
-    const e = performance.now();
-    S.simFx.push(b - a); S.draw.push(c - b); S.render.push(d - c); S.gpuWait.push(e - d); S.total.push(e - a);
-    for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
-  }
-  game.paused = wasPaused;
-  const simParts = {};
-  for (const k in SF) simParts[k] = r2(SF[k] / frames);
-  SIM_PHASES.forEach((k, i) => { simParts['sim.' + k] = r2((SIM_TIME.ms[i] - ms0[i]) / frames); });
-  const st = v => { const s = v.slice().sort((x, y) => x - y); return { avg: r2(s.reduce((p, x) => p + x, 0) / s.length), p95: r2(s[Math.min(s.length - 1, Math.floor(s.length * .95))]) }; };
-  const out = { frames, warm };
-  for (const k in S) out[k] = st(S[k]);
-  for (const k in parts) parts[k] = r2(parts[k]);
-  const fd = renderer.fx.debug();
-  Object.assign(out, { simParts, drawParts: parts, counts: renderer.countObjects(), units: world.totalAlive, corpses: world.corpses.length,
-    particles: fd.particles, lod: renderer.fx.lod, view: `${renderer.app.renderer.width}x${renderer.app.renderer.height}@${renderer.app.renderer.resolution}` });
-  return out;
-}
-const r2 = v => Math.round(v * 100) / 100;
-// Mittel über die Sekunden ab fromSec (Standard 2: ohne den Aufbau der Szene), dazu die schlechteste Sekunde
-function benchSummary(fromSec = 2) {
-  const h = bench.out.history.filter(s => s.t > fromSec);
-  if (!h.length) return null;
-  const avg = k => +(h.reduce((p, s) => p + s[k], 0) / h.length).toFixed(2);
-  return { seconds: h.length, fps: avg('fps'), minFps: Math.min(...h.map(s => s.fps)), simMs: avg('simMs'), renderMs: avg('renderMs'),
-    frameMs: avg('frameMs'), frameMaxMs: Math.max(...h.map(s => s.frameMaxMs)), lodMax: Math.max(...h.map(s => s.lod)) };
-}
-const r1 = v => Math.round(v * 10) / 10;
-function benchFrame(rawMs, simMs, renderMs, steps, dt) {
-  if (!(rawMs >= 0) || rawMs > 1000) return;   // Tab im Hintergrund: nicht werten
-  const b = bench;
-  b.n++; b.sim += simMs; b.render += renderMs; b.steps += steps; b.frame += rawMs; if (rawMs > b.frameMax) b.frameMax = rawMs;
-  b.t += rawMs / 1000; b.boxN++; b.boxT += dt; b.boxFrame += rawMs; b.boxSim += simMs; b.boxRender += renderMs;
-  const lod = renderer.fx.lod;
-  if (b.boxT >= .5) {
-    benchBox.textContent = `bench ${b.scenario} fps=${Math.round(b.boxN * 1000 / (b.boxFrame || 1))} sim=${(b.boxSim / b.boxN).toFixed(1)}ms ` +
-      `render=${(b.boxRender / b.boxN).toFixed(1)}ms frame=${(b.boxFrame / b.boxN).toFixed(1)}ms units=${world.totalAlive} lod=${lod}`;
-    b.boxN = 0; b.boxT = 0; b.boxSim = 0; b.boxRender = 0; b.boxFrame = 0;
-  }
-  const o = b.out, secT = b.frame / 1000;
-  if (secT >= 1) {
-    o.fps = r1(b.n / secT); o.simMs = r1(b.sim / b.n); o.simStepMs = b.steps ? r1(b.sim / b.steps) : 0; o.steps = b.steps;
-    o.renderMs = r1(b.render / b.n); o.frameMs = r1(b.frame / b.n); o.frameMaxMs = r1(b.frameMax);
-    o.units = world.totalAlive; o.lod = lod; o.t = r1(b.t);
-    o.history.push({ t: o.t, fps: o.fps, simMs: o.simMs, simStepMs: o.simStepMs, renderMs: o.renderMs, frameMs: o.frameMs, frameMaxMs: o.frameMaxMs, units: o.units, lod });
-    if (o.history.length > BENCH_HISTORY) o.history.shift();
-    b.n = 0; b.sim = 0; b.render = 0; b.steps = 0; b.frame = 0; b.frameMax = 0;
-  }
-}
+const bench = createBenchHud({ params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
 
-const fpsBox = params.has('fps') && !benchN ? document.createElement('div') : null;
+const fpsBox = params.has('fps') && !bench.n ? document.createElement('div') : null;
 let fpsN = 0, fpsT = 0;
 if (fpsBox) { fpsBox.className = 'fps'; fpsBox.textContent = '… fps'; host.append(fpsBox); }
 
 function frame(now) {
+  // Kontext verloren (glguard.js): nicht rechnen und nicht zeichnen, bis er zurück ist
+  if (gl.lost) { last = now; requestAnimationFrame(frame); return; }
   const rawMs = now - last;
   const realDt = Math.min(.05, Math.max(0, rawMs / 1000)); last = now;
   const w0 = performance.now();
@@ -652,7 +520,7 @@ function frame(now) {
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)
   renderer.fx.autoLod(performance.now() - w0, rawMs);
-  if (bench) benchFrame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
+  bench.frame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
   if (fpsBox) {
     fpsN++; fpsT += realDt;
     if (fpsT >= .5) { fpsBox.textContent = `${Math.round(fpsN / fpsT)} fps · ${world.totalAlive} Einheiten · LOD ${renderer.fx.lod}`; fpsN = 0; fpsT = 0; }
@@ -688,187 +556,17 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 // Boss; Mündung tip aus den Sprites, drawn aus der Pose, logic wie combat.fire sie jetzt nähme),
 // fx.debug().boss (Abgas, Rotorwind-Staub). Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
 // Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
-const scenes = {
-  grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
-  tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
-  heli() { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },
-  walls() { world.teamMode = true; tRect(world, 'mauer', .5, .25, .512, .75); placeRect(world, 'grenadier', 12, .62, .38, .66, .62, 'rot'); placeRect(world, 'krieger', 24, .3, .38, .36, .62, 'blau'); },
-  // Wegfindung (Spez. #24): links eine Mauer mit Lücke zwischen Blau und Rot (Krieger gehen durch die
-  // Lücke, kein Einschlagen), rechts ein geschlossener Mauerring wie in M5 mit gelben Schützen innen und
-  // grünen Rittern außen (kein Weg: sie schlagen die Mauer ein)
-  walls2() {
-    world.teamMode = true;
-    tRect(world, 'mauer', .25, 0, .262, .55); tRect(world, 'mauer', .25, .72, .262, 1);
-    placeRect(world, 'krieger', 24, .06, .12, .14, .4, 'blau'); placeRect(world, 'krieger', 24, .36, .12, .44, .4, 'rot');
-    tCircle(world, 'mauer', .8, .5, .22, .18);
-    placeCircle(world, 'schuetze', 10, .8, .5, .08, 'gelb');
-    placeRect(world, 'ritter', 12, .95, .38, .99, .62, 'gruen');
-  },
-  water() {
-    world.teamMode = true; tCircle(world, 'wasser', .5, .5, .18); tCircle(world, 'lava', .2, .5, .08);
-    placeRect(world, 'krieger', 30, .44, .4, .56, .6, 'blau'); placeRect(world, 'krieger', 8, .18, .45, .22, .55, 'blau');
-    placeRect(world, 'grenadier', 10, .8, .4, .84, .6, 'rot');
-  },
-  // Drachenfeuer (Spez. #21): ein Drache gegen einen dichten Bienenschwarm (60, Radius 40 px; fängt gut
-  // Feuer) und eine verteilte Kriegerreihe (Abstand 40 px; Feuer springt nicht über)
-  dragon() {
-    world.teamMode = true;
-    spawn(world, 'drache', world.W * .62, world.H * .5, 'rot');
-    placeCircle(world, 'biene', 60, .4, .3, 40 / world.H, 'blau');
-    for (let i = 0; i < 9; i++) spawn(world, 'krieger', world.W * .4, Math.min(world.H - 8, world.H * .72 - 160 + i * 40), 'blau');
-  },
-  // Liegen (Spez. #22): 4 MG-Schützen und 3 Scharfschützen gegen Schützen 260 px vor den MGs (die MGs
-  // gehen etwas vor und legen sich hin, die Scharfschützen sofort). Von weit rechts stürmen 10 Krieger
-  // heran (gut 10 s): wer sie näher als 140 px hat, steht erst auf (0,8 s ohne Schuss).
-  prone() {
-    world.teamMode = true;
-    const x0 = world.W * .22, cy = world.H * .5;
-    for (let i = 0; i < 4; i++) spawn(world, 'mg', x0, cy - 90 + i * 60, 'blau');
-    for (let i = 0; i < 3; i++) spawn(world, 'sniper', x0 - 70, cy - 70 + i * 70, 'blau');
-    placeRect(world, 'schuetze', 8, (x0 + 260) / world.W, .4, (x0 + 290) / world.W, .6, 'rot');
-    placeRect(world, 'krieger', 10, Math.min(.95, (x0 + 700) / world.W), .35, Math.min(.98, (x0 + 740) / world.W), .65, 'rot');
-  },
-  // Römer (Spez. #25): 24 Römer (Blau, 6 × 4 im Platzabstand, bilden sofort einen Block) marschieren gegen
-  // 20 Schützen (vorn) und 10 Krieger (dahinter, Rot): die Schilde halten die Pfeile ab (Funken), Speersalve
-  // vor dem Angriff, dann charge
-  roemer() {
-    world.teamMode = true;
-    for (let k = 0; k < 24; k++) spawn(world, 'roemer', world.W * .2 - (k % 4) * FORM.SPACING, world.H * .5 + (((k / 4) | 0) - 2.5) * FORM.SPACING, 'blau');
-    placeRect(world, 'schuetze', 20, .62, .38, .68, .62, 'rot');
-    placeRect(world, 'krieger', 10, .76, .42, .79, .58, 'rot');
-  },
-  // Rückzug (Spez. #27): 20 blaue Krieger mit 30 % LP gegen 20 rote mit vollen LP, je ein Sanitäter dahinter.
-  // Blau bricht nach den ersten Treffern ab (Angstaugen, Schweißtropfen), läuft zum eigenen Sanitäter, erholt sich
-  // abseits und kommt ab 60 % zurück; Eingeholte wehren sich.
-  flucht() {
-    world.teamMode = true;
-    const k0 = world.units.length;
-    placeRect(world, 'krieger', 20, .36, .36, .42, .64, 'blau');
-    for (let i = k0; i < world.units.length; i++) world.units[i].hp = .3 * world.units[i].T.hp;
-    placeRect(world, 'krieger', 20, .58, .36, .64, .64, 'rot');
-    spawn(world, 'sani', world.W * .26, world.H * .5, 'blau');
-    spawn(world, 'sani', world.W * .74, world.H * .5, 'rot');
-  },
-  // Fähigkeiten (Spez. #30, Task 2): neun Reihen, je eine kleine blaue Gruppe eines Typs mit Fähigkeit (Schütze,
-  // Sanitäter mit verletzten Kriegern, Soldat, Mörser, Panzer, Wolfsrudel, Bär, Geist, Drache) und rechts davon eine
-  // dichte gemischte rote Gruppe (Krieger, Schützen, Ritter, Römer). Die Abklingzeiten der Blauen starten bei 1–3 s:
-  // jede Fähigkeit ist in den ersten Sekunden zu sehen (Mörser und Panzer, sobald ein Ziel in Reichweite ist).
-  faehigkeiten() {
-    world.teamMode = true;
-    const rows = [['schuetze', 4], ['sani', 2], ['soldat', 4], ['moerser', 2], ['panzer', 1], ['wolf', 5], ['baer', 1], ['geist', 2], ['drache', 1]];
-    const foes = ['krieger', 'schuetze', 'ritter', 'roemer'], W = world.W, dy = world.H / rows.length;
-    rows.forEach(([type, n], i) => {
-      const y = (i + .5) * dy;
-      for (let k = 0; k < n; k++) {
-        const u = spawn(world, type, W * .3 - (k % 3) * 22, y + ((k / 3 | 0) - .5 * (n > 3)) * 22 + ((k % 3) - 1) * 5, 'blau');
-        u.abCd = 1 + world.rng() * 2;
-      }
-      if (type === 'sani') for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', W * .3 + 26, y - 20 + k * 20, 'blau'); a.hp = .4 * a.T.hp; }
-      for (let k = 0; k < 6; k++) spawn(world, foes[(i + (k % 2)) % 4], W * .5 + (k % 3) * 16, y + ((k / 3 | 0) - .5) * 16, 'rot');
-    });
-  },
-  // Zauberbuch (Spez. #31, Task 3): sechs blaue Magier. Oben drei dicht beieinander gegen einen dichten Kriegerblock
-  // (Feuerball, dann Meteor mit Kanalstrahlen); darunter je ein einzelner gegen einen dichten Bienenschwarm (Feuerball,
-  // Blitz, Windstoß, wenn sie heran sind), gegen zwei Ritter (Blitz, dann Windstoß und Steinwand, wenn sie heran sind)
-  // und gegen einen Geist (Blitz auf einen Flieger, Windstoß). Die Magier zaubern ab der ersten Sekunde.
-  magier() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .26;
-    for (let k = 0; k < 3; k++) spawn(world, 'magier', x - (k === 1 ? 18 : 0), H * .22 + (k - 1) * 22, 'blau');
-    placeRect(world, 'krieger', 12, (x + 190) / W, .17, (x + 240) / W, .27, 'rot');
-    spawn(world, 'magier', x, H * .48, 'blau');
-    placeCircle(world, 'biene', 14, (x + 210) / W, .48, 22 / H, 'rot');
-    spawn(world, 'magier', x, H * .68, 'blau');
-    spawn(world, 'ritter', x + 200, H * .66, 'rot'); spawn(world, 'ritter', x + 215, H * .7, 'rot');
-    spawn(world, 'magier', x, H * .88, 'blau');
-    spawn(world, 'geist', x + 210, H * .88, 'rot');
-    for (const u of world.units) if (u.type === 'magier') u.cd = .3 + world.rng() * .5;
-  },
-  // Vampir (Spez. #32, Task 4): drei blaue Vampire gegen sechs rote Krieger gut 320 px entfernt (sie fliegen als
-  // Fledermausschwarm hin und setzen sich davor wieder zusammen, Lebensraub, die Bisskills stehen als Ghule auf) und zwei
-  // rote Magier weit dahinter (680 px), die nach ein paar Sekunden heran sind: ihre Feuerbälle treffen die Vampire doppelt
-  // (der Brand auch). Fällt ein Vampir, zerfallen seine Ghule.
-  vampir() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .2;
-    for (let k = 0; k < 3; k++) spawn(world, 'vampir', x, H * .5 + (k - 1) * 70, 'blau');
-    placeRect(world, 'krieger', 6, (x + 320) / W, .38, (x + 350) / W, .62, 'rot');
-    spawn(world, 'magier', x + 680, H * .44, 'rot'); spawn(world, 'magier', x + 680, H * .56, 'rot');
-  },
-  // --- Task 6: Kreaturen (Spez. #34) --- fünf Reihen, Blau links gegen Rot rechts:
-  // 1. ein verletzter Troll gegen zwei Magier (heilt sich, die Feuerbälle stoppen die Heilung);
-  // 2. ein Zyklop wirft Felsbrocken über eine Mauer auf Krieger dahinter (Staub, Trümmer bleiben liegen);
-  // 3. eine Hexe gegen zwei Ritter (grüne Zauber, nach einer Sekunde wird ein Ritter für 5 s zum Frosch);
-  // 4. ein angeschlagener Phönix gegen Schützen (Feuerspur auf dem Anflug, stirbt, liegt 2 s als Asche, steht wieder auf);
-  // 5. ein Einhorn mit drei verletzten Kriegern gegen Krieger (Hornstoß aus vollem Lauf, Heilaura glitzert).
-  kreaturen() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .2, row = i => H * (i + .5) / 5;
-    const t = spawn(world, 'troll', x, row(0), 'blau'); t.hp = .55 * t.T.hp;
-    spawn(world, 'magier', x + 260, row(0) - 16, 'rot'); spawn(world, 'magier', x + 260, row(0) + 16, 'rot');
-    spawn(world, 'zyklop', x, row(1), 'blau').cd = .3;
-    tRect(world, 'mauer', (x + 120) / W, (row(1) - 60) / H, (x + 130) / W, (row(1) + 60) / H);
-    placeRect(world, 'krieger', 6, (x + 230) / W, (row(1) - 30) / H, (x + 260) / W, (row(1) + 30) / H, 'rot');
-    const hx = spawn(world, 'hexe', x, row(2), 'blau'); hx.abCd = 1;
-    spawn(world, 'ritter', x + 190, row(2) - 14, 'rot'); spawn(world, 'ritter', x + 205, row(2) + 14, 'rot');
-    const ph = spawn(world, 'phoenix', x, row(3), 'blau'); ph.hp = 30;
-    placeRect(world, 'schuetze', 6, (x + 200) / W, (row(3) - 30) / H, (x + 225) / W, (row(3) + 30) / H, 'rot');
-    spawn(world, 'einhorn', x - 40, row(4), 'blau');
-    for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', x + 10, row(4) - 30 + k * 30, 'blau'); a.hp = .4 * a.T.hp; }
-    placeRect(world, 'krieger', 5, (x + 300) / W, (row(4) - 30) / H, (x + 320) / W, (row(4) + 30) / H, 'rot');
-  },
-  // --- Task 5: Tiere (Spez. #33) --- fünf Reihen, jede zeigt eine Fähigkeit (Abklingzeiten der Blauen bei 0,5–1,5 s):
-  // ein Elefant trampelt durch rote Krieger, bis rote Bienen von rechts kommen und er flieht; ein Krokodil lauert in einem
-  // Teich vor Schützen (abgetaucht, unsichtbar für sie, packt zu); ein Gorilla klopft sich auf die Brust und wirft Krieger
-  // in ihre Gruppe; ein Adler stößt über Krieger hinweg auf die Schützen dahinter; 4 Büffel stürmen als Herde auf Schützen.
-  tiere() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, row = i => (i + .5) * H / 5, cd = u => { u.abCd = .5 + world.rng(); return u; };
-    let y = row(0);
-    cd(spawn(world, 'elefant', W * .22, y, 'blau'));
-    placeRect(world, 'krieger', 8, .36, (y - 30) / H, .4, (y + 30) / H, 'rot');
-    placeCircle(world, 'biene', 6, .78, y / H, 14 / H, 'rot');
-    y = row(1);
-    tCircle(world, 'wasser', .34, y / H, .075);
-    cd(spawn(world, 'krokodil', W * .3, y, 'blau'));
-    placeRect(world, 'schuetze', 4, .44, (y - 30) / H, .46, (y + 30) / H, 'rot');
-    y = row(2);
-    cd(spawn(world, 'gorilla', W * .28, y, 'blau'));
-    placeRect(world, 'krieger', 4, .36, (y - 20) / H, .38, (y + 20) / H, 'rot');
-    placeRect(world, 'krieger', 6, .46, (y - 25) / H, .5, (y + 25) / H, 'rot');
-    y = row(3);
-    cd(spawn(world, 'adler', W * .26, y, 'blau'));
-    placeRect(world, 'krieger', 3, .38, (y - 25) / H, .39, (y + 25) / H, 'rot');
-    placeRect(world, 'schuetze', 3, .52, (y - 25) / H, .53, (y + 25) / H, 'rot');
-    y = row(4);
-    for (let k = 0; k < 4; k++) cd(spawn(world, 'bueffel', W * .22 - (k % 2) * 20, y - 15 + (k >> 1) * 28 + (k % 2) * 8, 'blau'));
-    placeRect(world, 'schuetze', 5, .48, (y - 30) / H, .5, (y + 30) / H, 'rot');
-  },
-  // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
-  // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)
-  bosses() {
-    world.teamMode = true;
-    for (const [team, x, s] of [['blau', .16, 1], ['rot', .84, -1]]) {
-      spawn(world, 'panzer', world.W * x, world.H * .32, team); spawn(world, 'panzer', world.W * x, world.H * .68, team);
-      spawn(world, 'heli', world.W * (x + s * .06), world.H * .4, team); spawn(world, 'heli', world.W * (x + s * .06), world.H * .6, team);
-      spawn(world, 'drache', world.W * (x - s * .05), world.H * .5, team);
-      const a = x + s * .1, b = x + s * .13, c = x + s * .02, d = x + s * .04;
-      placeRect(world, 'soldat', 8, Math.min(a, b), .42, Math.max(a, b), .58, team);
-      placeRect(world, 'panzerfaust', 3, Math.min(c, d), .45, Math.max(c, d), .55, team);
-    }
-  },
-};
 if (new URLSearchParams(location.search).has('debug')) {
   window.__kritzel = {
-    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: startBench,
+    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: bench.start,
     // Schlacht-Modus: enterBattle(), startBattle(), runBatch(n, seed) (Promise), retryBattle(), editBattle(); armyPoints();
     // place(type, n, x0, y0, x1, y1, team) wie placeRect (Anteile von W und H)
     enterBattle, startBattle, runBatch, retryBattle, editBattle, cancelBatch, armyPoints: () => armyPoints(world),
     place(type, n, x0, y0, x1, y1, team) { placeRect(world, type, n, x0, y0, x1, y1, team); rebuildHash(world); ui.updateCounts(); ui.updateBattle(); },
     scene(name) {
-      if (!scenes[name]) return Object.keys(scenes);
+      if (!SCENES[name]) return Object.keys(SCENES);
       if (game.mission || game.battle) game.enterSandbox();
-      clearWorld(); scenes[name](); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
+      clearWorld(); SCENES[name](world); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
       return name;
     },
     crashHeli() { let n = 0; for (const u of world.units) if (u.alive && u.type === 'heli') { hurt(world, u, 1e9, 'rocket', null); n++; } return n; },
@@ -883,7 +581,8 @@ if (new URLSearchParams(location.search).has('debug')) {
   };
 }
 seedDemo();
-if (benchN) startBench();
+if (bench.n) bench.start();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
+const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
 requestAnimationFrame(t => { last = t; frame(t); });

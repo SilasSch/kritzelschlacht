@@ -193,6 +193,14 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 | 48 | **Schöneres Wasser**:<ul><li>Sanfte, ziehende Wellen und ein pulsierender Schaumrand am Ufer.</li><li>Ringe und Bugwelle, wo Einheiten waten.</li><li>Fontänen statt Staub bei Explosionen im Wasser.</li><li>Leichen treiben langsam mit einer Strömung und schaukeln.</li><li>Sticker-Stil, ohne spürbare Leistungskosten.</li></ul> |
 | 49 | **Das Panzer-MG ist gut sichtbar**: ein deutlich erkennbares MG mit Lafette, Mündungsfeuer beim Schießen und ausgeworfenen Hülsen. Bisher war es nur ein 2 px dünner Strich am Bug. |
 
+## Nachtrag 8 (2026-11-18, vom Nutzer bestätigt)
+
+| # | Entscheidung |
+|---|---|
+| 50 | **Besserer Rückzug** (ersetzt Teile von #27):<ul><li>Nie fliehen: Bienen, Ghule, Geister, Frösche, Panzer, Drache, Elefant. Römer im Block halten bis 15 %.</li><li>Geflohen wird nur vor Nahkämpfern, denen man davonlaufen kann. Ein Nahkämpfer, auf den nur geschossen wird, flieht nicht, sondern greift weiter an. Ein Fernkämpfer unter Beschuss zieht sich hinter die eigenen Reihen zurück.</li><li>Wer flieht, läuft zu einem Sammelpunkt hinter den eigenen Truppen und bleibt dort stehen, bis er bei 60 % zurückkehrt. Es gibt kein Hin-und-her-Wackeln an einer Distanzgrenze.</li><li>Wer eingeholt wird, wehrt sich wie bisher.</li></ul> |
+| 51 | **Scharfschützen** weichen höchstens etwa 2 s zurück, mit Pause danach, und nur vor langsameren Verfolgern. Ist ein Nahkämpfer dicht dran, wehren sie sich mit einem schwachen Messerangriff. |
+| 52 | **Kampagne in Kapiteln**:<ul><li>Die bisherigen 9 Missionen bilden das Kapitel „Grundausbildung“. Dazu kommen etwa 30 neue Level in Kapiteln mit je 4–5 aufeinander aufbauenden Leveln: Burgen & Ritter, Rom gegen die Barbaren, Wildnis, Magierakademie, Nacht der Vampire, Moderner Krieg, Finale.</li><li>Jedes Level legt fest, welche Einheiten oder Kategorien erlaubt sind.</li><li>Ein Kapitel schaltet sich frei, wenn das vorige geschafft ist. Sterne bleiben je Level erhalten, auch die der bisherigen 9 Missionen.</li><li>Jedes Level hat einen Lösungsplan, der in der Balance-Prüfung gewinnt, und lässt sich nicht billig mit Masse einer einzelnen Einheit lösen.</li></ul> |
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

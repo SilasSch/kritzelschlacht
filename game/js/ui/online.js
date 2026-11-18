@@ -7,6 +7,8 @@ import {
   makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO,
 } from '../online.js';
 import { getRoom } from '../net.js';
+// Live-Version des Artefakts (mit room-Capability, nur auf Einladung); die öffentliche Version verweist darauf
+const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
 import { fmtPts } from '../cards.js';
 
 const CSS = `
@@ -74,6 +76,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       showCard('lobby', `<h2 id="onlTitle">Online 1 gegen 1</h2>
         <p>Das Online-Spiel braucht die Live-Verbindung des Claude-Artefakts. Sie ist hier nicht verfügbar.</p>
         <p class="muted">Öffne das Spiel als Claude-Artefakt und melde dich an. Dein Gegner braucht ebenfalls Zugriff auf das Artefakt (Einladung) und muss angemeldet sein; über einen öffentlichen Link geht es nicht.</p>
+        <p>Live spielen: in der <a href="${LIVE_URL}" target="_blank" rel="noopener">Live-Version</a> (nur mit Einladung).</p>
         <p><b>Ohne Anmeldung:</b> Nimm das <b>Code-Duell</b> (Knopf daneben). Du verschickst deine Armee als Code, dein Gegner malt verdeckt dagegen.</p>
         <div class="btnrow"><button class="btn" id="onlCancel">Schließen</button></div>`);
       $('onlCancel').onclick = hideCard; return;

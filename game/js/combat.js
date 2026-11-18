@@ -298,9 +298,11 @@ export function fling(v, dx, dy, d, I) {
 // nicht den Bomber selbst, der über seinen Einschlägen fliegt); sonst Infinity
 export const AIRBOMB_TOP = 30;
 let BLAST_TOP = Infinity;
+// BLAST_FOE: Fraktion, die von der Explosion verschont bleibt (Steine des Flugsauriers treffen nur Feinde); sonst null
+let BLAST_FOE = null;
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
   query(world, x, y, R + 16, v => {
-    if (v.z > BLAST_TOP) return;
+    if (v.z > BLAST_TOP || (BLAST_FOE !== null && factionOf(world, v) === BLAST_FOE)) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
     const fall = 1 - .5 * Math.min(1, d / R);
@@ -579,7 +581,7 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
     // dg: Ausweichwürfe schon gemacht (dodge.js; nur Bomben, Mörsergranaten und Felsbrocken würfeln)
     world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
-      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R, dg: !DODGE_KINDS.has(kind) });
+      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R, dg: !DODGE_KINDS.has(kind), stone: false });
   } else {
     // Gerade: fliegt vom Körper des Schützen (Boden-x/y) zum Zielpunkt und prüft jeden Schritt das Segment;
     // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
@@ -1236,7 +1238,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     case 'laserbot': laserShot(world, u, t); break;
     case 'tesla': teslaArc(world, u, t); break;
     case 'speer': fire(world, u, t, 'pilum', undefined, undefined, T.dmg); u.swingT = .25; break;
-    case 'ptera': fire(world, u, t, 'bomb'); break;
+    case 'ptera': fire(world, u, t, 'bomb'); world.proj[world.proj.length - 1].stone = true; break;
     case 'baer': case 'mega': case 'rex': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
@@ -1425,6 +1427,8 @@ function shieldHit(world, v, a, kind, dx, dy, src) {
 // brennt, das Feuer springt nicht über (abilities.FIRE_ARROWS); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
   if (p.kind === 'boulder') { landBoulder(world, p, src); return; }   // Task 6
+  // Flugsaurier (p.stone): Stein fällt auf Bodenfeinde, trifft weder ihn selbst noch andere Flieger noch Eigene
+  if (p.stone) { BLAST_TOP = AIRBOMB_TOP; BLAST_FOE = p.f; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; BLAST_FOE = null; return; }
   if (p.kind === 'airbomb') { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;

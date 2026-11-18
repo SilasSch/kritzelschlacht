@@ -265,7 +265,7 @@ const ABIL = {
   speer: [{n:'Speerwurf', d:'Speere im Bogen, auch auf Flieger. Römerschilde halten sie ab.'}, {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
   schamane: [{n:'Kräuterrauch', d:'Jungtiere bis 90 px wachsen doppelt so schnell.'}, {n:'Heilen', d:'Heilt einen Verbündeten, Fliehende zuerst.'}],
   raptor: [{n:'Anspringen', d:'Alle 10 s springt er einen Fernkämpfer oder Heiler bis 200 px weit an. Der erste Biss macht doppelt.'}],
-  ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden, trifft auch Eigene und Mauern.'}, {n:'Hoch oben', d:'Nahkämpfer am Boden erreichen ihn nicht.'}],
+  ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden an Feinden am Boden und an Mauern. Eigene und Flieger trifft er nicht.'}, {n:'Hoch oben', d:'Nahkämpfer am Boden erreichen ihn nicht.'}],
   anky: [{n:'Panzerplatten', d:'Von vorn halber Schaden durch Schläge, Pfeile und Kugeln.'}, {n:'Schwanzkeule', d:'Alle 8 s fegt er Gegner hinter und neben sich weg.'}],
   trike: [{n:'Hornwand', d:'Im Lauf von vorn halber Schaden.'}, {n:'Ansturm', d:'Alle 14 s stürmt er 1,2 s geradeaus und schleudert alles zur Seite.'}],
   rex: [

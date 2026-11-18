@@ -230,3 +230,17 @@ test('T-Rex-Ei: bleibt in Aufstellung, Wiederherstellung, Teilen und Online-Arme
   const g2 = w2.units.find(u => u.type === 'raptor');
   assert.ok(g2.hp <= g2.T.hp);
 });
+
+/* ---------- Regression 18.11.: Flugsaurier schadeten sich selbst ----------
+   Der Stein war eine normale Bombe: die Explosion traf alles bis in jede Höhe, also den Flugsaurier über dem Ziel, seine
+   Schwarm-Nachbarn und eigene Nahkämpfer am Ziel. Jetzt trifft er nur Feinde am Boden (combat.landArc, p.stone). */
+test('Flugsaurier: Steine treffen weder ihn selbst noch andere Flugsaurier noch eigene Nahkämpfer', () => {
+  const w = mkWorld(3);
+  const P = [0, 1, 2, 3].map(i => spawn(w, 'ptera', 300, 300 + i * 20, 'blau'));
+  const H = [0, 1, 2].map(i => spawn(w, 'hoehle', 320, 330 + i * 20, 'blau'));
+  const E = [0, 1, 2, 3, 4].map(i => { const e = spawn(w, 'ritter', 700, 280 + i * 25, 'rot'); e.cd = 1e9; return e; });
+  run(w, 12);
+  for (const u of P) assert.equal(u.hp, UNITS.ptera.hp, 'Flugsaurier unverletzt');
+  for (const u of H) assert.equal(u.hp, UNITS.hoehle.hp, 'Höhlenmensch unverletzt');
+  assert.ok(E.some(e => e.hp < UNITS.ritter.hp), 'Feinde getroffen');
+});

@@ -65,3 +65,27 @@ test('Bomber: wirft einen Teppich auf Bodentruppen, trifft sich selbst nicht', (
   assert.equal(b.hp, UNITS.bomber.hp);
   assert.ok(w.units.some(u => u.type === 'ritter' && u.hp < UNITS.ritter.hp), 'Ritter getroffen');
 });
+
+test('Jet: Luft-Luft-Raketen lenken nach und treffen einen Heli', () => {
+  const w = mkWorld(), j = spawn(w, 'jet', 300, 450, 'blau'), h = spawn(w, 'heli', 700, 450, 'rot');
+  j.T = { ...j.T, dmg: 0 }; h.T = { ...h.T, speed: 0, range: 0 };
+  rebuildHash(w);
+  let fired = 0, hits = 0;
+  for (let i = 0; i < 4 * 60; i++) {
+    step(w, 1 / 60);
+    for (const p of w.proj) if (p.kind === 'aam' && p.t === 1 / 60) fired++;
+    w.events.length = 0;
+  }
+  hits = UNITS.heli.hp - h.hp;
+  assert.ok(fired >= 2, `Raketen ${fired}`);
+  assert.ok(hits >= 40, `Schaden ${hits | 0}`);
+});
+
+test('Jet: keine Luft-Luft-Raketen auf Bodentruppen', () => {
+  const w = mkWorld(), j = spawn(w, 'jet', 300, 450, 'blau'), p = spawn(w, 'panzer', 700, 450, 'rot');
+  p.T = { ...p.T, speed: 0, range: 0 };
+  rebuildHash(w);
+  let fired = 0;
+  for (let i = 0; i < 5 * 60; i++) { step(w, 1 / 60); fired += w.proj.filter(q => q.kind === 'aam').length; w.events.length = 0; }
+  assert.equal(fired, 0);
+});

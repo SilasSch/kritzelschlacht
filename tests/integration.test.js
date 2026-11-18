@@ -37,7 +37,7 @@ test('Froschfluch: der Elefant (Task 5) ist immun wie die Bosse und der Ghul', (
 });
 
 test('FEARLESS: Elefant furchtlos gegen Brüllen und Spuk, Bienen erschrecken ihn trotzdem', () => {
-  assert.deepEqual([...FEARLESS].sort(), ['drache', 'elefant', 'heli', 'panzer']);
+  assert.deepEqual([...FEARLESS].sort(), ['drache', 'drohne', 'elefant', 'heli', 'kuppel', 'laserbot', 'magnet', 'mega', 'minibot', 'panzer', 'schweisser', 'spinne', 'tesla']);
   const w = mkWorld(), g = spawn(w, 'geist', 300, 300, 'blau'), e = spawn(w, 'elefant', 380, 300, 'rot');
   g.tg = e; rebuildHash(w);
   assert.equal(ABILITY.geist.ready(w, g), false, 'Spuk wirkt nicht');
@@ -64,8 +64,8 @@ test('Nicht malbar: der Frosch (Task 6) fällt unter den paint:false-Rückhalt v
 
 test('Kategorien: Tiere 8 und Mythisch 9 malbare Einheiten; mixed bleibt fest, mixed2 hat beide neuen Sätze', () => {
   const keys = c => Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false);
-  assert.deepEqual(CATEGORIES.map(c => c[0]), ['armee', 'tiere', 'mythisch', 'modern', 'gelaende']);
   assert.deepEqual(keys('tiere'), ['wolf', 'baer', 'biene', 'elefant', 'krokodil', 'gorilla', 'adler', 'lama', 'bueffel']);   // Lama: Ideenrunde 18.11.
+  assert.deepEqual(CATEGORIES.map(c => c[0]), ['armee', 'tiere', 'mythisch', 'modern', 'schrott', 'urzeit', 'gelaende']);
   assert.deepEqual(keys('mythisch'), ['magier', 'geist', 'drache', 'vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn']);
   const neu = ['elefant', 'krokodil', 'gorilla', 'adler', 'bueffel', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn'];
   for (const t of neu) { assert.ok(mixed2Types().includes(t), t); assert.ok(!MIXED_TYPES.includes(t), t); }

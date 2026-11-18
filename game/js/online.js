@@ -5,17 +5,21 @@
 // Gesprochen wird nur über presence (jeder Spieler veröffentlicht ein Objekt, der andere liest es). Das dürfen alle, die
 // das Artefakt sehen, auch reine Betrachter; Ereignis-Themen bräuchten Mitwirkenden-Rechte.
 //   Host (erstellt den Raum) = Blau links, Gast = Rot rechts.
-//   Runde: Der Host würfelt { r, cat, seed, budget }. Beide malen verdeckt (die Welt des einen enthält nur die eigene
+//   Runde: Der Host lost { r, seed, budget, opts } aus: drei Regeln und drei Karten (rules.js). Beide stimmen ab (vote),
+//   gleiche Stimme gewinnt, sonst das Los; der Host trägt das Ergebnis als cat (Regel-id) und map ein. Beide malen verdeckt (die Welt des einen enthält nur die eigene
 //   Armee), „Fertig“ = ready. Sind beide fertig, tauschen sie ihre Armee in Stücken (arm/got) und starten denselben Kampf
 //   (gleiche Aufstellung in gleicher Reihenfolge, gleiche Saat; die Simulation ist deterministisch).
 //   Ergebnis: jeder meldet res; der Host zählt und veröffentlicht score. Nächste Runde, wenn beide want = r + 1 melden.
 import { UNITS } from './data.js';
 import { SHAPES } from './shapes.js';
+import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, draw, resolveVote } from './rules.js';
 
-export const PROTO = 1;
+export const PROTO = 2;   // 2: Abstimmung über Regel und Karte
 export const ROOM_PREFIX = 'ks1v1-';
-export const ONLINE_CATS = ['armee', 'tiere', 'mythisch', 'modern'];
-export const CAT_NAME = { armee: 'Armee', tiere: 'Tiere', mythisch: 'Mythisch', modern: 'Modern' };
+// cfg.cat ist die id einer Regel (rules.js); die vier Kategorien sind Regeln mit derselben id
+export const ONLINE_CATS = RULE_IDS;
+export const CAT_NAME = Object.fromEntries(RULES.map(r => [r.id, r.n]));
+export const VOTE_N = 3;   // Auswahl je Runde: so viele Regeln und Karten
 export const ONLINE_BUDGETS = [100, 150, 250];
 export const ONLINE_DEFAULT = 150;
 export const CHUNK = 2800;                 // Zeichen je Armee-Stück (presence hat 4 KiB je Spieler)
@@ -37,18 +41,27 @@ export function normCode(text) {
 export const roomName = code => ROOM_PREFIX + code.toLowerCase();
 
 /* ---------- Runden ---------- */
-// Nächste Runde: Kategorie zufällig, nie zweimal hintereinander dieselbe; neue Saat für den Kampf
+// Nächste Runde zur Abstimmung: drei Regeln (nie die der letzten Runde) und drei Karten; neue Saat für den Kampf
 export function nextRound(prev, budget, rand = Math.random) {
-  const pool = ONLINE_CATS.filter(c => !prev || c !== prev.cat);
   return {
     r: prev ? prev.r + 1 : 1,
-    cat: pool[Math.floor(rand() * pool.length) % pool.length],
     seed: (rand() * 2 ** 31) | 0,
     budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT,
+    opts: { rules: draw(RULE_IDS, VOTE_N, rand, prev && prev.cat), maps: draw(MAP_IDS, VOTE_N, rand) },
+    cat: null, map: null, agreed: null,
   };
 }
-// Level-artiges Objekt für die Malleiste und paint.js (campaign/index.js unitAllowed, catAllowed): nur die Kategorie
-export const roundDef = cfg => ({ id: 'online', cats: [cfg.cat], budget: cfg.budget });
+// Revanche: dieselbe Regel, Karte und dasselbe Budget, neue Saat; beide malen neu
+export function rematchRound(prev, rand = Math.random) {
+  return { ...prev, r: prev.r + 1, seed: (rand() * 2 ** 31) | 0, agreed: { rule: true, map: true }, rematch: true };
+}
+// Runde mit Regel und Karte gleich ausgelost (ohne Abstimmung, für Tests und Zufall)
+export function randomRound(prev, budget, rand = Math.random) {
+  const c = nextRound(prev, budget, rand);
+  return { ...c, cat: c.opts.rules[0], map: c.opts.maps[0] };
+}
+// Level-artiges Objekt für die Malleiste und paint.js (campaign/index.js unitAllowed, catAllowed): die Regel der Runde
+export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: cfg.budget });
 
 /* ---------- Armee-Pakete ---------- */
 // Jede Einheit in 5 Bytes: Typ (6 Bit) + Form (2 Bit), x und y als 16 Bit in Anteilen der Welt. Base64url.
@@ -95,7 +108,7 @@ export function unpackArmy(text, side, W, H, cfg) {
   for (let o = 0; o < bytes.length; o += 5) {
     const type = PAINT_TYPES[bytes[o] & 63], shape = SHAPE_KEYS[bytes[o] >> 6] || null;
     if (!type) throw new Error('Unbekannte Einheit');
-    if (cfg && UNITS[type].cat !== cfg.cat) throw new Error('Einheit nicht in der Kategorie');
+    if (cfg && !ruleAllows(cfg.cat, type)) throw new Error('Einheit nicht in der Kategorie');
     const x = dq((bytes[o + 1] << 8) | bytes[o + 2], W), y = dq((bytes[o + 3] << 8) | bytes[o + 4], H);
     if (side === 'blau' ? x > W / 2 + 1 : x < W / 2 - 1) throw new Error('Einheit auf der falschen Seite');
     cost += UNITS[type].cost;
@@ -110,13 +123,13 @@ export const splitChunks = (s, n = CHUNK) => { const out = []; for (let i = 0; i
 export function battleList(blau, rot) { return [...blau, ...rot]; }
 
 /* ---------- Ablauf ---------- */
-// phase: 'wait' (Host wartet auf Gegner / Gast auf die erste Runde) → 'paint' → 'ready' (fertig, Gegner malt noch) →
+// phase: 'wait' (Host wartet auf Gegner / Gast auf die erste Runde) → 'vote' (Regel und Karte wählen) → 'paint' → 'ready' (fertig, Gegner malt noch) →
 // 'xfer' (Armeen werden getauscht) → 'fight' → 'result'. 'left': der Gegner ist weg.
 export function createMatch(role, budget = ONLINE_DEFAULT, rand = Math.random) {
   return {
     role, side: SIDE[role], budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT, rand,
     phase: 'wait', cfg: null, score: { blau: 0, rot: 0 }, mine: null, chunks: null, recv: [], theirs: null,
-    res: null, peerRes: null, want: 0, counted: 0, error: null,
+    res: null, peerRes: null, want: 0, same: false, counted: 0, error: null, vote: null, peerVote: null,
   };
 }
 const num = v => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -124,7 +137,7 @@ const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 
 // Was ich veröffentliche (presence-Objekt)
 export function view(m) {
-  const r = m.cfg ? m.cfg.r : 0, o = { ks: PROTO, role: m.role, ready: 0, arm: null, got: null, res: null, want: m.want };
+  const r = m.cfg ? m.cfg.r : 0, o = { ks: PROTO, role: m.role, ready: 0, arm: null, got: null, res: null, want: m.want, same: m.same };
   if (m.role === 'host') { o.cfg = m.cfg; o.score = m.score; }
   if (m.mine !== null && (m.phase === 'ready' || m.phase === 'xfer' || m.phase === 'fight' || m.phase === 'result')) o.ready = r;
   if (m.phase === 'xfer' || m.phase === 'fight' || m.phase === 'result') {
@@ -132,11 +145,12 @@ export function view(m) {
     if (m.chunks) { const i = Math.min(m.sendI || 0, m.chunks.length - 1); o.arm = { r, n: m.chunks.length, i, d: m.chunks[i] }; }
   }
   if (m.res) o.res = m.res;
+  o.vote = m.vote && m.cfg ? { r, rule: m.vote.rule, map: m.vote.map } : null;
   return o;
 }
 
 function newRound(m, cfg) {
-  m.cfg = cfg; m.phase = 'paint'; m.mine = null; m.chunks = null; m.sendI = 0; m.recv = []; m.theirs = null;
+  m.cfg = cfg; m.phase = cfg.cat ? 'paint' : 'vote'; m.vote = null; m.peerVote = null; m.same = false; m.peerWant = null; m.mine = null; m.chunks = null; m.sendI = 0; m.recv = []; m.theirs = null;
   m.res = null; m.peerRes = null; m.error = null;
 }
 
@@ -144,8 +158,25 @@ function newRound(m, cfg) {
 export function hostStart(m) {
   if (m.role !== 'host' || m.cfg) return [];
   newRound(m, nextRound(null, m.budget, m.rand));
+  return ['vote'];
+}
+
+// Eigene Stimme: eine der angebotenen Regeln und Karten
+export function castVote(m, rule, map) {
+  if (m.phase !== 'vote' || !m.cfg.opts.rules.includes(rule) || !m.cfg.opts.maps.includes(map)) return [];
+  m.vote = { rule, map };
+  return ['voted', ...hostResolve(m)];
+}
+// Host: beide haben abgestimmt → Regel und Karte festlegen, malen
+function hostResolve(m) {
+  if (m.role !== 'host' || m.phase !== 'vote' || !m.vote || !m.peerVote) return [];
+  const a = resolveVote(m.vote.rule, m.peerVote.rule, m.rand), b = resolveVote(m.vote.map, m.peerVote.map, m.rand);
+  m.cfg = { ...m.cfg, cat: a.pick, map: b.pick, agreed: { rule: a.agreed, map: b.agreed } };
+  m.phase = 'paint';
   return ['round'];
 }
+const validOpts = o => isObj(o) && Array.isArray(o.rules) && Array.isArray(o.maps) && o.rules.length && o.maps.length
+  && o.rules.every(x => RULE_IDS.includes(x)) && o.maps.every(x => MAP_IDS.includes(x));
 
 // „Fertig“: eigene Armee eingepackt
 export function markReady(m, packed) {
@@ -160,9 +191,10 @@ export function finishFight(m, winner) {
   if (m.role === 'host' && m.counted < m.cfg.r) { m.counted = m.cfg.r; if (winner !== 'draw') m.score[winner]++; }
   return ['result'];
 }
-export function wantNext(m) {
+// same: Revanche (gleiche Regel und Karte) statt neuer Abstimmung; die gibt es nur, wenn beide Revanche wollen
+export function wantNext(m, same = false) {
   if (m.phase !== 'result') return [];
-  m.want = m.cfg.r + 1;
+  m.want = m.cfg.r + 1; m.same = !!same;
   return ['want'];
 }
 
@@ -181,8 +213,14 @@ export function onPeer(m, p, W, H) {
   // Gast: Runde und Punktestand vom Host übernehmen
   if (m.role === 'guest') {
     const c = p.cfg;
-    if (isObj(c) && num(c.r) > (m.cfg ? m.cfg.r : 0) && ONLINE_CATS.includes(c.cat) && ONLINE_BUDGETS.includes(c.budget)) {
-      newRound(m, { r: num(c.r), cat: c.cat, seed: num(c.seed) | 0, budget: c.budget }); ev.push('round');
+    const fin = isObj(c) && RULE_IDS.includes(c.cat) && MAP_IDS.includes(c.map);
+    const ag = isObj(c) && isObj(c.agreed) ? { rule: !!c.agreed.rule, map: !!c.agreed.map } : null;
+    if (isObj(c) && num(c.r) > (m.cfg ? m.cfg.r : 0) && validOpts(c.opts) && ONLINE_BUDGETS.includes(c.budget)) {
+      newRound(m, { r: num(c.r), seed: num(c.seed) | 0, budget: c.budget, opts: { rules: c.opts.rules, maps: c.opts.maps },
+        cat: fin ? c.cat : null, map: fin ? c.map : null, agreed: fin ? ag : null, ...(c.rematch ? { rematch: true } : {}) });
+      ev.push(fin ? 'round' : 'vote');
+    } else if (fin && m.cfg && num(c.r) === m.cfg.r && m.phase === 'vote') {
+      m.cfg = { ...m.cfg, cat: c.cat, map: c.map, agreed: ag }; m.phase = 'paint'; ev.push('round');
     }
     if (isObj(p.score)) {
       const s = { blau: num(p.score.blau), rot: num(p.score.rot) };
@@ -194,9 +232,17 @@ export function onPeer(m, p, W, H) {
   if (isObj(p.res) && num(p.res.r) === r && ['blau', 'rot', 'draw'].includes(p.res.w)) {
     if (!m.peerRes || m.peerRes.r !== r) { m.peerRes = { r, w: p.res.w }; ev.push('peerres'); }
   }
+  const pw = num(p.want) === r + 1 ? (p.same === true ? 'same' : 'new') : null;
+  if (pw !== m.peerWant) { m.peerWant = pw; ev.push('peerwant'); }
+  // Host: Stimme des Gasts
+  if (m.role === 'host' && m.phase === 'vote' && isObj(p.vote) && num(p.vote.r) === r
+    && m.cfg.opts.rules.includes(p.vote.rule) && m.cfg.opts.maps.includes(p.vote.map)) {
+    m.peerVote = { rule: p.vote.rule, map: p.vote.map }; ev.push(...hostResolve(m));
+  }
   // Host: nächste Runde, wenn beide wollen
   if (m.role === 'host' && m.phase === 'result' && m.want === r + 1 && num(p.want) === r + 1) {
-    newRound(m, nextRound(m.cfg, m.budget, m.rand)); ev.push('round');
+    const both = m.same && p.same === true;
+    newRound(m, both ? rematchRound(m.cfg, m.rand) : nextRound(m.cfg, m.budget, m.rand)); ev.push(both ? 'round' : 'vote');
     return ev;
   }
   if (m.phase === 'ready' && num(p.ready) === r) { m.phase = 'xfer'; ev.push('xfer'); }
@@ -217,7 +263,7 @@ export function onPeer(m, p, W, H) {
     }
     if (m.phase === 'xfer' && m.theirs !== null && m.chunks && got >= m.chunks.length) {
       const mine = unpackArmy(m.mine, m.side, W, H, null);
-      m.fight = { units: m.side === 'blau' ? battleList(mine, m.theirs) : battleList(m.theirs, mine), seed: m.cfg.seed };
+      m.fight = { units: m.side === 'blau' ? battleList(mine, m.theirs) : battleList(m.theirs, mine), seed: m.cfg.seed, map: m.cfg.map };
       m.phase = 'fight'; ev.push('fight');
     }
   }

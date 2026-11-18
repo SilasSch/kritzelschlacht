@@ -37,8 +37,8 @@ test('Konter', () => {
   const r = unitCard('ritter');
   assert.ok(r.strong.includes('krieger'));
   assert.ok(r.weak.includes('biene'));
-  assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'reiter', 'schuetze']);
-  assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'sniper']);
+  assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'minibot', 'raptor', 'reiter', 'schuetze']);
+  assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'ptera', 'schweisser', 'sniper']);
   assert.deepEqual([...unitCard('roemer').weak].sort(), ['grenadier', 'magier', 'moerser', 'reiter']);
   assert.ok(unitCard('moerser').strong.includes('roemer'), 'Mörser, wie im Römer-Text');
   // Konter nur aus COUNTERS, keine erfundenen; Einheiten ohne Einträge haben leere Listen
@@ -51,6 +51,11 @@ test('Konter', () => {
   // Task 7: jede neue Einheit schlägt mindestens eine und wird von mindestens einer geschlagen (Duell im Prüfstand)
   for (const t of ['vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel']) {
     assert.ok(unitCard(t).strong.length >= 1 && unitCard(t).weak.length >= 1, t);
+  }
+  // Schrottplatz und Urzeit: jede Einheit wird von einer geschlagen, die kämpfenden schlagen auch eine
+  for (const t of ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex']) {
+    assert.ok(unitCard(t).weak.length >= 1, t);
+    if (t !== 'drohne' && t !== 'schamane') assert.ok(unitCard(t).strong.length >= 1, t);
   }
   assert.deepEqual(unitCard('sani').strong, []);
   assert.deepEqual(unitCard('sani').weak, []);
@@ -87,7 +92,7 @@ test('Texte nennen die Konter aus der Balance-Prüfung', () => {
 
 test('Kategorien und Merkmale', () => {
   const g = cardTypes();
-  assert.deepEqual(g.map(x => x.cat), ['armee', 'tiere', 'mythisch', 'modern']);
+  assert.deepEqual(g.map(x => x.cat), ['armee', 'tiere', 'mythisch', 'modern', 'schrott', 'urzeit']);
   assert.equal(g.reduce((s, x) => s + x.types.length, 0), Object.keys(UNITS).length);
   assert.ok(unitCard('drache').tags.includes('Fliegt'));
   assert.ok(unitCard('magier').tags.includes('Flächenschaden'));

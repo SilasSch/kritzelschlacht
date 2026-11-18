@@ -87,7 +87,21 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .counts .empty{color:var(--muted);font-size:12.5px}
 
 .palette{border-radius:16px;padding:6px 8px 8px;display:flex;flex-direction:column;gap:4px;min-width:0;max-width:100%}
+.palette{position:relative;padding-top:14px}
+/* Griff zum Verschieben der Malleiste (ui/dragbar.js); verschoben liegt sie frei über dem Feld */
+.griprow{position:absolute;top:2px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:4px}
+.grip{width:64px;height:14px;border:0;background:transparent;padding:0;display:grid;place-items:center;cursor:grab;touch-action:none;border-radius:8px}
+.grip::before{content:"";width:40px;height:5px;border-radius:9px;background:var(--line);transition:background .15s}
+.grip:hover::before,.grip:focus-visible::before,.palette.dragging .grip::before{background:var(--muted)}
+.palette.dragging .grip{cursor:grabbing}
+.griprow .mini{padding:0 7px;font-size:11px;line-height:14px;border-radius:7px}
+.bottom>.palette.free{position:absolute;grid-column:auto;grid-row:auto;z-index:2;width:720px;max-width:calc(100% - 16px)}
+.palette.dragging{box-shadow:0 12px 32px rgba(30,35,60,.2);user-select:none}
 .info{font-size:12.5px;color:var(--muted);padding:2px 6px 0;min-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Feste Breite der Malleiste: Beschreibung und Tastenzeile bestimmen die Breite nicht mit (width:0 + min-width:100%),
+   sonst wächst die Leiste mit langen Texten (Römer: 1680 px). Volle Beschreibung: Charakterkarte und title. */
+.palette{width:720px}
+.palette .info,.palette .keys{width:0;min-width:100%;box-sizing:border-box}
 .info b{color:var(--ink)}
 .tabs{display:flex;gap:2px;flex-wrap:wrap}
 .tabs button{border:0;background:transparent;border-radius:9px;padding:5px 11px;color:var(--muted);font-weight:800;font-size:14px}
@@ -246,6 +260,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .ucard .uc::after{content:"";position:absolute;bottom:-9px;left:var(--ax,50%);width:14px;height:14px;background:#fff;
   border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateX(-50%) rotate(45deg)}
 .ucard.pop .uc{animation:ucpop .14s ease-out both}
+.ucard.below .uc::after{bottom:auto;top:-9px;transform:translateX(-50%) rotate(225deg)}
 @keyframes ucpop{from{transform:translateY(6px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 .ib.lexb{display:inline-flex;align-items:center;gap:6px;font-size:14px}
 .card.lex{max-width:1240px;max-height:92%;gap:12px}
@@ -409,6 +424,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
     <div class="bottom">
       <div class="counts shadow p" id="counts" aria-live="polite"></div>
       <div class="palette shadow p">
+        <div class="griprow"><button class="grip" id="palGrip" type="button" title="Ziehen: Malleiste verschieben · Doppelklick: zurück an den Standardplatz" aria-label="Malleiste verschieben (Pfeiltasten, Pos1 setzt zurück)"></button><button class="mini" id="palReset" type="button" title="Malleiste zurück an den Standardplatz" hidden>↺</button></div>
         <div class="info" id="info"></div>
         <div class="tabs" id="tabs" role="tablist" aria-label="Kategorie"></div>
         <div class="units" id="units"></div>

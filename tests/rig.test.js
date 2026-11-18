@@ -125,7 +125,7 @@ test('Bildwechsel: Bodentruppen im Stand Bild 0, Flieger flattern immer', () => 
 });
 
 test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', async () => {
-  const { rigLayout, T6_ACCENT } = await import('../game/js/render/rig.js');
+  const { rigLayout, T6_ACCENT, ERA_ACCENT } = await import('../game/js/render/rig.js');
   const { TINT } = await import('../game/js/data.js');
   for (const t of Object.keys(UNITS)) {
     const L = rigLayout(t);
@@ -134,7 +134,7 @@ test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', as
     assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
     // Ghul: Lumpen in Teamfarbe; Task 6: Kreaturen mit Akzent in Teamfarbe (rig.T6_ACCENT); Task 5: Krokodil, Gorilla,
     // Adler, Büffel mit Halstuch in Teamfarbe (der Elefant trägt seine Decke als eigenes Boss-Teil, sein Körper bleibt eine Variante)
-    const accent = ['krokodil', 'gorilla', 'adler', 'bueffel', 'lama'].includes(t);
+    const accent = ['krokodil', 'gorilla', 'adler', 'bueffel', 'lama'].includes(t) || ERA_ACCENT.has(t);   // Schrottplatz/Urzeit: Teamfarbe am Körper
     assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined || accent ? 5 : 1, `${t}: Teamfarbe`);
     assert.equal(!!L.pupilL, !!L.pupilR, t);
   }

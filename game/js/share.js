@@ -9,6 +9,7 @@ import { spawn, rebuildHash, touchTerrain, setCell } from './world.js';
 import { STONE_WALL } from './spells.js';
 import { applyShape } from './shapes.js';
 import { validDuel } from './duel.js';   // Code-Duell (18.11.)
+import { validResult } from './dailyboard.js';   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
 
 export const PREFIX = 'KS';
 const Q = 10000;   // Koordinaten als ganze Zahlen 0..Q
@@ -74,6 +75,8 @@ function validate(d) {
     if (l.units && (!Array.isArray(l.units) || !l.units.every(t => UNITS[t] && UNITS[t].paint !== false))) bad();
   } else if (d.k === 'duel' || d.k === 'duelres') {
     if (!validDuel(d)) bad();
+  } else if (d.k === 'dailyres') {
+    if (!validResult(d)) bad('Das Ergebnis passt nicht zur Tageschallenge dieses Tages.');
   } else bad();
 }
 

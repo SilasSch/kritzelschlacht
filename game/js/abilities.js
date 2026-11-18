@@ -36,6 +36,10 @@ import { hazardAt } from './formation.js';
 import { TERRAIN, RANGED } from './data.js';
 import { cellIndex, unseen, EAGLE_REACH_Z } from './world.js';
 import { applyImpulse, GRAVITY, GROUND_FRICTION } from './physics.js';
+// --- Schrottplatz und Urzeit ---
+import { BOT, DOME, METAL, YOUNG, REX_HATCH } from './data.js';
+import { hitWall } from './combat.js';
+import { WALL_CLEAR_Z } from './physics.js';
 
 /* ---------- Feuer (Festlegung 7) ---------- */
 // Feuerball, Drachenatem, Brand über Zeit, Brandpfeile, Phönixspur: gemeinsames Merkmal Feuer (combat.hurt: Panzer
@@ -201,6 +205,7 @@ const nothing = () => {};
 
 // Wen Brüllen und Spuk nicht erschrecken: Maschinen und Drachen
 export const FEARLESS = new Set(['panzer', 'heli', 'drache']);
+for (const k in UNITS) if (UNITS[k].bot) FEARLESS.add(k);   // Roboter kennen keine Angst
 
 // Das aktuelle Ziel u.tg, wenn es ein lebender Feind in Reichweite R ist (Mitte zu Mitte plus beide Radien);
 // ground: nur Bodenziele. Gesucht wird nicht neu: u.tg führt combat.think.
@@ -552,7 +557,8 @@ function diveEnd(world, u) { u.fz = u.T.flyZ; }
    (hirnlos, morale.updateMorale) und werden nicht geheilt (data.UNDEAD). */
 export const VAMPIRE = { HEAL: .5, BAT_START: 220, BAT_END: 40, MORPH: .3, BAT_Z: BAT_FORM.flyZ, MAX_GHOULS: 3 };
 export const GHOUL = { DECAY: .04, RISE: .6 };
-export const NO_GHOUL = new Set(['ghul', 'frosch', 'panzer', 'heli', 'drache', 'elefant']);
+export const NO_GHOUL = new Set(['ghul', 'frosch', 'panzer', 'heli', 'drache', 'elefant', 'rex', 'rexei']);
+for (const k in UNITS) if (UNITS[k].bot) NO_GHOUL.add(k);   // Roboter stehen nicht als Ghul auf
 // Ergebnis von stepBat: kein Fledermaus-Schritt (normales Verhalten), Verwandlung (steht), Fledermaus (Aufrufer bewegt)
 export const BAT_NONE = 0, BAT_MORPH = 1, BAT_FLY = 2;
 
@@ -645,7 +651,7 @@ export const CYCLOPS = { R: UNITS.zyklop.splash, MIN_D: 70, MELEE: 4, MELEE_CD: 
 // (endFrog), LP höchstens seine max. LP. Immun (FROG_IMMUNE): Panzer, Hubschrauber, Drache, Elefant, Ghul; dazu Frösche
 // und die Asche des Phönix.
 export const FROG = { T: 5, CD: 14, HOP_HZ: 1.6, HOP: .45, FLEE_R: 180, LOOK_T: .5 };
-export const FROG_IMMUNE = new Set(['panzer', 'heli', 'drache', 'elefant', 'ghul']);
+export const FROG_IMMUNE = new Set(['panzer', 'heli', 'drache', 'elefant', 'ghul', 'mega', 'rex']);
 export const canCurse = v => v.alive && !(v.ashT > 0) && v.type !== 'frosch' && !FROG_IMMUNE.has(v.type);
 
 // Zählt u wieder zum Schwerpunkt seiner Fraktion (wie morale.endFlee), wenn es floh oder erschreckt war
@@ -673,7 +679,8 @@ export function curseFrog(world, v, sec = FROG.T) {
 }
 // Der Frosch wird wieder er selbst (Ablauf oder Tod des verwandelten Phönix): Typ zurück, LP gedeckelt, Flieger steigen auf
 export function endFrog(world, u) {
-  const T = UNITS[u.frogFrom];
+  // ein verfluchtes Jungtier (Urzeit) wird wieder ein Jungtier
+  const T = u.growT > 0 && YOUNG[u.frogFrom] ? YOUNG[u.frogFrom] : UNITS[u.frogFrom];
   u.type = u.frogFrom; u.T = T; u.frogFrom = null; u.frogT = 0;
   if (u.hp > T.hp) u.hp = T.hp;
   u.fz = T.flyZ || 0;
@@ -1245,6 +1252,384 @@ export function kingFall(world, u) {
 // Unverändert: Mörser-Sperrfeuer (Flächenschaden), Sanitäter und Soldat (früher: Soldaten mit Sanitätern zu stark), Krokodil und Adler (ohnehin kurz), Hubschrauber und Drache (eigene
 // Baustellen), Büffel (Herden-Abklingzeit).
 export const FIRST_CD = { schuetze: 12, panzer: 12, wolf: 8, baer: 8, geist: 6, hexe: 6, elefant: 10, gorilla: 6, koenig: 6 };
+/* ---------- Schrottplatz (5. Kategorie, 18.11.) ----------
+   Kategorie-Regeln für alle Roboter (T.bot), aus combat.think je Schritt (stepBot) und combat.hurt (Schild, Blitz):
+   Schild aus BOT.SHIELD · LP schluckt Treffer vor den LP und lädt nach BOT.RECHARGE_T s ohne Treffer wieder auf; Blitz
+   macht BOT.LIGHTNING-fachen Schaden; Wasser betäubt einen Bodenroboter kurz (Kurzschluss, danach SHORT_CD s nicht
+   wieder). Schrott: die Leiche eines zerstörten Roboters (world.corpses, kind 'body'); die Schrauber-Drohne baut aus
+   BUILD.N eigenen davon einen Minibot (die Leichen verblassen). */
+export function stepBot(world, u, dt) {
+  const T = u.T, max = T.hp * BOT.SHIELD;
+  if (u.shdHit > 0) u.shdHit -= dt;
+  u.shdT += dt;
+  if (u.shdT >= BOT.RECHARGE_T && u.shd < max) { u.shd += T.hp * BOT.RECHARGE * dt; if (u.shd > max) u.shd = max; }
+  if (u.shortCd > 0) u.shortCd -= dt;
+  else if (!T.fly && u.state === 'ok' && u.z < 4 && world.terr[cellIndex(world, u.x, u.y)] === TERRAIN.wasser.id) {
+    u.state = 'stun'; u.stunT = BOT.SHORT_T; u.vx = 0; u.vy = 0; u.shortCd = BOT.SHORT_T + BOT.SHORT_CD;
+    cancelAbility(world, u);
+    emit(world, { type: 'ability', k: 'short', x: u.x, y: u.y, z: 0, R: T.r });
+    sound(world, 'zap');
+  }
+  if (u.type === 'kuppel' && u.domeT > 0) { u.domeT -= dt; if (u.domeT <= 0) { u.domeT = 0; u.domeHp = DOME.HP; } }
+  else if (u.type === 'schweisser') { u.tickT -= dt; if (u.tickT <= 0) { u.tickT = WELD.DT; weld(world, u); } }
+}
+// Schaden a am Schild eines Roboters (combat.hurt, nach allen Faktoren): Rest, der an die LP geht
+export function botShield(v, a) {
+  v.shdT = 0;
+  if (!(v.shd > 0) || a <= 0) return a;
+  v.shdHit = .25;
+  if (a <= v.shd) { v.shd -= a; return 0; }
+  a -= v.shd; v.shd = 0;
+  return a;
+}
+
+/* Schweißer: flickt eigene Roboter bis R px (nicht sich selbst) um HP je DT s; jeder N-te Treffer zündet (combat.attack) */
+export const WELD = { R: 50, HP: 1.5, DT: .5, N: 3 };
+let WE_W = null, WE_U = null, WE_F = null;
+function weldTest(v) {
+  if (v === WE_U || !v.T.bot || v.hp >= v.T.hp || factionOf(WE_W, v) !== WE_F) return;
+  const dx = v.x - WE_U.x, dy = v.y - WE_U.y;
+  if (dx * dx + dy * dy > WELD.R * WELD.R) return;
+  v.hp = Math.min(v.T.hp, v.hp + WELD.HP);
+}
+function weld(world, u) {
+  WE_W = world; WE_U = u; WE_F = factionOf(world, u);
+  query(world, u.x, u.y, WELD.R, weldTest);
+  WE_W = null; WE_U = null; WE_F = null;
+}
+
+/* Schildkuppel: fängt feindliche Geschosse ab (combat.stepProjectiles). Aktiv mit domeHp > 0; ein Geschoss einer
+   anderen Fraktion, das von außerhalb DOME.R kommt und in die Kuppel fliegt (Bögen erst im Fall), verpufft und zieht
+   seinen Schaden (Flächenschaden ×1,5) von domeHp ab. Bei 0: DOME.DOWN s Pause, dann wieder voll (stepBot). */
+export function domeCatch(world, p, domes) {
+  const R2 = DOME.R * DOME.R;
+  if (p.arc && p.t < p.dur * .5) return false;
+  const sx = p.arc ? p.x0 : p.sx, sy = p.arc ? p.y0 : p.sy;
+  for (let k = 0; k < domes.length; k++) {
+    const d = domes[k];
+    if (!d.alive || !(d.domeHp > 0) || factionOf(world, d) === p.f) continue;
+    if ((p.x - d.x) ** 2 + (p.y - d.y) ** 2 > R2 || (sx - d.x) ** 2 + (sy - d.y) ** 2 <= R2) continue;
+    d.domeHp -= (p.dmg || 0) * (p.R > 0 ? 1.5 : 1);
+    emit(world, { type: 'ability', k: 'domeHit', x: p.x, y: p.y, z: p.z || 0, R: 8, cx: d.x, cy: d.y });
+    if (d.domeHp <= 0) {
+      d.domeHp = 0; d.domeT = DOME.DOWN;
+      emit(world, { type: 'ability', k: 'domeBreak', x: d.x, y: d.y, z: 0, R: DOME.R, shake: 2 });
+    }
+    sound(world, 'clink');
+    return true;
+  }
+  return false;
+}
+
+/* Laserbot: Strahl trifft sofort (auch Flieger), Mauern halten ihn auf (die Mauer nimmt Schaden wie von einer Kugel).
+   Danach geht er weiter und trifft den nächsten Feind bis PIERCE px hinter dem Ziel, der höchstens WIDTH px neben der
+   Linie steht, mit PIERCE_DMG des Schadens. Keine Eigenen. */
+export const LASER = { PIERCE: 90, WIDTH: 14, PIERCE_DMG: .6 };
+// Erste Mauerzelle am Boden auf der Linie (−1 frei); Ziele über WALL_CLEAR_Z liegen über den Mauern
+function wallOnLine(world, x0, y0, x1, y1) {
+  const { GW, terr } = world, L = Math.hypot(x1 - x0, y1 - y0);
+  for (let s = CELL / 2; s < L; s += CELL / 2) {
+    const q = s / L, i = (((y0 + (y1 - y0) * q) / CELL) | 0) * GW + (((x0 + (x1 - x0) * q) / CELL) | 0);
+    if (terr[i] === TERRAIN.mauer.id) return i;
+  }
+  return -1;
+}
+let LZ_W = null, LZ_F = null, LZ_T = null, LZ_X = 0, LZ_Y = 0, LZ_NX = 0, LZ_NY = 0, LZ_B = null, LZ_D = 0;
+function pierceTest(v) {
+  if (v === LZ_T || factionOf(LZ_W, v) === LZ_F || (v.hidden && v.seenT <= 0)) return;
+  const dx = v.x - LZ_X, dy = v.y - LZ_Y, along = dx * LZ_NX + dy * LZ_NY;
+  if (along <= 0 || along > LASER.PIERCE) return;
+  if (Math.abs(dx * LZ_NY - dy * LZ_NX) > LASER.WIDTH + v.T.r) return;
+  if (along < LZ_D) { LZ_D = along; LZ_B = v; }
+}
+export function laserShot(world, u, t) {
+  const face = u.face < 0 ? -1 : 1, x0 = u.x + face * u.T.r * 1.3, y0 = u.y, z0 = (u.z || 0) + u.T.r * .9;
+  u.fireT = 0;
+  const high = t.T.fly && t.z > WALL_CLEAR_Z;
+  const cell = high ? -1 : wallOnLine(world, u.x, u.y, t.x, t.y);
+  if (cell >= 0) {
+    const gx = (cell % world.GW + .5) * CELL, gy = (((cell / world.GW) | 0) + .5) * CELL;
+    hitWall(world, cell, u.T.dmg, u.x, u.y);
+    emit(world, { type: 'spell', k: 'laser', x0, y0, z0, x1: gx, y1: gy, z1: 4 });
+    sound(world, 'laser');
+    return;
+  }
+  const x1 = t.x, y1 = t.y, z1 = (t.z || 0) + t.T.r * .5;
+  hurt(world, t, u.T.dmg * (.85 + world.rng() * .3), 'laser', u);
+  emit(world, { type: 'spell', k: 'laser', x0, y0, z0, x1, y1, z1 });
+  emit(world, { type: 'hit', x: x1, y: y1, flank: false, kind: 'laser' });
+  const d = Math.hypot(x1 - u.x, y1 - u.y) || 1;
+  LZ_W = world; LZ_F = factionOf(world, u); LZ_T = t; LZ_X = x1; LZ_Y = y1; LZ_NX = (x1 - u.x) / d; LZ_NY = (y1 - u.y) / d; LZ_B = null; LZ_D = Infinity;
+  query(world, x1 + LZ_NX * LASER.PIERCE / 2, y1 + LZ_NY * LASER.PIERCE / 2, LASER.PIERCE / 2 + LASER.WIDTH, pierceTest);
+  const v = LZ_B;
+  LZ_W = null; LZ_F = null; LZ_T = null; LZ_B = null;
+  if (v && (high || wallOnLine(world, x1, y1, v.x, v.y) < 0)) {
+    hurt(world, v, u.T.dmg * LASER.PIERCE_DMG, 'laser', u);
+    emit(world, { type: 'spell', k: 'laser', x0: x1, y0: y1, z0: z1, x1: v.x, y1: v.y, z1: (v.z || 0) + v.T.r * .5 });
+  }
+  sound(world, 'laser');
+}
+
+/* Teslaspule: Kettenblitz wie der Blitz des Magiers (Ereignis spell/bolt), auf bis zu JUMPS weitere Feinde bis R px vom
+   letzten Treffer, je Sprung ×FALL. Schadensart 'lightning' (Roboter ×2, auch die eigenen Teslas treffen nur Feinde). */
+export const TESLA = { JUMPS: 5, R: 80, FALL: .85 };
+const TS_HIT = new Array(TESLA.JUMPS + 1).fill(null);
+let TS_W = null, TS_F = null, TS_N = 0, TS_X = 0, TS_Y = 0, TS_B = null, TS_D = 0;
+function arcTest(v) {
+  if (factionOf(TS_W, v) === TS_F || v.ashT > 0) return;
+  for (let k = 0; k < TS_N; k++) if (TS_HIT[k] === v) return;
+  const dx = v.x - TS_X, dy = v.y - TS_Y, d = dx * dx + dy * dy;
+  if (d <= TESLA.R * TESLA.R && d < TS_D) { TS_D = d; TS_B = v; }
+}
+export function teslaArc(world, u, t) {
+  const f = factionOf(world, u);
+  let x0 = u.x, y0 = u.y, z0 = (u.z || 0) + u.T.r * 2.2, v = t, dmg = u.T.dmg * (.9 + world.rng() * .2);
+  u.fireT = 0; TS_N = 0;
+  for (;;) {
+    TS_HIT[TS_N++] = v;
+    const x1 = v.x, y1 = v.y, z1 = (v.z || 0) + v.T.r * .5;
+    emit(world, { type: 'spell', k: 'bolt', x0, y0, z0, x1, y1, z1, n: TS_N });
+    hurt(world, v, dmg, 'lightning', u);
+    emit(world, { type: 'hit', x: x1, y: y1, flank: false, kind: 'lightning' });
+    if (TS_N > TESLA.JUMPS) break;
+    TS_W = world; TS_F = f; TS_X = x1; TS_Y = y1; TS_B = null; TS_D = Infinity;
+    query(world, x1, y1, TESLA.R, arcTest);
+    const nv = TS_B;
+    TS_W = null; TS_F = null; TS_B = null;
+    if (!nv) break;
+    x0 = x1; y0 = y1; z0 = z1; v = nv; dmg *= TESLA.FALL;
+  }
+  TS_HIT.fill(null);
+  sound(world, 'zap');
+}
+
+/* Schrauber-Drohne: Bauen. Liegen bis R px mindestens N ruhende, nicht verblassende Leichen eigener Roboter (Schrott), baut
+   sie daraus einen Minibot (Fraktion der Drohne); die Leichen verblassen. */
+export const BUILD = { R: 70, N: 2, CD: 6, FADE: .6 };
+const BUILD_C = new Array(BUILD.N).fill(null);
+function scrapNear(world, u, take) {
+  const R2 = BUILD.R * BUILD.R, list = world.corpses;
+  let n = 0;
+  for (let i = 0; i < list.length && n < BUILD.N; i++) {
+    const c = list[i];
+    if (c.kind !== 'body' || c.fade !== 0 || c.state !== 'rest' || c.team !== u.team || !UNITS[c.type] || !UNITS[c.type].bot) continue;
+    if ((c.x - u.x) ** 2 + (c.y - u.y) ** 2 > R2) continue;
+    BUILD_C[n++] = c;
+  }
+  if (take && n >= BUILD.N) for (let k = 0; k < n; k++) BUILD_C[k].fade = BUILD.FADE;
+  BUILD_C.fill(null);
+  return n;
+}
+const buildReady = (world, u) => scrapNear(world, u, false) >= BUILD.N;
+function buildStart(world, u) {
+  let sx = 0, sy = 0, n = 0;
+  for (const c of world.corpses) if (c.kind === 'body' && c.fade === 0 && c.state === 'rest' && c.team === u.team && UNITS[c.type] && UNITS[c.type].bot &&
+    (c.x - u.x) ** 2 + (c.y - u.y) ** 2 <= BUILD.R * BUILD.R && n < BUILD.N) { sx += c.x; sy += c.y; n++; }
+  scrapNear(world, u, true);
+  const x = n ? sx / n : u.x, y = n ? sy / n : u.y;
+  const m = spawn(world, 'minibot', x, y, u.team);
+  m.kin = u.kin; m.face = u.face; m.orig = 'minibot';
+  emit(world, { type: 'ability', k: 'build', x, y, z: 0, R: 12, team: u.team });
+  sound(world, 'clink');
+}
+
+/* Mega-Mech: beim Tod steigen N Minibots aus dem Wrack (combat.die) */
+export const WRECK = { N: 4, R: 22 };
+export function megaWreck(world, v) {
+  for (let k = 0; k < WRECK.N; k++) {
+    const a = k / WRECK.N * Math.PI * 2 + .4;
+    const m = spawn(world, 'minibot', v.x + Math.cos(a) * WRECK.R, v.y + Math.sin(a) * WRECK.R * .7, v.team);
+    m.kin = v.kin; m.face = v.face;
+  }
+  emit(world, { type: 'ability', k: 'wreck', x: v.x, y: v.y, z: 0, R: v.T.r, shake: 3 });
+}
+
+/* Springen (Springspinne, Raptor): auf einen Bodenfeind MIN..R px weit, Fernkämpfer und Heiler vor allen anderen (nur
+   sie, wenn es welche gibt). Ein Satz (state 'air', über Mauern) auf den Rand des Ziels; landet betäubt wie jeder
+   Flug, der nächste Biss macht doppelten Schaden (u.pounce, combat.attack). */
+export const POUNCE = { spinne: { R: 240, MIN: 70 }, raptor: { R: 200, MIN: 60 }, VZ: 170, DRAG: .4 };
+let PO_W = null, PO_U = null, PO_F = null, PO_B = null, PO_S = 0, PO_R = 0, PO_M = 0;
+function pounceTest(v) {
+  if (v.T.fly || v.state !== 'ok' || factionOf(PO_W, v) === PO_F || (v.hidden && unseen(PO_U, v)) || v.ashT > 0) return;
+  const dx = v.x - PO_U.x, dy = v.y - PO_U.y, d2 = dx * dx + dy * dy;
+  if (d2 > PO_R * PO_R || d2 < PO_M * PO_M) return;
+  if (!(RANGED.has(v.type) || v.T.heal)) return;
+  const s = isFleeing(v) ? 4 * d2 : d2;
+  if (s < PO_S) { PO_S = s; PO_B = v; }
+}
+function pounceReady(world, u) {
+  const P = POUNCE[u.type];
+  PO_W = world; PO_U = u; PO_F = factionOf(world, u); PO_B = null; PO_S = Infinity; PO_R = P.R; PO_M = P.MIN;
+  query(world, u.x, u.y, P.R, pounceTest);
+  const t = PO_B;
+  PO_W = null; PO_U = null; PO_F = null; PO_B = null;
+  if (!t) return false;
+  u.tg = t;
+  return true;
+}
+function pounceStart(world, u) {
+  const t = u.tg, dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
+  const D = Math.max(0, d - u.T.r - t.T.r - 2), vz = POUNCE.VZ, tf = 2 * vz / GRAVITY, e = Math.exp(-POUNCE.DRAG * tf);
+  const sp = D / ((1 - e) / POUNCE.DRAG + e / GROUND_FRICTION), m = u.T.mass || 1;
+  faceTo(u, t.x, t.y);
+  u.mx = 0; u.my = 0; u.vx = 0; u.vy = 0;
+  applyImpulse(u, dx / d * sp * m, dy / d * sp * m, vz * m);
+  u.pounce = true; u.rt = 1;
+  emit(world, { type: 'ability', k: 'pounce', x: u.x, y: u.y, z: 0, R: u.T.r, nx: dx / d, ny: dy / d });
+  sound(world, 'whoosh');
+}
+
+/* Magnet-Mech: zieht Feinde aus Metall (data.METAL) am Boden bis R px und höchstens MAXM Masse zu sich (rutschen bis
+   GAP px vor ihn) und betäubt sie STUN s. Löst aus ab MIN solchen Feinden außerhalb von GAP. */
+export const MAGNET = { R: 220, GAP: 40, MIN: 2, MAXM: 8, STUN: .4, VMAX: 520 };
+let MG_W = null, MG_U = null, MG_F = null, MG_N = 0, MG_DO = false;
+function magnetTest(v) {
+  const u = MG_U;
+  if (!METAL.has(v.type) || v.T.fly || v.state === 'air' || (v.T.mass || 1) > MAGNET.MAXM || factionOf(MG_W, v) === MG_F) return;
+  const dx = u.x - v.x, dy = u.y - v.y, d = Math.hypot(dx, dy);
+  if (d > MAGNET.R || d < MAGNET.GAP + u.T.r) return;
+  MG_N++;
+  if (!MG_DO) return;
+  leaveBlock(v); cancelAbility(MG_W, v);
+  const sp = Math.min(MAGNET.VMAX, (d - MAGNET.GAP - u.T.r) * GROUND_FRICTION), m = v.T.mass || 1;
+  v.vx = 0; v.vy = 0;
+  applyImpulse(v, dx / d * sp * m, dy / d * sp * m, 0);
+  if (v.state === 'ok') { v.state = 'stun'; v.stunT = MAGNET.STUN; }
+}
+function magnet(world, u, apply) {
+  MG_W = world; MG_U = u; MG_F = factionOf(world, u); MG_N = 0; MG_DO = apply;
+  query(world, u.x, u.y, MAGNET.R, magnetTest);
+  MG_W = null; MG_U = null; MG_F = null;
+  return MG_N;
+}
+const magnetReady = (world, u) => magnet(world, u, false) >= MAGNET.MIN;
+function magnetStart(world, u) {
+  magnet(world, u, true);
+  u.swingT = .25;
+  emit(world, { type: 'ability', k: 'magnet', x: u.x, y: u.y, z: 0, R: MAGNET.R, shake: 2 });
+  sound(world, 'zap');
+}
+
+/* ---------- Urzeit (5. Kategorie, 18.11.) ----------
+   Wachsen (combat.think, solange u.growT > 0): Jungtiere tragen data.YOUNG[t] als u.T und werden nach T.grow s erwachsen
+   (LP im selben Anteil). Der T-Rex ist zuerst ein Ei (UNITS.rexei: läuft und kämpft nicht) und schlüpft nach REX_HATCH s
+   als Jungtier. Ein Frosch wächst nicht (er ist dann kein Dino). Schamaninnen ziehen growT schneller herunter. */
+export function stepGrow(world, u, dt) {
+  if (u.frogFrom !== null) return;
+  u.growT -= dt;
+  const T = UNITS[u.type];
+  if (u.T.egg) {
+    if (T.grow - u.growT >= REX_HATCH) {
+      u.hp = YOUNG[u.type].hp * u.hp / u.T.hp; u.T = YOUNG[u.type]; u.cd = u.T.cd;
+      emit(world, { type: 'ability', k: 'hatch', x: u.x, y: u.y, z: 0, R: UNITS.rexei.r });
+      sound(world, 'pop');
+    }
+    return;
+  }
+  if (u.growT > 0) return;
+  u.growT = 0;
+  u.hp = T.hp * u.hp / u.T.hp; u.T = T;
+  emit(world, { type: 'ability', k: 'grow', x: u.x, y: u.y, z: 0, R: T.r });
+  sound(world, 'pop');
+}
+/* Schamanin: Kräuterrauch. Alle HERBS.DT s ziehen eigene Jungtiere (und Eier) bis R px HERBS.DT s zusätzlich vom Wachsen ab
+   (doppelt so schnell). */
+export const HERBS = { R: 90, DT: .5 };
+let HB_W = null, HB_U = null, HB_F = null, HB_N = 0;
+function herbTest(v) {
+  if (!(v.growT > 0) || v.frogFrom !== null || factionOf(HB_W, v) !== HB_F) return;
+  const dx = v.x - HB_U.x, dy = v.y - HB_U.y;
+  if (dx * dx + dy * dy > HERBS.R * HERBS.R) return;
+  v.growT -= HERBS.DT; HB_N++;
+  if (v.growT < 1e-3) v.growT = 1e-3;   // erwachsen wird es in seinem eigenen Schritt (stepGrow)
+}
+export function stepHerbs(world, u, dt) {
+  u.tickT -= dt;
+  if (u.tickT > 0) return;
+  u.tickT = HERBS.DT;
+  HB_W = world; HB_U = u; HB_F = factionOf(world, u); HB_N = 0;
+  query(world, u.x, u.y, HERBS.R, herbTest);
+  if (HB_N) emit(world, { type: 'ability', k: 'herbs', x: u.x, y: u.y, z: 0, R: HERBS.R });
+  HB_W = null; HB_U = null; HB_F = null;
+}
+
+/* T-Rex: Brüllen (erwachsen). Feinde bis R px mit weniger LP als er, die nicht furchtlos sind und noch nicht fliehen,
+   erschrecken T s. Ab MIN solchen Feinden. */
+export const REX_ROAR = { R: 110, T: 2.5, MIN: 2 };
+let RR_W = null, RR_U = null, RR_F = null, RR_N = 0, RR_DO = false;
+function rexTest(v) {
+  if (FEARLESS.has(v.type) || v.type === 'frosch' || v.ashT > 0 || isFleeing(v) || v.hp >= RR_U.hp || factionOf(RR_W, v) === RR_F) return;
+  const dx = v.x - RR_U.x, dy = v.y - RR_U.y;
+  if (dx * dx + dy * dy > REX_ROAR.R * REX_ROAR.R) return;
+  RR_N++;
+  if (RR_DO) { scare(RR_W, v, REX_ROAR.T); emit(RR_W, { type: 'fear', x: v.x, y: v.y - v.T.r, z: v.z }); }
+}
+function rexRoar(world, u, apply) {
+  RR_W = world; RR_U = u; RR_F = factionOf(world, u); RR_N = 0; RR_DO = apply;
+  query(world, u.x, u.y, REX_ROAR.R, rexTest);
+  RR_W = null; RR_U = null; RR_F = null;
+  return RR_N;
+}
+const rexReady = (world, u) => u.T === UNITS.rex && rexRoar(world, u, false) >= REX_ROAR.MIN;
+function rexStart(world, u) {
+  rexRoar(world, u, true);
+  u.swingT = .3;
+  emit(world, { type: 'ability', k: 'roar', x: u.x, y: u.y, z: 0, R: REX_ROAR.R, shake: 4 });
+  sound(world, 'thud');
+}
+
+/* Ankylosaurus: Schwanzkeule. Feinde am Boden bis R px über beide Radien, die hinter oder neben ihm stehen (nicht im
+   vorderen Kegel), fliegen weg (Stoß PUSH · Masse, höchstens MAXM) und nehmen DMG · (u.T.dmg / UNITS.anky.dmg). */
+export const TAIL = { R: 26, DMG: 16, PUSH: 200, MAXM: 6, MIN: 1 };
+let TL_W = null, TL_U = null, TL_F = null, TL_N = 0, TL_DO = false;
+function tailTest(v) {
+  const u = TL_U;
+  if (v.T.fly || v.state === 'air' || factionOf(TL_W, v) === TL_F || (v.T.mass || 1) > TAIL.MAXM) return;
+  const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || 1;
+  if (d > TAIL.R + u.T.r + v.T.r) return;
+  const fx = u.fx || u.face, fy = u.fy || 0;
+  if (dx * fx + dy * fy > .5 * d) return;   // vorn: dort beißt er
+  TL_N++;
+  if (!TL_DO) return;
+  fling(v, dx, dy, d, (v.T.mass || 1) * TAIL.PUSH);
+  hurt(TL_W, v, TAIL.DMG * u.T.dmg / UNITS.anky.dmg, 'melee', u);
+  emit(TL_W, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 2 });
+}
+function tail(world, u, apply) {
+  TL_W = world; TL_U = u; TL_F = factionOf(world, u); TL_N = 0; TL_DO = apply;
+  query(world, u.x, u.y, TAIL.R + u.T.r + MAX_R, tailTest);
+  TL_W = null; TL_U = null; TL_F = null;
+  return TL_N;
+}
+const tailReady = (world, u) => tail(world, u, false) >= TAIL.MIN;
+function tailStart(world, u) {
+  tail(world, u, true);
+  u.swingT = .25;
+  emit(world, { type: 'ability', k: 'tail', x: u.x, y: u.y, z: 0, R: TAIL.R + u.T.r, face: u.face });
+  sound(world, 'thud');
+}
+
+/* Triceratops: Ansturm wie das Trampeln des Elefanten (charge), kürzer; erst erwachsen. */
+export const TRIKE = { T: 1.2, SPEED: 2.4, DMG: 22, PUSH: 220, FWD: .35, PAD: 4, MAXM: 8, RANGE: 160 };
+function trikeReady(world, u) {
+  if (u.growT > 0) return false;
+  const t = foeInReach(world, u, TRIKE.RANGE, true);
+  if (!t) return false;
+  const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
+  if (d < 40 || !lineFree(world, u, nx, ny, u.T.speed * TRIKE.SPEED * TRIKE.T + u.T.r)) return false;
+  u.abX = nx; u.abY = ny;
+  return true;
+}
+function trikeStart(world, u) {
+  emit(world, { type: 'ability', k: 'trample', x: u.x, y: u.y, z: 0, R: u.T.r, nx: u.abX, ny: u.abY });
+  sound(world, 'thud');
+}
+function trikeUpdate(world, u) {
+  if (u.abT >= TRIKE.T) return true;
+  charge(world, u, TRIKE);
+  u.run = 1;   // im Ansturm: Hornwand (combat.hurt)
+  return false;
+}
 
 /* ---------- Tabelle ---------- */
 export const ABILITY = {
@@ -1267,5 +1652,13 @@ export const ABILITY = {
   adler: { cd: 10, ready: swoopReady, start: swoopStart, update: swoopUpdate, end: swoopEnd },
   bueffel: { cd: 1, ready: herdReady, start: herdStart, update: herdUpdate },
   koenig: { cd: 18, ready: cryReady, start: cryStart, update: done },
+  // --- Schrottplatz und Urzeit ---
+  drohne: { cd: BUILD.CD, ready: buildReady, start: buildStart, update: done },
+  spinne: { cd: 10, ready: pounceReady, start: pounceStart, update: done },
+  raptor: { cd: 10, ready: pounceReady, start: pounceStart, update: done },
+  magnet: { cd: 12, ready: magnetReady, start: magnetStart, update: done },
+  rex: { cd: 15, ready: rexReady, start: rexStart, update: done },
+  anky: { cd: 8, ready: tailReady, start: tailStart, update: done },
+  trike: { cd: 14, ready: trikeReady, start: trikeStart, update: trikeUpdate },
 };
 for (const k in FIRST_CD) ABILITY[k].first = FIRST_CD[k];

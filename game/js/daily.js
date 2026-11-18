@@ -6,14 +6,25 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL, COUNTERS } from './data.js';
+import { UNITS, PLURAL, COUNTERS as ALL_COUNTERS } from './data.js';
+// Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
+// geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
+export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
+  'geist', 'drache', 'vampir', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli', 'troll', 'zyklop', 'hexe',
+  'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
+// Feste Kosten (Stand 18.11., vor der Balance-Runde): Kostenänderungen in data.js dürfen alte Tage ebenfalls nicht
+// verändern. Nur für den Aufbau des Levels; gespielt wird mit den aktuellen Kosten.
+export const DAILY_COST = { krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4 };
+export const dcost = t => DAILY_COST[t] ?? UNITS[t].cost;
+const inPool = t => DAILY_POOL.includes(t);
+const COUNTERS = ALL_COUNTERS.filter(c => inPool(c[0]) && inPool(c[1]));
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
 // Bosse: höchstens einer je Tag, nie der Hauptgegner und nie Konter im Plan (zu grob für das Budget)
 export const DAILY_BOSSES = ['panzer', 'heli', 'elefant', 'drache'];
 const isBoss = t => DAILY_BOSSES.includes(t);
-const paintable = t => UNITS[t] && UNITS[t].paint !== false;
+const paintable = t => inPool(t) && UNITS[t] && UNITS[t].paint !== false;
 
 // Konter je Gegnertyp: a schlägt b (COUNTERS), nur malbare Nicht-Bosse
 export function countersOf(type) {
@@ -66,8 +77,8 @@ export function dailyLevel(dateStr) {
   // Boss (etwa jeder vierte Tag), nur wenn sein Konter mit ins Spiel kommt
   let boss = null;
   if (rng() < .28 && total >= 90) {
-    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && UNITS[b].cost <= total * .4);
-    if (cand.length) { boss = pick(cand); rest -= UNITS[boss].cost; }
+    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && dcost(b) <= total * .4);
+    if (cand.length) { boss = pick(cand); rest -= dcost(boss); }
   }
   const sideTypes = shuffle(side).slice(0, nGroups - 1);
   const mainShare = sideTypes.length ? between(.55, .7) : 1;
@@ -79,8 +90,8 @@ export function dailyLevel(dateStr) {
   let enemyPts = 0;
   const xs = [[.6, .68], [.7, .78], [.8, .88]];
   groups.forEach(([t, pts], i) => {
-    const n = Math.max(1, Math.round(pts / UNITS[t].cost));
-    enemyPts += n * UNITS[t].cost;
+    const n = Math.max(1, Math.round(pts / dcost(t)));
+    enemyPts += n * dcost(t);
     // Fernkämpfer eher hinten, Nahkämpfer vorn
     const slot = xs[Math.min(xs.length - 1, i)];
     const y0 = r2(between(.14, .3)), y1 = r2(between(.7, .86));
@@ -88,7 +99,7 @@ export function dailyLevel(dateStr) {
     const x0 = r2(slot[0] + between(0, slot[1] - slot[0] - w)), x1 = r2(x0 + w);
     place.push(['rect', t, n, x0, y0, x1, y1]);
   });
-  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += UNITS[boss].cost; }
+  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += dcost(boss); }
 
   // Gelände in der gegnerischen Hälfte (vor den Gegnern), an etwa jedem zweiten Tag
   let terrain = null;
@@ -116,9 +127,10 @@ export function dailyLevel(dateStr) {
   const shares = new Map();
   const assign = (c, pts) => shares.set(c, (shares.get(c) || 0) + pts);
   for (const p of place) {
-    if (p[0] === 'rect') assign(beat(p[1]), p[2] * UNITS[p[1]].cost);
-    else if (p[0] === 'unit') assign(bossC, UNITS[p[1]].cost);
+    if (p[0] === 'rect') assign(beat(p[1]), p[2] * dcost(p[1]));
+    else if (p[0] === 'unit') assign(bossC, dcost(p[1]));
   }
+  // Lösungsplan mit den aktuellen Kosten (er muss spielbar bleiben); das Level selbst nutzt die festen Kosten
   const smart = [];
   let cost = 0, melee = 0;
   for (const [c, pts] of shares) {
@@ -136,7 +148,7 @@ export function dailyLevel(dateStr) {
   // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen
   const units = [...new Set([...counters, ...(bossC ? [bossC] : [])])];
   const want = Math.max(units.length, rng() < .5 ? 5 : 6);
-  const others = shuffle(Object.keys(UNITS).filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
+  const others = shuffle(DAILY_POOL.filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
   while (units.length < want) units.push(others.shift());
   const shown = shuffle(units);
 
@@ -154,11 +166,35 @@ export function dailyLevel(dateStr) {
   };
 }
 
-// Text zum Teilen: 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 64 Punkten ★★★'
+// Öffentlicher Link des Spiels (Claude-Artefakt) für den Teilen-Text
+export const PUBLIC_URL = 'https://claude.ai/artifact/QtMYbLk6di6csuGhk7YStf';
+// Erste Tageschallenge: Nummer 1
+export const DAILY_EPOCH = '2026-11-18';
+export const dailyNo = dateStr => Math.round((Date.parse(dateStr + 'T00:00:00Z') - Date.parse(DAILY_EPOCH + 'T00:00:00Z')) / 864e5) + 1;
+const MEDAL_ICONS = ['🛡️', '⚡', '🎯'];
+
+// Text zum Teilen (fertig für einen Post, unter 280 Zeichen, ohne die Lösung zu verraten), z. B.
+//   🖍️ Kritzelschlacht · Tageschallenge #1 (18.11.)
+//   ⭐⭐⭐ Sieg mit 64 von 110 Punkten in 0:38
+//   🟦🟦🟦🟦🟦🟦🟦🟥🟥🟥 7 von 10 überlebt
+//   🛡️⚡ Medaillen
+//   Schaffst du's billiger? https://claude.ai/…
+// r: { win, spent, budget, stars, time (s), lost, deployed, medals: { mask } } (alles außer win/spent/stars optional)
 export function shareText(dateStr, r) {
   const pts = String(Math.round(r.spent * 10) / 10).replace('.', ',');
-  const st = '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars);
-  return `Kritzelschlacht Tageschallenge ${shortDate(dateStr)}: ${r.win ? `gewonnen mit ${pts} Punkten ${st}` : 'verloren'}`;
+  const lines = [`🖍️ Kritzelschlacht · Tageschallenge #${dailyNo(dateStr)} (${shortDate(dateStr)})`];
+  if (r.win) {
+    const t = r.time > 0 ? ` in ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, '0')}` : '';
+    lines.push(`${'⭐'.repeat(r.stars)}${'✩'.repeat(3 - r.stars)} Sieg mit ${pts}${r.budget ? ` von ${r.budget}` : ''} Punkten${t}`);
+  } else lines.push('💥 Niederlage. Morgen gibt es eine neue Schlacht.');
+  if (r.deployed > 0) {
+    const alive = Math.max(0, r.deployed - (r.lost || 0)), blue = Math.round(alive / r.deployed * 10);
+    lines.push(`${'🟦'.repeat(blue)}${'🟥'.repeat(10 - blue)} ${alive} von ${r.deployed} überlebt`);
+  }
+  const mask = r.medals ? r.medals.mask : 0;
+  if (r.win && mask) lines.push(MEDAL_ICONS.filter((_, i) => (mask >> i) & 1).join('') + ' Medaillen');
+  lines.push(`${r.win ? 'Schaffst du\'s billiger?' : 'Schaffst du es?'} ${PUBLIC_URL}`);
+  return lines.join('\n');
 }
 
 // Bestwert eines Tages im Spielstand (save.daily) eintragen: weniger Punkte ist besser, ein Sieg schlägt jede Niederlage.

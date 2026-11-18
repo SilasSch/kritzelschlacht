@@ -1,14 +1,22 @@
 // Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung; geht für alle, auch über den öffentlichen Link.
 // Ablauf und Datenformat: duel.js. Gemalt wird wie im Online-Spiel (battle.hot mit online: true, duel: true und
 // def = Kategorie), A links als Blau, B rechts als Rot. Der Kampf läuft über main.js onlineFight mit der Saat aus dem Code.
-import { nextRound, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT } from '../online.js';
+import { roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT } from '../online.js';
+import { RULES, RULE, MAPS, MAP, RULE_IDS, MAP_IDS, applyMap, mapSVG } from '../rules.js';
 import { challengeData, answerData, duelList } from '../duel.js';
 import { fmtPts } from '../cards.js';
 
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const SIDE_N = { blau: 'Blau', rot: 'Rot' };
 
-export function createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle }) {
+const CSS = `
+.card.duelset{max-width:760px}
+.vopts.r4{grid-template-columns:repeat(4,1fr)}
+.vopts.small .btn{padding:7px 9px}.vopts.small .btn b{font-size:16px}
+`;
+
+export function createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle, markAll }) {
+  { const s = document.createElement('style'); s.textContent = CSS; document.head.append(s); }
   const $ = id => document.getElementById(id);
   // st: null oder { role: 'a' (fordert heraus) | 'b' (nimmt an) | 'view' (sieht die Antwort), cfg, a, data }
   let st = null, battleRef = null;
@@ -36,27 +44,38 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
   ov.innerHTML = '<div class="card onl shadow" role="dialog" aria-modal="true" aria-labelledby="duelTitle"></div>';
   $('app').append(ov);
   const card = ov.firstChild;
-  const hideCard = () => { ov.hidden = true; };
-  const showCard = html => { card.innerHTML = html; ov.hidden = false; };
+  const hideCard = () => { ov.hidden = true; card.classList.remove('duelset'); };
+  const showCard = html => { card.classList.remove('duelset'); card.innerHTML = html; ov.hidden = false; };
 
+  // Einstellungen: Regel, Karte (je auch „Zufall“) und Budget; der Code trägt sie zum Gegner
+  const pick = { budget: ONLINE_DEFAULT, rule: 'zufall', map: 'zufall' };
   function openSetup() {
-    let pick = ONLINE_DEFAULT;
+    const opt = (kind, id, inner) => `<button class="btn${pick[kind] === id ? ' on' : ''}" data-k="${kind}" data-v="${id}">${inner}</button>`;
     showCard(`<h2 id="duelTitle">Code-Duell</h2>
-      <p>1 gegen 1 ohne Anmeldung. Es wird eine Kategorie ausgelost, du malst deine Armee und bekommst einen Code. Den schickst du deinem Gegner (z. B. per WhatsApp).</p>
-      <p class="muted">Er fügt ihn mit „Code laden“ ein und malt mit derselben Kategorie und demselben Budget dagegen, ohne deine Armee zu sehen. Dann kämpfen beide, und er schickt dir einen Antwort-Code mit dem Kampf zurück.</p>
-      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick ? ' on' : ''}" data-v="${v}"><b>${v}</b><span>Punkte je Seite</span></button>`).join('')}</div>
-      <div class="btnrow"><button class="go" id="duelStart">Kategorie auslosen</button><button class="btn" id="duelCancel">Abbrechen</button></div>`);
-    card.querySelectorAll('.hotbud .btn').forEach(b => {
-      b.onclick = () => { pick = +b.dataset.v; card.querySelectorAll('.hotbud .btn').forEach(x => x.classList.toggle('on', x === b)); };
+      <p class="muted">1 gegen 1 ohne Anmeldung: Du wählst Regel und Karte, malst deine Armee und bekommst einen Code für deinen Gegner (z. B. per WhatsApp). Er malt mit denselben Regeln dagegen, ohne deine Armee zu sehen, und schickt dir einen Antwort-Code mit dem Kampf zurück.</p>
+      <h3>Was darf gemalt werden?</h3>
+      <div class="vopts r4 small">${opt('rule', 'zufall', '<b>🎲 Zufall</b><span>Lass dich überraschen</span>')}${RULES.map(r => opt('rule', r.id, `<b>${esc(r.n)}</b><span>${esc(r.d)}</span>`)).join('')}</div>
+      <h3>Karte</h3>
+      <div class="vopts r4 small">${opt('map', 'zufall', '<b>🎲 Zufall</b><span>Irgendeine Karte</span>')}${MAPS.map(m => opt('map', m.id, `${mapSVG(m.id)}<b>${esc(m.n)}</b>`)).join('')}</div>
+      <h3>Budget</h3>
+      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick.budget ? ' on' : ''}" data-k="budget" data-v="${v}"><b>${v}</b><span>Punkte je Seite</span></button>`).join('')}</div>
+      <div class="btnrow"><button class="go" id="duelStart">Los geht's</button><button class="btn" id="duelCancel">Abbrechen</button></div>`);
+    card.classList.add('duelset');
+    card.querySelectorAll('[data-k]').forEach(b => {
+      b.onclick = () => { const k = b.dataset.k; pick[k] = k === 'budget' ? +b.dataset.v : b.dataset.v; openSetup(); };
     });
-    $('duelStart').onclick = () => startA(pick);
+    $('duelStart').onclick = () => {
+      const any = a => a[Math.floor(Math.random() * a.length)];
+      startA({ cat: pick.rule === 'zufall' ? any(RULE_IDS) : pick.rule, map: pick.map === 'zufall' ? any(MAP_IDS) : pick.map, budget: pick.budget });
+    };
     $('duelCancel').onclick = hideCard;
     $('duelStart').focus();
   }
   function paintCard(side, intro) {
-    const c = st.cfg;
+    const c = st.cfg, mp = MAP[c.map] || MAP.feld;
     showCard(`<h2 id="duelTitle">${intro}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
-      <p>Male deine Armee nur aus <b>${esc(CAT_NAME[c.cat])}</b>, ${c.budget} Punkte. Du bist <b>${SIDE_N[side]}</b> (${side === 'blau' ? 'links' : 'rechts'}).
+      <div class="row"><div class="mapprev">${mapSVG(mp.id, 220, 124)}</div><div><b>${esc(mp.n)}</b><br><span class="muted">${esc(mp.d)}</span></div></div>
+      <p>${esc(RULE[c.cat].d)}. ${c.budget} Punkte. Du bist <b>${SIDE_N[side]}</b> (${side === 'blau' ? 'links' : 'rechts'}).
       ${side === 'blau' ? 'Wenn du fertig bist, bekommst du den Code für deinen Gegner.' : 'Die Armee deines Gegners bleibt verdeckt, bis du „Fertig“ drückst.'}</p>
       <div class="btnrow"><button class="go" id="duelOk">Los geht's</button></div>`);
     $('duelOk').onclick = hideCard; $('duelOk').focus();
@@ -69,14 +88,16 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     b.phase = 'plan'; b.stats = null; b.result = null; b.endT = -1; b.t = 0; b.snap = null; b.batchRes = null;
     $('ovBat').hidden = true; document.body.classList.remove('bat-res');
     clearWorld(); world.teamMode = true; undoStack.length = 0;
+    applyMap(world, cfg.map || 'feld'); markAll();
     b.hot = { online: true, duel: true, budget: cfg.budget, step: side || 'online', spent: { blau: 0, rot: 0 }, def: roundDef(cfg) };
     game.setCat(cfg.cat);
     ui.updateBattle(); ui.updateCounts(); ui.updateControls();
   }
-  function startA(budget) {
+  // Herausforderung mit Regel, Karte und Budget (auch als Revanche mit dem Setup eines Duells)
+  function startA({ cat, map, budget }) {
     hideCard();
-    const b = game.battle; if (!b || b.phase !== 'plan') return;
-    setup('a', nextRound(null, budget), 'blau');
+    const b = game.battle; if (!b) return;
+    setup('a', { r: 1, cat, map, budget, seed: (Math.random() * 2 ** 31) | 0 }, 'blau');
     audio.play('whoosh');
     paintCard('blau', 'Code-Duell');
   }
@@ -90,7 +111,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     st.data = answerData({ cfg: st.cfg, a: st.a }, packed);
     let list;
     try { list = duelList(st.data, world.W, world.H); } catch (e) { ui.toast('Der Code ist beschädigt.'); return; }
-    onlineFight(list, st.cfg.seed);
+    onlineFight(list, st.cfg.seed, st.cfg.map || 'feld');
     ui.toast('Aufgedeckt!');
     sync();
   }
@@ -113,7 +134,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     // Antwort: den Kampf zeigen
     setup('view', d.cfg, null);
     st.data = d;
-    onlineFight(duelList(d, world.W, world.H), d.cfg.seed);
+    onlineFight(duelList(d, world.W, world.H), d.cfg.seed, d.cfg.map || 'feld');
     ui.toast('Antwort geladen: euer Kampf läuft.');
     sync();
   }
@@ -143,9 +164,10 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     const note = w === 'draw' ? 'Unentschieden.' : w === me ? 'Du gewinnst das Duell!' : 'Dein Gegner gewinnt das Duell.';
     box.innerHTML = `<div><div class="muted">Code-Duell · ${esc(CAT_NAME[st.cfg.cat])} · ${st.cfg.budget} Punkte · du bist ${SIDE_N[me]}</div>
         <div class="sc">${esc(note)}</div>
-        <div class="muted">${st.role === 'b' ? 'Schick den Antwort-Code zurück, dann sieht dein Gegner diesen Kampf.' : 'Für eine Revanche: Code-Duell starten und neuen Code schicken.'}</div></div>
-      <div class="btnrow">${st.role === 'b' ? '<button class="go" id="duelAnswer">Antwort-Code</button>' : ''}<button class="btn" id="duelEnd">Duell beenden</button></div>`;
+        <div class="muted">${st.role === 'b' ? 'Schick den Antwort-Code zurück, dann sieht dein Gegner diesen Kampf. Revanche: gleiches Setup, du malst neu und schickst eine neue Herausforderung.' : 'Revanche: gleiche Regel, Karte und Budget, du malst neu und schickst eine neue Herausforderung.'}</div></div>
+      <div class="btnrow">${st.role === 'b' ? '<button class="go" id="duelAnswer">Antwort-Code</button>' : ''}<button class="go" id="duelRematch">Revanche</button><button class="btn" id="duelEnd">Duell beenden</button></div>`;
     if ($('duelAnswer')) $('duelAnswer').onclick = showAnswer;
+    $('duelRematch').onclick = () => { const c = st.cfg; startA({ cat: c.cat, map: c.map || 'feld', budget: c.budget }); };
     $('duelEnd').onclick = stop;
   }
 
@@ -164,7 +186,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     const label = side ? 'Fertig' : st.role === 'a' ? 'Code zeigen' : st.role === 'b' && b.phase === 'done' ? 'Antwort-Code' : b.phase === 'fight' ? 'Kampf läuft' : 'Fertig';
     setText(go, label);
     go.disabled = !(side || (st.role === 'a' && st.a) || (st.role === 'b' && st.data && b.phase === 'done'));
-    const head = `Code-Duell · ${CAT_NAME[c.cat]}`;
+    const head = `Code-Duell · ${CAT_NAME[c.cat]} · ${(MAP[c.map] || MAP.feld).n}`;
     const tail = side ? `du malst ${side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(h.spent[side])} / ${c.budget} Punkte`
       : st.role === 'a' ? 'Code verschickt · die Antwort mit „Code laden“ einfügen'
       : b.phase === 'fight' ? 'Kampf läuft' : 'Kampf vorbei';

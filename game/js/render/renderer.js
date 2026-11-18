@@ -5,7 +5,7 @@
 // Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
-import { TEAMS, CELL, UNITS } from '../data.js';
+import { TEAMS, CELL, UNITS, DOME } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
 import { query, factionOf, RV_MARK } from '../world.js';
 import { SYN_COL, BIT_KEY } from '../synergy.js';
@@ -462,6 +462,11 @@ void main() {
         links.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); links.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
       }
     }
+    // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit, blinkt bei Treffern) und Bot-Schild beim Treffer
+    for (const u of groundList) {
+      if (u.domeHp > 0) ring(u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
+      if (u.shdHit > 0 && u.shd > 0) ring(u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
+    }
     nBoss = 0;
     bodies(groundList, groundQ, groundBars, t, tm, inv);
     bodies(airList, airQ, airBars, t, tm, inv);
@@ -470,9 +475,18 @@ void main() {
   }
 
   // Stufe 0 (am Boden): Rig-Schatten mit Teamring; höher: weicher Fleck plus Teamring in Teamfarbe
+  function ring(x, y, R, n, w, tint, a) {
+    let px = x + R, py = y;
+    for (let i = 1; i <= n; i++) {
+      const q = i / n * Math.PI * 2, nx = x + Math.cos(q) * R, ny = y + Math.sin(q) * R * .55;
+      links.line(px, py, nx, ny, w, tint, a); px = nx; py = ny;
+    }
+  }
+  // Urzeit: das T.-Rex-Ei hat ein eigenes Rig (u.type bleibt 'rex')
+  const rigOf = u => rigs.get(u.T.egg ? 'rexei' : u.type);
   function shadows(list, tm, inv) {
     for (const u of list) {
-      const rig = rigs.get(u.type), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
+      const rig = rigOf(u), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
       shadowParams(u.z, SH);
       if (SH.level === 0) {
         const a = rig.anchors.shadow, k = inv * SH.scale;
@@ -507,7 +521,8 @@ void main() {
     Q.clear(); bars.clear();
     for (const u of list) {
       if (u.ashT > 0) { ashPile(Q, u, t); continue; }   // Task 6: Asche statt Figur, ohne Leiste
-      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
+      const T = u.T, rig = rigOf(u), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
+      if (u.growT > 0 && !T.egg) { const g = T.r / UNITS[u.type].r; p.sx *= g; p.sy *= g; }   // Jungtier: kleiner gezeichnet
       // Vampir in Fledermausform (ganz: nur der Schwarm; beim Verwandeln schrumpft der Körper, der Schwarm blendet ein)
       if (u.batT > 0) {
         batSwarm(Q, u, t, u.batT);

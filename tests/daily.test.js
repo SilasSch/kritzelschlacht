@@ -2,14 +2,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UNITS, COUNTERS } from '../game/js/data.js';
-import { dailyLevel, dateKey, shortDate, shareText, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES } from '../game/js/daily.js';
+import { dailyLevel, dateKey, shortDate, shareText, PUBLIC_URL, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES, dcost } from '../game/js/daily.js';
 import { validateCampaign, unitAllowed, terrainAllowed } from '../game/js/campaign/index.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult } from '../game/js/sim.js';
 import { placePlan } from '../tools/plans.mjs';
 
 const days = n => Array.from({ length: n }, (_, i) => dateKey(new Date(2026, 10, 1 + i)));
-const enemyPts = L => L.place.reduce((a, p) => a + (p[0] === 'rect' || p[0] === 'circle' ? p[2] * UNITS[p[1]].cost : p[0] === 'unit' ? UNITS[p[1]].cost : 0), 0);
+const enemyPts = L => L.place.reduce((a, p) => a + (p[0] === 'rect' || p[0] === 'circle' ? p[2] * dcost(p[1]) : p[0] === 'unit' ? dcost(p[1]) : 0), 0);   // feste Kosten (daily.DAILY_COST)
 
 test('dateKey und shortDate: Ortszeit, YYYY-MM-DD und 18.11.', () => {
   assert.equal(dateKey(new Date(2026, 10, 18, 23, 59)), '2026-11-18');
@@ -71,9 +71,13 @@ test('Tageschallenge: immer mindestens zwei Konter des Hauptgegners erlaubt', ()
 });
 
 test('Tageschallenge: Teilen-Text und Bestwert', () => {
-  assert.equal(shareText('2026-11-18', { win: true, spent: 64, stars: 3 }), 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 64 Punkten ★★★');
-  assert.equal(shareText('2026-11-18', { win: true, spent: 70.5, stars: 2 }), 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 70,5 Punkten ★★☆');
-  assert.equal(shareText('2026-11-18', { win: false, spent: 50, stars: 0 }), 'Kritzelschlacht Tageschallenge 18.11.: verloren');
+  const full = shareText('2026-11-18', { win: true, spent: 64, budget: 110, stars: 3, time: 38.2, lost: 3, deployed: 10, medals: { mask: 3 } });
+  assert.equal(full, '🖍️ Kritzelschlacht · Tageschallenge #1 (18.11.)\n⭐⭐⭐ Sieg mit 64 von 110 Punkten in 0:38\n'
+    + '🟦🟦🟦🟦🟦🟦🟦🟥🟥🟥 7 von 10 überlebt\n🛡️⚡ Medaillen\nSchaffst du\'s billiger? ' + PUBLIC_URL);
+  assert.ok(full.length <= 280);
+  assert.match(shareText('2026-11-19', { win: true, spent: 70.5, stars: 2 }), /^🖍️ Kritzelschlacht · Tageschallenge #2 \(19\.11\.\)\n⭐⭐✩ Sieg mit 70,5 Punkten\n/);
+  const lost = shareText('2026-11-18', { win: false, spent: 50, stars: 0, deployed: 4, lost: 4, medals: { mask: 7 } });
+  assert.match(lost, /Niederlage/); assert.doesNotMatch(lost, /Medaillen|⭐/);
   const daily = {};
   assert.equal(recordDaily(daily, '2026-11-18', { win: false, spent: 10, stars: 0 }), null, 'Niederlage zählt nicht');
   assert.deepEqual(recordDaily(daily, '2026-11-18', { win: true, spent: 80, stars: 2 }), { spent: 80, stars: 2 });

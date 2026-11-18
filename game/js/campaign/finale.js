@@ -1,7 +1,7 @@
 // Kapitel „Finale“ (Spez. #52): alles gemischt, in den schwersten Schlachten. Jedes Level erlaubt eine feste Auswahl
 // aus mehreren Kategorien; jede Einheit allein verliert, erst die richtige Mischung gewinnt.
 // Felder eines Levels und Regeln: docs/kampagne.md. Prüfen: node tools/balance.mjs missions 8 1400x875 --chapter=finale
-import { F, B, Md } from './areas.js';
+import { F, B, Md, Deep } from './areas.js';
 
 export default {
   id: 'finale',
@@ -11,12 +11,15 @@ export default {
     // Zeitreise: Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer. Ritter fangen die Reiter ab,
     // Soldaten dahinter holen die Drachen herunter, Sanitäter halten die Ritter lange genug am Leben.
     {
-      id: 'fin-1', n: 'Zeitreise', budget: 180, par: 146,
+      // Drachenatem trifft seit dem Fix bis zur Angriffsreichweite, auch Soldaten auf Abstand (vorher nie): der alte Plan
+      // (12 Ritter, 25 Soldaten, 4 Sanitäter, 143) gewann nur noch 0/4; mit Scharfschützen ganz hinten wieder fast immer.
+      // par 145 → 177; mit den Kosten der Balance-Runde (Ritter 4,75, Sani 3,5) 183, Budget 190
+      id: 'fin-1', n: 'Zeitreise', budget: 190, par: 183,
       units: ['roemer', 'ritter', 'grenadier', 'soldat', 'sniper', 'sani'],
       hint: 'Römer, Ritter, Grenadiere, Soldaten, Scharfschützen und Sanitäter aus allen Zeiten. Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer: Wer fängt die Reiter ab, und wer holt die Drachen herunter?',
       place: [['unit', 'drache', .8, .3], ['unit', 'drache', .8, .7], ['rect', 'reiter', 24, .66, .2, .72, .8], ['rect', 'krieger', 20, .62, .3, .65, .7]],
       plan: {
-        smart: [['ritter', 12, ...F], ['soldat', 25, ...B], ['sani', 4, ...B]],
+        smart: [['ritter', 14, ...F], ['soldat', 24, ...B], ['sniper', 4, ...Deep], ['sani', 4, ...B]],
         spam: [['roemer', 60, ...F]],
       },
     },

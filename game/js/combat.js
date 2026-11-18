@@ -19,6 +19,7 @@ import { aloft, unseen } from './world.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
+import { AIR, stepAir } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -44,7 +45,7 @@ const pinned = (world, u) => u.blk > .3 || u.x < PIN_EDGE || u.y < PIN_EDGE || u
 const canBack = (u, t) => u.rv[RV_BCD] <= 0 && u.T.speed * u.spdMul > t.T.speed * t.spdMul;
 const noBack = (world, u, t) => pinned(world, u) || !canBack(u, t);
 // Messer: t in Kontakt (höchstens KNIFE_GAP px zwischen den Körpern) und am Boden erreichbar
-const knifeReach = (u, t, d) => d - u.T.r - t.T.r <= SNIPER.KNIFE_GAP && t.type !== 'heli' && !isBat(t) && !aloft(t);
+const knifeReach = (u, t, d) => d - u.T.r - t.T.r <= SNIPER.KNIFE_GAP && !t.T.high && !isBat(t) && !aloft(t);
 function knife(world, u, t, dx) {
   u.face = dx < 0 ? -1 : 1;
   if (u.rv[RV_KNIFE] > 0) return;
@@ -152,7 +153,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
-  if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
+  if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
+  if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
   // Schrottplatz: Blitze schlagen in Roboter doppelt ein; Urzeit: Panzerplatten des Ankylosaurus, Hornwand des
   // Triceratops im Lauf (von vorn halber Schaden durch Schläge, Pfeile und Kugeln)
@@ -192,7 +194,7 @@ export const PARTS = {
   grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'shield', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
-  panzer: ['turret'], heli: ['headgear', 'weapon'], vampir: [], ghul: [],
+  panzer: ['turret'], heli: ['headgear', 'weapon'], jet: [], kampfdrohne: [], bomber: [], vampir: [], ghul: [],
   // --- Task 6: Kreaturen --- (Troll: Keule, Zyklop: Felsen in der Hand, Hexe: Hut)
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
@@ -205,8 +207,20 @@ const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
 // Abgeschossene Flieger, die beim Aufschlag abstürzen (combat.crash); Bienen und Geister fallen nur
-export const CRASH = new Set(['heli', 'drache']);
-export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;     // Explosion beim Aufschlag des Helis
+// Hubschrauber (Overhaul 18.11.): gepanzerte Kanzel (Kugeln ×BULLET), Raketen ×ROCKET, Pfeile und Flieger-Nahkampf voll
+// (Schützen sind die Flugabwehr der Armee, Adler und Bienen die der Tiere). Im Gefecht hält er Abstand HOLD × Reichweite
+// und schwebt seitlich hin und her (Periode SWAY_T s, Tempo SWAY × speed), statt das Ziel zu umkreisen (heliHover).
+// Lufteinheiten (18.11., air.js): Schadensfaktor je Art (fehlt: 1). Bomber gepanzert wie der Heli, alle drei: Raketen
+// hart, fliegende Nahkämpfer voll und mehr (sie erreichen sie als einzige Nahkämpfer)
+export const AIR_ARMOR = {
+  jet: { rocket: 1.4, melee: 1.5 },
+  bomber: { bullet: .75, rocket: 1.4, melee: 1.5 },
+  kampfdrohne: {},
+};
+export const HELI = { BULLET: .75, ROCKET: 1.4, MELEE: 1.5, HOLD: .7, SWAY: .45, SWAY_T: 5, BAND: 40 };
+export const CRASH = new Set(['heli', 'drache', 'jet', 'bomber']);
+export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;
+export const AIR_CRASH = { jet: [40, 40], bomber: [70, 90] };   // [Radius, Schaden] beim Aufschlag (18.11.)     // Explosion beim Aufschlag des Helis
 export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag des Drachen, ohne Schaden
 
 // Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete (auch von
@@ -280,8 +294,13 @@ export function fling(v, dx, dy, d, I) {
   const iz = BLAST_LIFT * I;
   applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
 }
+// BLAST_TOP: Höhe, über der die Explosion niemanden trifft (Fliegerbomben am Boden treffen keine hohen Flieger, auch
+// nicht den Bomber selbst, der über seinen Einschlägen fliegt); sonst Infinity
+export const AIRBOMB_TOP = 30;
+let BLAST_TOP = Infinity;
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
   query(world, x, y, R + 16, v => {
+    if (v.z > BLAST_TOP) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
     const fall = 1 - .5 * Math.min(1, d / R);
@@ -314,6 +333,7 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
 export function crash(world, kind, x, y) {
   emit(world, { type: 'crash', kind, x, y });
   if (kind === 'heli') blast(world, x, y, HELI_CRASH_R, HELI_CRASH_DMG, null, null, 'blast', 2);
+  else if (kind === 'jet' || kind === 'bomber') { const C = AIR_CRASH[kind]; blast(world, x, y, C[0], C[1], null, null, 'blast', 2); }
   else if (kind === 'drache') {
     query(world, x, y, DRAGON_CRASH_R + 16, v => {
       const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
@@ -704,7 +724,7 @@ export function stepBurn(world, u, dt) {
 // Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) und Untote
 // (Ghule, data.UNDEAD) vergiftet es nicht.
 export const POISON = { DPS: 4, T: 3 };
-const NO_POISON = new Set(['panzer', 'heli']);
+const NO_POISON = new Set(['panzer', 'heli', 'jet', 'kampfdrohne', 'bomber']);
 export function poison(world, v, src) {
   if (!v.alive || NO_POISON.has(v.type) || UNDEAD.has(v.type)) return;
   if (!(v.poisonT > 0)) emit(world, { type: 'poison', x: v.x, y: v.y, z: v.z });
@@ -791,7 +811,7 @@ function pilumTarget(world, u) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
-      if (!v.alive || v.type === 'heli' || v.ashT > 0 || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil; Task 6: Asche
+      if (!v.alive || v.T.high || v.ashT > 0 || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil; Task 6: Asche
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
       if (d2 > PIL_MAX2 || factionOf(world, v) === f) continue;
       if (d2 < bd) { bd = d2; best = v; }
@@ -915,6 +935,8 @@ export function think(world, u, dt) {
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
   if (u.chanId > 0) return;
+  // Lufteinheiten (air.js): eigene Zielwahl und Flugbahn
+  if (AIR.has(u.type)) { stepAir(world, u, dt); return; }
   // Bug-MG des Panzers: feuert, während die Kanone lädt (eigene Abklingzeit, unabhängig vom übrigen Verhalten)
   if (u.type === 'panzer') hullMg(world, u, dt);
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
@@ -997,7 +1019,8 @@ export function think(world, u, dt) {
     }
     attack(world, u, t, d, dx, dy, ax, ay);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
-    else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
+    else if (u.type === 'heli') heliHover(world, u, nx, ny, d, reach);
+    else if (u.type === 'drache') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
   }
   // Scharfschütze ohne Ziel in Reichweite: erst WAIT s warten, dann vorrücken, nie über die Frontgrenze
@@ -1182,6 +1205,17 @@ function lineBlocked(world, u, nx, ny, dt) {
   u.mx = mx; u.my = my;
 }
 
+// Hubschrauber im Gefecht: auf HELI.HOLD × Reichweite heran oder zurück (Band ±BAND px ohne Ruck), dazu seitlich
+// schweben (Sinus über die Weltzeit, je Heli versetzt über u.seed); am Feldrand kehrt das Schweben um.
+export function heliHover(world, u, nx, ny, d, reach) {
+  const T = u.T, H = HELI, want = reach * H.HOLD;
+  const rad = Math.max(-1, Math.min(1, (d - want) / H.BAND)) * T.speed * .6;
+  let side = Math.sin((world.time / H.SWAY_T + u.seed) * Math.PI * 2) * T.speed * H.SWAY;
+  const mx0 = -ny * side, my0 = nx * side, m = T.r + 6;
+  if ((mx0 < 0 && u.x < m) || (mx0 > 0 && u.x > world.W - m) || (my0 < 0 && u.y < m) || (my0 > 0 && u.y > world.H - m)) side = -side;
+  u.mx = nx * rad - ny * side; u.my = ny * rad + nx * side;
+}
+
 // ax/ay (optional): geprüfter Zielpunkt für gerade Schüsse (siehe think)
 export function attack(world, u, t, d, dx, dy, ax, ay) {
   const T = u.T; if (u.cd > 0) return;
@@ -1349,7 +1383,7 @@ export function stepProjectiles(world, dt) {
     if (DOMES.length && domeCatch(world, p, DOMES)) { proj.splice(i, 1); continue; }
     if (p.arc) {
       const q = p.t < p.dur ? p.t / p.dur : 1;
-      p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = Math.sin(q * Math.PI) * p.h;
+      p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = p.drop ? p.drop * (1 - q * q) : Math.sin(q * Math.PI) * p.h;
       // Ausweichen (dodge.js, Nachtrag 7, #47): einmal je Geschoss, DODGE.LEAD s vor dem Einschlag (kurze Würfe sofort)
       if (!p.dg && p.t >= p.dur - DODGE.LEAD) rollDodges(world, p);
       if (p.t < p.dur) continue;
@@ -1390,6 +1424,7 @@ function shieldHit(world, v, a, kind, dx, dy, src) {
 // brennt, das Feuer springt nicht über (abilities.FIRE_ARROWS); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
   if (p.kind === 'boulder') { landBoulder(world, p, src); return; }   // Task 6
+  if (p.kind === 'airbomb') { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
@@ -1467,7 +1502,7 @@ function hexImpact(world, p, v, x, y, src) {
 // unbeholfener Schlag (attack: Abklingzeit ×MELEE_CD, cyclopsHit: Schaden ×MELEE_DMG), sonst geht er hin. Liefert true,
 // wenn der Schritt damit erledigt ist (weiter weg: false, er wirft).
 function cyclopsClose(world, u, t, d, dx, dy, dt) {
-  if (d >= CYCLOPS.MIN_D || t.type === 'heli' || isBat(t)) return false;
+  if (d >= CYCLOPS.MIN_D || t.T.high || isBat(t)) return false;
   const T = u.T, reach = CYCLOPS.MELEE + T.r + t.T.r;
   if (d > reach) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.run += dt; return true; }
   if (u.cd <= 0) attack(world, u, t, d, dx, dy);

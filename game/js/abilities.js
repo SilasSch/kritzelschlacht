@@ -24,7 +24,7 @@
 // "Importkreise: jedes Logikmodul lädt als Einstieg" (tests/abilities.test.js) wacht darüber.
 import { UNITS, CELL, TERR_HAZ, BAT_FORM, UNDEAD } from './data.js';
 import { factionOf, query, spawn } from './world.js';
-import { fire, clearShot, hasLineOfFire, fling, hurt } from './combat.js';
+import { fire, clearShot, hasLineOfFire, fling, hurt, heliHover } from './combat.js';
 import { isFleeing } from './morale.js';
 import { leaveBlock } from './formation.js';
 import { FLY_VZ } from './physics.js';
@@ -183,9 +183,8 @@ function heliUpdate(world, u) {
   }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
-  // weiter kreisen wie beim normalen Feuer (combat.think)
-  const s = u.id % 2 ? 1 : -1, sp = u.T.speed * .5;
-  u.mx = -ny * s * sp; u.my = nx * s * sp;
+  // weiter schweben wie beim normalen Feuer (combat.heliHover)
+  heliHover(world, u, nx, ny, d, u.T.range + u.T.r + t.T.r);
   while (u.abK < S.N && u.abT >= u.abK * S.GAP - 1e-9) {
     const a = clearShot(world, u, t, 'rocket');
     if (a) fire(world, u, t, 'rocket', a.x, a.y, S.DMG, S.R);
@@ -204,7 +203,7 @@ const done = () => true;
 const nothing = () => {};
 
 // Wen Brüllen und Spuk nicht erschrecken: Maschinen und Drachen
-export const FEARLESS = new Set(['panzer', 'heli', 'drache']);
+export const FEARLESS = new Set(['panzer', 'heli', 'drache', 'jet', 'kampfdrohne', 'bomber']);
 for (const k in UNITS) if (UNITS[k].bot) FEARLESS.add(k);   // Roboter kennen keine Angst
 
 // Das aktuelle Ziel u.tg, wenn es ein lebender Feind in Reichweite R ist (Mitte zu Mitte plus beide Radien);
@@ -557,7 +556,7 @@ function diveEnd(world, u) { u.fz = u.T.flyZ; }
    (hirnlos, morale.updateMorale) und werden nicht geheilt (data.UNDEAD). */
 export const VAMPIRE = { HEAL: .5, BAT_START: 220, BAT_END: 40, MORPH: .3, BAT_Z: BAT_FORM.flyZ, MAX_GHOULS: 3 };
 export const GHOUL = { DECAY: .04, RISE: .6 };
-export const NO_GHOUL = new Set(['ghul', 'frosch', 'panzer', 'heli', 'drache', 'elefant', 'rex', 'rexei']);
+export const NO_GHOUL = new Set(['ghul', 'frosch', 'panzer', 'heli', 'drache', 'elefant', 'rex', 'rexei', 'jet', 'kampfdrohne', 'bomber']);
 for (const k in UNITS) if (UNITS[k].bot) NO_GHOUL.add(k);   // Roboter stehen nicht als Ghul auf
 // Ergebnis von stepBat: kein Fledermaus-Schritt (normales Verhalten), Verwandlung (steht), Fledermaus (Aufrufer bewegt)
 export const BAT_NONE = 0, BAT_MORPH = 1, BAT_FLY = 2;
@@ -651,7 +650,7 @@ export const CYCLOPS = { R: UNITS.zyklop.splash, MIN_D: 70, MELEE: 4, MELEE_CD: 
 // (endFrog), LP höchstens seine max. LP. Immun (FROG_IMMUNE): Panzer, Hubschrauber, Drache, Elefant, Ghul; dazu Frösche
 // und die Asche des Phönix.
 export const FROG = { T: 5, CD: 14, HOP_HZ: 1.6, HOP: .45, FLEE_R: 180, LOOK_T: .5 };
-export const FROG_IMMUNE = new Set(['panzer', 'heli', 'drache', 'elefant', 'ghul', 'mega', 'rex']);
+export const FROG_IMMUNE = new Set(['panzer', 'heli', 'drache', 'elefant', 'ghul', 'mega', 'rex', 'jet', 'kampfdrohne', 'bomber']);
 export const canCurse = v => v.alive && !(v.ashT > 0) && v.type !== 'frosch' && !FROG_IMMUNE.has(v.type);
 
 // Zählt u wieder zum Schwerpunkt seiner Fraktion (wie morale.endFlee), wenn es floh oder erschreckt war

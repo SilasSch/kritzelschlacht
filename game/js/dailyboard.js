@@ -36,7 +36,8 @@ export function simVersion() {
 export const SIM_VERSION = simVersion();
 // Bekannte Versionen: until = letzter Tag, an dem sie galt (null: die aktuelle)
 export const VERSIONS = {
-  vh9hl1p: { until: null },   // Stand bei Start der Bestenliste (18.11.)
+  vh9hl1p: { until: '2026-11-18' },   // Stand bei Start der Bestenliste (18.11.)
+  v1j0sw5m: { until: null },   // Luftwaffe: Hubschrauber neu, Jet, Kampfdrohne, Bomber (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

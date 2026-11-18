@@ -67,7 +67,13 @@ export const roundDef = cfg => ({ ...ruleDef(cfg.cat), budget: budgetOf(cfg) });
 
 /* ---------- Armee-Pakete ---------- */
 // Jede Einheit in 5 Bytes: Typ (6 Bit) + Form (2 Bit), x und y als 16 Bit in Anteilen der Welt. Base64url.
-export const PAINT_TYPES = Object.keys(UNITS).filter(t => UNITS[t].paint !== false);
+// Die Reihenfolge ist Teil des Codes: einmal vergebene Indizes bleiben fest (PAINT_FIXED), neue Einheiten kommen hinten dran,
+// egal wo sie in data.js stehen. Neue Einheiten bei Gelegenheit hier ans Ende von PAINT_FIXED anhängen.
+const PAINT_FIXED = ('krieger schuetze ritter grenadier reiter roemer sani wolf baer biene magier geist drache vampir soldat mg sniper '
+  + 'panzerfaust moerser panzer heli troll zyklop hexe phoenix einhorn elefant krokodil gorilla adler bueffel minibot laserbot drohne '
+  + 'kuppel spinne schweisser magnet tesla mega hoehle speer schamane raptor ptera anky trike rex').split(' ');
+const paintable = t => UNITS[t] && UNITS[t].paint !== false;
+export const PAINT_TYPES = [...PAINT_FIXED, ...Object.keys(UNITS).filter(t => paintable(t) && !PAINT_FIXED.includes(t))];
 const SHAPE_KEYS = [null, ...Object.keys(SHAPES)];
 const Q = 65535;
 const qz = (v, M) => Math.round(Math.max(0, Math.min(1, v / M)) * Q);

@@ -32,7 +32,13 @@ export const UNITS = {
   // Nachtrag 7 (#47): Splash 55 → 62, Abklingzeit 4,5 → 4,2 s (Römer außerhalb des Blocks weichen aus, moerser > roemer hielt nicht)
   moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:66,speed:34,cd:4.2,cost:8.5,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
-  heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
+  // Overhaul 18.11.: high = fliegt so hoch, dass Nahkämpfer am Boden nicht rankommen (world.outOfMelee); Heli hält Abstand
+  heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,high:1,mass:12,d:'Schwebt auf Abstand und feuert Salven. Gepanzert gegen Kugeln, Pfeile und Raketen treffen voll. Nahkämpfer kommen nicht ran.'},
+  // Lufteinheiten (18.11., air.js): Jet = Luftüberlegenheit im Überflug, Kampfdrohne = billige Kamikaze-Drohne gegen Panzerung,
+  // Bomber = langsamer Teppich aus Bomben gegen Bodentruppen. Alle drei fliegen hoch (high).
+  jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:150,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast im Überflug heran, feuert die Bordkanone und dreht weit. Jagt zuerst Flieger. Gegen Bodentruppen schwach.'},
+  kampfdrohne:{n:'Kampfdrohne',cat:'modern',col:'#9aa39a',r:6,hp:24,dmg:70,range:4,splash:26,speed:130,cd:4,cost:3,fly:1,flyZ:30,high:1,mass:.4,d:'Billige Kamikaze-Drohne. Sucht sich das teuerste Ziel in der Nähe und stürzt sich hinein. Zerbrechlich.'},
+  bomber:{n:'Bomber',cat:'modern',col:'#6f7d63',r:20,hp:620,dmg:60,range:4,splash:50,speed:52,cd:5,cost:26,fly:1,flyZ:86,high:1,mass:25,d:'Langsamer Riese. Überfliegt die dichteste Gruppe am Boden und wirft einen Bombenteppich, der auch Eigene trifft. Knackt Panzer und Elefanten. Wehrlos gegen Flieger und Gewehre.'},
   // --- Task 6: Kreaturen (Spez. #34; Verhalten in abilities.js, Abschnitt Kreaturen) ---
   // Troll: heilt sich ständig, Feuer stoppt das; Zyklop: Felsbrocken im Bogen (combat 'boulder'), im Nahkampf unbeholfen;
   // Hexe: fliegt niedrig (Festlegung 6), Zauber 'hex', Froschfluch; Phönix: fliegt, Feuerspur, steht einmal wieder auf;
@@ -171,7 +177,20 @@ const ABIL = {
   ],
   heli: [
     {n:'Raketensalve', d:'Alle 25 s feuert er 4 Raketen schnell hintereinander auf die dichteste Feindgruppe. Die Explosionen treffen auch Eigene.'},
-    {n:'Hoch oben', d:'Nahkämpfer kommen nicht ran. Raketen treffen hart.'},
+    {n:'Gepanzert', d:'Kugeln machen nur drei Viertel Schaden. Raketen treffen hart, Pfeile und fliegende Nahkämpfer voll.'},
+    {n:'Hoch oben', d:'Hält Abstand und schwebt seitlich hin und her. Nahkämpfer am Boden kommen nicht ran.'},
+  ],
+  jet: [
+    {n:'Überflug', d:'Fliegt nie still: rast aufs Ziel zu, feuert, solange es vor der Nase ist, schießt vorbei und dreht in weitem Bogen.'},
+    {n:'Luftüberlegenheit', d:'Jagt zuerst Flieger und macht gegen sie dreifachen Schaden. Bodentruppen beharkt er nur im Vorbeiflug.'},
+  ],
+  kampfdrohne: [
+    {n:'Kamikaze', d:'Stürzt sich auf das teuerste Ziel im Umkreis. Die Ladung trifft nur Feinde und wirkt wie eine Rakete. Schwärme verteilen sich.'},
+    {n:'Zerbrechlich', d:'Wenige LP: Schützen, Soldaten und MGs holen sie leicht runter, Nahkämpfer erst, wenn sie da ist.'},
+  ],
+  bomber: [
+    {n:'Bombenteppich', d:'Alle 5 s wirft er im Überflug 6 Bomben hintereinander auf die dichteste Gruppe am Boden. Trifft auch Eigene.'},
+    {n:'Wehrlos', d:'Hat kein Bordgeschütz: Jets, MGs und Raketen holen ihn runter. Sehr hoch, Nahkämpfer kommen nicht ran.'},
   ],
   // --- Task 6: Kreaturen ---
   troll: [
@@ -324,6 +343,10 @@ export const COUNTERS = [
   ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
   ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
   ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90],
+  // Lufteinheiten (18.11.): Jet jagt Flieger, Drohne stürzt sich auf teure Ziele, Bomber trifft schwere Bodentruppen
+  ['jet', 'heli', 90], ['jet', 'bomber', 104], ['mg', 'jet', 90],
+  ['kampfdrohne', 'sniper', 90], ['kampfdrohne', 'moerser', 90], ['mg', 'kampfdrohne', 90], ['schuetze', 'kampfdrohne', 90],
+  ['bomber', 'panzer', 140], ['bomber', 'elefant', 104], ['soldat', 'bomber', 104],
   ['panzer', 'krieger', 105], ['panzer', 'soldat', 105],
   ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90],
   ['roemer', 'schuetze', 60], ['roemer', 'krieger', 60],
@@ -379,6 +402,7 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 // --- Task 6: Kreaturen ---
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
+Object.assign(PLURAL, {jet:'Kampfjets',kampfdrohne:'Kampfdrohnen',bomber:'Bomber'});
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 // --- Schrottplatz und Urzeit ---
 Object.assign(PLURAL, {minibot:'Minibots',laserbot:'Laserbots',drohne:'Schrauber-Drohnen',kuppel:'Schildkuppeln',spinne:'Springspinnen',schweisser:'Schweißer',magnet:'Magnet-Mechs',tesla:'Teslaspulen',mega:'Mega-Mechs',
@@ -389,7 +413,7 @@ export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Myth
 export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:'#ff4d4d',body:'#ef5d55'},gruen:{n:'Grün',c:'#2fbf6b',body:'#4fc07a'},gelb:{n:'Gelb',c:'#ffb800',body:'#ffc533'}};
 
 // Typen, deren Körper die Teamfarbe trägt (Vampir: der Umhang; der Ghul zeigt sein Team an Lumpen und Teamring, rig.js)
-export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli','vampir']);
+export const TINT = new Set(['krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli','jet','kampfdrohne','bomber','vampir']);
 
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
 export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);

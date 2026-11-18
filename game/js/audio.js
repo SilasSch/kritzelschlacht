@@ -41,7 +41,7 @@ export function eventSound(e) {
 
 // Tod je Einheit: Fahrzeuge scheppern, Bienen fiepen, der Geist verhallt, Tiere und Ungeheuer brüllen (Tonhöhe nach
 // Größe), alle anderen sind Menschen ("uff").
-const METAL = new Set(['panzer', 'heli', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega']);
+const METAL = new Set(['panzer', 'heli', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'jet', 'kampfdrohne', 'bomber']);
 const SPIRIT = new Set(['geist']);
 const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
 export function deathVoice(type) {
@@ -91,7 +91,7 @@ export function spatial(cam, x, y) {
 const GAP = .03;
 const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, clink: .07, die: .06, dieBeast: .08, dieBug: .12,
   shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, notify: .6, ui: .05, rise: .4, ignite: .2,
-  twang: .05, fire: .12 };
+  twang: .05, fire: .12, jet: .6, whistle: .3 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
 const BUSY = { laser: .6, hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
   twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55 };
@@ -377,6 +377,9 @@ export function createAudio() {
       for (let i = 0; i < 3; i++) osc(v, 'sine', v.f(420 + i * 160, .3), 900, .05, .03, { dt: .08 + i * .06 });
     },
     whoosh(v) { noise(v, 'bandpass', v.f(400, .15), 1500, .32, .07, { a: .1, q: 1.5 }); },
+    // Lufteinheiten (18.11.): Bombe pfeift im Fall (fallender Sinus), Jet donnert im Überflug vorbei
+    whistle(v) { osc(v, 'sine', v.f(1500, .08), 520, .7, .035, { a: .05, vib: [7, 12] }); },
+    jet(v) { noise(v, 'bandpass', v.f(1800, .1), 380, 1.1, .08, { a: .25, q: .7 }); noise(v, 'lowpass', 500, 160, 1.0, .07, { a: .3 }); },
     wind(v) { noise(v, 'bandpass', 300, 900, .8, .08, { a: .25, q: 1.2 }); noise(v, 'bandpass', 900, 400, .7, .05, { a: .3, dt: .1, q: 2 }); },
     crash(v) { explosion(v, 1.4, .3); metal(v, v.f(380, .1), .5, .04); },
 

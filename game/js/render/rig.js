@@ -144,6 +144,11 @@ const BOSS_DEF = {
           c.lineWidth = 3.8; c.strokeStyle = O; c.stroke(); c.lineWidth = 1.6; c.strokeStyle = '#6b707a'; c.stroke();
           E(c, 0, 0, r, r * .64, k.col);
           E(c, -r * .28, -r * .38, r * .4, r * .09, 'rgba(255,255,255,.3)', 0);
+          // Stummelflügel mit Raketenbehälter (Raketensalve), vorn Rot an der Spitze
+          poly(c, r, [[-.42, .2], [-.05, .22], [-.1, .34], [-.46, .32]], k.dk, 1.2);
+          RR(c, -r * .62, r * .3, r * .64, r * .2, r * .09, '#4a4e57');
+          for (const x of [-.48, -.3, -.12]) E(c, r * x, r * .4, r * .035, r * .035, '#1f2126', 0);
+          E(c, r * .02, r * .4, r * .07, r * .08, '#e5574f', 1);
           Ln(c, [[-r * .18, -r * .52], [-r * .2, r * .46]], k.dk, 1, false);
           RR(c, -r * .5, -r * .8, r * .8, r * .22, r * .08, k.dk);
           Ln(c, [[0, -r * .8], [0, -r * .96]], '#2f3340', 2, false);
@@ -168,6 +173,8 @@ const BOSS_DEF = {
       },
       rotorBlades: {
         draw(c, r) {
+          // vier Blätter (zwei gekreuzte Paare), Spitzen rot
+          Ln(c, [[0, -r * 1.9], [0, r * 1.9]], '#3a3f4a', 2);
           Ln(c, [[-r * 1.9, 0], [r * 1.9, 0]], '#3a3f4a', 2.4);
           E(c, -r * 1.86, 0, r * .05, r * .05, '#e5574f', 0); E(c, r * 1.86, 0, r * .05, r * .05, '#e5574f', 0);
           E(c, 0, 0, r * .13, r * .13, '#5b5f69', 1.1);
@@ -1274,6 +1281,66 @@ Object.assign(DEF, {
       Ln(c, [[-r * .78, r * .15], [-r * .45, -r * .02], [-r * .2, r * .2], [r * .1, -r * .02], [r * .4, r * .18], [r * .78, 0]], O, .2, false);
       c.strokeStyle = O; c.lineWidth = 1.1; c.beginPath(); c.moveTo(-r * .78, r * .15); c.lineTo(-r * .45, -r * .02 + (f ? .03 * r : 0)); c.lineTo(-r * .2, r * .2);
       c.lineTo(r * .1, -r * .02); c.lineTo(r * .4, r * .18); c.lineTo(r * .78, 0); c.stroke();
+      whites(c, r, this.eyes);
+    },
+  },
+});
+
+/* ---------- Lufteinheiten (18.11., air.js) ----------
+   Jet: spitzer Rumpf in Teamfarbe, gepfeilte Flügel, Leitwerk, Kanzel mit Augen, Nachbrenner (Bild 0/1 flackert).
+   Kampfdrohne: kleiner Quadrokopter, zwei Rotorscheiben (Bild 0/1 dreht die Blätter), zwei Kameraaugen, roter Sprengkopf.
+   Bomber: dicker Rumpf, Glasnase mit Augen, hohes Leitwerk, Flügel mit Motorgondel und Propeller (Bild 0/1), Bombenschacht. */
+Object.assign(DEF, {
+  jet: {
+    eyes: eyePair(.62, -.3, .11), lidCol: '#bfe3f2',
+    body(c, r, k, f) {
+      const L = f ? .55 : .38;
+      E(c, -r * (1.62 + L * .5), r * .02, r * L, r * .14, '#ff8a3d', 0); E(c, -r * (1.6 + L * .3), r * .02, r * L * .55, r * .08, '#ffe066', 0);
+      poly(c, r, [[-.15, -.08], [-.95, -.62], [-.62, -.62], [.25, -.1]], shade(k.col, -.35));
+      poly(c, r, [[-1.62, -.22], [.85, -.3], [1.78, .04], [.85, .3], [-1.62, .24]], k.col);
+      poly(c, r, [[-1.12, -.2], [-1.62, -1.0], [-1.36, -1.0], [-.72, -.24]], k.dk);
+      Ln(c, [[-r * 1.4, r * .08], [r * .6, r * .1]], k.dk, 1, false);
+      RR(c, -r * 1.78, -r * .16, r * .2, r * .34, r * .06, '#4a4e57');
+      E(c, r * .62, -r * .3, r * .48, r * .22, '#bfe3f2', 1.2);
+      poly(c, r, [[-.35, .06], [-1.1, .66], [-.72, .68], [.28, .1]], k.dk);
+      E(c, r * 1.6, r * .02, r * .06, r * .06, '#e5574f', 0);
+      whites(c, r, this.eyes);
+    },
+  },
+  kampfdrohne: {
+    eyes: eyePair(.28, -.08, .17),
+    body(c, r, k, f) {
+      const blade = (x) => {
+        E(c, x * r, -r * .72, r * .7, r * .16, 'rgba(70,75,90,.14)', 1, 'rgba(70,75,90,.35)');
+        const a = f ? .55 : -.55; Ln(c, [[x * r - Math.cos(a) * r * .62, -r * .72 - Math.sin(a) * r * .1], [x * r + Math.cos(a) * r * .62, -r * .72 + Math.sin(a) * r * .1]], '#3a3f4a', 1.1, false);
+      };
+      Ln(c, [[-r * 1.3, -r * .5], [r * 1.3, -r * .5]], '#3a3f4a', 1.6);
+      Ln(c, [[-r * 1.3, -r * .5], [-r * 1.3, -r * .74]], '#3a3f4a', 1.4, false); Ln(c, [[r * 1.3, -r * .5], [r * 1.3, -r * .74]], '#3a3f4a', 1.4, false);
+      blade(-1.3); blade(1.3);
+      E(c, 0, r * .62, r * .32, r * .26, '#e5574f', 1.1);
+      RR(c, -r * .78, -r * .5, r * 1.56, r * .98, r * .3, k.col);
+      Ln(c, [[-r * .5, r * .5], [-r * .7, r * .95]], '#3a3f4a', 1, false); Ln(c, [[r * .5, r * .5], [r * .7, r * .95]], '#3a3f4a', 1, false);
+      whites(c, r, this.eyes);
+    },
+  },
+  bomber: {
+    eyes: eyePair(1.38, -.1, .1), lidCol: '#bfe3f2',
+    body(c, r, k, f) {
+      E(c, -r * .05, -r * .22, r * .95, r * .12, shade(k.col, -.35), 1.2);
+      poly(c, r, [[-1.42, -.22], [-2.02, -1.02], [-1.72, -1.04], [-1.0, -.28]], k.dk);
+      E(c, 0, 0, r * 1.72, r * .46, k.col);
+      E(c, -r * .3, -r * .28, r * .9, r * .07, 'rgba(255,255,255,.28)', 0);
+      poly(c, r, [[-1.9, -.12], [-1.45, -.06], [-1.45, .06], [-2.0, .02]], k.dk, 1.1);
+      Ln(c, [[-r * 1.4, r * .06], [r * 1.0, r * .06]], k.dk, 1.2, false);
+      RR(c, -r * .55, r * .3, r * .9, r * .14, r * .05, '#4a4e57');
+      for (const x of [-.4, -.2, 0, .2]) Ln(c, [[r * x, r * .3], [r * x, r * .44]], '#2f3340', .8, false);
+      E(c, r * 1.38, -r * .06, r * .42, r * .34, '#bfe3f2', 1.2);
+      c.beginPath(); c.arc(r * 1.38, -r * .06, r * .26, -2.4, -1.5); c.lineWidth = 1.2; c.strokeStyle = 'rgba(255,255,255,.9)'; c.stroke();
+      poly(c, r, [[-.35, .08], [.6, .08], [.42, .36], [-.55, .36]], k.dk);
+      E(c, r * .25, r * .36, r * .38, r * .14, '#5b5f69', 1.2);
+      E(c, r * .64, r * .36, r * .05, r * .3, 'rgba(70,75,90,.18)', 1, 'rgba(70,75,90,.35)');
+      Ln(c, [[r * .64, r * (f ? .1 : .2)], [r * .64, r * (f ? .62 : .52)]], '#3a3f4a', 1.4, false);
+      E(c, r * .68, r * .36, r * .06, r * .06, '#e5574f', .8);
       whites(c, r, this.eyes);
     },
   },

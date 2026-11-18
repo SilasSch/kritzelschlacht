@@ -75,7 +75,7 @@ export function resolveSound(e, prev) {
 const posOf = e => (e.x != null ? { x: e.x, y: e.y } : e.x1 != null ? { x: e.x1, y: e.y1 } : null);
 
 // Stereo und Dämpfung aus der Bildschirmlage: pan -0,8..0,8 über die Breite, außerhalb des Bilds je 400 px Abstand
-// leiser (bis 0,25). Nah herangezoomt etwas lauter, weit herausgezoomt etwas leiser.
+// leiser (bis 0,15). Nah herangezoomt etwas lauter, weit herausgezoomt etwas leiser.
 export function spatial(cam, x, y) {
   if (!cam || x == null) return { pan: 0, gain: 1 };
   const sx = (x - cam.x) * cam.zoom, sy = (y - cam.y) * cam.zoom;
@@ -83,15 +83,20 @@ export function spatial(cam, x, y) {
   const pan = Math.max(-1, Math.min(1, (sx / w) * 2 - 1)) * .8;
   const ox = sx < 0 ? -sx : sx > w ? sx - w : 0, oy = sy < 0 ? -sy : sy > h ? sy - h : 0;
   const off = Math.hypot(ox, oy);
-  const z = cam.fit ? Math.max(.85, Math.min(1.25, Math.sqrt(cam.zoom / cam.fit))) : 1;
-  return { pan, gain: Math.max(.25, 1 / (1 + off / 400)) * z };
+  const z = cam.fit ? Math.max(.8, Math.min(1.1, Math.sqrt(cam.zoom / cam.fit))) : 1;
+  return { pan, gain: Math.max(.15, 1 / (1 + off / 250)) * z };
 }
 
 // Mindestabstand (s) zwischen zwei gleichen Tönen; Vorgabe GAP
 const GAP = .03;
-const MIN_GAP = { pop: .045, scribble: .07, crackle: .14, heal: .18, die: .025, dieBug: .05, shot: .035, thunk: .03,
-  thwip: .05, land: .05, splash: .08, sizzle: .12, hiss: .12, horn: .6, ui: .03, rise: .3, ignite: .08 };
-const MAX_VOICES = 40;
+const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, clink: .07, die: .06, dieBeast: .08, dieBug: .12,
+  shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, ui: .05, rise: .4, ignite: .2,
+  twang: .05, fire: .12 };
+// Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
+const BUSY = { hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
+  twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55 };
+const MAX_VOICES = 24;
+export const DEFAULT_VOLUME = .6;
 // Pentatonik für das Plopp beim Malen von Einheiten: steigt, solange schnell nacheinander gesetzt wird
 const POP_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 
@@ -102,7 +107,7 @@ export function createAudio() {
 
   const audio = {
     muted: false,
-    volume: .8,
+    volume: DEFAULT_VOLUME,
     init() {
       if (!AC) {
         try {
@@ -149,11 +154,11 @@ export function createAudio() {
       ends = ends.filter(t => t > now);
       const prio = k === 'win' || k === 'lose' || k === 'go';
       if (!prio && ends.length >= MAX_VOICES) return;
-      // Dichte: der n-te gleiche Ton binnen 0,25 s ist 1/(1 + 0,3·(n−1)) so laut
+      // Dichte: der n-te gleiche Ton binnen 0,4 s ist 1/(1 + 0,6·(n−1)) so laut, häufige Töne (BUSY) grundsätzlich leiser
       const rc = recent[k] || (recent[k] = []);
-      while (rc.length && now - rc[0] > .25) rc.shift();
+      while (rc.length && now - rc[0] > .4) rc.shift();
       rc.push(now);
-      const dens = 1 / (1 + .3 * (rc.length - 1));
+      const dens = (BUSY[k] || 1) / (1 + .6 * (rc.length - 1));
       const ui = k === 'ui' || k === 'tab' || k === 'go' || k === 'pop' || k === 'scribble' || k === 'win' || k === 'lose';
       const sp = ui ? { pan: 0, gain: 1 } : spatial(cam, o && o.x, o && o.y);
       if (k === 'pop') { popStep = now - popT < .4 ? Math.min(popStep + 1, POP_SCALE.length - 1) : 0; popT = now; }
@@ -171,11 +176,14 @@ export function createAudio() {
     for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
     master = AC.createGain(); master.gain.value = audio.volume * audio.volume;
     comp = AC.createDynamicsCompressor();
-    comp.threshold.value = -16; comp.knee.value = 10; comp.ratio.value = 5; comp.attack.value = .003; comp.release.value = .22;
-    mix = AC.createGain(); mix.gain.value = 2.2;
-    mix.connect(comp); comp.connect(master); master.connect(AC.destination);
+    comp.threshold.value = -24; comp.knee.value = 12; comp.ratio.value = 6; comp.attack.value = .003; comp.release.value = .22;
+    mix = AC.createGain(); mix.gain.value = 1.5;
+    // Höhen dämpfen (weniger spitz), Tiefstes unter 40 Hz weg (dröhnt nur auf großen Boxen)
+    const shelf = AC.createBiquadFilter(); shelf.type = 'highshelf'; shelf.frequency.value = 3200; shelf.gain.value = -8;
+    const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 40;
+    mix.connect(shelf); shelf.connect(hp); hp.connect(comp); comp.connect(master); master.connect(AC.destination);
     sfxBus = AC.createGain(); sfxBus.gain.value = 1; sfxBus.connect(mix);
-    uiBus = AC.createGain(); uiBus.gain.value = .8; uiBus.connect(mix);
+    uiBus = AC.createGain(); uiBus.gain.value = .45; uiBus.connect(mix);
     // Hall: abklingendes Rauschen als Impulsantwort (1,6 s), zweikanalig leicht verschieden
     const ir = AC.createBuffer(2, sr * 1.6 | 0, sr);
     for (let c = 0; c < 2; c++) {
@@ -207,6 +215,7 @@ export function createAudio() {
   }
   // Hüllkurve: Anstieg a, Abfall auf 0 bis t + dur
   function env(g, t, a, dur, vol) {
+    a = Math.max(a, .006);   // kein harter Klick am Anfang
     g.gain.setValueAtTime(.0001, t);
     g.gain.linearRampToValueAtTime(vol, t + a);
     g.gain.exponentialRampToValueAtTime(.0001, t + Math.max(a + .005, dur));
@@ -257,7 +266,7 @@ export function createAudio() {
     const L = Math.min(1.6, .5 + s * .35);
     osc(v, 'sine', v.f(75 / Math.sqrt(s), .15), 28, L * .8, vol * .9, { a: .004 });
     noise(v, 'lowpass', 1800, 140, L, vol, { a: .003, q: .9 });
-    noise(v, 'highpass', 1800, 1200, .06, vol * .5);
+    noise(v, 'highpass', 1800, 1200, .06, vol * .3);
     crackle(v, 4 + s * 3 | 0, L * .7, vol * .12);
     v.wet(.45);
   }
@@ -279,7 +288,7 @@ export function createAudio() {
       osc(v, 'triangle', f * 2, f * 2, .05, .03);
     },
     scribble(v, o) { (SCRIB[o.kind] || SCRIB.radierer)(v); },
-    ui(v) { osc(v, 'sine', v.f(1700, .05), 1100, .035, .05); noise(v, 'highpass', 5000, 5000, .015, .02); },
+    ui(v) { osc(v, 'sine', v.f(1200, .05), 900, .035, .04); },
     tab(v) { osc(v, 'sine', v.f(660, .02), 660, .05, .045); osc(v, 'sine', v.f(990, .02), 990, .07, .04, { dt: .045 }); },
     go(v) { // Kampfbeginn: kurzer Trommelwirbel und Signal
       for (let i = 0; i < 4; i++) noise(v, 'bandpass', 900, 600, .05, .05 + i * .015, { dt: i * .05 });
@@ -306,7 +315,7 @@ export function createAudio() {
       osc(v, 'sine', v.f(170, .2), 70, .09, .1);
     },
     clink(v) { // Klinge auf Schild/Rüstung
-      noise(v, 'highpass', 3500, 3500, .02, .07);
+      noise(v, 'highpass', 3500, 3500, .02, .035);
       metal(v, v.f(1250, .12), .22, .05);
       osc(v, 'sine', v.f(220, .2), 90, .05, .05);
       v.wet(.2);
@@ -315,7 +324,7 @@ export function createAudio() {
     impact(v) { osc(v, 'sine', v.f(105, .12), 32, .28, .2); noise(v, 'lowpass', 700, 120, .2, .12); crackle(v, 3, .12, .03); },
     land(v) { osc(v, 'sine', v.f(150, .2), 80, .08, .06); noise(v, 'lowpass', 500, 200, .05, .04); },
     horn(v) { // Reiter-Angriff: zweitöniges Horn
-      notes(v, 'sawtooth', [[233, 0, .25], [349, .22, .55, 1.15]], .045, { lp: 1100, a: .04, glide: 1.003 });
+      notes(v, 'sawtooth', [[233, 0, .25], [349, .22, .55, 1.15]], .032, { lp: 1100, a: .04, glide: 1.003 });
       v.wet(.4);
     },
 
@@ -330,13 +339,13 @@ export function createAudio() {
     throw(v) { noise(v, 'bandpass', v.f(450, .15), 1500, .2, .085, { a: .06, q: 1.4 }); },
     thump(v) { osc(v, 'sine', v.f(90, .1), 40, .25, .16); noise(v, 'lowpass', 300, 100, .2, .1); noise(v, 'highpass', 2000, 1500, .03, .04); v.wet(.25); },
     shot(v) { // Gewehr: Knall, Körper, kurzer Nachklang
-      noise(v, 'highpass', v.f(1400, .2), 900, .035, .1);
+      noise(v, 'highpass', v.f(1400, .2), 900, .035, .06);
       noise(v, 'bandpass', v.f(2600, .2), 1400, .07, .06, { q: 1 });
       osc(v, 'sine', v.f(190, .15), 60, .05, .07);
       v.wet(.15);
     },
     cannon(v) {
-      noise(v, 'highpass', 2000, 1000, .05, .12);
+      noise(v, 'highpass', 2000, 1000, .05, .07);
       osc(v, 'sine', v.f(70, .1), 28, .55, .3, { a: .004 });
       noise(v, 'lowpass', 1100, 160, .65, .26, { a: .003 });
       v.wet(.4);
@@ -354,7 +363,7 @@ export function createAudio() {
     ignite(v) { noise(v, 'lowpass', 200, 1600, .3, .09, { a: .06 }); osc(v, 'sine', 90, 180, .25, .05, { a: .05 }); },
     crackle(v) { crackle(v, 2, .08, .025); },
     hiss(v) { noise(v, 'highpass', 2200, 3500, .35, .045, { a: .02 }); },
-    sizzle(v) { noise(v, 'highpass', 3000, 4500, .5, .05, { a: .02 }); crackle(v, 6, .4, .03); osc(v, 'sine', v.f(150, .3), 260, .08, .05, { dt: .1 }); },
+    sizzle(v) { noise(v, 'highpass', 3000, 4500, .45, .025, { a: .04 }); crackle(v, 5, .4, .015); osc(v, 'sine', v.f(150, .3), 260, .08, .03, { dt: .1 }); },
     splash(v) {
       noise(v, 'bandpass', v.f(1100, .2), 2600, .12, .08, { q: .8 });
       noise(v, 'highpass', 3000, 2000, .3, .03, { dt: .04 });
@@ -366,7 +375,7 @@ export function createAudio() {
 
     /* Zauber */
     zap(v) { // Blitz: Knall, elektrisches Sirren, Donner
-      noise(v, 'highpass', 2500, 1800, .06, .16);
+      noise(v, 'highpass', 2500, 1800, .06, .1);
       osc(v, 'square', v.f(140, .2), 70, .16, .035, { lp: 2500, vib: [60, 80] });
       noise(v, 'lowpass', 500, 80, 1.1, .13, { dt: .06, a: .08 });
       v.wet(.5);
@@ -375,7 +384,7 @@ export function createAudio() {
     wall(v) { osc(v, 'sine', v.f(80, .1), 40, .3, .16); noise(v, 'bandpass', 600, 250, .45, .08, { a: .05 }); crackle(v, 5, .3, .03); },
     fizzle(v) { osc(v, 'sine', v.f(700, .1), 180, .18, .03); noise(v, 'highpass', 3000, 3000, .08, .02); },
     heal(v) { osc(v, 'sine', v.f(880, .03), 880, .3, .025, { a: .02 }); osc(v, 'sine', v.f(1320, .03), 1320, .35, .018, { dt: .06, a: .02 }); v.wet(.5); },
-    rise(v) { osc(v, 'sine', v.f(95, .1), 70, .7, .06, { a: .2, vib: [4, 5] }); noise(v, 'lowpass', 500, 200, .6, .04, { a: .2 }); v.wet(.6); },
+    rise(v) { osc(v, 'sine', v.f(95, .1), 70, .7, .035, { a: .2, vib: [4, 5] }); noise(v, 'lowpass', 500, 200, .6, .04, { a: .2 }); v.wet(.6); },
 
     /* Tode */
     die(v, o) { // "Uff": Sägezahn durch zwei Formanten, kleinere Einheiten etwas höher

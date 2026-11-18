@@ -10,7 +10,7 @@ import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zon
 import { createStats } from './stats.js';
 import { snapshotBattle, restoreBattle, mirrorBattle, createBatch, resetFight } from './battle.js';
 import { createRenderer } from './render/renderer.js';
-import { createAudio } from './audio.js';
+import { createAudio, DEFAULT_VOLUME } from './audio.js';
 import { hurt, blast } from './combat.js';
 import { createUI } from './ui.js';
 import { createBenchHud } from './benchhud.js';
@@ -52,7 +52,7 @@ const renderer = createRenderer(host);
 renderer.resize(vw, vh);
 const audio = createAudio();
 audio.muted = !!save.muted;
-audio.setVolume(typeof save.volume === 'number' ? save.volume : .8);
+audio.setVolume(typeof save.volume === 'number' ? save.volume : DEFAULT_VOLUME);
 audio.bindUI(document);
 
 const pointer = { x: -999, y: -999, inside: false, erasing: false };

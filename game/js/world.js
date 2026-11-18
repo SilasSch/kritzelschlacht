@@ -108,7 +108,7 @@ export function spawn(world, type, x, y, team) {
     stance: 'stand', stanceT: 0, proneCd: 0, aimOk: false, snipeT: 0,   // Liegen (combat.PRONE): Haltung, Restzeit, Sperre, letzter Zielcheck frei
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
-    pathT: 0, pathBlk: 0,
+    pathT: 0, pathBlk: 0, pathX: 0,   // pathX: Aufpreis der geraden Linie in px (Einschlagen bzw. Wasser/Dornen)
     // Lufteinheiten (air.js): Blickrichtung, Rest des Überflugs, Bomben des laufenden Teppichs und Takt bis zur nächsten
     hx: .5, hy: .5, passT: .5, bombK: 0, bombT: .5, droneN: 0, mslCd: .5, mslK: 0, mslT: .5,
     // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):

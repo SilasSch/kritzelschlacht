@@ -15,6 +15,7 @@ import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepF
 // --- Task 5: Tiere ---
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
 import { stepKingAura, kingFall, KING } from './abilities.js';
+import { igniteArea, igniteUnder } from './wildfire.js';
 import { aloft, unseen } from './world.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
 
@@ -285,6 +286,7 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
     hurt(world, v, dmg * fall * (v === src ? .5 : 1), kind, src);
     if (gen >= 0 && v.alive) ignite(world, v, gen, src);
   });
+  if (gen >= 0) igniteArea(world, x, y);   // Waldbrand (wildfire.js)
   if (wallMul) {
     const { GW, GH, terr } = world;
     const g0x = Math.max(0, (x - R) / CELL | 0), g1x = Math.min(GW - 1, (x + R) / CELL | 0);
@@ -682,6 +684,7 @@ export function stepBurn(world, u, dt) {
   u.burnT -= a;
   hurt(world, u, BURN_DPS * a, 'burn', src, true);
   if (!u.alive) return;
+  if (!u.T.fly && u.z < 4) igniteUnder(world, u.x, u.y);   // Waldbrand: brennt er im Wald, fängt der Wald Feuer
   u.burnCk -= dt;
   if (u.burnCk <= 0 && u.burnGen < BURN_MAX_GEN && u.burnT > 0) {
     SP_W = world; SP_U = u; SP_P = SPREAD_P * Math.pow(.5, u.burnGen);

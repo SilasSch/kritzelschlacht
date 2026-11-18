@@ -39,7 +39,7 @@ export function unitAllowed(level, type) {
 // Gelände malen: in Leveln nie (Wunsch Silas, 18.11.: Lava, Mauern und Wasser entschieden Missionen zu billig), nur der
 // Radierer geht immer. Das Gelände der Gegner (place) bleibt; im Sandkasten und in der Schlacht ist alles malbar.
 export function terrainAllowed(level, key) {
-  if (!TERRAIN[key]) return false;
+  if (!TERRAIN[key] || TERRAIN[key].paint === false) return false;   // Asche entsteht nur durch Waldbrand
   return key === 'radierer' || !level;
 }
 // Malbare Einheiten des Levels (paint: false, etwa der Ghul, nie)

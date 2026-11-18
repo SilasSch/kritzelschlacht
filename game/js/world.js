@@ -277,4 +277,6 @@ export function clearBattle(world) {
   // Steinwände gehören zur Schlacht (spells.js): ihre Zellen werden wieder frei, Meteor-Kanäle enden
   for (const e of world.tempWalls) if (world.terr[e.i] === 4 && world.towner[e.i] === 2) { world.terr[e.i] = 0; world.towner[e.i] = 0; world.whp[e.i] = 0; touchTerrain(world); }
   world.tempWalls = []; world.casts = [];
+  // Waldbrand (wildfire.js): kein Brand mehr; Asche bleibt wie zerbrochene Mauern
+  if (world.cfire) { for (const i of world.blaze) world.cfire[i] = 0; world.blaze = []; }
 }

@@ -963,6 +963,14 @@ export function createFxCore(hooks = {}, opt = {}) {
         add('ring', e.x, e.y, .4, 14, WATER);
         break;
       }
+      // Waldbrand (wildfire.js): je brennender Zelle ein paar Flammen, gegen Ende Rauch; beim Ausbrennen ein Rußfleck
+      case 'blaze': {
+        if (!take('misc')) break;
+        const n = e.t > .25 ? 2 : 1;
+        for (let i = 0; i < n; i++) { const p = add('flame', e.x + rnd(-5, 5), e.y + rnd(-4, 3), rnd(.35, .55), rnd(3, 4.6)); if (!p) break; p.vx = rnd(-8, 8); p.vy = -rnd(35, 60); p.drag = 1.2; }
+        if (e.t < .5 && rand() < .5) wisp(e.x + rnd(-4, 4), e.y - 8, rnd(3, 4.5), 0x6f6a66);
+        break;
+      }
       case 'terrain':
         // Asche einer in Lava versunkenen Leiche: dunkler Fleck und Zischen (Dampfwölkchen wie bei extinguish,
         // Ton über audio.eventSound); andere terrain-Ereignisse gehen ans Gelände

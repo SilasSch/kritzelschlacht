@@ -187,14 +187,14 @@ test('Timer: think lässt fireT wachsen, swingT und hitT sinken bis 0', () => {
 });
 
 // Nachtrag 4 (#37): Bienengift
-test('Bienengift: ein Stich, Biene weg, das Ziel verliert 3 s lang Leben (4/s), frischt auf statt zu stapeln', async () => {
+test('Bienengift: ein Stich, Biene weg, das Ziel verliert 3 s lang Leben (5/s), frischt auf statt zu stapeln', async () => {
   const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
   const { attack, think, POISON, hurt } = await import('../game/js/combat.js');
   const { isFire } = await import('../game/js/abilities.js');
   const { UNITS } = await import('../game/js/data.js');
-  assert.deepEqual(POISON, { DPS: 4, T: 3 });
+  assert.deepEqual(POISON, { DPS: 5, T: 3 });
   assert.equal(isFire('poison'), false, 'Gift ist kein Feuer');
-  assert.equal(UNITS.biene.cost, .55);
+  assert.equal(UNITS.biene.cost, 1);   // Wunsch Silas 18.11.: mindestens 1 Punkt, dafür stärker
   const w = createWorld(1400, 800, 5); w.teamMode = true;
   const b = spawn(w, 'biene', 400, 400, 'blau'), k = spawn(w, 'krieger', 405, 400, 'rot'); k.cd = 1e9;
   rebuildHash(w);

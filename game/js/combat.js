@@ -173,6 +173,8 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
   if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
+  // Bienen (1 Punkt, Wunsch Silas 18.11.: weniger, aber stärkere Bienen): zäh gegen Klingen, Kugeln und Blitze zerfetzen sie
+  if (t === 'biene') m *= kind === 'bullet' ? BEE_BULLET : kind === 'lightning' ? BEE_ZAP : isFire(kind) ? BEE_FIRE : 1;
   // Schrottplatz: Blitze schlagen in Roboter doppelt ein; Urzeit: Panzerplatten des Ankylosaurus, Hornwand des
   // Triceratops im Lauf (von vorn halber Schaden durch Schläge, Pfeile und Kugeln)
   if (kind === 'lightning' && v.T.bot) m *= BOT.LIGHTNING;
@@ -765,7 +767,8 @@ export function stepBurn(world, u, dt) {
 // 'poison' (kein Feuer: Panzer, Vampir und Brand bleiben unberührt; Rüstung, Deckung und Liegen schützen nicht).
 // Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) und Untote
 // (Ghule, data.UNDEAD) vergiftet es nicht.
-export const POISON = { DPS: 4, T: 3 };
+export const BEE_BULLET = 2.5, BEE_ZAP = 1.6, BEE_FIRE = 3;   // Feuer: sonst entzünden sich überlebende Bienen im Schwarm immer wieder
+export const POISON = { DPS: 5, T: 3 };
 const NO_POISON = new Set(['panzer', 'heli', 'jet', 'kampfdrohne', 'bomber']);
 export function poison(world, v, src) {
   if (!v.alive || NO_POISON.has(v.type) || UNDEAD.has(v.type)) return;

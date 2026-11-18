@@ -358,7 +358,7 @@ export const COUNTERS = [
   ['biene', 'ritter', 60], ['biene', 'schuetze', 60],
   ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
   ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
-  ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
+  ['magier', 'krieger', 60], ['grenadier', 'krieger', 72],   // 72 statt 60 (18.11.): bei 60 Punkten an 1726x820 und 1400x1050 nur 5/8, schon auf dem Basis-Stand
   ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90],
   // Lufteinheiten (18.11.): Jet jagt Flieger, Drohne stürzt sich auf teure Ziele, Bomber trifft schwere Bodentruppen
   ['jet', 'heli', 90], ['jet', 'bomber', 104], ['mg', 'jet', 90],

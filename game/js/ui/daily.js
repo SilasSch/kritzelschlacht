@@ -11,6 +11,7 @@ const CSS = `
 .daily .no .new{font-size:11px;font-weight:800;padding:1px 8px;border-radius:99px;background:var(--go);color:#fff}
 .daily .nm{font-family:var(--f-logo);font-weight:400;font-size:26px;letter-spacing:.5px;line-height:1.05;color:var(--ink)}
 .daily .ds{font-size:12.5px;color:var(--muted);line-height:1.35}
+.daily .btns{display:flex;flex-direction:column;gap:6px}
 .daily .best{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .daily .best b{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
 .daily .best .st{color:var(--gold);font-size:17px;letter-spacing:2px;-webkit-text-stroke:.6px var(--ink)}
@@ -40,13 +41,14 @@ export function dailyCard(grid, game) {
       <span class="nm">Tageschallenge</span>
       <span class="ds">${esc(L.hint)} Budget ${L.budget}, drei Sterne bis ${L.par} Punkte.</span></div>
     <div class="best">${best ? `Bestwert heute<b>${fmtPts(best.spent)} Punkte</b><span class="st">${stars(best.stars)}</span>` : 'Heute noch nicht geschafft'}</div>
-    <button class="go" id="dailyPlay">${best ? 'Nochmal' : 'Spielen'}</button>`;
+    <div class="btns"><button class="go" id="dailyPlay">${best ? 'Nochmal' : 'Spielen'}</button>${game.board ? '<button class="btn" id="dailyBoard">🏆 Bestenliste</button>' : ''}</div>`;
   el.querySelector('#dailyPlay').onclick = () => { document.getElementById('ovList').hidden = true; game.playDaily(); };
+  if (game.board) el.querySelector('#dailyBoard').onclick = () => game.board.open(day);
   grid.prepend(el);
 }
 
 // Ergebnis: r.daily = { date, best } in der Tageschallenge, sonst nichts (dann wird der Zusatz entfernt)
-export function dailyResult(r, toast) {
+export function dailyResult(r, toast, game) {
   addStyle();
   const old = document.getElementById('resDaily'); if (old) old.remove();
   if (!r.daily) return;
@@ -56,8 +58,10 @@ export function dailyResult(r, toast) {
   box.className = 'resdaily'; box.id = 'resDaily';
   box.innerHTML = `<div class="row"><span>Bestwert heute</span><b>${best ? `${fmtPts(best.spent)} Punkte ${'★'.repeat(best.stars)}` : '–'}</b></div>
     <div class="row"><span>${esc(text)}</span><button class="btn" id="resCopy">Ergebnis kopieren</button></div>
+    ${game && game.board ? `<div class="row"><span>${r.win ? (game.board.live() ? 'Steht in der Live-Bestenliste.' : 'Als Code teilen: Freunde fügen ihn in ihre Bestenliste ein.') : 'Wer liegt heute vorn?'}</span><button class="btn" id="resBoard">🏆 Bestenliste</button></div>` : ''}
     <textarea id="resShare" rows="2" readonly hidden></textarea>`;
   document.getElementById('resStats').after(box);
+  if (game && game.board) box.querySelector('#resBoard').onclick = () => game.board.open(date);
   // Rückmeldung auch am Knopf: der Toast liegt unter der Ergebniskarte
   const btn = box.querySelector('#resCopy');
   btn.onclick = () => copyText(text, box.querySelector('#resShare'), msg => { btn.textContent = msg === MSG_COPIED ? 'Kopiert ✓' : 'Text markiert'; toast(msg); });

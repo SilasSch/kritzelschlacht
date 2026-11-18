@@ -30,7 +30,7 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 | Einstieg, Spielfluss | `js/main.js`, `js/ui.js`, `js/ui/*` (Tutorial-Blasen, Editor-Leiste, Teilen-Dialog, Tageschallenge, Hotseat) |
 | Simulation (ohne DOM) | `sim.js`, `world.js`, `combat.js`, `physics.js`, `pathing.js`, `morale.js`, `spells.js`, `abilities.js`, `battle.js` |
 | Inhalte | `data.js` (Einheiten, Gelände, Konter), `campaign/*` (Kapitel, Tutorial), `docs/kampagne.md` |
-| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `rules.js` (Regeln und Karten für 1 gegen 1), `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
+| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `dailyboard.js` (Bestenliste), `editor.js`, `hotseat.js`, `rules.js` (Regeln und Karten für 1 gegen 1), `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
 | Netz | `net.js` (Live-Verbindung des Artefakts, `room`-Capability; `?nettest` simuliert sie über BroadcastChannel in mehreren Tabs) |
 | Darstellung | `render/*`, `camera.js` (Zoom auf feste Welt), `glguard.js` (WebGL-Kontextverlust) |
 | Debug | `debug/scenes.js`, `benchhud.js`, `sandbox.js` |
@@ -52,6 +52,16 @@ alle Betrachter), daher keine Themen-Freigaben. Beide Spieler müssen angemeldet
 
 **Code-Duell** (`duel.js`, `ui/duel.js`) ist das 1 gegen 1 ohne Live-Verbindung: Herausforderung und Antwort als
 `KS1.`-Code (Typ `duel` / `duelres`), geht für jeden, auch über den öffentlichen Link.
+
+**Bestenliste der Tageschallenge** (`dailyboard.js`, `ui/dailyboard.js`): Rangfolge Sieg, dann weniger Punkte, dann
+schnellerer Sieg. Jeder Eintrag trägt die gemalte Armee und wird nachgerechnet; gezählt wird nur das Ergebnis der
+Simulation. Dafür ist der Kampf der Tageschallenge fest: Gegner mit Saat aus dem Datum, Armee auf dem Raster des Codes,
+Kampf mit fester Saat (Test: `tests/dailyboard.test.js`).
+- Öffentlicher Link: keine gemeinsame Liste (anonyme Betrachter haben keinen gemeinsamen Speicher). Eigene Siege und
+  Ergebnis-Codes (`KS1.`, Typ `dailyres`) von Freunden landen in der Liste auf dem Gerät.
+- Live-Artefakt: gemeinsame Liste in der Datenbank des Artefakts, `scores/<Spieler-id>`. Veröffentlichen mit
+  `capabilities: { room: {}, db: { rules: [{ path: 'scores', read: 'view', write: 'owner' }, { path: 'scores/{self}', write: 'interact' }] }, user: { scopes: ['profile'] } }`
+  (die Regeln stehen auch in `dailyboard.DB_RULES`). Eintragen dürfen nur Eingeladene mit Recht „Mitwirkende“ oder höher.
 
 **Regeln, Karten, Revanche** (`rules.js`): 14 Regeln (einzelne Kategorien, Mischungen wie Armee + Tiere, Auswahl nach
 Eigenschaft wie Nur Fernkampf, Luftkampf, Kleinvieh) und 6 spiegelgleiche Karten (Feld, Fluss, Furten, Wäldchen, Bollwerk,

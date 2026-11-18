@@ -382,7 +382,7 @@ export function createUI(game) {
     $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
     $('resNext').textContent = r.nextLabel || (r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln');
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
-    dailyResult(r, toast);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
+    dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
 

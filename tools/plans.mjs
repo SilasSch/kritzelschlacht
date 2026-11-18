@@ -14,7 +14,8 @@ export const MISSION_PLANS = [
   { smart: [['ritter', 9, ...F]], spam: [['krieger', 30, ...F]] },
   // M2: nur 4 Grenadiere: ihre Bomben fallen in den Nahkampf vor den Rittern und treffen die eigenen Ritter mit
   // Task 7: Budget 100 → 95, Spam 50 → 47 Krieger (mehr passt nicht ins Budget)
-  { smart: [['ritter', 12, ...F], ['grenadier', 4, ...B]], spam: [['krieger', 47, ...F]] },
+  // Nachtrag 7 (#47): par 70 → 75, 14 Ritter + 3 Grenadiere statt 12 + 4 (die Schützen weichen den Bomben aus)
+  { smart: [['ritter', 14, ...F], ['grenadier', 3, ...B]], spam: [['krieger', 47, ...F]] },
   // M3, M6: Bienen kosten 0,55 statt 0,5 (Nachtrag 4, #37). Task 7: par 85 → 90 bzw. 90 → 95 und 163 bzw. 172 Bienen
   // (154 bzw. 163 gewannen an einzelnen Formen nur 3/8 bzw. 4/8; die alten Pläne hatten 170 bzw. 180)
   { smart: [['biene', 163, ...F]], spam: [['krieger', 55, ...F]] },

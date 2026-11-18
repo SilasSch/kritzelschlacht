@@ -29,7 +29,8 @@ export const UNITS = {
   // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
   panzerfaust:{n:'Panzerfaust',cat:'modern',col:'#b59060',r:9,hp:85,dmg:70,range:230,splash:22,speed:44,cd:3.5,cost:6,mass:1,d:'Rakete gegen Panzer und Hubschrauber. Lange Nachladezeit.'},
-  moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:55,speed:34,cd:4.5,cost:9,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
+  // Nachtrag 7 (#47): Splash 55 → 62, Abklingzeit 4,5 → 4,2 s (Römer außerhalb des Blocks weichen aus, moerser > roemer hielt nicht)
+  moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:62,speed:34,cd:4.2,cost:9,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,mass:12,d:'Fliegt, kreist und feuert Salven. Nahkämpfer kommen nicht ran, Raketen schon.'},
   // --- Task 6: Kreaturen (Spez. #34; Verhalten in abilities.js, Abschnitt Kreaturen) ---
@@ -39,7 +40,8 @@ export const UNITS = {
   // Task 7: Kosten 8 → 7, Schaden 22 → 24 (wirkte zu schwach: verlor fast jedes Duell gleicher Punkte)
   troll:{n:'Troll',cat:'mythisch',col:'#7f9a62',r:14,hp:260,dmg:24,range:4,speed:38,cd:1.3,cost:7,mass:4,d:'Zäh, mit Keule. Heilt sich ständig selbst, nur Feuer stoppt die Heilung.'},
   // Task 7: Kosten 10 → 12 (Spam gewann M8 und M9 öfter als der Mörser)
-  zyklop:{n:'Zyklop',cat:'mythisch',col:'#d0a983',r:15,hp:220,dmg:30,range:280,splash:34,speed:32,cd:3.6,cost:12,mass:5,d:'Mythische Artillerie: wirft Felsbrocken im Bogen über Mauern und Köpfe. Im Nahkampf unbeholfen.'},
+  // Nachtrag 7 (#47): Abklingzeit 3,6 → 3,3 s (Grenadiere weichen den Felsbrocken aus, zyklop > grenadier hielt nicht)
+  zyklop:{n:'Zyklop',cat:'mythisch',col:'#d0a983',r:15,hp:220,dmg:30,range:280,splash:34,speed:32,cd:3.3,cost:12,mass:5,d:'Mythische Artillerie: wirft Felsbrocken im Bogen über Mauern und Köpfe. Im Nahkampf unbeholfen.'},
   hexe:{n:'Hexe',cat:'mythisch',col:'#6a4c8c',r:9,hp:55,dmg:10,range:200,speed:58,cd:1.3,cost:5,fly:1,flyZ:24,mass:.8,d:'Fliegt niedrig auf dem Besen und schießt grüne Zauber. Verwandelt Gegner kurz in harmlose Frösche.'},
   // Task 7: Kosten 7 → 9,5 (Spam gewann M4 und M7 öfter als der Geist)
   phoenix:{n:'Phönix',cat:'mythisch',col:'#ff8a3d',r:11,hp:110,dmg:12,range:3,speed:88,cd:.8,cost:9.5,fly:1,flyZ:26,mass:1,d:'Feuervogel mit Feuerspur, die Bodentruppen anzündet. Steht einmal pro Schlacht aus seiner Asche wieder auf.'},
@@ -207,10 +209,11 @@ for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
 // paint: false = nicht malbar (Ghul; Vorgabe 3: main.js catKeys und randomBattle, bench.js und ui.js filtern), sonst true.
 for (const k in UNITS) if (UNITS[k].paint === undefined) UNITS[k].paint = true;
 // Wendigkeit (Nachtrag 7, #47): Chance, einer Bombe, Granate, Mörsergranate oder einem Felsbrocken auszuweichen
-// (dodge.js). Jede Einheit trägt den Schlüssel dodge (gleiche Form für V8): flink etwa 60 %, normal etwa 35 % (Infanterie,
+// (dodge.js). Jede Einheit trägt den Schlüssel dodge (gleiche Form für V8): flink etwa 60 %, normal etwa 30 % (Infanterie,
 // Magier, Gorilla und alle übrigen, auch Frosch und Ghul), schwer 0–10 %. Liegende MG- und Scharfschützen und Römer im
 // Block weichen nie aus (dodge.canDodge); Flieger trifft ein Bogenwurf ohnehin nicht.
-export const AGILITY = { flink: .6, normal: .35 };
+// normal 30 % (unteres Ende von "etwa 35 %"): mit 35 % fiel grenadier > krieger an einer Weltform (Balance nach #47)
+export const AGILITY = { flink: .6, normal: .3 };
 export const NIMBLE = new Set(['wolf', 'biene', 'reiter', 'adler', 'einhorn', 'geist', 'vampir']);
 export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0 };
 for (const k in UNITS) UNITS[k].dodge = NIMBLE.has(k) ? AGILITY.flink : k in HEAVY ? HEAVY[k] : AGILITY.normal;
@@ -291,6 +294,8 @@ export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sn
 // --- Task 6: Kreaturen --- (Hexe und Zyklop: Geister und Reiter jagen sie bevorzugt)
 RANGED.add('hexe'); RANGED.add('zyklop');
 
+// Nachtrag 7 (#47): M2 par 70 → 75 (letztes Mittel): die Schützen weichen den Bomben jetzt aus, 12 Ritter + 4 Grenadiere
+// gewannen nur noch 3–6/8; Ritter-LP oder Schützen-LP zu ändern brach biene > ritter bzw. roemer > schuetze. Smart: 14 + 3.
 // Task 7: M2 (Pfeilregen) Budget 100 → 95: 33 Römer gewannen dort an zwei Formen 4/8 (Römer-Spam muss verlieren), 31
 // verlieren 8/8; der Smart-Plan (70 = par) bleibt. M3 und M6 par +5 (Bienen 0,55 statt 0,5, #37), Pläne in tools/plans.mjs.
 // M5 (Die Festung): Budget 110 → 80 und 26 statt 16 Schützen (finale Prüfung der Römer-Runde). Die Schilde halten die
@@ -303,7 +308,7 @@ RANGED.add('hexe'); RANGED.add('zyklop');
 // von H. Einheiten gehören dem Team 'rot'.
 export const MISSIONS = [
   {n:'Erster Zusammenstoß',budget:60,par:42,hint:'Wähle Krieger, male deine Armee links der Linie und drück Los. Für drei Sterne: Ritter halten mehr aus.',place:[['rect','krieger',24,.70,.36,.80,.64]]},
-  {n:'Pfeilregen',budget:95,par:70,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
+  {n:'Pfeilregen',budget:95,par:75,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
   {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
   {n:'Die Festung',budget:80,par:70,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},

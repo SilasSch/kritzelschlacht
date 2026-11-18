@@ -296,6 +296,24 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.75, -r * .75]], '#e6ebf0', 2.2); Ln(c, [[r * .52, -r * .02], [r * 1.08, r * .5]], '#8a5a2b', 1.8); },
     },
   },
+  // König: Teamfarbe, roter Umhang hinter dem Körper, goldene Krone, Schwert mit goldenem Griff
+  koenig: {
+    eyes: eyePair(.28, -.02, .27),
+    body(c, r, k, f) {
+      poly(c, r, [[-.35, -.55], [-1.25, .95], [.1, .9]], '#b8323a', 1.3);
+      feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col);
+      E(c, 0, r * .55, r * .78, r * .2, '#f4f1e8', 1);
+      whites(c, r, this.eyes);
+    },
+    headgear(c, r) {
+      poly(c, r, [[-.6, -.72], [-.66, -1.32], [-.33, -1.0], [0, -1.42], [.33, -1.0], [.66, -1.32], [.6, -.72]], '#ffc533', 1.4);
+      E(c, 0, -r * 1.12, r * .1, r * .1, '#e5574f', 0); E(c, -r * .45, -r * .92, r * .07, r * .07, '#3f7cff', 0); E(c, r * .45, -r * .92, r * .07, r * .07, '#3f7cff', 0);
+    },
+    weapon: {
+      grip: [.8, .26], axis: Math.atan2(-1.05, .97), swing: 1,
+      draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.95, -r * .95]], '#eef2f6', 2.6); Ln(c, [[r * .5, -r * .02], [r * 1.1, r * .55]], '#ffc533', 2.2); E(c, r * .66, r * .44, r * .12, r * .12, '#ffc533', 1); },
+    },
+  },
   schuetze: {
     eyes: eyePair(.28, .05, .27),
     body(c, r, k, f) { feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes); },
@@ -828,7 +846,7 @@ const DEF = {
    Boss-Sticker (#23, BOSS_VIS 1,3): Körper mit Beinen (Bild 0/1 = Schritt), Decke in Teamfarbe, Kopfgruppe am Hals
    (Drehpunkt ELE_GEO.head, nickt um headRot) mit Kopf und Stoßzähnen, Ohr (wedelt: pose.wing) und Rüssel (schwingt:
    pose.tailSwing, hebt sich beim Schlag und beim Trampeln); Augen in der Kopfgruppe. */
-const TEAM_ACCENT = new Set(['krokodil', 'gorilla', 'adler', 'bueffel', 'elefant']);
+const TEAM_ACCENT = new Set(['krokodil', 'gorilla', 'adler', 'bueffel', 'elefant', 'lama']);
 // Halstuch: dreieckiger Zipfel in Teamfarbe vom Knoten (x, y) aus, Richtung a (rad), Länge l (r-Einheiten)
 function scarf(c, r, k, x, y, a, l) {
   const cx = Math.cos(a), sy = Math.sin(a), px = -sy, py = cx, w = l * .45;
@@ -853,6 +871,23 @@ Object.assign(DEF, {
       E(c, r * 1.78, -r * .12, r * .05, r * .04, O, 0);
       for (const p of [this.eyes.L, this.eyes.R]) E(c, p[0] * r, p[1] * r + r * .08, r * .2, r * .16, k.col, 1.2);
       scarf(c, r, k, .5, -.1, 1.75, .5);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Lama: wolliger heller Körper, langer Hals, Kopf mit Bananenohren, Decke in Teamfarbe
+  lama: {
+    eyes: eyePair(.82, -1.22, .15),
+    body(c, r, k, f) {
+      const l = f ? .14 : -.14;
+      for (const [x, s] of [[-.6, 1], [-.3, -1], [.3, 1], [.58, -1]]) Ln(c, [[x * r, r * .3], [(x + s * l) * r, r * .98]], '#c9b79a', 2.2);
+      E(c, -r * .82, -r * .1, r * .22, r * .2, k.col, 1.2);
+      E(c, 0, r * .1, r * .95, r * .55, k.col);
+      for (const x of [-.6, -.25, .1, .45]) E(c, x * r, -r * .32, r * .2, r * .14, k.col, 0);
+      RR(c, -r * .45, -r * .2, r * .8, r * .42, r * .1, k.shield);
+      Ln(c, [[r * .55, -r * .05], [r * .66, -r * 1.05]], k.col, 5.2);
+      E(c, r * .82, -r * 1.2, r * .4, r * .3, k.col);
+      poly(c, r, [[.6, -1.42], [.55, -1.78], [.7, -1.48]], k.col, 1.1); poly(c, r, [[.88, -1.45], [.92, -1.8], [1.0, -1.46]], k.col, 1.1);
+      E(c, r * 1.14, -r * 1.08, r * .14, r * .1, '#d9c6a8', 1);
       whites(c, r, this.eyes);
     },
   },

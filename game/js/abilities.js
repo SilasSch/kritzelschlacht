@@ -1179,6 +1179,78 @@ function swoopUpdate(world, u) {
 }
 function swoopEnd(world, u) { u.fz = u.T.flyZ; }
 
+/* ---------- König (Wunsch Silas, 18.11.) ----------
+   Teure Armee-Einheit, um die sich die Schlacht dreht.
+   - Königsaura (stepKingAura, jeder Zustand außer tot): alle AURA_DT s bekommen eigene Armee-Einheiten bis AURA_R px
+     (er selbst nicht) u.braveT = AURA_T: sie fliehen nicht (morale.updateMorale) und schlagen im Nahkampf ×AURA_DMG
+     (combat.attack). Mehrere Könige stapeln nicht (braveT wird nur gesetzt). Alle PULSE s ein goldener Ring als Zeichen.
+   - Schlachtruf (ABILITY, Abklingzeit cd): mit einem Feind bis CRY_ENGAGE px und mindestens CRY_MIN Verbündeten bis
+     CRY_R px heilen alle Verbündeten dort (nicht Untote, nicht Asche) CRY_HEAL ihrer max. LP und sind CRY_T s lang
+     ×CRY_SPEED schneller und ×CRY_DMG stärker im Nahkampf (u.buffT, wie das Heulen der Wölfe).
+   - Königsmord (kingFall, aus combat.die): fällt er, erschrecken eigene Einheiten bis FALL_R px FALL_T s lang (scare;
+     furchtlose Maschinen und Drachen nicht). Darum lohnt es sich, ihn mit Scharfschützen, Reitern oder Geistern zu jagen. */
+export const KING = {
+  AURA_R: 150, AURA_DT: .5, AURA_T: .8, AURA_DMG: 1.2, PULSE: 2.5,
+  CRY_R: 170, CRY_ENGAGE: 220, CRY_MIN: 3, CRY_HEAL: .25, CRY_T: 5, CRY_SPEED: 1.25, CRY_DMG: 1.25,
+  FALL_R: 250, FALL_T: 3,
+};
+let KG_W = null, KG_U = null, KG_F = null, KG_N = 0, KG_DO = false;
+function kingAuraTest(v) {
+  if (v === KG_U || !v.alive || v.T.cat !== 'armee' || factionOf(KG_W, v) !== KG_F) return;
+  const dx = v.x - KG_U.x, dy = v.y - KG_U.y, R = KING.AURA_R;
+  if (dx * dx + dy * dy > R * R) return;
+  v.braveT = KING.AURA_T; KG_N++;
+}
+export function stepKingAura(world, u, dt) {
+  u.auraT -= dt;
+  if (u.auraT > 0) return;
+  u.auraT = u.auraT + KING.AURA_DT > 0 ? u.auraT + KING.AURA_DT : KING.AURA_DT;
+  KG_W = world; KG_U = u; KG_F = factionOf(world, u); KG_N = 0;
+  query(world, u.x, u.y, KING.AURA_R, kingAuraTest);
+  KG_W = null; KG_U = null; KG_F = null;
+  const k = Math.round(KING.PULSE / KING.AURA_DT);
+  if ((u.id + Math.round(world.time / KING.AURA_DT)) % k === 0) emit(world, { type: 'ability', k: 'kingAura', x: u.x, y: u.y, z: 0, R: KING.AURA_R });
+}
+function cryTest(v) {
+  if (v.ashT > 0 || !v.alive || factionOf(KG_W, v) !== KG_F) return;
+  const dx = v.x - KG_U.x, dy = v.y - KG_U.y, R = KING.CRY_R;
+  if (dx * dx + dy * dy > R * R) return;
+  KG_N++;
+  if (!KG_DO) return;
+  if (!UNDEAD.has(v.type)) { const h = v.hp + KING.CRY_HEAL * v.T.hp; v.hp = h < v.T.hp ? h : v.T.hp; }
+  if (!(v.buffT > KING.CRY_T) || v.spdMul < KING.CRY_SPEED) { v.buffT = KING.CRY_T; v.spdMul = KING.CRY_SPEED; v.dmgMul = KING.CRY_DMG; }
+}
+function cry(world, u, apply) {
+  KG_W = world; KG_U = u; KG_F = factionOf(world, u); KG_N = 0; KG_DO = apply;
+  query(world, u.x, u.y, KING.CRY_R, cryTest);
+  KG_W = null; KG_U = null; KG_F = null;
+  return KG_N;
+}
+const cryReady = (world, u) => !!foeInReach(world, u, KING.CRY_ENGAGE, false) && cry(world, u, false) >= KING.CRY_MIN + 1;
+function cryStart(world, u) {
+  cry(world, u, true);
+  u.swingT = .25;
+  emit(world, { type: 'ability', k: 'kingCry', x: u.x, y: u.y, z: 0, R: KING.CRY_R, face: u.face });
+  sound(world, 'horn');
+}
+function fallTest(v) {
+  if (v === KG_U || !v.alive || FEARLESS.has(v.type) || v.type === 'frosch' || v.ashT > 0 || UNDEAD.has(v.type) || factionOf(KG_W, v) !== KG_F) return;
+  const dx = v.x - KG_U.x, dy = v.y - KG_U.y, R = KING.FALL_R;
+  if (dx * dx + dy * dy > R * R) return;
+  v.braveT = 0; scare(KG_W, v, KING.FALL_T); emit(KG_W, { type: 'fear', x: v.x, y: v.y - v.T.r, z: v.z });
+}
+export function kingFall(world, u) {
+  KG_W = world; KG_U = u; KG_F = factionOf(world, u);
+  query(world, u.x, u.y, KING.FALL_R, fallTest);
+  KG_W = null; KG_U = null; KG_F = null;
+  emit(world, { type: 'ability', k: 'kingFall', x: u.x, y: u.y, z: 0, R: KING.FALL_R });
+}
+
+// Erste Abklingzeit (Wunsch Silas, 18.11.): viele Fähigkeiten kamen zu spät, oft war die Schlacht schon entschieden.
+// Für diese Typen gilt beim Spawn FIRST_CD statt cd (gestreut wie bisher, world.spawn); die Wiederholung bleibt cd.
+// Unverändert: Mörser-Sperrfeuer (Flächenschaden), Sanitäter und Soldat (früher: Soldaten mit Sanitätern zu stark), Krokodil und Adler (ohnehin kurz), Hubschrauber und Drache (eigene
+// Baustellen), Büffel (Herden-Abklingzeit).
+export const FIRST_CD = { schuetze: 20, panzer: 12, wolf: 16, baer: 16, geist: 6, elefant: 10, gorilla: 6, koenig: 6 };
 /* ---------- Schrottplatz (5. Kategorie, 18.11.) ----------
    Kategorie-Regeln für alle Roboter (T.bot), aus combat.think je Schritt (stepBot) und combat.hurt (Schild, Blitz):
    Schild aus BOT.SHIELD · LP schluckt Treffer vor den LP und lädt nach BOT.RECHARGE_T s ohne Treffer wieder auf; Blitz
@@ -1578,6 +1650,7 @@ export const ABILITY = {
   gorilla: { cd: 12, ready: throwReady, start: throwStart, update: throwUpdate, end: throwEnd },
   adler: { cd: 10, ready: swoopReady, start: swoopStart, update: swoopUpdate, end: swoopEnd },
   bueffel: { cd: 1, ready: herdReady, start: herdStart, update: herdUpdate },
+  koenig: { cd: 18, ready: cryReady, start: cryStart, update: done },
   // --- Schrottplatz und Urzeit ---
   drohne: { cd: BUILD.CD, ready: buildReady, start: buildStart, update: done },
   spinne: { cd: 10, ready: pounceReady, start: pounceStart, update: done },
@@ -1587,3 +1660,4 @@ export const ABILITY = {
   anky: { cd: 8, ready: tailReady, start: tailStart, update: done },
   trike: { cd: 14, ready: trikeReady, start: trikeStart, update: trikeUpdate },
 };
+for (const k in FIRST_CD) ABILITY[k].first = FIRST_CD[k];

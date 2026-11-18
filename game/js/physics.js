@@ -27,6 +27,7 @@ export const FLY_VZ = 120;           // Flieger steigen und sinken zu ihrer Flug
 
 const HC = HASH_CELL;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const SLOW = .6;   // Lama-Spucke (combat.SPIT.SLOW, hier ohne Import wegen der Ladereihenfolge)
 const WATER = TERRAIN.wasser.id, LAVA = TERRAIN.lava.id, WALL = TERRAIN.mauer.id;
 
 /* ---------- Impuls ---------- */
@@ -52,7 +53,7 @@ export function integrate(world, dt) {
     if (T.fly) {
       if (u.z !== u.fz) { const dz = u.fz - u.z, s = FLY_VZ * dt; u.z = dz > s ? u.z + s : dz < -s ? u.z - s : u.fz; }
       u.vz = 0;
-      wx = u.mx * u.spdMul; wy = u.my * u.spdMul;
+      wx = u.mx * u.spdMul * (u.slowT > 0 ? SLOW : 1); wy = u.my * u.spdMul * (u.slowT > 0 ? SLOW : 1);
     } else if (u.state === 'air') {
       f = drag;
       u.vz -= GRAVITY * dt; u.z += u.vz * dt;
@@ -79,7 +80,7 @@ export function integrate(world, dt) {
         if (u.hopT > 0) { u.hopT -= dt; mx = 0; my = 0; }
         if (tt === LAVA) { if (lavaEscape(world, u)) { mx = LV.x * T.speed; my = LV.y * T.speed; if (LV.x < -.2) u.face = -1; else if (LV.x > .2) u.face = 1; } }
         else if ((mx !== 0 || my !== 0) && lavaGuard(world, u, mx, my)) { mx = LV.x; my = LV.y; }
-        wx = mx * sp * u.spdMul; wy = my * sp * u.spdMul;
+        wx = mx * sp * u.spdMul * (u.slowT > 0 ? SLOW : 1); wy = my * sp * u.spdMul * (u.slowT > 0 ? SLOW : 1);
       }
     }
     const vx = wx + u.vx, vy = wy + u.vy;

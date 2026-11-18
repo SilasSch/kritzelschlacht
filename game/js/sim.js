@@ -1,6 +1,7 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
 import { MISSIONS, TERRAIN, CELL, UNITS } from './data.js';
+import { stepWildfire } from './wildfire.js';
 import { levelById } from './campaign/index.js';
 import { spawn, setCell, rebuildHash, clearBattle, touchTerrain, frameX } from './world.js';
 import { think, stepProjectiles } from './combat.js';
@@ -62,6 +63,7 @@ export function step(world, dt) {
   }
   t1 = pnow(); M[6] += t1 - t0; t0 = t1;
   stepProjectiles(world, dt);
+  stepWildfire(world, dt);   // Waldbrand (wildfire.js)
   t1 = pnow(); M[7] += t1 - t0; t0 = t1;
   stepCorpses(world, dt);
   stepDebris(world, dt);

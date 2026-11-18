@@ -61,6 +61,7 @@ function cardHTML(t, pic, mini, opt = {}) {
     ${row('Kosten', st.cost, fmtPts(r.cost))}
   </div>
   ${c.abil.length ? `<div class="uc-ab">${c.abil.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
+  ${c.syn && c.syn.length ? `<div class="uc-ab uc-syn">${c.syn.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
   <div class="uc-vs">${vs('s', 'Stark gegen', c.strong)}${vs('w', 'Schwach gegen', c.weak)}</div>
   ${opt.note ? `<div class="uc-note">${opt.note}</div>` : ''}`;
 }

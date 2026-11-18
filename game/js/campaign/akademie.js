@@ -25,24 +25,24 @@ export default {
       // Trolle heilen 3 % je s, Feuer stoppt das 4 s lang. 12 Magier allein verlieren (0/4), mit 2 Trollen davor
       // gewinnen sie sicher: die Trolle halten, die Feuerbälle stoppen die Heilung. Trolle und Einhörner allein heilen
       // die Gegner nie herunter.
-      id: 'aka-1', n: 'Die Trollbrücke', budget: 88, par: 76,
+      id: 'aka-1', n: 'Die Trollbrücke', budget: 128, par: 127,   // Magier langsamer (18.11.): 14 statt 12
       units: ['magier', 'troll', 'einhorn'], cats: CATS, answer: ['magier'],
       hint: 'Magier, Trolle und Einhörner. Trolle heilen sich ständig, nur Feuer stoppt das. Ein paar eigene Trolle halten die Brücke, dahinter brennt es.',
       place: [
         ['tRect', 'wasser', .5, 0, .58, .42], ['tRect', 'wasser', .5, .58, .58, 1],
         ['rect', 'troll', 9, .66, .32, .72, .68], ['rect', 'krieger', 16, .74, .25, .8, .75],
       ],
-      plan: { smart: [['magier', 12, ...B], ['troll', 2, ...F]], spam: [['einhorn', 19, ...F]] },
+      plan: { smart: [['magier', 14, ...B], ['troll', 2, ...F]], spam: [['einhorn', 19, ...F]] },
     },
     {
       // Froschfluch: alle 14 s wird das Ziel einer Hexe 5 s lang ein harmloser Frosch. Geister vorn (halber Schaden,
       // Lebensraub) halten die Bären, die Hexen dahinter verwandeln sie. Einhörner und Geister allein verlieren (Budget 86:
       // mit 90 gewannen 30 Geister an zwei Formen 2/8, 28 Geister höchstens 1/8).
-      id: 'aka-2', n: 'Der Hexenwald', budget: 86, par: 80,
+      id: 'aka-2', n: 'Der Hexenwald', budget: 86, par: 85,   // 11 Hexen (18.11.)
       units: ['hexe', 'geist', 'einhorn'], cats: CATS, answer: ['hexe'],
       hint: 'Hexen, Geister und Einhörner. Ein Bär als Frosch beißt nicht. Wer hält die Bären fest, solange die Hexen fluchen?',
       place: [['tRect', 'wald', .58, 0, 1, 1], ['rect', 'baer', 10, .68, .3, .76, .7]],
-      plan: { smart: [['geist', 10, ...F], ['hexe', 10, ...B]], spam: [['geist', 28, ...F]] },
+      plan: { smart: [['geist', 10, ...F], ['hexe', 11, ...B]], spam: [['geist', 28, ...F]] },
     },
     {
       // Schützen in einem Mauerring: Pfeile fliegen im Bogen hinaus, Bodentruppen kommen nicht hinein. Felsbrocken
@@ -79,14 +79,14 @@ export default {
       // ums Ziel), Zyklopen tief im großen Krater, außer Reichweite der Magier. Magier allein verlieren nach 180 s,
       // Phönixe allein am Drachen und den Kriegern, Trolle und Einhörner kommen nicht in den Krater. Budget 145: mit 160
       // gewannen 35 Einhörner an 1400×1050 3/8 (der Sturzflug des Drachen schleudert einzelne in den Krater).
-      id: 'aka-5', n: 'Drachenhort II', budget: 145, par: 130,
+      id: 'aka-5', n: 'Drachenhort II', budget: 178, par: 177,   // Magier langsamer (18.11.): 14 statt 12
       units: ['magier', 'troll', 'phoenix', 'einhorn'], cats: CATS,
       hint: 'Magier, Trolle, Phönixe und Einhörner. Drei Magier nah beieinander rufen einen Meteor in den dichtesten Haufen. Der Hort liegt tief im Krater, weit über jede Zauberreichweite.',
       place: [
         ['tCircle', 'lava', .9, .5, .44, .08], ['circle', 'zyklop', 3, .9, .5, .04],
         ['unit', 'drache', .56, .5], ['rect', 'krieger', 36, .52, .4, .56, .6],
       ],
-      plan: { smart: [['magier', 12, ...B], ['troll', 3, ...F], ['phoenix', 5, ...Deep]], spam: [['magier', 29, ...F]] },
+      plan: { smart: [['magier', 14, ...B], ['troll', 3, ...F], ['phoenix', 5, ...Deep]], spam: [['magier', 29, ...F]] },
     },
   ],
 };

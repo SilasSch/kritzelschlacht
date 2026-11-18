@@ -26,6 +26,7 @@ test('PROJECTILES: Bögen und gerade Schüsse mit Tempo', () => {
     fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
     // Task 6: Felsbrocken des Zyklopen, Zauber der Hexe
     boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
+    spit: { arc: false, speed: 380 },   // Lama (18.11.)
   });
 });
 
@@ -195,7 +196,7 @@ test('Soldat hinter eigener Reihe feuert nicht und bewegt sich seitlich', () => 
 
 test('Dauerhaft verdeckt: nach 2 s neues Ziel mit freier Linie, nie Schuss durch Verbündete', () => {
   const w = mkWorld();
-  const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0;
+  const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0; s.abCd = 1e9;   // ohne Handgranate (Bogenwurf über die Reihe)
   // lange Reihe Verbündeter, seitlich kommt man nicht vorbei
   const allies = [];
   for (let y = 100; y <= 520; y += 15) allies.push(spawn(w, 'ritter', 345, y, 'blau'));
@@ -216,7 +217,7 @@ test('Dauerhaft verdeckt: nach 2 s neues Ziel mit freier Linie, nie Schuss durch
 
 test('Dauerhaft verdeckt ohne Alternative: hält das Feuer, friert nicht ein, blockedT zurückgesetzt', () => {
   const w = mkWorld();
-  const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0;
+  const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0; s.abCd = 1e9;   // ohne Handgranate
   const allies = [];
   for (let y = 40; y <= 760; y += 15) allies.push(spawn(w, 'ritter', 345, y, 'blau'));
   spawn(w, 'krieger', 450, 300, 'rot');

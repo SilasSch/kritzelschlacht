@@ -14,6 +14,10 @@ import { castSpell, spellReact, FIREBALL } from './spells.js';
 import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepFrog, stepFrogCurse, phoenixAsh } from './abilities.js';
 // --- Task 5: Tiere ---
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
+import { stepKingAura, kingFall, KING } from './abilities.js';
+import { igniteArea, igniteUnder } from './wildfire.js';
+import { SYN, SB, stepSynergy, synFx, ZANGE_A, ZANGE_B, FELD_A, JAGD_A, SCHRECK_A, KLEBRIG_A } from './synergy.js';
+import { RV_MARK, RV_KLINGE } from './world.js';
 import { aloft, unseen } from './world.js';
 // --- Schrottplatz und Urzeit ---
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
@@ -59,12 +63,15 @@ function backStep(u, dt) { const r = u.rv; r[RV_BACK] += dt; if (r[RV_BACK] >= S
 function endBack(u) { const r = u.rv; if (r[RV_BACK] > 0) { r[RV_BACK] = 0; r[RV_BCD] = SNIPER.BACK_CD; } }
 // Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
 // Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
-export const KITE = new Set(['schuetze', 'soldat', 'speer', 'laserbot']);
+export const KITE = new Set(['schuetze', 'soldat', 'lama', 'speer', 'laserbot']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
 // --- Task 6: Kreaturen --- Hexe: gerader Zauber 'hex' (Schusslinie prüfen wie die Schützen)
 STRAIGHT.add('hexe'); STRAIGHT_KIND.hexe = 'hex';
+// Lama (Ideenrunde 18.11.): Spucke, gerade wie der Hexenzauber, trifft auch Flieger und bremst (SPIT)
+STRAIGHT.add('lama'); STRAIGHT_KIND.lama = 'spit';
+export const SPIT = { T: 2, SLOW: .6 };
 
 // Liegen (Spez. #22): MG-Schützen und Scharfschützen legen sich hin, wenn ein Ziel in Reichweite ist und
 // kein Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R ist. Haltung u.stance: 'stand' → 'down'
@@ -92,6 +99,7 @@ export const PROJECTILES = {
   fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
   // --- Task 6: Kreaturen --- boulder: Felsbrocken des Zyklopen (Bogen, landBoulder); hex: Zauber der Hexe (gerade, hexImpact)
   boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
+  spit: { arc: false, speed: 380 },
 };
 // Bögen, die wie ein Pfeil den nächsten Körper am Landepunkt treffen (alle anderen Bögen explodieren)
 export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow']);
@@ -109,6 +117,7 @@ const SHOT = {
   // --- Task 6: Kreaturen ---
   boulder: [.6, .42, 16, 'throw'],
   hex: [0, 0, 6, 'whoosh'],
+  spit: [0, 0, 7, 'thwip'],
 };
 
 // Höhen der geraden Schüsse: am Boden in Laufhöhe (unter WALL_CLEAR_Z, Mauern blocken),
@@ -131,8 +140,16 @@ export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET
 // Takt der Zielsuche (s, Grundwert + Zufall) und der Gruppenmitte (groupInfo), gestreckt in Task 13
 export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5, .3];
 // Nur diese Typen lesen die Gruppenmitte (Rudel, Schwarm, Schildwall, Reihe halten); alle anderen sparen sich groupInfo
+// Keil der Reiter (Wunsch Silas, 18.11.): ab MIN Reitern in der Gruppe (groupInfo, 70 px, sich selbst mitgezählt) reiten
+// sie als Keil. Ihr Sturmangriff trifft Schildträger (SHIELDED) mit SHIELD-fachem Schaden, ein Schildwall dämpft ihn nicht
+// (÷ WALL_MELEE), und der Stoß schiebt weiter (PUSH statt 260). Sichtbar: Linien zwischen den Reitern im Keil (renderer)
+// und ein größerer Aufprall (fxcore, charge.wedge). Gegen alle anderen Ziele wirkt der Keil nicht.
+export const WEDGE = { MIN: 3, SHIELD: 1.5, PUSH: 340 };
+export const SHIELDED = new Set(['ritter', 'roemer']);
+const WALL_MELEE = .65;   // Schildwall: Pfeile und Schwerter × 0,65 (hurt)
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
+GROUP_USERS.add('reiter');    // Keil (WEDGE): Reiter, die zusammen reiten
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4, WATER_ID = 1;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -150,7 +167,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
     m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
-    if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
+    if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= WALL_MELEE;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
@@ -167,6 +184,25 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
+  // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
+  if (v.syn) {
+    if ((v.syn & SB.schild) && (kind === 'arrow' || kind === 'bullet')) m *= SYN.SCHILD;
+    if ((v.syn & SB.geleit) && (kind === 'arrow' || kind === 'bullet' || kind === 'blast')) m *= SYN.GELEIT;
+  }
+  if (src) {
+    const st = src.type;
+    if (JAGD_A.has(st) && v.rv[RV_MARK] > world.time) { m *= SYN.JAGD; synFx(world, v, 'jagd'); }
+    else if (SCHRECK_A.has(st) && v.fearT > 0 && kind === 'melee') { m *= SYN.SCHRECK; synFx(world, v, 'schreck'); }
+    else if (v.slowT > 0 && (kind === 'arrow' || kind === 'bullet') && KLEBRIG_A.has(st)) { m *= SYN.KLEBRIG; synFx(world, v, 'klebrig'); }
+    if ((src.syn & SB.turm) && kind === 'arrow') m *= SYN.TURM;
+    if (kind === 'melee') {
+      if (st === 'adler') v.rv[RV_MARK] = world.time + SYN.MARK_T;
+      if ((src.syn & SB.klinge) && src.rv[RV_KLINGE] <= world.time && v.alive && !v.T.fly) {
+        src.rv[RV_KLINGE] = world.time + SYN.KLINGE_DT;
+        if (ignite(world, v, BURN_MAX_GEN, src)) synFx(world, v, 'klinge');
+      }
+    }
+  }
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
   const h0 = v.hp;
@@ -199,6 +235,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 // --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
 Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],
@@ -236,6 +273,7 @@ export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag
 function die(world, v, src, kind) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
   releaseUnit(world, v);
+  if (v.type === 'koenig') kingFall(world, v);   // Königsmord: eigene Truppen erschrecken
   if (v.type === 'mega') megaWreck(world, v);   // Schrottplatz: Minibots steigen aus dem Wrack
   if (kind === 'melee' && riseGhoul(world, v, src)) {
     emit(world, {
@@ -310,6 +348,7 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
     hurt(world, v, dmg * fall * (v === src ? .5 : 1), kind, src);
     if (gen >= 0 && v.alive) ignite(world, v, gen, src);
   });
+  if (gen >= 0) igniteArea(world, x, y);   // Waldbrand (wildfire.js)
   if (wallMul) {
     const { GW, GH, terr } = world;
     const g0x = Math.max(0, (x - R) / CELL | 0), g1x = Math.min(GW - 1, (x + R) / CELL | 0);
@@ -710,6 +749,7 @@ export function stepBurn(world, u, dt) {
   u.burnT -= a;
   hurt(world, u, BURN_DPS * a, 'burn', src, true);
   if (!u.alive) return;
+  if (!u.T.fly && u.z < 4) igniteUnder(world, u.x, u.y);   // Waldbrand: brennt er im Wald, fängt der Wald Feuer
   u.burnCk -= dt;
   if (u.burnCk <= 0 && u.burnGen < BURN_MAX_GEN && u.burnT > 0) {
     SP_W = world; SP_U = u; SP_P = SPREAD_P * Math.pow(.5, u.burnGen);
@@ -890,6 +930,9 @@ export function think(world, u, dt) {
   if (u.meteorCd > 0) u.meteorCd -= dt;
   // Verstärkung (Heulen, abilities.js) läuft ab
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
+  if (u.braveT > 0) u.braveT -= dt;
+  if (u.slowT > 0) u.slowT -= dt;
+  stepSynergy(world, u, dt);   // Nähe-Synergien (synergy.js)   // Lama-Spucke läuft ab   // Königsaura läuft ab (abilities.KING)
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
@@ -913,6 +956,7 @@ export function think(world, u, dt) {
   if (u.type === 'troll') stepTroll(u, dt);
   else if (u.type === 'phoenix') { stepTrail(world, u, dt); if (!u.alive) return; }
   else if (u.type === 'einhorn') stepAura(world, u, dt);
+  else if (u.type === 'koenig') stepKingAura(world, u, dt);
   else if (u.type === 'schamane') stepHerbs(world, u, dt);   // Urzeit: Kräuterrauch
   // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
   if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
@@ -953,6 +997,7 @@ export function think(world, u, dt) {
   }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
+  u.wedge = u.type === 'reiter' && u.gn >= WEDGE.MIN;
   if (T.heal) { healer(world, u, dt); return; }
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
   // Adler oben)
@@ -1222,6 +1267,7 @@ export function heliHover(world, u, nx, ny, d, reach) {
 export function attack(world, u, t, d, dx, dy, ax, ay) {
   const T = u.T; if (u.cd > 0) return;
   u.cd = T.cd * (.85 + world.rng() * .3);
+  if (u.syn & SB.feuerschutz) u.cd *= SYN.FEUERSCHUTZ;   // Synergie: Soldat beim MG
   switch (u.type) {
     case 'schuetze': fire(world, u, t, 'arrow'); break;
     case 'grenadier': fire(world, u, t, 'bomb'); break;
@@ -1234,6 +1280,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     // Zyklop: nahe Feinde (auch in der Ecke auf der Flucht) unbeholfen schlagen statt werfen (cyclopsHit)
     case 'zyklop': if (d < CYCLOPS.MIN_D) { u.cd *= CYCLOPS.MELEE_CD; cyclopsHit(world, u, t); } else { fire(world, u, t, 'boulder'); u.swingT = .25; } break;
     case 'hexe': fire(world, u, t, 'hex', ax, ay); break;
+    case 'lama': fire(world, u, t, 'spit', ax, ay); break;
     // --- Schrottplatz und Urzeit ---
     case 'laserbot': laserShot(world, u, t); break;
     case 'tesla': teslaArc(world, u, t); break;
@@ -1254,15 +1301,23 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     }
     default: {
       u.swingT = .25;
-      let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen)
+      let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen, Schlachtruf)
+      if (u.braveT > 0) a *= KING.AURA_DMG;   // Königsaura
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
       // Sturmangriff der Reiter, danach Durchritt
       if (u.type === 'reiter' && u.run > .7) {
-        a *= 2.6; knock(t, dx / d, dy / d, 260);
-        emit(world, { type: 'charge', x: t.x, y: t.y });
+        // Keil: im Verband stoßen die Lanzen durch Schilde (Ritter, Römer); den Abzug des Schildwalls heben sie auf
+        const lance = u.wedge && SHIELDED.has(t.type);
+        a *= 2.6 * (lance ? WEDGE.SHIELD / (t.wall ? WALL_MELEE : 1) : 1); knock(t, dx / d, dy / d, lance ? WEDGE.PUSH : 260);
+        emit(world, { type: 'charge', x: t.x, y: t.y, wedge: u.wedge });
         u.st = .6; u.cvx = dx / d * T.speed; u.cvy = dy / d * T.speed;
+      }
+      // Synergie Zange: Ziel kämpft gerade mit eigenem Fußvolk (Krieger, Ritter, Römer)
+      if (ZANGE_A.has(u.type)) {
+        const o = t.tg;
+        if (o && o !== u && o.alive && ZANGE_B.has(o.type) && factionOf(world, o) === factionOf(world, u)) { a *= SYN.ZANGE; synFx(world, t, 'zange'); }
       }
       // Task 6: Hornstoß des Einhorns aus vollem Lauf (abilities.UNICORN), danach Durchlauf
       if (u.type === 'einhorn' && u.run > .7) {
@@ -1361,7 +1416,7 @@ function healer(world, u, dt) {
   if (!u.follow && d <= T.range && u.cd <= 0) {
     u.cd = T.cd;
     if (HEAL_STACK.SPLASH > 0) query(world, t.x, t.y, HEAL_STACK.SPLASH_R, v => { if (v !== t) healOne(world, f, v, T.heal * HEAL_STACK.SPLASH); });
-    healOne(world, f, t, T.heal);
+    healOne(world, f, t, T.heal * (FELD_A.has(t.type) ? SYN.FELDARZT : 1));   // Synergie Feldarzt
   }
 }
 
@@ -1449,6 +1504,7 @@ function landArc(world, p, src) {
 // Gerader Schuss am Ende: v = getroffener Körper, cell = Mauerzelle (−1), (x, y) = Trefferpunkt am Boden
 function impact(world, p, v, cell, x, y, src) {
   if (p.kind === 'hex') { hexImpact(world, p, v, x, y, src); return; }   // Task 6
+  if (p.kind === 'spit') { spitImpact(world, p, v, x, y, src); return; }
   if (p.kind === 'bullet') {
     if (v) {
       const a = p.dmg * (.85 + world.rng() * .3);
@@ -1493,6 +1549,15 @@ function landBoulder(world, p, src) {
   sound(world, 'impact');
 }
 
+// Lama-Spucke am Ende: Schaden des Lamas (Art 'spit': kein Feuer, kein Schildblock) und SPIT.T s Verlangsamung
+function spitImpact(world, p, v, x, y, src) {
+  if (v) {
+    hurt(world, v, p.dmg * (.85 + world.rng() * .3), 'spit', src);
+    if (v.alive) v.slowT = SPIT.T;
+    emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'spit' });
+    emit(world, { type: 'spit', x: v.x, y: v.y - v.z });
+  } else emit(world, { type: 'spit', x, y });
+}
 // Hexenzauber am Ende: trifft den Körper mit dem Schaden der Hexe (Art 'hex': kein Feuer, kein Schildblock), sonst verpufft er
 function hexImpact(world, p, v, x, y, src) {
   if (v) {

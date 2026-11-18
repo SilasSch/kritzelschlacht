@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, frameX, MISSION_ASPECT } from '../game/js/world.js';
 import { step, buildMission, missionResult, sandboxWinner } from '../game/js/sim.js';
 import { placePlan, MISSION_PLANS, COUNTERS } from '../tools/plans.mjs';
+import { UNITS } from '../game/js/data.js';
 
 // Seit dem Rückzug (Spez. #27) ziehen sich geschlagene Krieger zurück, erholen sich und kommen wieder: die
 // Mission dauert länger (Saat 11: 137 s statt unter 60 s). Gewinnen muss sie vor dem Zeitlimit (180 s).
@@ -72,6 +73,6 @@ test('Pläne: 9 Missionen mit smart/spam, COUNTERS mit Punkten', () => {
   for (const p of MISSION_PLANS) { assert.ok(p.smart.length && p.spam.length); }
   assert.ok(COUNTERS.length >= 20 && COUNTERS.every(c => c.length === 3 && c[2] >= 60));
   const w = createWorld(1400, 1050, 1); w.teamMode = true;
-  assert.equal(placePlan(w, [['ritter', 9, .32, .3, .38, .7]]), 9 * 4.5);
+  assert.equal(placePlan(w, [['ritter', 9, .32, .3, .38, .7]]), 9 * UNITS.ritter.cost);
   assert.equal(w.units.length, 9); assert.ok(w.units.every(u => u.team === 'blau'));
 });

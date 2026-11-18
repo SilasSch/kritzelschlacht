@@ -6,6 +6,20 @@ import { placeRect, placeCircle, tRect, tCircle } from '../sim.js';
 import { FORM } from '../formation.js';
 
 export const SCENES = {
+  // Ideenrunde 18.11.: Waldbrand (Magier schießen Feuerbälle in einen Wald voller Krieger), König mit Kriegern,
+  // Reiter-Keil gegen einen Ritter-Schildwall
+  waldbrand(world) { world.teamMode = true; tRect(world, 'wald', .45, .2, .7, .8); placeRect(world, 'krieger', 30, .5, .3, .65, .7, 'rot'); placeRect(world, 'magier', 10, .15, .35, .2, .65, 'blau'); },
+  koenig(world) { world.teamMode = true; spawn(world, 'koenig', world.W * .3, world.H * .5, 'blau'); placeRect(world, 'krieger', 24, .33, .3, .4, .7, 'blau'); placeRect(world, 'krieger', 34, .62, .3, .7, .7, 'rot'); },
+  // Synergien (synergy.js): Schützen hinter Rittern, Soldaten beim MG, Krieger beim Magier, Adler und Wölfe
+  synergie(world) {
+    world.teamMode = true;
+    placeRect(world, 'ritter', 6, .3, .2, .33, .45, 'blau'); placeRect(world, 'schuetze', 6, .24, .2, .27, .45, 'blau');
+    placeRect(world, 'krieger', 8, .3, .55, .34, .8, 'blau'); spawn(world, 'magier', world.W * .26, world.H * .68, 'blau');
+    placeRect(world, 'wolf', 6, .36, .45, .4, .55, 'blau'); spawn(world, 'adler', world.W * .35, world.H * .5, 'blau');
+    placeRect(world, 'soldat', 8, .7, .25, .74, .75, 'rot'); spawn(world, 'mg', world.W * .77, world.H * .5, 'rot');
+    placeRect(world, 'krieger', 14, .62, .25, .66, .75, 'rot'); spawn(world, 'lama', world.W * .78, world.H * .3, 'rot');
+  },
+  keil(world) { world.teamMode = true; placeRect(world, 'reiter', 12, .15, .35, .25, .65, 'blau'); placeRect(world, 'ritter', 12, .66, .35, .72, .65, 'rot'); },
   grenades(world) { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank(world) { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
   heli(world) { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },

@@ -37,7 +37,7 @@ test('Konter', () => {
   const r = unitCard('ritter');
   assert.ok(r.strong.includes('krieger'));
   assert.ok(r.weak.includes('biene'));
-  assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'minibot', 'raptor', 'reiter', 'schuetze']);
+  assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'minibot', 'raptor', 'schuetze']);   // Reiter: Keil bricht Schilde (18.11.)
   assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'ptera', 'schweisser', 'sniper']);
   assert.deepEqual([...unitCard('roemer').weak].sort(), ['grenadier', 'magier', 'moerser', 'reiter']);
   assert.ok(unitCard('moerser').strong.includes('roemer'), 'Mörser, wie im Römer-Text');

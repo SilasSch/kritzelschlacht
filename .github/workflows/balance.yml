@@ -1,0 +1,26 @@
+name: Balance
+# Volle Balance-Prüfung (Missionen und Konter-Duelle an allen Weltformen). Dauert etwa 10 Minuten,
+# darum nur bei Änderungen an Spiel, Kampagne oder Werkzeugen und von Hand.
+on:
+  push:
+    paths: ['game/js/**', 'tools/**', '.github/workflows/balance.yml']
+  workflow_dispatch:
+jobs:
+  missions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/balance.mjs missions 8
+  duels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node tools/balance.mjs duels 8

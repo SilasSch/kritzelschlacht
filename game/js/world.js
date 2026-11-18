@@ -37,7 +37,7 @@ export function createWorld(W, H, seed = 1) {
 // Felder in u.rv (Float64Array): Sammelpunkt der Flucht x/y, world.time seiner Wahl (−9 = keiner), dort angekommen (0/1),
 // Drossel des Fluchtbeginns (s; morale.js, #50); Scharfschütze: Zeit im laufenden Zurückweichen, Sperre danach, Abklingzeit
 // des Messers (s; combat.js, #51)
-export const RV_X = 0, RV_Y = 1, RV_T = 2, RV_IN = 3, RV_CK = 4, RV_BACK = 5, RV_BCD = 6, RV_KNIFE = 7, RV_N = 8;
+export const RV_X = 0, RV_Y = 1, RV_T = 2, RV_IN = 3, RV_CK = 4, RV_BACK = 5, RV_BCD = 6, RV_KNIFE = 7, RV_SYNT = 8, RV_MARK = 9, RV_KLINGE = 10, RV_SYNFX = 11, RV_N = 12;
 
 // Fraktion: im Teammodus das Team, sonst die Art u.kin (beim Spawn der Typ; Ghule tragen die ihres Vampirs, Spez. #32)
 export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
@@ -95,7 +95,7 @@ export function spawn(world, type, x, y, team) {
     hp: T.hp, alive: true, state: 'ok', stunT: 0, peakZ: 0, face: team === 'rot' ? -1 : 1,
     aimX: 0, aimY: 0, tg: null, cd: world.rng() * T.cd, rt: world.rng() * 0.3, kills: 0,
     hitT: 0, fireT: 1, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
-    cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0, lofFlip: false, lofT: -9,
+    cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, wedge: false, blockedT: 0, lofFlip: false, lofT: -9,
     // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt; lofWait: Drossel des Zielchecks (combat.lofCheck)
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0, lofWait: 0,
     // Gift der Bienen (combat.poison, Nachtrag 4, #37): Restdauer (s), Verursacher; bei der Biene das Ziel ihres ersten Stichs
@@ -162,6 +162,10 @@ export function spawn(world, type, x, y, team) {
     dmgOut: .5, orig: null,
     // Bomben ausweichen (dodge.js, Nachtrag 7, #47): Restzeit des Hüpfers (s; Wunschbewegung ruht, physics.integrate)
     hopT: .5,
+    // König (abilities.KING): Restzeit seiner Aura auf dieser Einheit (s; mutig: flieht nicht, Nahkampf stärker)
+    braveT: .5,
+    // Lama-Spucke (combat.SPIT): Restzeit der Verlangsamung (s)
+    slowT: .5,
     // --- Schrottplatz (abilities.js, Block "Schrottplatz") --- Schild der Roboter (LP), Zeit seit dem letzten Treffer (s),
     // Aufblitzen des Schilds (s, Darstellung), Sperre des Kurzschlusses im Wasser (s); Schildkuppel: Kuppel-LP und Pause
     // (s); Springspinne und Raptor: nächster Biss nach dem Sprung macht doppelten Schaden; Treffer-Zähler (Fackel,
@@ -180,6 +184,8 @@ export function spawn(world, type, x, y, team) {
   u.hx = 0; u.hy = 0; u.passT = 0; u.bombT = 0; u.mslCd = 0; u.mslT = 0;   // Lufteinheiten (air.js)
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
+  u.braveT = 0;   // Königsaura: als Double angelegt
+  u.slowT = 0;    // Lama-Spucke: als Double angelegt
   // Schrottplatz: voller Schild, Kuppel bereit; Urzeit: Jungtier bzw. Ei (data.YOUNG, UNITS.rexei)
   u.shd = T.bot ? T.hp * BOT.SHIELD : 0; u.shdT = 0; u.shdHit = 0; u.shortCd = 0; u.tickT = (u.id % 5) * .1;
   u.domeHp = type === 'kuppel' ? DOME.HP : 0; u.domeT = 0; u.growT = 0;
@@ -187,10 +193,13 @@ export function spawn(world, type, x, y, team) {
   if (T.grow) { u.growT = T.grow; u.T = type === 'rex' ? UNITS.rexei : YOUNG[type]; u.hp = u.T.hp; }
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
-  if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
+  // erste Abklingzeit: A.first (FIRST_CD, abilities.js), sonst die normale; nach id gestreut wie bisher
+  if (A) { const q = u.id * .6180339887; u.abCd = (A.first ?? A.cd) * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
+  u.rv[RV_SYNT] = (u.id % 5) * .1; u.rv[RV_MARK] = -9; u.rv[RV_KLINGE] = -9; u.rv[RV_SYNFX] = -9;
+  u.syn = 0; u.synP = null;   // Synergien (synergy.js): Bits der Nähe-Synergien, nächster Partner
   u.rvx = 0; u.rvy = 0; u.armor = 1;   // als Double angelegt (.5 / 1.5), Start in Ruhe und ohne Rüstung
   return u;
 }
@@ -290,4 +299,6 @@ export function clearBattle(world) {
   // Steinwände gehören zur Schlacht (spells.js): ihre Zellen werden wieder frei, Meteor-Kanäle enden
   for (const e of world.tempWalls) if (world.terr[e.i] === 4 && world.towner[e.i] === 2) { world.terr[e.i] = 0; world.towner[e.i] = 0; world.whp[e.i] = 0; touchTerrain(world); }
   world.tempWalls = []; world.casts = [];
+  // Waldbrand (wildfire.js): kein Brand mehr; Asche bleibt wie zerbrochene Mauern
+  if (world.cfire) { for (const i of world.blaze) world.cfire[i] = 0; world.blaze = []; }
 }

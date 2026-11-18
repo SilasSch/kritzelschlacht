@@ -30,7 +30,7 @@ export default {
       plan: { smart: [['roemer', 38, ...blk(38)]], spam: [['krieger', 62, ...F]] },
     },
     {
-      id: 'rom-3', n: 'Hinterhalt im Wald', budget: 120, par: 116,
+      id: 'rom-3', n: 'Hinterhalt im Wald', budget: 125, par: 121,   // 17 Schützen (18.11.)
       units: ['roemer', 'schuetze'],
       hint: 'Römer und Schützen. Aus den Wäldern oben und unten brechen Wolfsrudel hervor, in der Mitte stehen Bären. Wölfe hetzen Schützen, Bären sprengen einen einzelnen Block. Wer fängt die Rudel an den Flanken ab?',
       place: [
@@ -40,7 +40,7 @@ export default {
       ],
       plan: {
         // zwei Blöcke an den Flanken fangen die Rudel ab, die Schützen dahinter schießen die Bären (ein Block: 0–1/8)
-        smart: [['roemer', 13, ...blk(13, .32, .28)], ['roemer', 13, ...blk(13, .32, .72)], ['schuetze', 15, ...B]],
+        smart: [['roemer', 13, ...blk(13, .32, .28)], ['roemer', 13, ...blk(13, .32, .72)], ['schuetze', 17, ...B]],
         spam: [['schuetze', 48, ...F]],
       },
     },

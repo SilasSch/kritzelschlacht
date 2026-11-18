@@ -296,7 +296,7 @@ test('Meteor: 3 Magier kanalisieren 1,5 s still, dann blast R 80 mit Schaden 70 
   assert.ok(tb > 0, 'Meteor eingeschlagen');
   assert.ok(Math.abs(tb - t0 - METEOR.CHANNEL) < 2.5 * DT, `Kanal ${tb - t0}`);
   assert.equal(blast.kind, 'fire');
-  assert.deepEqual([METEOR.R, METEOR.DMG, METEOR.CHANNEL, METEOR.CD, METEOR.GROUP_R, METEOR.MIN], [80, 70, 1.5, 30, 90, 3]);
+  assert.deepEqual([METEOR.R, METEOR.DMG, METEOR.CHANNEL, METEOR.CD, METEOR.GROUP_R, METEOR.MIN], [80, 45, 1.5, 32, 90, 3]);
   for (const m of mages) { assert.equal(m.chanId, 0); assert.ok(m.meteorCd > METEOR.CD - 2, `Abklingzeit ${m.meteorCd}`); }
   assert.ok(w.units.some(u => u.team === 'rot' && u.burnT > 0), 'Einschlag zündet an');
   assert.equal(w.casts.length, 0);

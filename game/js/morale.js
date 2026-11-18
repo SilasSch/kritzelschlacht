@@ -170,7 +170,8 @@ export function updateMorale(world, u, dt) {
   if (!u.flee) {
     // Ghule (Spez. #32) sind hirnlos: sie fliehen nie, sie zerfallen. Geister (Nachtrag 5, #41) fliehen nie: sie heilen
     // sich, indem sie Schaden machen (Lebensraub, combat.js)
-    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || NO_RETREAT.has(u.type)) return false;
+    // Königsaura (abilities.KING): wer sie spürt, flieht nicht
+    if (u.hp > (u.formOn ? M.FLEE_FORM : M.FLEE) * T.hp || others < M.MIN_ALLIES || NO_RETREAT.has(u.type) || u.braveT > 0) return false;
     // Fluchtbeginn nur vor Nahkämpfern, denen man davonläuft (#50), gedrosselt
     if (u.rv[RV_CK] > 0) { u.rv[RV_CK] -= dt; return false; }
     u.rv[RV_CK] = FLEE_CK + (u.id % 4) * FLEE_STAGGER;

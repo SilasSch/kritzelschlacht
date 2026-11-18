@@ -13,6 +13,7 @@ import { shade } from './rig.js';
 import { projScreen, BOSS, BOSS_VIS, CHANNEL_LIFT } from './pose.js';
 import { METEOR, WIND } from '../spells.js';
 import { cellIndex } from '../world.js';
+import { SYN_COL } from '../synergy.js';
 
 export const FX_CAP = 3000;
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
@@ -356,7 +357,7 @@ export const VAMP_FX = {
   riseClods: 7, riseWisps: 4, riseSoil: '#4a4036', riseClod: 0x7a6a55, riseMist: 0xb6c7a8,
   dust: 4, bits: 6, bitCol: 0x8f9c84,
 };
-const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a };
+const WAVE_COL = { heal: 0x2fbf6b, roar: 0x8b5a3c, howl: 0x8d939e, spook: 0x9b8fd6, dive: 0xb8a98a, king: 0xffc533, kingFall: 0x6f7a8c };
 /* ---------- Task 6: Kreaturen (Spez. #34) ----------
    creature-Ereignis (abilities.js, combat.js), Budget-Art ability. boulder: Felseinschlag ohne Feuer (Staubwelle bis R,
    Staubwolken am Rand, Steinsplitter, Krater, Wackeln über e.shake); frog / unfrog: grünes Wölkchen mit Funkeln (Fluch
@@ -727,6 +728,18 @@ export function createFxCore(hooks = {}, opt = {}) {
           p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
         }
         break;
+      // König (abilities.KING): Aura als leiser goldener Ring, Schlachtruf als kräftige Welle mit Funken, Königsmord grau
+      case 'kingAura': wave(x, e.y, R, 1.1, WAVE_COL.king); break;
+      case 'kingCry': {
+        wave(x, e.y, R, .7, WAVE_COL.king);
+        for (let i = 0; i < 8; i++) {
+          const a = i / 8 * TAU + rnd(-.2, .2), s = rnd(120, 160);
+          const p = add('shout', x + Math.cos(a) * 14, y - 10 + Math.sin(a) * 10, .4, 5, WAVE_COL.king); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .7; p.drag = 3; p.rot = Math.atan2(Math.sin(a) * .7, Math.cos(a));
+        }
+        break;
+      }
+      case 'kingFall': wave(x, e.y, R, .9, WAVE_COL.kingFall); break;
       case 'howl': {
         wave(x, e.y, R, .6, WAVE_COL.howl);
         const face = e.face < 0 ? -1 : 1;
@@ -1027,6 +1040,26 @@ export function createFxCore(hooks = {}, opt = {}) {
         add('ring', e.x, e.y, .4, 14, WATER);
         break;
       }
+      // Lama-Spucke trifft: kleine weiße Spritzer
+      case 'spit':
+        if (!take('misc')) break;
+        for (let i = 0; i < 4; i++) { const p = add('dot', e.x + rnd(-3, 3), e.y + rnd(-3, 3), rnd(.25, .4), rnd(1.3, 2), 0xe8f2f7); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(10, 50); p.ay = 200; }
+        break;
+      // Synergie (synergy.js) ausgelöst: kleine Funken in der Farbe der Synergie steigen vom Ziel auf
+      case 'syn': {
+        if (!take('misc')) break;
+        const c = SYN_COL[e.k] || 0xffffff;
+        for (let i = 0; i < 5; i++) { const p = add('dot', e.x + rnd(-5, 5), e.y - e.z + rnd(-4, 2), rnd(.35, .55), rnd(1.6, 2.4), c); if (!p) break; p.vx = rnd(-25, 25); p.vy = -rnd(40, 80); p.drag = 1.5; }
+        break;
+      }
+      // Waldbrand (wildfire.js): je brennender Zelle ein paar Flammen, gegen Ende Rauch; beim Ausbrennen ein Rußfleck
+      case 'blaze': {
+        if (!take('misc')) break;
+        const n = e.t > .25 ? 2 : 1;
+        for (let i = 0; i < n; i++) { const p = add('flame', e.x + rnd(-5, 5), e.y + rnd(-4, 3), rnd(.35, .55), rnd(3, 4.6)); if (!p) break; p.vx = rnd(-8, 8); p.vy = -rnd(35, 60); p.drag = 1.2; }
+        if (e.t < .5 && rand() < .5) wisp(e.x + rnd(-4, 4), e.y - 8, rnd(3, 4.5), 0x6f6a66);
+        break;
+      }
       case 'terrain':
         // Asche einer in Lava versunkenen Leiche: dunkler Fleck und Zischen (Dampfwölkchen wie bei extinguish,
         // Ton über audio.eventSound); andere terrain-Ereignisse gehen ans Gelände
@@ -1064,7 +1097,10 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (p) { p.vx = ca * s; p.vy = sa * s - BLOCK_FX.shardUp; p.ay = 380; p.drag = 1; p.rot = a; p.vrot = (rand() < .5 ? -1 : 1) * rnd(10, 18); }
         break;
       }
-      case 'charge': if (take('misc')) add('ring', e.x, e.y, .25, 16, OUTLINE); break;
+      case 'charge':
+        if (take('misc')) add('ring', e.x, e.y, .25, e.wedge ? 24 : 16, OUTLINE);
+        if (e.wedge && take('misc')) for (let i = 0; i < 4; i++) puff('dust', e.x + rnd(-8, 8), e.y + rnd(-4, 6), DUST.life, rnd(4, 6));
+        break;
       // Ausweich-Hüpfer (Nachtrag 7, #47): kleiner Staubstoß am Absprung, gegen die Sprungrichtung
       case 'dodge': if (take('misc')) for (let i = 0; i < 2; i++) { const p = add('dot', e.x - (e.nx || 0) * 4, e.y + 2, .35, rnd(1.4, 2.2), 0xcdc6b4); if (p) { p.vx = -(e.nx || 0) * rnd(20, 40) + rnd(-10, 10); p.vy = -(e.ny || 0) * rnd(10, 20) - rnd(8, 18); p.drag = DRAG; } } break;
       case 'spell': if (take('spell')) spell(e); break;

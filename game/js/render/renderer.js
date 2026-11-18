@@ -7,7 +7,8 @@
 /* global PIXI */
 import { TEAMS, CELL, UNITS, DOME } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
-import { query, factionOf } from '../world.js';
+import { query, factionOf, RV_MARK } from '../world.js';
+import { SYN_COL, BIT_KEY } from '../synergy.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
 import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, dragonHead, drawnMuzzle } from './pose.js';
@@ -168,7 +169,7 @@ void main() {
     const px0 = x0 * CELL, py0 = y0 * CELL, pw = (x1 - x0 + 1) * CELL, ph = (y1 - y0 + 1) * CELL;
     c.beginPath(); c.rect(px0, py0, pw, ph); c.clip(); c.clearRect(px0, py0, pw, ph);
     const ax0 = Math.max(0, x0 - 2), ax1 = Math.min(GW - 1, x1 + 2), ay0 = Math.max(0, y0 - 2), ay1 = Math.min(GH - 1, y1 + 2);
-    const layers = [[1, 9.5, '#a8e6f0'], [1, 7, '#62b9ea'], [2, 9.5, '#ffb54d'], [2, 7, '#f2652f'], [3, 9, '#b5dfae'], [4, 8.6, '#5b5f69'], [4, 7.3, '#a3a8b2']];
+    const layers = [[1, 9.5, '#a8e6f0'], [1, 7, '#62b9ea'], [2, 9.5, '#ffb54d'], [2, 7, '#f2652f'], [3, 9, '#b5dfae'], [4, 8.6, '#5b5f69'], [4, 7.3, '#a3a8b2'], [5, 8.6, '#b9b2aa'], [5, 6.4, '#8f8780']];
     for (const [id, rad, col] of layers) {
       c.fillStyle = col; c.beginPath(); let any = false;
       for (let gy = ay0; gy <= ay1; gy++) for (let gx = ax0; gx <= ax1; gx++) {
@@ -184,6 +185,7 @@ void main() {
       if (t === 2 && h < .1) { c.fillStyle = '#ffd36b'; c.beginPath(); c.arc(cx, cy, 2.4, 0, 7); c.fill(); }
       if (t === 3 && h < .16) { E(c, cx, cy, 8.5, 8, '#4e9f5d', 1.6, '#2f6b3b'); E(c, cx - 2.5, cy - 2.5, 3, 2.6, '#6dbd78', 0); }
       if (t === 4 && h < .3 && whp[i] >= 70) { c.fillStyle = '#8d929c'; c.beginPath(); c.ellipse(cx + (h - .15) * 14, cy + (h - .15) * 6, 3.4, 2.3, 0, 0, 7); c.fill(); }
+      if (t === 5 && h < .12) { c.fillStyle = '#4a4440'; c.beginPath(); c.arc(cx + (h - .06) * 30, cy, 1.6, 0, 7); c.fill(); }   // Asche: Holzkohle
       if (t === 4 && whp[i] < 70) { c.strokeStyle = '#3a3d45'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(cx - 4, cy - 3); c.lineTo(cx, cy + 1); c.lineTo(cx + 4, cy - 2); c.stroke(); }
     }
     c.restore();
@@ -396,6 +398,11 @@ void main() {
     if (v.id <= u.id || !v.wall || v.state !== 'ok' || !v.alive || factionOf(LK_W, v) !== LK_F) return;
     const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < LK_D) { LK_D = e; LK_B = v; }
   }
+  function wedgeTest(v) {
+    const u = LK_U;
+    if (v.id <= u.id || !v.wedge || v.state !== 'ok' || !v.alive || factionOf(LK_W, v) !== LK_F) return;
+    const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < LK_D) { LK_D = e; LK_B = v; }
+  }
   function drawUnits(world, cam, t) {
     const tm = world.teamMode;
     // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
@@ -430,6 +437,30 @@ void main() {
       query(world, u.x, u.y, 42, linkTest);
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
       if (b) links.line(u.x + u.face * u.T.r * .8, u.y - u.z, b.x + b.face * b.T.r * .8, b.y - b.z, 3, tm ? C(TEAMS[u.team].c) : 0x6f7a8c, .5);
+    }
+    // Keil der Reiter (combat.WEDGE): dünne Linien in Teamfarbe zwischen Nachbarn im Keil, nur in Bewegung
+    for (const u of groundList) {
+      if (!u.wedge || u.state !== 'ok' || u.run <= 0) continue;
+      LK_W = world; LK_U = u; LK_F = factionOf(world, u); LK_B = null; LK_D = 70 * 70;
+      query(world, u.x, u.y, 70, wedgeTest);
+      const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
+      if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + b.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
+    }
+    // Synergien (synergy.js): dünne Linie zum Partner in der Farbe der Synergie; vom Adler Markierte mit Fadenkreuz
+    const wt = world.time;
+    for (const list of [groundList, airList]) for (const u of list) {
+      if (u.syn && u.state === 'ok') {
+        const p = u.synP;
+        if (p && p.alive) {
+          let k = 0; while (!(u.syn & (1 << k))) k++;
+          links.line(u.x, u.y - u.z * .5, p.x, p.y - p.z * .5, 2, SYN_COL[BIT_KEY[k]], .5);
+        }
+      }
+      if (u.rv[RV_MARK] > wt) {
+        const r = u.T.r + 4, y = u.y - u.z - u.T.r * .6, c = SYN_COL.jagd;
+        links.line(u.x - r - 4, y, u.x - r + 2, y, 2, c, .7); links.line(u.x + r - 2, y, u.x + r + 4, y, 2, c, .7);
+        links.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); links.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
+      }
     }
     // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit, blinkt bei Treffern) und Bot-Schild beim Treffer
     for (const u of groundList) {
@@ -825,6 +856,8 @@ void main() {
       // Task 6: Felsbrocken des Zyklopen (grauer Stein mit Umriss und Glanz), Hexenzauber (grüne Kugel mit hellem Kern)
       else if (p.kind === 'boulder') { disc(x, y, 5.6, OC); disc(x, y, 4.5, 0x9aa0aa); disc(x - 1.4, y - 1.5, 1.6, 0xc3c8cf); }
       else if (p.kind === 'hex') { disc(x, y, 4.4, 0x3f9a4a); disc(x, y, 2.9, 0x9df58a); disc(x, y, 1.3, 0xeaffd8); }
+      // Lama-Spucke: hellblauer Tropfen mit kleinem Nachzügler
+      else if (p.kind === 'spit') { disc(x, y, 3.2, 0x7fa6c2); disc(x, y, 2.3, 0xdcecf5); disc(x - ca * 5, y - sa * 5, 1.4, 0xdcecf5); }
       else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
     }
     stats.projShadows = ns; stats.targets = nt;

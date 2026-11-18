@@ -22,9 +22,10 @@ reiter>roemer magier>roemer moerser>roemer mg>adler adler>sniper vampir>zyklop m
 krieger>troll zyklop>grenadier reiter>zyklop hexe>baer schuetze>hexe phoenix>vampir soldat>phoenix einhorn>schuetze
 ritter>einhorn elefant>grenadier panzerfaust>elefant biene>elefant krokodil>bueffel schuetze>krokodil
 gorilla>grenadier ritter>gorilla bueffel>grenadier ritter>bueffel magier>ritter magier>geist`;
-const COUNTERS = DAILY_COUNTERS_TXT.split(/\s+/).map(p => p.split('>')).filter(c => UNITS[c[0]] && UNITS[c[1]]);
+export const DAILY_COUNTERS = DAILY_COUNTERS_TXT.split(/\s+/).map(p => p.split('>')).filter(c => UNITS[c[0]] && UNITS[c[1]]);
+const COUNTERS = DAILY_COUNTERS;
 export const DAILY_COST = {krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4};
-const costOf = t => DAILY_COST[t] ?? UNITS[t].cost;
+export const costOf = t => DAILY_COST[t] ?? UNITS[t].cost;
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
@@ -137,18 +138,19 @@ export function dailyLevel(dateStr) {
     if (p[0] === 'rect') assign(beat(p[1]), p[2] * costOf(p[1]));
     else if (p[0] === 'unit') assign(bossC, costOf(p[1]));
   }
+  // Lösungsplan mit den aktuellen Kosten (er muss spielbar bleiben); das Level selbst nutzt die festen Kosten
   const smart = [];
   let cost = 0, melee = 0;
   for (const [c, pts] of shares) {
-    const n = Math.max(1, Math.floor(pts / enemyPts * par / costOf(c)));
+    const n = Math.max(1, Math.floor(pts / enemyPts * par / UNITS[c].cost));
     const area = isRanged(c) ? B : melee++ ? Md : F;
-    smart.push([c, n, ...area]); cost += n * costOf(c);
+    smart.push([c, n, ...area]); cost += n * UNITS[c].cost;
   }
   // Rundung kann über par führen: vom teuersten Posten abziehen
   while (cost > par + 1e-6) {
-    const e = smart.reduce((a, b) => (costOf(b[0]) * b[1] > costOf(a[0]) * a[1] ? b : a));
+    const e = smart.reduce((a, b) => (UNITS[b[0]].cost * b[1] > UNITS[a[0]].cost * a[1] ? b : a));
     if (e[1] <= 1) break;
-    e[1]--; cost -= costOf(e[0]);
+    e[1]--; cost -= UNITS[e[0]].cost;
   }
 
   // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen

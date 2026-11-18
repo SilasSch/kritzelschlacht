@@ -85,7 +85,7 @@ export default {
     // Mörser schießen über Graben und Mauer. budget/par nur 1,14: 41 statt 40 Panzerfäuste (ohne Graben) gewannen an
     // einzelnen Formen 3/6.
     {
-      id: 'mod-5', n: 'Die große Panzerschlacht', budget: 240, par: 210,
+      id: 'mod-5', n: 'Die große Panzerschlacht', budget: 240, par: 220,
       units: ['soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli'], cats: ['modern'],
       hint: 'Alle modernen Einheiten. Panzer und Hubschrauber vor Wassergraben und dicker Festungsmauer, darin Mörser und Scharfschützen. Keine Einheit schafft das allein: Raketen vorn, Dauerfeuer dahinter, Steilfeuer breit verteilt ganz hinten.',
       place: [
@@ -98,7 +98,8 @@ export default {
         ['unit', 'heli', .66, .15], ['unit', 'heli', .66, .85], ['unit', 'heli', .7, .5],
         ['rect', 'panzerfaust', 5, .58, .38, .6, .62],
       ],
-      plan: { smart: [['moerser', 10, ...Deep], ['panzerfaust', 16, ...F], ['mg', 8, ...B]], spam: [['soldat', 80, ...F]] },
+      // Audit 18.11.: par 210 → 220 und 10 statt 8 MGs; mit 8 gewann der Smart-Plan an zwei Formen nur 7/8
+      plan: { smart: [['moerser', 10, ...Deep], ['panzerfaust', 16, ...F], ['mg', 10, ...B]], spam: [['soldat', 80, ...F]] },
     },
   ],
 };

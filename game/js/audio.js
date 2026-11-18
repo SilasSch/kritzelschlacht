@@ -41,9 +41,9 @@ export function eventSound(e) {
 
 // Tod je Einheit: Fahrzeuge scheppern, Bienen fiepen, der Geist verhallt, Tiere und Ungeheuer brüllen (Tonhöhe nach
 // Größe), alle anderen sind Menschen ("uff").
-const METAL = new Set(['panzer', 'heli']);
+const METAL = new Set(['panzer', 'heli', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'jet', 'kampfdrohne', 'bomber']);
 const SPIRIT = new Set(['geist']);
-const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch']);
+const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
 export function deathVoice(type) {
   const T = UNITS[type];
   if (!T) return 'die';
@@ -90,10 +90,10 @@ export function spatial(cam, x, y) {
 // Mindestabstand (s) zwischen zwei gleichen Tönen; Vorgabe GAP
 const GAP = .03;
 const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, clink: .07, die: .06, dieBeast: .08, dieBug: .12,
-  shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, ui: .05, rise: .4, ignite: .2,
-  twang: .05, fire: .12 };
+  shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, notify: .6, ui: .05, rise: .4, ignite: .2,
+  twang: .05, fire: .12, jet: .6, whistle: .3 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
-const BUSY = { hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
+const BUSY = { laser: .6, hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
   twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55 };
 const MAX_VOICES = 24;
 export const DEFAULT_VOLUME = .6;
@@ -152,14 +152,14 @@ export function createAudio() {
       if (lastT[k] && now - lastT[k] < (MIN_GAP[k] || GAP) / rate) return;
       lastT[k] = now;
       ends = ends.filter(t => t > now);
-      const prio = k === 'win' || k === 'lose' || k === 'go';
+      const prio = k === 'win' || k === 'lose' || k === 'go' || k === 'notify';
       if (!prio && ends.length >= MAX_VOICES) return;
       // Dichte: der n-te gleiche Ton binnen 0,4 s ist 1/(1 + 0,6·(n−1)) so laut, häufige Töne (BUSY) grundsätzlich leiser
       const rc = recent[k] || (recent[k] = []);
       while (rc.length && now - rc[0] > .4) rc.shift();
       rc.push(now);
       const dens = (BUSY[k] || 1) / (1 + .6 * (rc.length - 1));
-      const ui = k === 'ui' || k === 'tab' || k === 'go' || k === 'pop' || k === 'scribble' || k === 'win' || k === 'lose';
+      const ui = k === 'ui' || k === 'tab' || k === 'go' || k === 'notify' || k === 'pop' || k === 'scribble' || k === 'win' || k === 'lose';
       const sp = ui ? { pan: 0, gain: 1 } : spatial(cam, o && o.x, o && o.y);
       if (k === 'pop') { popStep = now - popT < .4 ? Math.min(popStep + 1, POP_SCALE.length - 1) : 0; popT = now; }
       const v = voice(ui ? uiBus : sfxBus, sp.pan, sp.gain * dens, now + (ui ? 0 : Math.random() * .012));
@@ -290,6 +290,13 @@ export function createAudio() {
     scribble(v, o) { (SCRIB[o.kind] || SCRIB.radierer)(v); },
     ui(v) { osc(v, 'sine', v.f(1200, .05), 900, .035, .04); },
     tab(v) { osc(v, 'sine', v.f(660, .02), 660, .05, .045); osc(v, 'sine', v.f(990, .02), 990, .07, .04, { dt: .045 }); },
+    // Online-Hinweis (Gegner will Revanche, ist fertig …): weiche Glocke, zwei oder drei Töne aufwärts
+    notify(v, o) {
+      const seq = o.kind === 'big' ? [[659, 0, .5], [880, .14, .5], [1175, .28, .9, 1.1]] : [[784, 0, .45], [1046, .13, .7]];
+      notes(v, 'sine', seq, .11);
+      notes(v, 'triangle', seq.map(([hz, dt, d]) => [hz * 2, dt, d * .5, .25]), .05);
+      v.wet(.35);
+    },
     go(v) { // Kampfbeginn: kurzer Trommelwirbel und Signal
       for (let i = 0; i < 4; i++) noise(v, 'bandpass', 900, 600, .05, .05 + i * .015, { dt: i * .05 });
       notes(v, 'square', [[392, .2, .12], [392, .33, .1], [523, .45, .35, 1.3]], .028, { lp: 1800 });
@@ -370,10 +377,17 @@ export function createAudio() {
       for (let i = 0; i < 3; i++) osc(v, 'sine', v.f(420 + i * 160, .3), 900, .05, .03, { dt: .08 + i * .06 });
     },
     whoosh(v) { noise(v, 'bandpass', v.f(400, .15), 1500, .32, .07, { a: .1, q: 1.5 }); },
+    // Lufteinheiten (18.11.): Bombe pfeift im Fall (fallender Sinus), Jet donnert im Überflug vorbei
+    whistle(v) { osc(v, 'sine', v.f(1500, .08), 520, .7, .035, { a: .05, vib: [7, 12] }); },
+    jet(v) { noise(v, 'bandpass', v.f(1800, .1), 380, 1.1, .08, { a: .25, q: .7 }); noise(v, 'lowpass', 500, 160, 1.0, .07, { a: .3 }); },
     wind(v) { noise(v, 'bandpass', 300, 900, .8, .08, { a: .25, q: 1.2 }); noise(v, 'bandpass', 900, 400, .7, .05, { a: .3, dt: .1, q: 2 }); },
     crash(v) { explosion(v, 1.4, .3); metal(v, v.f(380, .1), .5, .04); },
 
     /* Zauber */
+    laser(v) { // Laserbot: hohes, schnell fallendes Sirren
+      osc(v, 'sawtooth', v.f(1900, .12), 320, .14, .028, { lp: 4200 });
+      noise(v, 'highpass', 3200, 2400, .05, .03);
+    },
     zap(v) { // Blitz: Knall, elektrisches Sirren, Donner
       noise(v, 'highpass', 2500, 1800, .06, .1);
       osc(v, 'square', v.f(140, .2), 70, .16, .035, { lp: 2500, vib: [60, 80] });

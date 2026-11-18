@@ -5,7 +5,7 @@
 // Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
-import { TEAMS, CELL, UNITS } from '../data.js';
+import { TEAMS, CELL, UNITS, DOME } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
 import { query, factionOf } from '../world.js';
 import { DEBRIS_FADE } from '../physics.js';
@@ -65,6 +65,12 @@ export function createRenderer(canvasHost) {
   app.stage.addChild(scene);
   const L = {};
   for (const n of LAYERS) { L[n] = new PIXI.Container(); L[n].name = n; scene.addChild(L[n]); }
+  // Spielfeld als weißes Blatt: passt die Welt nicht genau in die Ansicht (32:9, Hochformat; camera.worldSizeFor),
+  // bleibt rundherum ein grauer Rand, damit man sieht, wo gemalt werden kann
+  const paper = new PIXI.Graphics();
+  scene.addChildAt(paper, 0); paper.visible = false;
+  let paperW = 0, paperH = 0, edge = false;
+  const EDGE_BG = 0xeceef4, PAPER_LINE = 0xd9dce6;
   const fx = createFx({ layers: L, app });   // Effekte: Decals, Bodenlicht, Partikel, Wackeln
 
   /* ---------- Gelände (Offscreen-Canvas, Code aus drawTerrain) ---------- */
@@ -400,8 +406,10 @@ void main() {
     groundList.length = 0; airList.length = 0;
     let top = null, culled = 0;
     const SC = stats.stances; SC.stand = SC.down = SC.prone = SC.up = 0;
+    const hidden = overlay.hiddenTeam;   // Hotseat (Audit 18.11.): diese Seite nicht zeichnen (setOverlay)
     for (const u of world.units) {
       if (!u.alive) continue;
+      if (hidden && u.team === hidden) continue;
       if (PRONE.has(u.type)) SC[u.stance]++;
       if (u.kills >= 3 && (!top || u.kills > top.kills)) top = u;
       if (u.x < vx0 || u.x > vx1 || u.y < vy0 || u.y > vy1) { culled++; continue; }
@@ -423,6 +431,11 @@ void main() {
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
       if (b) links.line(u.x + u.face * u.T.r * .8, u.y - u.z, b.x + b.face * b.T.r * .8, b.y - b.z, 3, tm ? C(TEAMS[u.team].c) : 0x6f7a8c, .5);
     }
+    // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit, blinkt bei Treffern) und Bot-Schild beim Treffer
+    for (const u of groundList) {
+      if (u.domeHp > 0) ring(u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
+      if (u.shdHit > 0 && u.shd > 0) ring(u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
+    }
     nBoss = 0;
     bodies(groundList, groundQ, groundBars, t, tm, inv);
     bodies(airList, airQ, airBars, t, tm, inv);
@@ -431,9 +444,18 @@ void main() {
   }
 
   // Stufe 0 (am Boden): Rig-Schatten mit Teamring; höher: weicher Fleck plus Teamring in Teamfarbe
+  function ring(x, y, R, n, w, tint, a) {
+    let px = x + R, py = y;
+    for (let i = 1; i <= n; i++) {
+      const q = i / n * Math.PI * 2, nx = x + Math.cos(q) * R, ny = y + Math.sin(q) * R * .55;
+      links.line(px, py, nx, ny, w, tint, a); px = nx; py = ny;
+    }
+  }
+  // Urzeit: das T.-Rex-Ei hat ein eigenes Rig (u.type bleibt 'rex')
+  const rigOf = u => rigs.get(u.T.egg ? 'rexei' : u.type);
   function shadows(list, tm, inv) {
     for (const u of list) {
-      const rig = rigs.get(u.type), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
+      const rig = rigOf(u), r = rig.r, ti = tm ? TEAM_INDEX[u.team] || 0 : 0;
       shadowParams(u.z, SH);
       if (SH.level === 0) {
         const a = rig.anchors.shadow, k = inv * SH.scale;
@@ -468,7 +490,8 @@ void main() {
     Q.clear(); bars.clear();
     for (const u of list) {
       if (u.ashT > 0) { ashPile(Q, u, t); continue; }   // Task 6: Asche statt Figur, ohne Leiste
-      const T = u.T, rig = rigs.get(u.type), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
+      const T = u.T, rig = rigOf(u), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
+      if (u.growT > 0 && !T.egg) { const g = T.r / UNITS[u.type].r; p.sx *= g; p.sy *= g; }   // Jungtier: kleiner gezeichnet
       // Vampir in Fledermausform (ganz: nur der Schwarm; beim Verwandeln schrumpft der Körper, der Schwarm blendet ein)
       if (u.batT > 0) {
         batSwarm(Q, u, t, u.batT);
@@ -777,6 +800,13 @@ void main() {
         projQ.line(x + ca * 1.5, y + sa * 1.5, x + ca * 7, y + sa * 7, 1, 0x9aa3ae);
         projQ.line(x + ca * 6.6, y + sa * 6.6, x + ca * 9.2, y + sa * 9.2, 1.7, 0xe6ebf0);
       }
+      else if (p.kind === 'airbomb') {
+        // Fliegerbombe: dunkler Körper mit Umriss, Leitwerk hinten, rote Spitze
+        projQ.line(x - ca * 6, y - sa * 6, x + ca * 5, y + sa * 5, 6.4, OC);
+        projQ.line(x - ca * 5, y - sa * 5, x + ca * 4, y + sa * 4, 4.4, 0x3a3f4a);
+        projQ.line(x - ca * 7 - sa * 3, y - sa * 7 + ca * 3, x - ca * 7 + sa * 3, y - sa * 7 - ca * 3, 1.6, OC);
+        disc(x + ca * 4.5, y + sa * 4.5, 1.8, 0xe5574f);
+      }
       else if (p.kind === 'bomb' || p.kind === 'mortar') {
         disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
         if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);
@@ -834,6 +864,12 @@ void main() {
       for (let y = 0; y < world.H; y += 20) zoneG.moveTo(mx, y).lineTo(mx, Math.min(world.H, y + 10));
       sideB.position.set(mx - 10, world.H * .5 + 5); sideR.position.set(mx + 10, world.H * .5 + 5);
     }
+    // Reichweiten der Gegner in der Planung (Audit 18.11.): { x, y, r } je Fernkämpfer, blass rot
+    const rg = overlay.ranges;
+    if (rg && rg.length) {
+      zoneG.lineStyle(1.2, 0xe5574f, .28);
+      for (const c of rg) zoneG.beginFill(0xff4d4d, .025).drawCircle(c.x, c.y, c.r).endFill();
+    }
     overG.clear();
     if (overlay.brushR > 0) {
       const er = overlay.erase;
@@ -889,6 +925,14 @@ void main() {
     const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
+    if (paperW !== world.W || paperH !== world.H) {
+      paperW = world.W; paperH = world.H;
+      paper.clear().beginFill(0xffffff).drawRect(0, 0, paperW, paperH).endFill();
+      paper.lineStyle(2, PAPER_LINE, 1, 1).drawRect(0, 0, paperW, paperH);
+    }
+    // Rand nur, wenn die Welt sichtbar kleiner ist als die Ansicht (sonst bliebe beim Wackeln ein grauer Saum)
+    const e = cam.viewW / cam.zoom > world.W + 8 || cam.viewH / cam.zoom > world.H + 8;
+    if (e !== edge) { edge = e; app.renderer.background.color = e ? EDGE_BG : 0xffffff; paper.visible = e; }
     lap('fx');
   }
 

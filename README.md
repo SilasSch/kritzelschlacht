@@ -1,0 +1,79 @@
+# Kritzelschlacht
+
+Ein Physik-Schlachtspiel im Browser: Armeen mit dem Pinsel aufs Papier malen und zusehen, wie sie kämpfen.
+Reines JavaScript (ES-Module) mit PixiJS 7.4.2, ohne Build-Schritt und ohne Server-Abhängigkeiten.
+
+## Starten
+
+```sh
+python3 -m http.server 8000 -d game
+# dann http://localhost:8000 öffnen (?debug zeigt Testszenen und Bench-HUD)
+```
+
+Alles liegt lokal in `game/`: Pixi in `game/vendor/`, Schriften in `game/fonts/` (OFL). Kein CDN nötig.
+
+## Tests und Balance
+
+```sh
+npm test                                         # node --test tests/*.test.js (läuft auch in CI, Node 22)
+node tools/balance.mjs missions 8                # jedes Level: kluger Plan muss ≥6/8 gewinnen, Spam ≥6/8 verlieren
+node tools/balance.mjs missions 8 --chapter=rom  # nur ein Kapitel
+node tools/balance.mjs duels 4                   # COUNTERS-Duelle (data.js): jedes ≥3/4 auf allen Bildformaten
+node tools/eramatrix.mjs 2 60                    # Schrottplatz/Urzeit: jede neue Einheit gegen 16 Bezugseinheiten
+node tools/catbattle.mjs 10 80                   # Kategorie gegen Kategorie mit gemischten Armeen
+node tools/bench.mjs                             # Simulations-Benchmark
+```
+
+Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fest 1600×900). Darauf beruhen Balance-Läufe und das Replay.
+
+## Aufbau
+
+| Bereich | Dateien |
+|---|---|
+| Einstieg, Spielfluss | `js/main.js`, `js/ui.js`, `js/ui/*` (Tutorial-Blasen, Editor-Leiste, Teilen-Dialog, Tageschallenge, Hotseat) |
+| Simulation (ohne DOM) | `sim.js`, `world.js`, `combat.js`, `physics.js`, `pathing.js`, `morale.js`, `spells.js`, `abilities.js`, `battle.js` |
+| Inhalte | `data.js` (Einheiten, Gelände, Konter), `campaign/*` (Kapitel, Tutorial), `docs/kampagne.md` |
+| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `dailyboard.js` (Bestenliste), `editor.js`, `hotseat.js`, `rules.js` (Regeln und Karten für 1 gegen 1), `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
+| Netz | `net.js` (Live-Verbindung des Artefakts, `room`-Capability; `?nettest` simuliert sie über BroadcastChannel in mehreren Tabs) |
+| Darstellung | `render/*`, `camera.js` (Zoom auf feste Welt), `glguard.js` (WebGL-Kontextverlust) |
+| Debug | `debug/scenes.js`, `benchhud.js`, `sandbox.js` |
+
+## Als Claude-Artefakt veröffentlichen
+
+Das Spiel läuft als Multi-File-Artefakt: `game/index.html` ist die Seite, alle übrigen Dateien unter `game/`
+(`js/**`) gehen mit ihrem Pfad relativ zu `game/` in `files`.
+Neue Module müssen dort mit aufgenommen werden, sonst fehlen sie im Artefakt.
+
+Wichtig fürs öffentliche Teilen: Die Prüfung lässt nur gängige Bild-, Video- und Audioformate zu. Schriftdateien (`.woff2`)
+und das lokale `pixi.min.js` (enthält data:-URIs für AVIF/WebM) lassen sie scheitern, dann ist der Link nur noch privat.
+`tools/artifact-pages.py` erzeugt beide Seiten (öffentlich und Live). Für das Artefakt daher den `@font-face`-Block durch den Google-Fonts-Link ersetzen, Pixi von
+`https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js` laden und `fonts/` sowie `vendor/` nicht mit hochladen.
+
+**Online 1 gegen 1** braucht beim Veröffentlichen `capabilities: { room: {} }`. Gespielt wird über `presence` (das dürfen
+alle Betrachter), daher keine Themen-Freigaben. Beide Spieler müssen angemeldet sein und Zugriff auf das Artefakt haben;
+über einen öffentlichen Link gibt es keine Live-Verbindung. Lokal testen: zwei Tabs mit `?nettest`.
+
+**Code-Duell** (`duel.js`, `ui/duel.js`) ist das 1 gegen 1 ohne Live-Verbindung: Herausforderung und Antwort als
+`KS1.`-Code (Typ `duel` / `duelres`), geht für jeden, auch über den öffentlichen Link.
+
+**Bestenliste der Tageschallenge** (`dailyboard.js`, `ui/dailyboard.js`): Rangfolge Sieg, dann weniger Punkte, dann
+schnellerer Sieg. Jeder Eintrag trägt die gemalte Armee und wird nachgerechnet; gezählt wird nur das Ergebnis der
+Simulation. Dafür ist der Kampf der Tageschallenge fest: Gegner mit Saat aus dem Datum, Armee auf dem Raster des Codes,
+Kampf mit fester Saat (Test: `tests/dailyboard.test.js`).
+- Öffentlicher Link: keine gemeinsame Liste (anonyme Betrachter haben keinen gemeinsamen Speicher). Eigene Siege und
+  Ergebnis-Codes (`KS1.`, Typ `dailyres`) von Freunden landen in der Liste auf dem Gerät.
+- Live-Artefakt: gemeinsame Liste in der Datenbank des Artefakts, `scores/<Spieler-id>`. Veröffentlichen mit
+  `capabilities: { room: {}, db: { rules: [{ path: 'scores', read: 'view', write: 'owner' }, { path: 'scores/{self}', write: 'interact' }] }, user: { scopes: ['profile'] } }`
+  (die Regeln stehen auch in `dailyboard.DB_RULES`). Eintragen dürfen nur Eingeladene mit Recht „Mitwirkende“ oder höher.
+- Balance-Updates: Jeder Eintrag trägt die Spielversion (`dailyboard.SIM_VERSION`, Prüfsumme der Einheitenwerte der
+  Tageschallenge plus `SIM_REV`). Ändern sich Werte, schlägt `tests/dailyboard.test.js` fehl: neue Version in `VERSIONS`
+  eintragen und bei der alten `until` = Tag des Updates setzen. Einträge der alten Version zählen dann bis zu diesem Tag
+  wie eingetragen (markiert „alte Spielversion“), neue werden nachgerechnet.
+
+**Regeln, Karten, Revanche** (`rules.js`): Regeln für einzelne Kategorien, Mischungen (Armee + Tiere, Robo-Dinos …),
+Auswahl nach Eigenschaft (Nur Fernkampf, Luftkampf, Dickhäuter …) und Budget-Varianten (`bm`: Sparrunde, Horde, Titanen);
+15 spiegelgleiche Karten, jede lässt einen Weg ohne Lava und Mauer frei (Test). Regeln ohne mindestens 3 Einheiten fallen
+von selbst weg. Die Revanche-Anfrage kommt als Abfrage mitten im Bild mit Ton, Hinweise (Gegner fertig, hat abgestimmt) als
+Leiste oben. Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
+der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Budget neu, beide malen neu.
+Beim Veröffentlichen `js/rules.js` mit hochladen.

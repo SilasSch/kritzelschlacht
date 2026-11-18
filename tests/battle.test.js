@@ -158,3 +158,20 @@ test('mirrorBattle: Seiten tauschen spiegelt Einheiten und Gelände, Blau wird R
   assert.equal(w.terr[((405 / CELL) | 0) * w.GW + (w.GW - 1 - ((105 / CELL) | 0))], TERRAIN.wasser.id);
   assert.equal(w.terr.filter(Boolean).length, 1);
 });
+
+test('resetFight: gleicher Kampf nach derselben Aufstellung und Saat, auch wenn die Welt schon gekämpft hat', async () => {
+  const { resetFight } = await import('../game/js/battle.js');
+  const { createWorld: cw } = await import('../game/js/world.js');
+  const { step: st, placeRect: pr, tCircle: tc } = await import('../game/js/sim.js');
+  const a = cw(1400, 820, 5); a.teamMode = true;
+  tc(a, 'wasser', .5, .5, .1);
+  pr(a, 'schuetze', 10, .2, .3, .25, .7, 'blau'); pr(a, 'roemer', 12, .3, .35, .34, .65, 'blau');
+  pr(a, 'krieger', 20, .7, .3, .76, .7, 'rot'); pr(a, 'magier', 4, .8, .4, .82, .6, 'rot');
+  const snap = snapshotBattle(a);
+  const b = cw(1400, 820, 99); b.teamMode = true;
+  pr(b, 'ritter', 10, .4, .4, .5, .6, 'rot'); pr(b, 'grenadier', 10, .5, .4, .6, .6, 'blau');
+  for (let i = 0; i < 300; i++) { st(b, 1 / 60); b.events.length = 0; }   // Vorgeschichte: Leichen, ids, Zeit, Zufall
+  const run = w => { resetFight(w, snap, 1234); for (let i = 0; i < 600; i++) { st(w, 1 / 60); w.events.length = 0; }
+    return w.units.map(u => `${u.id}:${u.x.toFixed(3)},${u.y.toFixed(3)},${u.hp.toFixed(3)}`).join('|'); };
+  assert.equal(run(a), run(b));
+});

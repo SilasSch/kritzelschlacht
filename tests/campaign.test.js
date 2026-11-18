@@ -121,14 +121,14 @@ test('units und cats: erlaubte Einheiten, Gelände und Reiter', () => {
   assert.equal(catAllowed(L, 'armee'), true);
   assert.equal(catAllowed(L, 'tiere'), false);
   assert.equal(catAllowed(L, 'gelaende'), true);
-  const U = lvl('u', { units: ['biene'] });   // ohne cats: Gelände frei
+  const U = lvl('u', { units: ['biene'] });   // seit 18.11.: in Leveln nie Gelände, mit oder ohne cats
   assert.deepEqual(paintableUnits(U), ['biene']);
-  assert.equal(terrainAllowed(U, 'wasser'), true);
+  assert.equal(terrainAllowed(U, 'wasser'), false);
   assert.equal(catAllowed(U, 'armee'), false);
   const noTerr = lvl('t', { cats: ['tiere'] });
   assert.equal(terrainAllowed(noTerr, 'mauer'), false);
   assert.equal(terrainAllowed(noTerr, 'radierer'), true, 'der Radierer geht immer');
-  assert.equal(catAllowed(noTerr, 'gelaende'), false);
+  assert.equal(catAllowed(noTerr, 'gelaende'), true, 'Reiter Gelände zeigt den Radierer');
   // ohne Level (Sandkasten) alles; nicht Malbares wie der Ghul nie in paintableUnits
   assert.equal(unitAllowed(null, 'krieger'), true);
   assert.ok(!paintableUnits(null).includes('ghul'));
@@ -161,7 +161,7 @@ test('stamp: im Level nur Einheiten aus units, sonst Warnung und nichts gesetzt'
   assert.ok(stamp(w, createStroke(0), 900, 400, 60, 'krieger', 'gruen', null, null).placed > 0);
 });
 
-test('paintTerrain: Gelände nur, wenn cats es erlaubt; der Radierer immer', () => {
+test('paintTerrain: in Leveln kein Gelände, der Radierer immer', () => {
   const w = createWorld(1400, 800, 3);
   const def = lvl('t', { cats: ['tiere'], budget: 500 });
   const m = { budget: 500, spent: 0, def };
@@ -176,8 +176,8 @@ test('paintTerrain: Gelände nur, wenn cats es erlaubt; der Radierer immer', () 
   const e = paintTerrain(w, createStroke(0), 200, 400, 60, 'radierer', m, 'plan');
   assert.equal(e.changed, true);
   assert.equal(alive(w).length, 0);
-  const ok = paintTerrain(w, createStroke(0), 200, 400, 40, 'wasser', { budget: 500, spent: 0, def: levelById('ga-6') }, 'plan');
-  assert.equal(ok.changed, true, 'M6 erlaubt Gelände');
+  const no = paintTerrain(w, createStroke(0), 200, 400, 40, 'wasser', { budget: 500, spent: 0, def: levelById('ga-6') }, 'plan');
+  assert.equal(no.changed, false, 'auch M6 (cats mit gelaende) erlaubt kein Gelände mehr');
 });
 
 /* ---------- Werkzeuge ---------- */
@@ -231,4 +231,14 @@ test('balance.mjs --chapter: leeres Kapitel ist OK, unbekanntes bricht mit Exitc
   const bad = run('missions', '1', '1400x875', '--chapter=gibtsnicht');
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /unbekanntes Kapitel/);
+});
+
+test('In Leveln ist kein Gelände malbar, nur der Radierer; im Sandkasten und in der Schlacht alles', async () => {
+  const { terrainAllowed, catAllowed, LEVELS } = await import('../game/js/campaign/index.js');
+  for (const { level } of LEVELS) {
+    for (const k of ['wasser', 'lava', 'wald', 'mauer']) assert.equal(terrainAllowed(level, k), false, `${level.id} ${k}`);
+    assert.equal(terrainAllowed(level, 'radierer'), true, level.id);
+    assert.equal(catAllowed(level, 'gelaende'), true, level.id);
+  }
+  for (const k of ['wasser', 'lava', 'wald', 'mauer', 'radierer']) assert.equal(terrainAllowed(null, k), true);
 });

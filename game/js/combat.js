@@ -15,7 +15,11 @@ import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepF
 // --- Task 5: Tiere ---
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
 import { aloft, unseen } from './world.js';
+// --- Schrottplatz und Urzeit ---
+import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
+import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
+import { AIR, stepAir } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -41,7 +45,7 @@ const pinned = (world, u) => u.blk > .3 || u.x < PIN_EDGE || u.y < PIN_EDGE || u
 const canBack = (u, t) => u.rv[RV_BCD] <= 0 && u.T.speed * u.spdMul > t.T.speed * t.spdMul;
 const noBack = (world, u, t) => pinned(world, u) || !canBack(u, t);
 // Messer: t in Kontakt (höchstens KNIFE_GAP px zwischen den Körpern) und am Boden erreichbar
-const knifeReach = (u, t, d) => d - u.T.r - t.T.r <= SNIPER.KNIFE_GAP && t.type !== 'heli' && !isBat(t) && !aloft(t);
+const knifeReach = (u, t, d) => d - u.T.r - t.T.r <= SNIPER.KNIFE_GAP && !t.T.high && !isBat(t) && !aloft(t);
 function knife(world, u, t, dx) {
   u.face = dx < 0 ? -1 : 1;
   if (u.rv[RV_KNIFE] > 0) return;
@@ -55,7 +59,7 @@ function backStep(u, dt) { const r = u.rv; r[RV_BACK] += dt; if (r[RV_BACK] >= S
 function endBack(u) { const r = u.rv; if (r[RV_BACK] > 0) { r[RV_BACK] = 0; r[RV_BCD] = SNIPER.BACK_CD; } }
 // Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
 // Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
-export const KITE = new Set(['schuetze', 'soldat']);
+export const KITE = new Set(['schuetze', 'soldat', 'speer', 'laserbot']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
@@ -142,15 +146,21 @@ export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
   if (v.ashT > 0) return 0;   // Task 6: Asche des Phönix ist unverwundbar
-  let m = 1; const t = v.type;
+  let m = v.armor; const t = v.type;   // armor: Igel aus einem Kreis-Strich (shapes.js), sonst 1
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
     m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
     if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
-  if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
+  if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
+  if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
   if (t === 'geist' && !isFire(kind)) m *= .5;
+  // Schrottplatz: Blitze schlagen in Roboter doppelt ein; Urzeit: Panzerplatten des Ankylosaurus, Hornwand des
+  // Triceratops im Lauf (von vorn halber Schaden durch Schläge, Pfeile und Kugeln)
+  if (kind === 'lightning' && v.T.bot) m *= BOT.LIGHTNING;
+  if ((t === 'anky' || (t === 'trike' && v.run > .4)) && src && src !== v && (kind === 'melee' || kind === 'arrow' || kind === 'bullet') &&
+      (src.x - v.x) * (v.fx || v.face) + (src.y - v.y) * v.fy > 0) m *= .5;
   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7), auch beim Troll, der gerade ein Frosch ist
   if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
@@ -159,7 +169,10 @@ export function hurt(world, v, a, kind, src, dot = false) {
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
-  const h0 = v.hp, d = a * m; v.hp -= d;
+  const h0 = v.hp;
+  let d = a * m;
+  if (v.T.bot && !dot) d = botShield(v, d);   // Schild der Roboter schluckt zuerst (abilities.BOT)
+  v.hp -= d;
   // Schlacht-Statistik (stats.js): der tatsächlich angerichtete Schaden (ohne Überschuss über die LP) zählt für den
   // Verursacher, nur gegen Gegner (kein Friendly Fire, kein Eigenschaden)
   if (src && d > 0 && h0 > 0 && factionOf(world, src) !== factionOf(world, v)) src.dmgOut += d < h0 ? d : h0;
@@ -181,18 +194,33 @@ export const PARTS = {
   grenadier: ['headgear', 'weapon'], reiter: ['weapon'], roemer: ['headgear', 'shield', 'weapon'], sani: ['headgear'], wolf: [], baer: [], biene: [],
   magier: ['headgear', 'weapon'], geist: [], drache: [], soldat: ['headgear', 'weapon'], mg: ['headgear', 'weapon'],
   sniper: ['headgear', 'weapon'], panzerfaust: ['headgear', 'weapon'], moerser: ['headgear', 'weapon'],
-  panzer: ['turret'], heli: ['headgear', 'weapon'], vampir: [], ghul: [],
+  panzer: ['turret'], heli: ['headgear', 'weapon'], jet: [], kampfdrohne: [], bomber: [], vampir: [], ghul: [],
   // --- Task 6: Kreaturen --- (Troll: Keule, Zyklop: Felsen in der Hand, Hexe: Hut)
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
+// --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
+Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],
+  hoehle: [], speer: [], schamane: [], raptor: [], ptera: [], anky: [], trike: [], rex: [], rexei: [] });
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
 // Abgeschossene Flieger, die beim Aufschlag abstürzen (combat.crash); Bienen und Geister fallen nur
-export const CRASH = new Set(['heli', 'drache']);
-export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;     // Explosion beim Aufschlag des Helis
+// Hubschrauber (Overhaul 18.11.): gepanzerte Kanzel (Kugeln ×BULLET), Raketen ×ROCKET, Pfeile und Flieger-Nahkampf voll
+// (Schützen sind die Flugabwehr der Armee, Adler und Bienen die der Tiere). Im Gefecht hält er Abstand HOLD × Reichweite
+// und schwebt seitlich hin und her (Periode SWAY_T s, Tempo SWAY × speed), statt das Ziel zu umkreisen (heliHover).
+// Lufteinheiten (18.11., air.js): Schadensfaktor je Art (fehlt: 1). Bomber gepanzert wie der Heli, alle drei: Raketen
+// hart, fliegende Nahkämpfer voll und mehr (sie erreichen sie als einzige Nahkämpfer)
+export const AIR_ARMOR = {
+  jet: { rocket: 1.4, melee: 1.5 },
+  bomber: { bullet: .75, rocket: 1.4, melee: 1.5 },
+  kampfdrohne: {},
+};
+export const HELI = { BULLET: .75, ROCKET: 1.4, MELEE: 1.5, HOLD: .7, SWAY: .45, SWAY_T: 5, BAND: 40 };
+export const CRASH = new Set(['heli', 'drache', 'jet', 'bomber']);
+export const HELI_CRASH_R = 50, HELI_CRASH_DMG = 60;
+export const AIR_CRASH = { jet: [40, 40], bomber: [70, 90] };   // [Radius, Schaden] beim Aufschlag (18.11.)     // Explosion beim Aufschlag des Helis
 export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag des Drachen, ohne Schaden
 
 // Leiche mit der Geschwindigkeit der Einheit (Fremd- plus Wunschbewegung), in der Luft getötete (auch von
@@ -208,6 +236,7 @@ export const DRAGON_CRASH_R = 70, DRAGON_CRASH_I = 900;  // Stoß beim Aufschlag
 function die(world, v, src, kind) {
   v.alive = false; world.dead = (world.dead || 0) + 1;
   releaseUnit(world, v);
+  if (v.type === 'mega') megaWreck(world, v);   // Schrottplatz: Minibots steigen aus dem Wrack
   if (kind === 'melee' && riseGhoul(world, v, src)) {
     emit(world, {
       type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team, ghoul: true,
@@ -265,8 +294,13 @@ export function fling(v, dx, dy, d, I) {
   const iz = BLAST_LIFT * I;
   applyImpulse(v, dx / (d || 1) * I, dy / (d || 1) * I, iz >= LAUNCH_VZ * m ? iz : 0);
 }
+// BLAST_TOP: Höhe, über der die Explosion niemanden trifft (Fliegerbomben am Boden treffen keine hohen Flieger, auch
+// nicht den Bomber selbst, der über seinen Einschlägen fliegt); sonst Infinity
+export const AIRBOMB_TOP = 30;
+let BLAST_TOP = Infinity;
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
   query(world, x, y, R + 16, v => {
+    if (v.z > BLAST_TOP) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
     const fall = 1 - .5 * Math.min(1, d / R);
@@ -299,6 +333,7 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
 export function crash(world, kind, x, y) {
   emit(world, { type: 'crash', kind, x, y });
   if (kind === 'heli') blast(world, x, y, HELI_CRASH_R, HELI_CRASH_DMG, null, null, 'blast', 2);
+  else if (kind === 'jet' || kind === 'bomber') { const C = AIR_CRASH[kind]; blast(world, x, y, C[0], C[1], null, null, 'blast', 2); }
   else if (kind === 'drache') {
     query(world, x, y, DRAGON_CRASH_R + 16, v => {
       const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
@@ -468,8 +503,14 @@ const AIM = { x: 0, y: 0 };
 function aimPoint(world, u, t, kind) {
   const K = SHOT[kind], d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
   const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2] * (u.stance === 'prone' ? PRONE_SPREAD : 1);
-  AIM.x = t.x + t.mx * lead * .8 + rnd(world, -sp, sp);
-  AIM.y = t.y + t.my * lead * .8 + rnd(world, -sp, sp);
+  // Vorhalt mit der tatsächlichen Bewegung (u.rvx/u.rvy, sim.step), nicht der gewünschten (u.mx/u.my): sonst zielten
+  // Schützen an Lava und Mauern ins Leere, wo das Ziel hin will, aber nicht hinkommt (Fehler von Silas, 18.11.)
+  // Nur wer fast steht, obwohl er laufen will (steckt fest, unter 8 px/s), wird mit der tatsächlichen Bewegung vorgehalten; sonst wie
+  // bisher mit der gewünschten (die Balance der Kampagne ist darauf eingestellt).
+  const rv2 = t.rvx * t.rvx + t.rvy * t.rvy, stuck = rv2 < 64 && rv2 < .02 * (t.mx * t.mx + t.my * t.my);
+  const vx = stuck ? t.rvx : t.mx, vy = stuck ? t.rvy : t.my;
+  AIM.x = t.x + vx * lead * .8 + rnd(world, -sp, sp);
+  AIM.y = t.y + vy * lead * .8 + rnd(world, -sp, sp);
   return AIM;
 }
 
@@ -600,10 +641,12 @@ const MZ = {};
 function breath(world, u, nx, ny, t) {
   const T = u.T, f = factionOf(world, u);
   u.fireT = 0;
-  query(world, u.x, u.y, T.range + 30, v => {
+  // Reichweite wie in think (reach = range + r + r): sonst greift der Drache Ziele auf Abstand an (Hexe: 145 px),
+  // die der Kegel nie erreicht (nur bis range + v.r = 119 px), und Fernkämpfer nehmen keinen Schaden
+  query(world, u.x, u.y, T.range + T.r + MAX_R, v => {
     if (factionOf(world, v) === f) return;
     const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy);
-    if (d > T.range + v.T.r) return;
+    if (d > T.range + T.r + v.T.r) return;
     if ((dx * nx + dy * ny) / (d || 1) < .82) return;
     hurt(world, v, T.dmg, 'fire', u);
     if (v.alive) ignite(world, v, 0, u);
@@ -681,7 +724,7 @@ export function stepBurn(world, u, dt) {
 // Neues Gift frischt die Dauer auf, stapelt aber nicht (ein Wert je Ziel). Maschinen (Panzer, Hubschrauber) und Untote
 // (Ghule, data.UNDEAD) vergiftet es nicht.
 export const POISON = { DPS: 4, T: 3 };
-const NO_POISON = new Set(['panzer', 'heli']);
+const NO_POISON = new Set(['panzer', 'heli', 'jet', 'kampfdrohne', 'bomber']);
 export function poison(world, v, src) {
   if (!v.alive || NO_POISON.has(v.type) || UNDEAD.has(v.type)) return;
   if (!(v.poisonT > 0)) emit(world, { type: 'poison', x: v.x, y: v.y, z: v.z });
@@ -768,7 +811,7 @@ function pilumTarget(world, u) {
     const cell = hash[gy * HW + gx];
     for (let i = 0; i < cell.length; i++) {
       const v = cell[i];
-      if (!v.alive || v.type === 'heli' || v.ashT > 0 || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil; Task 6: Asche
+      if (!v.alive || v.T.high || v.ashT > 0 || (v.hidden && unseen(u, v))) continue;   // Task 5: Krokodil; Task 6: Asche
       const d2 = (v.x - ux) ** 2 + (v.y - uy) ** 2;
       if (d2 > PIL_MAX2 || factionOf(world, v) === f) continue;
       if (d2 < bd) { bd = d2; best = v; }
@@ -849,6 +892,8 @@ export function think(world, u, dt) {
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
   if (T.tier) stepAnimal(world, u, dt);   // Task 5: Zeiten der Tiere, Versteck des Krokodils
+  if (T.bot) stepBot(world, u, dt);       // Schrottplatz: Schild, Kurzschluss, Kuppel, Flicken
+  if (u.growT > 0) stepGrow(world, u, dt);   // Urzeit: Jungtiere wachsen, das Ei schlüpft
   if (u.fleeT > 0) u.fleeT -= dt;
   // Animations-Timer für die Rigs (render/pose.js): seit dem Schuss, Rest von Schwung und Treffer
   if (u.fireT < 1) u.fireT += dt;
@@ -866,6 +911,7 @@ export function think(world, u, dt) {
   if (u.type === 'troll') stepTroll(u, dt);
   else if (u.type === 'phoenix') { stepTrail(world, u, dt); if (!u.alive) return; }
   else if (u.type === 'einhorn') stepAura(world, u, dt);
+  else if (u.type === 'schamane') stepHerbs(world, u, dt);   // Urzeit: Kräuterrauch
   // Ghul (abilities.stepGhoul): zerfällt in jedem Zustand; solange er aufsteht, tut er nichts
   if (u.type === 'ghul' && stepGhoul(world, u, dt)) return;
   // In der Luft oder betäubt: keine Entscheidung, keine Wunschbewegung (Timer laufen oben weiter).
@@ -873,6 +919,8 @@ export function think(world, u, dt) {
   if (u.state !== 'ok') { if (u.abOn) cancelAbility(world, u); if (u.stance !== 'stand') { u.stance = 'stand'; u.stanceT = 0; } return; }
   // Task 6: Frosch (Froschfluch) ist harmlos: kein Rückzug, keine Fähigkeit, kein Angriff, hüpft vom Feind weg
   if (u.type === 'frosch') { stepFrog(world, u, dt); return; }
+  // Urzeit: das Ei des T-Rex liegt nur da (kein Rückzug, keine Fähigkeit, kein Angriff)
+  if (u.T.egg) return;
   // Schreck und Rückzug (morale.js, Spez. #27): vor allem anderen, auch vor dem Block. Der Vampir flieht als
   // Fledermausschwarm (Festlegung 1: die Fledermausform ist die Flucht selbst) und beißt dabei nicht.
   if (updateMorale(world, u, dt)) {
@@ -887,6 +935,8 @@ export function think(world, u, dt) {
   if (stepAbility(world, u, dt)) return;
   // Meteor-Kanal (spells.js): steht still und schaut zum Ziel (beim Start gesetzt); spells.stepSpells führt den Kanal
   if (u.chanId > 0) return;
+  // Lufteinheiten (air.js): eigene Zielwahl und Flugbahn
+  if (AIR.has(u.type)) { stepAir(world, u, dt); return; }
   // Bug-MG des Panzers: feuert, während die Kanone lädt (eigene Abklingzeit, unabhängig vom übrigen Verhalten)
   if (u.type === 'panzer') hullMg(world, u, dt);
   // Römer im marschierenden Block (formation.js): kein eigenes Ziel, kein Schlag, nur auf den Platz und
@@ -969,7 +1019,8 @@ export function think(world, u, dt) {
     }
     attack(world, u, t, d, dx, dy, ax, ay);
     if (KITE.has(u.type) && u.cd > .3 && d < T.range * .35 && t.T.range < 20 && !t.T.fly) { u.mx = -nx * T.speed * .5; u.my = -ny * T.speed * .5; }
-    else if (u.type === 'drache' || u.type === 'heli') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
+    else if (u.type === 'heli') heliHover(world, u, nx, ny, d, reach);
+    else if (u.type === 'drache') { const s = u.id % 2 ? 1 : -1; u.mx = -ny * s * T.speed * .5; u.my = nx * s * T.speed * .5; }
     return;
   }
   // Scharfschütze ohne Ziel in Reichweite: erst WAIT s warten, dann vorrücken, nie über die Frontgrenze
@@ -1154,6 +1205,17 @@ function lineBlocked(world, u, nx, ny, dt) {
   u.mx = mx; u.my = my;
 }
 
+// Hubschrauber im Gefecht: auf HELI.HOLD × Reichweite heran oder zurück (Band ±BAND px ohne Ruck), dazu seitlich
+// schweben (Sinus über die Weltzeit, je Heli versetzt über u.seed); am Feldrand kehrt das Schweben um.
+export function heliHover(world, u, nx, ny, d, reach) {
+  const T = u.T, H = HELI, want = reach * H.HOLD;
+  const rad = Math.max(-1, Math.min(1, (d - want) / H.BAND)) * T.speed * .6;
+  let side = Math.sin((world.time / H.SWAY_T + u.seed) * Math.PI * 2) * T.speed * H.SWAY;
+  const mx0 = -ny * side, my0 = nx * side, m = T.r + 6;
+  if ((mx0 < 0 && u.x < m) || (mx0 > 0 && u.x > world.W - m) || (my0 < 0 && u.y < m) || (my0 > 0 && u.y > world.H - m)) side = -side;
+  u.mx = nx * rad - ny * side; u.my = ny * rad + nx * side;
+}
+
 // ax/ay (optional): geprüfter Zielpunkt für gerade Schüsse (siehe think)
 export function attack(world, u, t, d, dx, dy, ax, ay) {
   const T = u.T; if (u.cd > 0) return;
@@ -1170,7 +1232,12 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     // Zyklop: nahe Feinde (auch in der Ecke auf der Flucht) unbeholfen schlagen statt werfen (cyclopsHit)
     case 'zyklop': if (d < CYCLOPS.MIN_D) { u.cd *= CYCLOPS.MELEE_CD; cyclopsHit(world, u, t); } else { fire(world, u, t, 'boulder'); u.swingT = .25; } break;
     case 'hexe': fire(world, u, t, 'hex', ax, ay); break;
-    case 'baer': {
+    // --- Schrottplatz und Urzeit ---
+    case 'laserbot': laserShot(world, u, t); break;
+    case 'tesla': teslaArc(world, u, t); break;
+    case 'speer': fire(world, u, t, 'pilum', undefined, undefined, T.dmg); u.swingT = .25; break;
+    case 'ptera': fire(world, u, t, 'bomb'); break;
+    case 'baer': case 'mega': case 'rex': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
       query(world, t.x, t.y, T.splash + 20, v => {
@@ -1207,7 +1274,19 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         if (n >= 3) a *= 1.4;
       }
       if (u.type === 'krokodil') u.seenT = CROC.SEEN;   // Task 5: nach dem Biss sichtbar
-      const before = t.hp, dealt = hurt(world, t, a, u.type === 'phoenix' ? 'phoenix' : 'melee', u);   // Phönix: Feuerkrallen (Task 6)
+      // Schrottplatz: Verbund der Minibots; Sprung von Springspinne und Raptor (abilities.POUNCE): erster Biss doppelt
+      if (u.type === 'minibot') {
+        let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'minibot' && v.team === u.team && ++n >= 5) return true; });
+        if (n >= 5) a *= 1.25;
+      }
+      if (u.pounce) { a *= 2; u.pounce = false; }
+      // Schweißer: Brenner (Feuer); Höhlenmensch und Schweißer zünden mit jedem n-ten Treffer an
+      const kind = u.type === 'phoenix' ? 'phoenix' : u.type === 'schweisser' ? 'fire' : 'melee';
+      const before = t.hp, dealt = hurt(world, t, a, kind, u);   // Phönix: Feuerkrallen (Task 6)
+      if (u.type === 'hoehle' || u.type === 'schweisser') {
+        u.hits++;
+        if (u.hits >= (u.type === 'hoehle' ? 4 : WELD.N)) { u.hits = 0; if (t.alive) ignite(world, t, BURN_MAX_GEN, u); }
+      }
       // Biene: der erste Stich auf dieses Ziel vergiftet (Nachtrag 4, #37)
       if (u.type === 'biene' && u.stingTg !== t) { u.stingTg = t; if (t.alive) poison(world, t, u); }
       if (u.stingTg !== null && !u.stingTg.alive) u.stingTg = null;   // keinen Verweis auf Tote festhalten
@@ -1250,11 +1329,12 @@ function healer(world, u, dt) {
     // Untote (Ghule, data.UNDEAD) heilt er nicht, die Asche des Phönix (Task 6) auch nicht: sie steht ohnehin mit halben LP auf
     query(world, u.x, u.y, 380, v => {
       if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal || v.ashT > 0 || UNDEAD.has(v.type)) return;
+      if (T.repair ? !MACHINE.has(v.type) : v.T.bot) return;   // Schrauber-Drohne: nur Maschinen; Roboter heilt nur sie
       const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (isFleeing(v) ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
     });
     if (!best) {
       query(world, u.x, u.y, 420, v => {
-        if (v === u || factionOf(world, v) !== f || v.T.heal) return;
+        if (v === u || factionOf(world, v) !== f || v.T.heal || (T.repair && !MACHINE.has(v.type))) return;
         const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (d < bd) { bd = d; best = v; }
       });
       u.follow = true;
@@ -1292,13 +1372,18 @@ function healer(world, u, dt) {
 // Liegende Verbündete des Schützen (Fraktion p.f) trifft er nie (sie ducken sich). Andere liegende Körper,
 // auf die der Schuss nicht gezielt ist, trifft er nur mit PRONE_DODGE: ein Wurf je Geschoss und Körper;
 // geht er vorbei, kommt der Körper in p.pass und der Strahl läuft dahinter weiter.
+// Schildkuppeln (Schrottplatz, abilities.domeCatch): ein Geschoss, das in eine feindliche Kuppel fliegt, verpufft
+const DOMES = [];
 export function stepProjectiles(world, dt) {
   const proj = world.proj;
+  DOMES.length = 0;
+  if (world.domeN > 0 && proj.length) for (const u of world.units) if (u.alive && u.domeHp > 0) DOMES.push(u);
   for (let i = proj.length - 1; i >= 0; i--) {
     const p = proj[i]; p.t += dt;
+    if (DOMES.length && domeCatch(world, p, DOMES)) { proj.splice(i, 1); continue; }
     if (p.arc) {
       const q = p.t < p.dur ? p.t / p.dur : 1;
-      p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = Math.sin(q * Math.PI) * p.h;
+      p.x = p.x0 + (p.x1 - p.x0) * q; p.y = p.y0 + (p.y1 - p.y0) * q; p.z = p.drop ? p.drop * (1 - q * q) : Math.sin(q * Math.PI) * p.h;
       // Ausweichen (dodge.js, Nachtrag 7, #47): einmal je Geschoss, DODGE.LEAD s vor dem Einschlag (kurze Würfe sofort)
       if (!p.dg && p.t >= p.dur - DODGE.LEAD) rollDodges(world, p);
       if (p.t < p.dur) continue;
@@ -1339,6 +1424,7 @@ function shieldHit(world, v, a, kind, dx, dy, src) {
 // brennt, das Feuer springt nicht über (abilities.FIRE_ARROWS); ein abgeblockter zündet nicht (Vorgabe 5).
 function landArc(world, p, src) {
   if (p.kind === 'boulder') { landBoulder(world, p, src); return; }   // Task 6
+  if (p.kind === 'airbomb') { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
@@ -1416,7 +1502,7 @@ function hexImpact(world, p, v, x, y, src) {
 // unbeholfener Schlag (attack: Abklingzeit ×MELEE_CD, cyclopsHit: Schaden ×MELEE_DMG), sonst geht er hin. Liefert true,
 // wenn der Schritt damit erledigt ist (weiter weg: false, er wirft).
 function cyclopsClose(world, u, t, d, dx, dy, dt) {
-  if (d >= CYCLOPS.MIN_D || t.type === 'heli' || isBat(t)) return false;
+  if (d >= CYCLOPS.MIN_D || t.T.high || isBat(t)) return false;
   const T = u.T, reach = CYCLOPS.MELEE + T.r + t.T.r;
   if (d > reach) { u.mx = dx / d * T.speed; u.my = dy / d * T.speed; u.run += dt; return true; }
   if (u.cd <= 0) attack(world, u, t, d, dx, dy);

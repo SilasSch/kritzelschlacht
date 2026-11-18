@@ -6,6 +6,10 @@ import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
 import { armyPoints } from './sim.js';
+import { MEDALS, hasMedal } from './medals.js';
+/* ---------- Editor (Audit 18.11.) ---------- */
+import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
+import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -55,7 +59,8 @@ export function createUI(game) {
   const portrait = k => { const vi = teamVi(), id = k + '|' + vi; return portraits[id] || (portraits[id] = iconURL(k, 176, vi)); };
   const accent = () => TEAMS[game.mission ? 'blau' : game.curTeam].c;
   // Kampfstatistik einer Mission, aus death-Ereignissen abgeleitet
-  const stats = { lostBlue: 0, lostRed: 0, heroK: 0, heroType: null };
+  // killers: Typ des Verursachers -> eigene Verluste (Niederlage-Hinweis, hints.js)
+  const stats = { lostBlue: 0, lostRed: 0, heroK: 0, heroType: null, killers: new Map() };
 
   /* ---------- Palette ---------- */
   const tabs = $('tabs');
@@ -124,7 +129,11 @@ export function createUI(game) {
     const b = btn.getBoundingClientRect(), w = ucard.offsetWidth, cx = b.left + b.width / 2 - app.left;
     const left = Math.max(8, Math.min(app.width - w - 8, cx - w / 2));
     ucard.style.left = left + 'px';
-    ucard.style.bottom = (app.bottom - pal.top + 12) + 'px';
+    // Über der Leiste; ist darüber kein Platz (Leiste nach oben verschoben, ui/dragbar.js), darunter
+    const below = pal.top - app.top < ucard.offsetHeight + 20 && app.bottom - pal.bottom > pal.top - app.top;
+    ucard.classList.toggle('below', below);
+    ucard.style.bottom = below ? '' : (app.bottom - pal.top + 12) + 'px';
+    ucard.style.top = below ? (pal.bottom - app.top + 12) + 'px' : '';
     ucard.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
   }
   // Knopf unter dem Zeiger (oder null: Lücke, kein Knopf)
@@ -191,7 +200,8 @@ export function createUI(game) {
   window.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if (!$('ovLex').hidden) { e.preventDefault(); closeLexicon(); }
-    else if (!$('ovBat').hidden) { e.preventDefault(); hideBattleResult(); }   // Schlachtfeld ansehen; der Reiter holt sie zurück
+    else if (!$('ovBat').hidden) { e.preventDefault(); hideBattleResult(); }
+    else if (game.replaying()) { e.preventDefault(); game.endReplay(); }   // Schlachtfeld ansehen; der Reiter holt sie zurück
   });
 
   function updateInfo() {
@@ -203,6 +213,7 @@ export function createUI(game) {
       const T = TERRAIN[sel];
       el.innerHTML = `<b>${T.n}</b>${game.mission && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
     }
+    el.title = el.textContent;   // volle Beschreibung, die Zeile kürzt mit …
   }
 
   /* ---------- Zähler mit Stärkebalken ---------- */
@@ -246,9 +257,11 @@ export function createUI(game) {
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
     if (mis) {
-      $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint;
-      $('misName').title = mis.chapter.n;
+      // Level ohne Kapitel (Tutorial, Tageschallenge, eigene Level): nur der Name
+      $('misName').textContent = mis.chapter ? `Mission ${mis.idx + 1} · ${mis.def.n}` : mis.def.n; $('misHint').textContent = mis.def.hint;
+      $('misName').title = mis.chapter ? mis.chapter.n : '';
     }
+    if (game.editorUI) game.editorUI.update();   // Editor (Audit 18.11.)
   }
 
   function updateMission() {
@@ -301,6 +314,7 @@ export function createUI(game) {
     $('listTitle').textContent = 'Kampagne';
     $('listText').textContent = 'Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.';
     const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
+    dailyCard(g, game);   // Tageschallenge (Audit 18.11.): Karte ganz oben
     CHAPTERS.forEach((c, ci) => {
       const b = document.createElement('button'); b.className = 'ch'; b.dataset.ch = c.id;
       const p = chapterProgress(game.save.stars, c.id), empty = !p.total, open = !empty && game.chapterUnlocked(c.id);
@@ -315,6 +329,7 @@ export function createUI(game) {
       if (open) b.onclick = () => openChapter(c.id);
       g.append(b);
     });
+    g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
     $('listBack').hidden = true;
     $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
     $('ovList').hidden = false;
@@ -329,7 +344,9 @@ export function createUI(game) {
       const b = document.createElement('button'); b.className = 'lv'; b.dataset.id = m.id;
       const open = game.unlocked(m.id), s = game.save.stars[m.id] || 0;
       b.disabled = !open;
-      b.innerHTML = `<span class="no">Mission ${i + 1}${open ? '' : ' · gesperrt'}</span><span class="nm">${esc(m.n)}</span><span class="st">${starRow(s)}</span>`;
+      const md = game.save.medals[m.id] || 0;
+      b.innerHTML = `<span class="no">Mission ${i + 1}${open ? '' : ' · gesperrt'}</span><span class="nm">${esc(m.n)}</span><span class="st">${starRow(s)}</span>` +
+        `<span class="md" title="${MEDALS.map((x, k) => `${x.n}${hasMedal(md, k) ? ' ✓' : ''}`).join(' · ')}">${MEDALS.map((x, k) => `<i class="${hasMedal(md, k) ? 'on' : ''}">${x.icon}</i>`).join('')}</span>`;
       b.onclick = () => { $('ovList').hidden = true; game.loadMission(m.id); };
       g.append(b);
     });
@@ -338,7 +355,10 @@ export function createUI(game) {
     $('ovList').hidden = false;
   }
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
-  const openMissionList = () => (game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+  // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
+  const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
+    : game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+  const openCustomList = () => openCustomListView(game, openChapters);
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
@@ -351,16 +371,24 @@ export function createUI(game) {
     <li><span>Eigene Verluste</span>${stats.lostBlue}</li><li><span>Besiegte Gegner</span>${stats.lostRed}</li>
     <li><span>Kampfdauer</span>${Math.round(r.time)} s</li>
     ${stats.heroType ? `<li><span>Held der Schlacht</span>${UNITS[stats.heroType].n} mit ${stats.heroK} Siegen</li>` : ''}`;
+    // Audit 18.11.: Hinweis nach einer Niederlage, Medaillen (r.medals = { mask, fresh }), Replay
+    $('resHint').hidden = !r.hint; $('resHint').textContent = r.hint || '';
+    const md = r.medals;
+    $('resMedals').hidden = !md;
+    if (md) $('resMedals').innerHTML = MEDALS.map((x, k) => `<span class="${hasMedal(md.mask, k) ? 'on' : ''}${hasMedal(md.fresh, k) ? ' new' : ''}" title="${esc(x.d)}">${x.icon} ${esc(x.n)}</span>`).join('');
+    $('resReplay').hidden = !r.canReplay;
     // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
-    $('resNext').hidden = !r.win;
-    $('resNext').textContent = r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln';
+    $('resNext').hidden = !r.win || !!r.custom;   // eigene Level: keine nächste Mission
+    $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
+    $('resNext').textContent = r.nextLabel || (r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln');
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
+    dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
 
-  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; $('ovBat').hidden = true; document.body.classList.remove('bat-res'); closeLexicon(); }
+  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; $('ovBat').hidden = true; $('ovWelcome').hidden = true; document.body.classList.remove('bat-res'); closeLexicon(); }
 
-  function resetBattle() { stats.lostBlue = 0; stats.lostRed = 0; stats.heroK = 0; stats.heroType = null; }
+  function resetBattle() { stats.lostBlue = 0; stats.lostRed = 0; stats.heroK = 0; stats.heroType = null; stats.killers.clear(); }
 
   // Verluste und Held nur während einer Missionsschlacht (inkl. Auslaufen bis zum Ergebnis)
   function onEvent(e) {
@@ -368,6 +396,7 @@ export function createUI(game) {
     const mis = game.mission;
     if (!mis || mis.phase === 'plan') return;
     if (e.team === 'blau') stats.lostBlue++; else stats.lostRed++;
+    if (e.team === 'blau' && e.killerType && e.killerTeam !== 'blau') stats.killers.set(e.killerType, (stats.killers.get(e.killerType) || 0) + 1);
     if (e.killerTeam === 'blau' && e.killerKills > stats.heroK) { stats.heroK = e.killerKills; stats.heroType = e.killerType; }
   }
 
@@ -392,6 +421,17 @@ export function createUI(game) {
   $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
   $('listBack').onclick = () => openChapters();
   $('mBat').onclick = () => game.enterBattle();
+  /* ---------- Audit 18.11.: Reichweiten, Replay, Tutorial ---------- */
+  $('misRange').onclick = () => game.toggleRanges();
+  $('resReplay').onclick = () => { $('ovRes').hidden = true; game.replay(); };
+  $('batReplay').onclick = () => game.replay();
+  $('replaySkip').onclick = () => game.endReplay();
+  $('welTut').onclick = () => { $('ovWelcome').hidden = true; game.startTutorial(); };
+  $('welSkip').onclick = () => { $('ovWelcome').hidden = true; game.skipTutorial(); };
+  $('listTut').onclick = () => { $('ovList').hidden = true; game.startTutorial(); };
+  function showWelcome() { $('ovWelcome').hidden = false; }
+  function replayBar(on, txt) { $('replayBar').hidden = !on; if (txt) $('replayTxt').textContent = txt; }
+  function updateRanges() { const b = $('misRange'); b.classList.toggle('on', game.showRanges); b.setAttribute('aria-pressed', String(game.showRanges)); }
   // Auswertung schließen (Esc oder Klick daneben): das Schlachtfeld bleibt zu sehen, der Reiter "Schlacht" zeigt sie wieder
   function hideBattleResult() { $('ovBat').hidden = true; document.body.classList.remove('bat-res'); }
   $('ovBat').addEventListener('pointerdown', e => { if (e.target === $('ovBat')) hideBattleResult(); });
@@ -420,10 +460,12 @@ export function createUI(game) {
     const plan = b.phase === 'plan';
     setText('batHint', plan ? 'Blau malt links, Rot rechts · Gelände überall'
       : b.phase === 'fight' ? `Kampf läuft · ${clock(b.t)}${b.t > 150 ? ' · ab 3:00 entscheidet die Stärke' : ''}` : `Kampf vorbei · ${clock(b.t)}`);
-    $('batClear').hidden = !plan; $('batSwap').hidden = !plan;
+    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan;
     const g = $('batGo');
     setText('batGo', plan ? 'Los!' : 'Abbrechen');
     g.disabled = b.phase === 'done';
+    if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
+    if (game.onlineUI) game.onlineUI();     // Online 1 gegen 1 (18.11.): Leiste im Online-Spiel
   }
 
   // Verlauf: zwei Linien (Teamfarben, 2 px) über der Zeit, eine Achse; Namen am Linienende, Hover mit Fadenkreuz und Werten
@@ -501,6 +543,7 @@ export function createUI(game) {
       : '<div class="k">Kein Held: niemand hat einen Gegner besiegt.</div>';
     const bb = game.battle;
     if (bb && bb.batchRes) batchDone(bb.batchRes); else { $('batBatch').hidden = true; $('batTen').disabled = false; }
+    $('batReplay').hidden = !game.canReplay();
     document.body.classList.add('bat-res');
     $('ovBat').hidden = false;
   }
@@ -525,8 +568,9 @@ export function createUI(game) {
 
   return {
     updateBattle, batchProgress, batchDone, showBattleResult,
-    refresh, toast, banner, closeBanner, showResult, openMissionList, openChapters, openChapter,
+    refresh, toast, banner, closeBanner, showResult, openMissionList, openChapters, openChapter, openCustomList,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
     hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon, lexiconOpen: () => !$('ovLex').hidden,
+    killers: () => stats.killers, lostBlue: () => stats.lostBlue, showWelcome, replayBar, updateRanges,
   };
 }

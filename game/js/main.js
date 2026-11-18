@@ -2,25 +2,44 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
-import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
-import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
-import { createCamera, resizeCamera } from './camera.js';
+import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain } from './world.js';
+import { step, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect } from './sim.js';
+import { createCamera, resizeCamera, setPadding, WORLD_W, WORLD_H } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
 import { createStats } from './stats.js';
-import { snapshotBattle, restoreBattle, mirrorBattle, createBatch } from './battle.js';
+import { snapshotBattle, restoreBattle, mirrorBattle, createBatch, resetFight } from './battle.js';
 import { createRenderer } from './render/renderer.js';
 import { createAudio, DEFAULT_VOLUME } from './audio.js';
 import { hurt, blast } from './combat.js';
-import { FORM } from './formation.js';
 import { createUI } from './ui.js';
-import { buildBench, SCENARIOS } from './bench.js';
-import { createRng } from './rng.js';
+import { createBenchHud } from './benchhud.js';
+import { SCENES } from './debug/scenes.js';
+import { seedDemo as seedDemoScene, randomBattle as randomScene } from './sandbox.js';
 import { SAVE_KEY, parseSave, serializeSave } from './save.js';
+import { guardContext } from './glguard.js';
+import { classifyStroke, applyShape, SHAPES, SHAPE_MIN_UNITS } from './shapes.js';
+import { defeatHint } from './hints.js';
+import { earnedMedals } from './medals.js';
+import { createCoach } from './ui/coach.js';
+import TUTORIAL from './campaign/tutorial.js';
+/* ---------- Editor und Teilen (Audit 18.11.) ---------- */
+import { EDITOR } from './paint.js';
+import { levelFromWorld, levelProblem, upsertCustom, isLevel } from './editor.js';
+import { encode, decode, battleData, applyBattle, levelData } from './share.js';
+import { createShareDialog } from './ui/sharedialog.js';
+import { createEditorBar } from './ui/editorbar.js';
+import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallenge (Audit 18.11.)
+import { placeDaily, dailySnapshot, fightSeed, armyOf } from './dailyboard.js';   // Bestenliste der Tageschallenge (18.11.)
+import { createBoardUI } from './ui/dailyboard.js';
+import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
+import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
+import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
+import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
+import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-const rnd = (a, b) => a + Math.random() * (b - a);
 
 /* ---------- Speicher ---------- */
 let save;
@@ -30,12 +49,9 @@ function persist() { try { localStorage.setItem(SAVE_KEY, serializeSave(save)); 
 /* ---------- Welt, Kamera, Renderer ---------- */
 const host = document.getElementById('app');
 const viewport = () => ({ vw: Math.max(280, host.clientWidth || innerWidth), vh: Math.max(280, host.clientHeight || innerHeight) });
-// Grundzoom wie früher `zoom`: Einheiten sind in der Standardansicht gleich groß wie im alten Spiel
-const baseZoomFor = (vw, vh) => clamp(Math.min(vw / 1400, vh / 820), .55, 1.15);
-
+// Feste Weltgröße (camera.WORLD_W × WORLD_H), das Fenster bestimmt nur den Maßstab der Kamera
 let { vw, vh } = viewport();
-let bz = baseZoomFor(vw, vh);
-const world = createWorld(vw / bz, vh / bz, (Math.random() * 2 ** 31) | 0);
+const world = createWorld(WORLD_W, WORLD_H, (Math.random() * 2 ** 31) | 0);
 const cam = createCamera(vw, vh, world.W, world.H);
 const renderer = createRenderer(host);
 renderer.resize(vw, vh);
@@ -60,10 +76,13 @@ const game = {
   battle: null,
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
+  // Audit 18.11.: Reichweiten der Gegner in der Planung zeigen; laufendes Replay (oder null)
+  showRanges: true, replayState: null,
 
   // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3), in einem Level nur
   // die erlaubten (units, cats; Spez. #52). Die Tasten folgen den sichtbaren Plätzen.
-  level: () => (game.mission ? game.mission.def : null),
+  // Online 1 gegen 1 (online.js): battle.hot.def legt die Kategorie der Runde fest
+  level: () => (game.mission ? game.mission.def : game.battle && game.battle.hot && game.battle.hot.def) || null,
   catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN).filter(k => terrainAllowed(game.level(), k))
     : Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false && unitAllowed(game.level(), k))),
   catAllowed: c => catAllowed(game.level(), c),
@@ -73,7 +92,11 @@ const game = {
   chapterUnlocked: id => chapterUnlocked(save.stars, id),
 
   setCat(c) {
-    if (!game.catAllowed(c)) return;
+    // keine echte oder erlaubte Kategorie (z. B. eine 1-gegen-1-Regel wie „Titanen“): erste erlaubte, falls die jetzige nicht passt
+    if (!game.catAllowed(c)) {
+      if (game.catAllowed(game.cat) && game.catKeys(game.cat).includes(game.sel)) return;
+      c = CATEGORIES.map(x => x[0]).find(game.catAllowed) || 'gelaende';
+    }
     game.cat = c;
     if (!game.catKeys(c).includes(game.sel)) game.sel = game.catKeys(c)[0];
     ui.renderUnits();
@@ -83,7 +106,7 @@ const game = {
   setBrush(v) { game.brush = clamp(Math.round(v), 10, 150); ui.syncBrush(); },
   setTeam(k) { game.curTeam = k; ui.buildChips(); },
   setTeamMode(on) {
-    if (game.mission || game.battle) { ui.updateMode(); return; }
+    if (game.mission || game.battle || game.editor) { ui.updateMode(); return; }
     world.teamMode = !!on; world.contested = false;
     rebuildHash(world); ui.updateMode(); ui.updateCounts();
   },
@@ -105,6 +128,8 @@ const game = {
 
   clear() {
     const m = game.mission, b = game.battle;
+    if (game.editor) { clearWorld(); world.teamMode = true; rebuildHash(world); ui.updateCounts(); game.editorUI.tick(); return; }   // Editor (Audit 18.11.)
+    if (hotseat.clear()) return;   // Hotseat (Audit 18.11.): nur die eigene Hälfte
     if (b) {
       if (b.phase !== 'plan') return;
       clearWorld(); world.teamMode = true; rebuildHash(world);
@@ -121,7 +146,7 @@ const game = {
     }
     clearWorld(); ui.updateCounts();
   },
-  dice() { if (game.mission || game.battle) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
+  dice() { if (game.mission || game.battle || game.editor) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
 
   undo() {
     const m = game.mission, b = game.battle;
@@ -131,10 +156,14 @@ const game = {
     if (!s) { ui.toast('Nichts zum Rückgängigmachen.'); return; }
     const spent = undoStroke(world, s);
     if (m) m.spent = spent;
+    hotseat.onUndo(spent);   // Hotseat (Audit 18.11.)
     markAll(); ui.updateMission(); ui.updateBattle(); ui.updateCounts();
   },
 
   enterSandbox,
+  toggleRanges() { game.showRanges = !game.showRanges; ui.updateRanges(); },
+  replay: startReplay, endReplay, replaying: () => !!game.replayState, canReplay,
+  startTutorial, skipTutorial() { save.tutorial = true; persist(); },
   enterBattle, startBattle, retryBattle, editBattle, runBatch, cancelBatch, swapSides,
   loadMission,
   go() { const m = game.mission; if (!m) return; if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission(); },
@@ -142,8 +171,10 @@ const game = {
   // "Nächste Mission": das nächste Level im Kapitel, nach dem letzten die Kapitelübersicht
   nextMission() {
     const m = game.mission; if (!m) return;
+    if (!m.chapter) { ui.openChapters(); return; }   // Tutorial und andere Level ohne Kapitel: zur Kampagne
     const n = nextLevel(m.id);
-    if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
+    if (m.custom) game.customBack();   // eigenes Level (Audit 18.11.)
+    else if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
   },
 };
 // Index der Grundausbildung (alte Aufrufe, Debug) → id
@@ -160,41 +191,8 @@ function clearWorld() {
   renderer.fx.clear(); markAll(); rebuildHash(world);
 }
 
-function seedDemo() {
-  clearWorld();
-  tCircle(world, 'wasser', .66, .52, .2); tCircle(world, 'wald', .3, .78, .09);
-  placeRect(world, 'krieger', 36, .12, .18, .24, .42, 'blau');
-  placeRect(world, 'ritter', 12, .14, .58, .22, .74, 'blau');
-  placeRect(world, 'grenadier', 18, .4, .52, .48, .68, 'rot');
-  placeRect(world, 'reiter', 9, .42, .12, .52, .26, 'rot');
-  placeCircle(world, 'biene', 40, .9, .2, .07, 'gelb');
-  placeRect(world, 'schuetze', 14, .86, .62, .92, .84, 'gruen');
-  markAll(); rebuildHash(world);
-}
-
-function randomBattle() {
-  clearWorld();
-  const ter = ['wasser', 'wald', 'lava', 'mauer'];
-  for (let i = 0; i < 2; i++) {
-    const k = ter[Math.random() * ter.length | 0];
-    if (k === 'mauer') { const x = rnd(.4, .58), y = rnd(.1, .4); tRect(world, k, x, y, x + .012, y + rnd(.25, .45)); }
-    else tCircle(world, k, rnd(.35, .65), rnd(.25, .75), rnd(.06, .14));
-  }
-  const types = Object.keys(UNITS).filter(k => k !== 'drache' && UNITS[k].paint !== false);
-  const spots = [[.06, .1], [.06, .6], [.78, .1], [.78, .6]];
-  const nf = 3 + (Math.random() * 2 | 0), teams = Object.keys(TEAMS);
-  for (let i = 0; i < nf; i++) {
-    const t = types[Math.random() * types.length | 0], [sx, sy] = spots[i];
-    const n = Math.max(2, Math.round(60 / UNITS[t].cost));
-    placeRect(world, t, Math.min(n, 60), sx, sy, sx + .14, sy + .28, teams[i]);
-    if (Math.random() < .4) {
-      const t2 = types[Math.random() * types.length | 0];
-      placeRect(world, t2, Math.max(1, Math.min(Math.round(30 / UNITS[t2].cost), 30)), sx + .02, sy + .05, sx + .12, sy + .22, teams[i]);
-    }
-  }
-  if (Math.random() < .25) spawn(world, 'drache', world.W * .5, world.H * .1, teams[Math.random() * nf | 0]);
-  markAll(); rebuildHash(world);
-}
+function seedDemo() { clearWorld(); seedDemoScene(world); markAll(); rebuildHash(world); }
+function randomBattle() { clearWorld(); randomScene(world); markAll(); rebuildHash(world); }
 
 /* ---------- Sandkasten sichern ---------- */
 function saveSandbox() {
@@ -202,16 +200,17 @@ function saveSandbox() {
     // Ghule (nicht malbar) gehören zur Schlacht ihres Vampirs, sie kommen nicht mit zurück
     // Task 6: ein verfluchter Frosch kommt als er selbst zurück (u.frogFrom), die Asche des Phönix mit halben LP; reborn
     // geht mit (ein schon wiedergeborener Phönix steht nicht noch einmal auf)
-    units: world.units.filter(u => u.alive && (u.T.paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn })),
+    units: world.units.filter(u => u.alive && (UNITS[u.type].paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn, shape: u.shape })),
     GW: world.GW, GH: world.GH, terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
     teamMode: world.teamMode,
   };
 }
 
 function enterSandbox() {
+  endReplay(true);
   ui.hideOverlays();
-  if (!game.mission && !game.battle) return;
-  leaveBattle();
+  if (!game.mission && !game.battle && !game.editor) return;
+  leaveBattle(); leaveEditor();
   game.mission = null; snap = null; game.paused = false;
   clearWorld();
   if (sandSave) {
@@ -222,28 +221,41 @@ function enterSandbox() {
       if (s.towner[a] === 2) continue;   // Steinwände der Magier (spells.js) gehörten zur Schlacht
       world.terr[b] = s.terr[a]; world.towner[b] = s.towner[a]; world.whp[b] = s.whp[a];
     }
-    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = u.hp; n.reborn = u.reborn; }
+    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = n.growT > 0 ? Math.min(u.hp, n.T.hp) : u.hp; n.reborn = u.reborn; if (u.shape) applyShape(n, u.shape, false); }
     markAll(); rebuildHash(world);
   } else { world.teamMode = false; seedDemo(); }
   ui.closeBanner(); ui.refresh();
 }
 
 /* ---------- Missionen ---------- */
-// x: id eines Levels (campaign/) oder Index der Grundausbildung
-function loadMission(x) {
+// x: id eines Levels (campaign/) oder Index der Grundausbildung, die Tageschallenge (Objekt oder 'daily-YYYY-MM-DD'), oder
+// ein eigenes Level (Objekt, Editor; custom: 'editor' zurück in den Editor, 'list' zur Liste der eigenen Level; ohne Kapitel
+// und ohne Sterne)
+function loadMission(x, custom = null) {
+  const d = dailyInfo(x);
+  if (d) { loadLevelDef(d.level, { kind: 'daily' }); return; }
+  if (x && typeof x === 'object') { loadLevelDef(x, { custom: custom || 'list' }); return; }
   const e = levelInfo(levelId(x)); if (!e) return;
-  if (!game.mission && !game.battle) saveSandbox();
-  leaveBattle();
+  loadLevelDef(e.level, { chapter: e.chapter, idx: e.li });
+}
+// Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
+function loadLevelDef(def, opts = {}) {
+  endReplay(true);
+  if (!game.mission && !game.battle && !game.editor) saveSandbox();
+  leaveBattle(); leaveEditor();
   clearWorld();
-  const def = e.level;
-  buildMission(world, def);
-  game.mission = { id: def.id, idx: e.li, chapter: e.chapter, def, budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null };
+  // Tageschallenge: Gegner mit fester Saat (dailyboard.js), damit der Kampf nachgerechnet werden kann
+  if (def.daily) placeDaily(world, def); else buildMission(world, def);
+  game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, def,
+    kind: opts.kind || (opts.chapter ? 'campaign' : opts.custom ? 'custom' : 'level'),
+    budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
+  if (opts.custom) game.mission.custom = opts.custom;
   game.paused = false;
   // Auswahl auf eine erlaubte Kategorie und Einheit setzen (units, cats)
   if (!game.catAllowed(game.cat)) game.cat = CATEGORIES.map(c => c[0]).find(game.catAllowed) || 'gelaende';
   if (!game.catKeys(game.cat).includes(game.sel)) game.sel = game.catKeys(game.cat)[0];
   markAll();
-  ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh();
+  ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh(); ui.updateRanges();
 }
 
 function startMission() {
@@ -252,10 +264,24 @@ function startMission() {
   if (!(world.facCount.get(PLAYER) > 0)) { ui.toast('Male zuerst deine Armee.'); return; }
   snap = {
     id: m.id, spent: m.spent, GW: world.GW, GH: world.GH,
-    units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y })),
+    units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y, shape: u.shape })),
     terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
   };
+  // Tageschallenge (Bestenliste 18.11.): Armee auf das Raster des Codes, fester Schnappschuss und feste Saat. So ergibt das
+  // Nachrechnen (dailyboard.createCheck) genau diesen Kampf.
+  let daily = null;
+  if (m.def.daily) {
+    try { const army = armyOf(world); daily = { army, ...dailySnapshot(m.def.daily, army) }; }
+    catch (e) { ui.toast(e.message || 'Diese Armee passt nicht zur Tageschallenge.'); return; }
+  }
   m.phase = 'battle'; m.t = 0; m.endT = -1; m.result = null;
+  // Replay (Audit 18.11.): Kampf aus festem Zustand starten, damit er sich genau wiederholen lässt
+  if (daily) {
+    m.army = daily.army; m.spent = daily.spent;
+    m.fight = { snap: daily.snap, seed: fightSeed(m.def.daily) };
+    resetFight(world, m.fight.snap, m.fight.seed);
+    renderer.fx.clear(); markAll();
+  } else m.fight = beginFight();
   undoStack.length = 0; ui.resetBattle(); audio.init(); audio.play('go');
   ui.updateMission(); ui.updateControls();
 }
@@ -263,25 +289,113 @@ function startMission() {
 // "Nochmal planen" / "Besser planen" / "Abbrechen": Mission neu laden und den Plan wiederherstellen
 function retryMission() {
   const m = game.mission; if (!m) return;
-  if (!snap || snap.id !== m.id) { loadMission(m.id); return; }
+  // Kampagne über die id, alle anderen (eigenes Level, Tutorial, Tageschallenge) über das Level-Objekt
+  const again = () => (m.chapter ? loadMission(m.id) : loadLevelDef(m.def, { kind: m.kind, custom: m.custom }));
+  if (!snap || snap.id !== m.id) { again(); return; }
   const s = snap;
-  loadMission(s.id);
+  again();
   if (s.GW === world.GW && s.GH === world.GH) {
     for (let k = 0; k < world.terr.length; k++) if (s.towner[k]) { world.terr[k] = s.terr[k]; world.towner[k] = 1; world.whp[k] = s.whp[k]; }
   }
-  for (const u of s.units) spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), PLAYER);
+  for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), PLAYER); if (u.shape) applyShape(n, u.shape); }
   game.mission.spent = s.spent; snap = s;
   markAll(); rebuildHash(world); ui.updateMission(); ui.updateCounts();
 }
 
 function finishMission() {
   const m = game.mission; if (!m) return;
-  const win = m.result === 'win';
+  const win = m.result === 'win', timeUp = m.t > 180;
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
-  if (win) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
+  const camp = m.kind === 'campaign';
+  if (win && camp) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
+  // Tageschallenge (Audit 18.11.): keine Kampagnensterne, der Bestwert des Tages kommt in save.daily
+  const daily = m.def.daily ? { date: m.def.daily, best: recordDaily(save.daily, m.def.daily, { win, spent: m.spent, stars }), army: m.army, time: m.t } : null;
+  if (daily && win && m.army) board.onWin(daily.date, m.army, { win, spent: m.spent, time: Math.round(m.t * 100) / 100, stars });
+  // Medaillen (medals.js): nur für Kampagnenlevel gespeichert, angezeigt immer
+  const army = snap && snap.id === m.id ? snap.units : [];
+  const got = earnedMedals({ win, lost: ui.lostBlue(), deployed: army.length, time: m.t, types: new Set(army.map(u => u.type)).size });
+  const before = camp ? save.medals[m.id] || 0 : 0;
+  if (camp && got) save.medals[m.id] = before | got;
+  if (m.kind === 'tutorial' && win) save.tutorial = true;
   persist();
-  ui.showResult({ win, timeUp: m.t > 180, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!nextLevel(m.id) });
+  const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
+  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, lost: ui.lostBlue(), deployed: army.length, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
+    daily, nextLabel: m.chapter || m.custom || daily ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+  ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
+}
+
+/* ---------- Replay (Audit 18.11.) ---------- */
+// Jeder Kampf beginnt mit resetFight (battle.js) aus einem Schnappschuss und einer Saat; danach ist er deterministisch.
+// Das Replay stellt denselben Anfang her, rechnet ohne Zeichnen bis REPLAY_S s vor das Ende und spielt den Rest in
+// Zeitlupe (REPLAY_SPEED) ab. Danach erscheint die Auswertung wieder.
+const REPLAY_S = 6, REPLAY_TAIL = 1, REPLAY_SPEED = .35, REPLAY_FF_MS = 14;
+function beginFight(seed = (Math.random() * 2 ** 31) | 0) {
+  const f = { snap: snapshotBattle(world), seed };
+  resetFight(world, f.snap, f.seed);
+  renderer.fx.clear(); markAll();
+  return f;
+}
+function fightSrc() {
+  const m = game.mission, b = game.battle;
+  if (m && m.phase === 'done' && m.fight && m.res) return { f: m.fight, T: m.t };
+  if (b && b.phase === 'done' && b.fight && b.result) return { f: b.fight, T: b.t };
+  return null;
+}
+function canReplay() { return !!fightSrc(); }
+function startReplay() {
+  const src = fightSrc(); if (!src) return;
+  ui.hideOverlays(); ui.closeBanner();
+  resetFight(world, src.f.snap, src.f.seed);
+  world.events.length = 0; renderer.fx.clear(); markAll();
+  game.replayState = { t: 0, from: Math.max(0, src.T - REPLAY_S), to: src.T + REPLAY_TAIL, play: false, acc: 0 };
+  game.paused = false;
+  ui.replayBar(true, 'wird vorbereitet …');
+  audio.init(); audio.play('whoosh');
+}
+// Ende des Replays: Auswertung wieder zeigen (quiet: ohne, beim Wechsel des Modus)
+function endReplay(quiet = false) {
+  if (!game.replayState) return;
+  game.replayState = null; ui.replayBar(false);
+  if (quiet) return;
+  const m = game.mission, b = game.battle;
+  if (m && m.res) ui.showResult(m.res); else if (b && b.result) ui.showBattleResult(b.result);
+}
+function replayFrame(realDt) {
+  const r = game.replayState;
+  if (!r.play) {
+    const end = performance.now() + REPLAY_FF_MS;
+    while (r.t < r.from && performance.now() < end) { step(world, STEP); world.events.length = 0; r.t += STEP; }
+    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, `Zeitlupe · letzte ${Math.round(r.to - r.from)} s`); }
+    else ui.replayBar(true, `wird vorbereitet … ${Math.round(r.t / r.from * 100)} %`);
+    return;
+  }
+  if (game.paused) { renderer.fx.update(realDt * .5, null); return; }
+  r.acc += realDt * REPLAY_SPEED * (game.slow ? SLOW : 1);
+  let n = 0;
+  while (r.acc >= STEP && n < MAX_STEPS) { step(world, STEP); r.t += STEP; r.acc -= STEP; n++; }
+  const ev = world.events;
+  renderer.consume(ev);
+  audio.onEvents(ev, cam, true);   // Replay in Zeitlupe: tiefer
+  ev.length = 0;
+  renderer.fx.update(realDt * REPLAY_SPEED, world);
+  if (r.t >= r.to) endReplay();
+}
+
+/* ---------- Tutorial (Audit 18.11.) ---------- */
+const coach = createCoach(host, () => audio.play('tab'));
+function startTutorial() {
+  loadLevelDef(TUTORIAL, { kind: 'tutorial' });
+  const $ = id => document.getElementById(id);
+  const own = () => world.units.some(u => u.alive && u.team === PLAYER);
+  const m = () => game.mission;
+  coach.start([
+    { text: 'Unten ist deine Malleiste. Der Krieger ist schon gewählt, die Zahl rechts unten ist sein Preis in Punkten.', at: () => $('units'), next: 'Weiter' },
+    { text: 'Male mit gedrückter Maustaste links der gestrichelten Linie. Jeder Strich setzt Krieger, solange dein Budget reicht.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), done: own },
+    { text: 'Tipp: Ein Strich als Pfeil mit der Spitze nach rechts macht einen Sturmkeil, ein Kreis einen Igel, eine lange Linie eine Schlachtreihe.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), next: 'Weiter' },
+    { text: 'Fertig? Dann drück „Los!“.', at: () => $('misGo'), done: () => m() && m().kind === 'tutorial' && m().phase !== 'plan' },
+    { text: 'Jetzt kämpfen sie von allein. Rot verliert, wenn niemand mehr steht.', at: () => $('misBar'), done: () => !m() || m().kind !== 'tutorial' || m().phase === 'done' },
+  ], () => { save.tutorial = true; persist(); });
 }
 
 /* ---------- Schlacht (Spez. #45, #46) ---------- */
@@ -291,6 +405,7 @@ function finishMission() {
 const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
 
 function enterBattle() {
+  endReplay(true);
   const cur = game.battle;
   if (cur) {
     // schon in der Schlacht (Reiter erneut geklickt, etwa bei offener Missionsliste): nach dem Kampf die Auswertung zeigen
@@ -301,7 +416,8 @@ function enterBattle() {
     }
     return;
   }
-  if (!game.mission) saveSandbox();
+  if (!game.mission && !game.editor) saveSandbox();
+  leaveEditor();
   game.mission = null; snap = null;
   clearWorld();
   world.teamMode = true;
@@ -339,7 +455,8 @@ function startBattle() {
 }
 
 // Kampf aus dem aktuellen Stand der Welt (frisch aufgestellt) beginnen
-function fight(b) {
+function fight(b, seed) {
+  b.fight = beginFight(seed);   // Replay (Audit 18.11.)
   b.stats = createStats(world);
   b.phase = 'fight'; b.t = 0; b.endT = -1; b.result = null; b.evFrom = world.events.length;
   undoStack.length = 0; game.paused = false; audio.init(); audio.play('go');
@@ -349,6 +466,20 @@ function fight(b) {
 function restoreSnap(b) {
   restoreBattle(world, b.snap);
   renderer.fx.clear(); markAll();
+}
+
+// Online 1 gegen 1 (online.js): beide Armeen aus der Liste aufstellen (feste Reihenfolge) und mit der Saat der Runde
+// kämpfen. Auf beiden Geräten dieselbe Liste und Saat, also derselbe Kampf.
+function onlineFight(list, seed, map = 'feld') {
+  const b = game.battle; if (!b) return false;
+  cancelBatch(); endReplay(true);
+  clearWorld(); world.teamMode = true;
+  applyMap(world, map); markAll();   // Karte der Runde (rules.js), auf beiden Geräten gleich
+  for (const u of list) { const n = spawn(world, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
+  rebuildHash(world);
+  b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
+  fight(b, seed);
+  return true;
 }
 
 // "Nochmal": dieselbe Aufstellung samt Gelände, gleich wieder in den Kampf
@@ -417,6 +548,118 @@ function finishBattle() {
   audio.play(b.result.winner === 'draw' ? 'lose' : 'win');
 }
 
+/* ---------- Editor und Teilen (Audit 18.11.) ---------- */
+// Level-Editor: game.editor ist edState ({ meta: { n, hint, budget, cats }, savedId, keep }), solange der Editor offen ist,
+// sonst null. Gemalt werden Gegner (paint.EDITOR: Rot, nur rechts der Mallinie) und Gelände überall; die Simulation steht.
+// Beim Verlassen (Testen, anderer Modus) merkt sich keep die Aufstellung (snapshotBattle), der Reiter „Editor“ und
+// „Zum Editor“ nach dem Testen stellen sie wieder her. Eigene Level liegen im Spielstand (save.custom, save.js) und laufen
+// als Mission ohne Kapitel (loadMission(level, custom)). Teilen per Code: share.js, Dialog ui/sharedialog.js.
+let edState = null;
+const newMeta = () => ({ n: '', hint: '', budget: '', cats: null });
+game.editor = null;
+const shareDlg = createShareDialog(host);
+const editorUI = createEditorBar(game);
+game.editorUI = editorUI;
+
+// level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
+function enterEditor(level = null) {
+  ui.hideOverlays();
+  if (game.editor && !level) return;
+  if (!game.mission && !game.battle && !game.editor) saveSandbox();
+  leaveBattle(); leaveEditor();
+  game.mission = null; snap = null; game.paused = false;
+  clearWorld();
+  if (!edState) edState = { meta: newMeta(), savedId: null, keep: null };
+  if (level) {
+    edState.meta = { n: level.n, hint: level.hint || '', budget: level.budget, cats: level.cats || null };
+    edState.savedId = save.custom.some(l => l.id === level.id) ? level.id : null;
+    buildMission(world, level);
+  } else if (edState.keep) restoreBattle(world, edState.keep);
+  world.teamMode = true;
+  game.editor = edState;
+  markAll(); rebuildHash(world);
+  editorUI.fill();
+  ui.closeBanner(); ui.refresh();
+}
+function leaveEditor() {
+  if (!game.editor) return;
+  edState.keep = snapshotBattle(world);
+  game.editor = null;
+}
+// Das Level aus dem Editor oder null (mit Meldung, etwa ohne Gegner)
+function editorLevel() {
+  if (!game.editor) return null;
+  rebuildHash(world);
+  const lv = levelFromWorld(world, edState.meta), bad = levelProblem(lv);
+  if (bad) { ui.toast(bad); return null; }
+  return lv;
+}
+function editorTest() { const lv = editorLevel(); if (lv) loadMission(lv, 'editor'); }
+function editorShare() {
+  const lv = editorLevel(); if (!lv) return;
+  shareDlg.showCode(encode(levelData(lv)), 'Level teilen', 'Wer diesen Code mit „Code laden“ einfügt, kann dein Level spielen.');
+}
+function saveCustom(lv, replaceId = null) {
+  const r = upsertCustom(save.custom, lv, replaceId);
+  if (r.error) { ui.toast(r.error); return false; }
+  save.custom = r.list; persist();
+  return true;
+}
+function editorSave() {
+  const lv = editorLevel(); if (!lv) return;
+  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast('Gespeichert unter Missionen → Eigene Level.'); }
+}
+const customById = id => save.custom.find(l => l.id === id) || null;
+function playCustom(id) { const l = customById(id); if (l) loadMission(l, 'list'); }
+function editCustom(id) { const l = customById(id); if (l) enterEditor(l); }
+function shareCustom(id) {
+  const l = customById(id); if (!l) return;
+  shareDlg.showCode(encode(levelData(l)), 'Level teilen', `„${l.n}“: Wer diesen Code mit „Code laden“ einfügt, kann das Level spielen.`);
+}
+function deleteCustom(id) {
+  save.custom = save.custom.filter(l => l.id !== id); persist();
+  if (edState && edState.savedId === id) edState.savedId = null;
+}
+// „Übersicht“ und „Weiter“ in einem eigenen Level: zurück in den Editor bzw. zur Liste der eigenen Level
+function customBack() {
+  const m = game.mission;
+  if (m && m.custom === 'editor') enterEditor(); else ui.openCustomList();
+}
+function shareBattle() {
+  const b = game.battle; if (!b || b.phase !== 'plan') return;
+  const n = sideCounts();
+  if (!n.blau && !n.rot) { ui.toast('Male zuerst eine Aufstellung.'); return; }
+  shareDlg.showCode(encode(battleData(world)), 'Schlacht teilen', 'Wer diesen Code mit „Code laden“ einfügt, bekommt genau diese Aufstellung samt Gelände.');
+}
+// Code laden: Schlacht (in die Planung des Schlacht-Modus) oder eigenes Level (gespeichert und gleich als Mission)
+async function loadCode(text) {
+  const d = await decode(text);
+  if (d.k === 'duel' || d.k === 'duelres') { duel.load(d); return; }   // Code-Duell (18.11.)
+  if (d.k === 'dailyres') { board.addCode(d); return; }   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
+  if (d.k === 'battle') {
+    if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
+    clearWorld(); world.teamMode = true;
+    applyBattle(world, d);
+    game.battle.snap = null;
+    markAll(); rebuildHash(world);
+    ui.updateBattle(); ui.updateCounts();
+    ui.toast('Schlacht geladen.');
+    return;
+  }
+  const lv = d.level;
+  if (!isLevel(lv)) throw new Error('Der Code passt nicht zu dieser Version des Spiels.');
+  if (!customById(lv.id) && saveCustom(lv)) ui.toast(`„${lv.n}“ unter Eigene Level gespeichert.`);
+  loadMission(lv, 'list');
+}
+const openCodeLoad = () => shareDlg.openLoad(loadCode);
+
+Object.assign(game, {
+  enterEditor: () => enterEditor(), editorTest, editorShare, editorSave, customBack,
+  playCustom, editCustom, shareCustom, deleteCustom, openCodeLoad, loadCode, shareBattle, toast: msg => ui.toast(msg),
+});
+document.getElementById('mEd').onclick = () => game.enterEditor();
+document.getElementById('bCode').onclick = () => openCodeLoad();
+document.getElementById('batShare').onclick = () => shareBattle();
 
 /* ---------- Malen (Eingabe -> paint.js) ---------- */
 const actions = {
@@ -424,10 +667,12 @@ const actions = {
     audio.init();
     if (!game.mission) ui.closeBanner();
     stroke = createStroke(game.mission ? game.mission.spent : 0);
-    stroke.first = true; stroke.blocked = false;
+    stroke.first = true; stroke.blocked = false; stroke.path = [];
+    if (hotseat.painter()) stroke.spent = hotseat.spent();   // Hotseat (Audit 18.11.): Rückgängig kennt die Ausgaben
   },
   paintAt(wx, wy, erase) {
     if (!stroke) return;
+    if (hotseat.paintAt(stroke, wx, wy, erase)) return;   // Hotseat (Audit 18.11.): eigene Hälfte, eigenes Budget
     const m = game.mission;
     if (stroke.first) {
       stroke.first = false;
@@ -435,6 +680,7 @@ const actions = {
       if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? 'Während des Kampfes wird nicht gemalt.' : 'Plane neu, um weiter zu malen.'); stroke.blocked = true; }
       else if (b && b.phase !== 'plan') { ui.toast(b.phase === 'fight' ? 'Während des Kampfes wird nicht gemalt.' : 'Ändere die Aufstellung, um weiter zu malen.'); stroke.blocked = true; }
       else if (m && wx > zoneX(world)) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
+      else if (game.editor && !erase && UNITS[game.sel] && wx <= zoneX(world)) ui.toast('Gegner nur rechts der gestrichelten Linie, Gelände überall.');
     }
     if (stroke.blocked) return;
     pointer.erasing = erase;
@@ -444,13 +690,15 @@ const actions = {
       if (r.changed) { const c = r.cells; renderer.markTerrainDirty(c.gx0, c.gy0, c.gx1, c.gy1); ui.updateMission(); ui.updateBattle(); audio.play('scribble', { kind: sel }); }
       if (r.warning) ui.toast(r.warning);
     } else {
-      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.curTeam, m, phase);
+      stroke.path.push([wx, wy]);   // Kritzel-Formen (shapes.js)
+      const r = stamp(world, stroke, wx, wy, game.brush, sel, game.battle ? BY_HALF : game.editor ? EDITOR : game.curTeam, m, phase);
       if (r.placed) { audio.play('pop'); ui.updateMission(); ui.updateBattle(); }
       if (r.warning) ui.toast(r.warning);
     }
   },
   strokeEnd() {
     pointer.erasing = false;
+    if (stroke && !stroke.blocked) shapeStroke(stroke);
     if (stroke && !stroke.blocked && !strokeEmpty(stroke)) {
       undoStack.push(stroke);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
@@ -472,8 +720,57 @@ const actions = {
   toggleMute: () => game.toggleMute(),
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
   // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
-  keysBlocked: () => ui.lexiconOpen(),
+  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen(),
 };
+
+// Kritzel-Formen (Audit 18.11.): Form des Strichs erkennen und seinen Einheiten den Bonus geben. Der Gegner steht in
+// Missionen rechts; in der Schlacht und im Sandkasten gegenüber der Hälfte, in der der Strich begann.
+function shapeStroke(s) {
+  const us = s.units.filter(u => u.alive);
+  if (us.length < SHAPE_MIN_UNITS || !s.path || s.path.length < 3) return;
+  const dir = game.mission ? 1 : s.path[0][0] < world.W / 2 ? 1 : -1;
+  const k = classifyStroke(s.path, game.brush, dir);
+  if (!k) return;
+  for (const u of us) applyShape(u, k);
+  ui.toast(`${SHAPES[k].n}! ${us.length} ${us.length === 1 ? 'Einheit' : 'Einheiten'}: ${SHAPES[k].d}`);
+  audio.play('horn');   // Formbonus: Signalhorn
+}
+
+// Reichweiten der gegnerischen Fernkämpfer (Planung einer Mission), für renderer.setOverlay
+function enemyRanges() {
+  const out = [];
+  for (const u of world.units) if (u.alive && u.team !== PLAYER && u.T.range >= 20 && !u.T.heal) out.push({ x: u.x, y: u.y, r: u.T.range });
+  return out;
+}
+
+/* ---------- Tageschallenge (Audit 18.11.) ---------- */
+// Ein Level je Tag (daily.js). Läuft als Mission ohne Kapitel (mis.chapter null, mis.idx -1); loadMission nimmt auch das
+// Level selbst oder seine id 'daily-YYYY-MM-DD' (für „Nochmal planen“).
+function dailyInfo(x) {
+  const def = x && typeof x === 'object' && x.daily ? x : typeof x === 'string' && /^daily-\d{4}-\d{2}-\d{2}$/.test(x) ? dailyLevel(x.slice(6)) : null;
+  return def ? { level: def, li: -1, chapter: null } : null;
+}
+// Level direkt laden (ohne Kampagne)
+function loadLevel(def) { loadMission(def); }
+game.loadLevel = loadLevel;
+game.playDaily = () => loadLevel(dailyLevel(dateKey()));
+
+/* ---------- Hotseat-Versus (Audit 18.11.) ---------- */
+// Schlacht-Modus: Blau und Rot malen nacheinander verdeckt mit eigenem Budget (hotseat.js, ui/hotseat.js)
+const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, startBattle, markAll, rebuildHash, undoStack });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || hotseat.covered(); }
+
+/* ---------- Online 1 gegen 1 (18.11.) ---------- */
+// Zwei Geräte über die Live-Verbindung des Artefakts (net.js, online.js, ui/online.js)
+const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack, markAll });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || online.covered(); }
+// Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung (duel.js, ui/duel.js)
+// Bestenliste der Tageschallenge (18.11.): Live über die Datenbank des Artefakts, sonst eigene Siege und Ergebnis-Codes
+const board = createBoardUI({ toast: m => ui.toast(m), decode, encode, shareDlg });
+game.board = board;
+const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle, markAll });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || duel.covered(); }
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || board.covered(); }
 
 /* ---------- Schleife ---------- */
 function drainEvents() {
@@ -486,7 +783,7 @@ function drainEvents() {
 }
 
 function simStep() {
-  if (bench && bench.tick) bench.tick(bench.k++);   // ?bench&scenario=blastcrowd: Salven im Takt der Schritte
+  bench.tick();
   step(world, STEP);
   const m = game.mission, b = game.battle;
   if (b) {
@@ -513,115 +810,23 @@ function simStep() {
 let acc = 0, last = performance.now(), uiT = 0;
 const params = new URLSearchParams(location.search);
 
-/* ---------- Leistungsprobe ?bench=N (Task 13) ----------
-   Baut die Szene aus bench.js (mixed mit N Einheiten; &scenario=blastcrowd: Bienenschwarm mit Salven) im
-   Sandkasten und zeigt oben links fps, Sim-ms und Render-ms je Bild, die Bilddauer (Mittel und Spitze), die
-   Einheiten und die Fx-Detailstufe. Die Anzeige ist maschinenlesbar (key=value), dazu jede Sekunde
-   window.__bench = { fps, simMs, simStepMs, steps, renderMs, frameMs, frameMaxMs, units, lod, t, scenario,
-   history (eine Zeile je Sekunde), summary(fromSec), restart() }. Sim-ms: alle Simulationsschritte des Bilds;
-   Render-ms: der Rest der Arbeit im Bild (Ereignisse, Effekte, Zeichnen); Bilddauer: Abstand der Bilder. */
-const benchN = params.has('bench') ? clamp(parseInt(params.get('bench'), 10) || 2000, 4, 10000) : 0;
-const benchScen = SCENARIOS.includes(params.get('scenario')) ? params.get('scenario') : 'mixed';   // mixed, mixed2, blastcrowd
-const BENCH_HISTORY = 600;
-let bench = null, benchBox = null;
 
-// Szene (neu) aufbauen und die Messung von vorn beginnen; mit ?debug auch als __kritzel.bench(n, scenario)
-function startBench(n = benchN || 2000, scenario = benchScen) {
-  if (!benchBox) { benchBox = document.createElement('div'); benchBox.className = 'fps'; benchBox.textContent = 'bench …'; host.append(benchBox); }
-  if (game.mission || game.battle) game.enterSandbox();
-  clearWorld();
-  // &seed=N: feste Saat, damit Szene und Verlauf (die Simulation) bei jedem Lauf gleich sind
-  const seed = parseInt(params.get('seed'), 10);
-  if (Number.isFinite(seed)) world.rng = createRng(seed);
-  const tick = buildBench(world, scenario, n);
-  markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
-  const hist = bench ? bench.out.history : [];
-  hist.length = 0;
-  bench = { tick, k: 0, t: 0, n: 0, sim: 0, steps: 0, render: 0, frame: 0, frameMax: 0, boxN: 0, boxT: 0, boxSim: 0, boxRender: 0, boxFrame: 0,
-    scenario, out: { scenario, fps: 0, simMs: 0, simStepMs: 0, steps: 0, renderMs: 0, frameMs: 0, frameMaxMs: 0, units: 0, lod: 0, t: 0,
-      history: hist, summary: benchSummary, measure: benchMeasure, restart: () => startBench(n, scenario) } };
-  window.__bench = bench.out;
-  return scenario;
-}
-// Messung mit angehaltener Schleife: warm Schritte (mit Zeichnen) vorweg, dann frames Bilder je aus einem
-// Schritt + Ereignissen + fx.update (simFx), renderer.prepare (draw, JS), renderer.present (render: PIXI
-// durchläuft und bündelt die Szene) und gl.finish (gpuWait). Liefert avg/p95 je Teil, die Teile von draw
-// (drawParts), die Anzeigeobjekte je Ebene (counts) und den Zustand der Szene.
-function benchMeasure(frames = 60, opt = {}) {
-  const warm = opt.warm ?? 30, wasPaused = game.paused;
-  game.paused = true;
-  let t = performance.now() / 1000;
-  // simFx = Schritt (sim, je Teil aus sim.SIM_TIME) + Ereignisse (events) + fx.update (fxUpdate)
-  const SF = { sim: 0, events: 0, fxUpdate: 0 };
-  const one = () => {
-    const a = performance.now(); simStep();
-    const b = performance.now(); drainEvents();
-    const c = performance.now(); renderer.fx.update(STEP, world);
-    SF.sim += b - a; SF.events += c - b; SF.fxUpdate += performance.now() - c;
-  };
-  for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
-  SF.sim = SF.events = SF.fxUpdate = 0;
-  const ms0 = Float64Array.from(SIM_TIME.ms);
-  const S = { simFx: [], draw: [], render: [], gpuWait: [], total: [] }, parts = {};
-  for (let i = 0; i < frames; i++) {
-    const a = performance.now(); one();
-    const b = performance.now(); renderer.prepare(world, cam, t += STEP);
-    const c = performance.now(); renderer.present();
-    const d = performance.now(); renderer.gpuFinish();
-    const e = performance.now();
-    S.simFx.push(b - a); S.draw.push(c - b); S.render.push(d - c); S.gpuWait.push(e - d); S.total.push(e - a);
-    for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
-  }
-  game.paused = wasPaused;
-  const simParts = {};
-  for (const k in SF) simParts[k] = r2(SF[k] / frames);
-  SIM_PHASES.forEach((k, i) => { simParts['sim.' + k] = r2((SIM_TIME.ms[i] - ms0[i]) / frames); });
-  const st = v => { const s = v.slice().sort((x, y) => x - y); return { avg: r2(s.reduce((p, x) => p + x, 0) / s.length), p95: r2(s[Math.min(s.length - 1, Math.floor(s.length * .95))]) }; };
-  const out = { frames, warm };
-  for (const k in S) out[k] = st(S[k]);
-  for (const k in parts) parts[k] = r2(parts[k]);
-  const fd = renderer.fx.debug();
-  Object.assign(out, { simParts, drawParts: parts, counts: renderer.countObjects(), units: world.totalAlive, corpses: world.corpses.length,
-    particles: fd.particles, lod: renderer.fx.lod, view: `${renderer.app.renderer.width}x${renderer.app.renderer.height}@${renderer.app.renderer.resolution}` });
-  return out;
-}
-const r2 = v => Math.round(v * 100) / 100;
-// Mittel über die Sekunden ab fromSec (Standard 2: ohne den Aufbau der Szene), dazu die schlechteste Sekunde
-function benchSummary(fromSec = 2) {
-  const h = bench.out.history.filter(s => s.t > fromSec);
-  if (!h.length) return null;
-  const avg = k => +(h.reduce((p, s) => p + s[k], 0) / h.length).toFixed(2);
-  return { seconds: h.length, fps: avg('fps'), minFps: Math.min(...h.map(s => s.fps)), simMs: avg('simMs'), renderMs: avg('renderMs'),
-    frameMs: avg('frameMs'), frameMaxMs: Math.max(...h.map(s => s.frameMaxMs)), lodMax: Math.max(...h.map(s => s.lod)) };
-}
-const r1 = v => Math.round(v * 10) / 10;
-function benchFrame(rawMs, simMs, renderMs, steps, dt) {
-  if (!(rawMs >= 0) || rawMs > 1000) return;   // Tab im Hintergrund: nicht werten
-  const b = bench;
-  b.n++; b.sim += simMs; b.render += renderMs; b.steps += steps; b.frame += rawMs; if (rawMs > b.frameMax) b.frameMax = rawMs;
-  b.t += rawMs / 1000; b.boxN++; b.boxT += dt; b.boxFrame += rawMs; b.boxSim += simMs; b.boxRender += renderMs;
-  const lod = renderer.fx.lod;
-  if (b.boxT >= .5) {
-    benchBox.textContent = `bench ${b.scenario} fps=${Math.round(b.boxN * 1000 / (b.boxFrame || 1))} sim=${(b.boxSim / b.boxN).toFixed(1)}ms ` +
-      `render=${(b.boxRender / b.boxN).toFixed(1)}ms frame=${(b.boxFrame / b.boxN).toFixed(1)}ms units=${world.totalAlive} lod=${lod}`;
-    b.boxN = 0; b.boxT = 0; b.boxSim = 0; b.boxRender = 0; b.boxFrame = 0;
-  }
-  const o = b.out, secT = b.frame / 1000;
-  if (secT >= 1) {
-    o.fps = r1(b.n / secT); o.simMs = r1(b.sim / b.n); o.simStepMs = b.steps ? r1(b.sim / b.steps) : 0; o.steps = b.steps;
-    o.renderMs = r1(b.render / b.n); o.frameMs = r1(b.frame / b.n); o.frameMaxMs = r1(b.frameMax);
-    o.units = world.totalAlive; o.lod = lod; o.t = r1(b.t);
-    o.history.push({ t: o.t, fps: o.fps, simMs: o.simMs, simStepMs: o.simStepMs, renderMs: o.renderMs, frameMs: o.frameMs, frameMaxMs: o.frameMaxMs, units: o.units, lod });
-    if (o.history.length > BENCH_HISTORY) o.history.shift();
-    b.n = 0; b.sim = 0; b.render = 0; b.steps = 0; b.frame = 0; b.frameMax = 0;
-  }
-}
+const bench = createBenchHud({ params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
 
-const fpsBox = params.has('fps') && !benchN ? document.createElement('div') : null;
+const fpsBox = params.has('fps') && !bench.n ? document.createElement('div') : null;
 let fpsN = 0, fpsT = 0;
 if (fpsBox) { fpsBox.className = 'fps'; fpsBox.textContent = '… fps'; host.append(fpsBox); }
 
 function frame(now) {
+  // Kontext verloren (glguard.js): nicht rechnen und nicht zeichnen, bis er zurück ist
+  if (gl.lost) { last = now; requestAnimationFrame(frame); return; }
+  if (game.replayState) {
+    const dt = Math.min(.05, Math.max(0, (now - last) / 1000)); last = now;
+    replayFrame(dt);
+    renderer.setOverlay({ brushR: 0, missionZoneX: null, battleMidX: null, ranges: null });
+    renderer.draw(world, cam, now / 1000);
+    requestAnimationFrame(frame); return;
+  }
   const rawMs = now - last;
   const realDt = Math.min(.05, Math.max(0, rawMs / 1000)); last = now;
   const w0 = performance.now();
@@ -630,7 +835,7 @@ function frame(now) {
   const ts = (game.slow ? SLOW : 1) * game.speed * ((m && m.endT >= 0) || (bt && bt.endT >= 0) ? .35 : 1);
   // 10× auswerten: rechnet in einer eigenen Welt; die angezeigte steht solange still
   if (bt && bt.batch) pumpBatch(bt);
-  if (!game.paused && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {
+  if (!game.paused && !game.editor && !(m && m.phase === 'plan') && !(bt && (bt.phase === 'plan' || bt.batch))) {
     acc += realDt * ts;
     while (acc >= STEP && n < MAX_STEPS) { const s0 = performance.now(); simStep(); simMs += performance.now() - s0; acc -= STEP; n++; }
     if (n >= MAX_STEPS) acc = 0;
@@ -647,17 +852,21 @@ function frame(now) {
   renderer.setOverlay({
     brushX: pointer.x, brushY: pointer.y, brushR: pointer.inside && canPaint ? game.brush : 0,
     erase: game.sel === 'radierer' || pointer.erasing,
-    missionZoneX: m && m.phase === 'plan' ? zoneX(world) : null,
+    missionZoneX: (m && m.phase === 'plan') || game.editor ? zoneX(world) : null,
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
+    ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
+  hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
+  online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
+  duel.frame();      // Code-Duell: Antwort-Code nach dem Kampf
   renderer.draw(world, cam, now / 1000);
 
-  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); }
+  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }
   // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)
   renderer.fx.autoLod(performance.now() - w0, rawMs);
-  if (bench) benchFrame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
+  bench.frame(rawMs, simMs, performance.now() - w0 - simMs, n, realDt);
   if (fpsBox) {
     fpsN++; fpsT += realDt;
     if (fpsT >= .5) { fpsBox.textContent = `${Math.round(fpsN / fpsT)} fps · ${world.totalAlive} Einheiten · LOD ${renderer.fx.lod}`; fpsN = 0; fpsT = 0; }
@@ -669,16 +878,24 @@ function frame(now) {
 function onResize() {
   const v = viewport();
   if (v.vw === vw && v.vh === vh) return;
-  vw = v.vw; vh = v.vh; bz = baseZoomFor(vw, vh);
-  resizeWorld(world, vw / bz, vh / bz);
+  vw = v.vw; vh = v.vh;
+  // Nur Kamera und Leinwand: die Welt bleibt gleich groß, Einheiten, Gelände und Rückgängig bleiben unberührt
   resizeCamera(cam, vw, vh, world.W, world.H);
   renderer.resize(vw, vh);
-  // Rückgängig kennt Zellindizes des alten Gitters: Verlauf leeren und einen laufenden Strich sperren
-  // (malt nicht weiter und landet beim Loslassen nicht im Verlauf)
-  undoStack.length = 0;
-  if (stroke) stroke.blocked = true;
-  markAll();
+  updatePad();
 }
+// Freier Platz zwischen oberer und unterer HUD-Leiste (#hudGap): ist neben dem Feld Platz (anderes Seitenverhältnis),
+// rückt das Feld dorthin, statt unter den Leisten zu liegen
+const hudGap = document.getElementById('hudGap');
+function updatePad() {
+  if (!hudGap) return;
+  const g = hudGap.getBoundingClientRect(), h = host.getBoundingClientRect();
+  setPadding(cam, g.top - h.top, h.bottom - g.bottom);
+}
+if (hudGap && typeof ResizeObserver === 'function') new ResizeObserver(updatePad).observe(hudGap);
+// Malleiste per Griff verschiebbar (ui/dragbar.js); die Lage bleibt zwischen Sitzungen erhalten
+const palette = document.querySelector('.palette');
+if (palette) makeDraggable({ el: palette, grip: document.getElementById('palGrip'), reset: document.getElementById('palReset'), host, key: 'kritzelschlacht.palettePos', onMove: updatePad });
 let resizeQueued = false;
 const queueResize = () => { if (resizeQueued) return; resizeQueued = true; requestAnimationFrame(() => { resizeQueued = false; onResize(); }); };
 window.addEventListener('resize', queueResize);
@@ -693,187 +910,17 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(queueResize).observ
 // Boss; Mündung tip aus den Sprites, drawn aus der Pose, logic wie combat.fire sie jetzt nähme),
 // fx.debug().boss (Abgas, Rotorwind-Staub). Zähler des letzten Bilds: renderer.debugPhysics() (dazu stances: Haltung der MG-Schützen und Scharfschützen); Effekte: fx.debug() (Partikel je Art, Sprites je
 // Container und Mischung, Deckel, Wackeln, Decals, Rauchdrift; fire: Flammenstrahl- und Brand-Partikel).
-const scenes = {
-  grenades() { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
-  tank() { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },
-  heli() { world.teamMode = true; spawn(world, 'heli', world.W * .5, world.H * .45, 'rot'); placeRect(world, 'krieger', 12, .46, .5, .54, .6, 'blau'); placeRect(world, 'panzerfaust', 4, .2, .4, .24, .6, 'blau'); },
-  walls() { world.teamMode = true; tRect(world, 'mauer', .5, .25, .512, .75); placeRect(world, 'grenadier', 12, .62, .38, .66, .62, 'rot'); placeRect(world, 'krieger', 24, .3, .38, .36, .62, 'blau'); },
-  // Wegfindung (Spez. #24): links eine Mauer mit Lücke zwischen Blau und Rot (Krieger gehen durch die
-  // Lücke, kein Einschlagen), rechts ein geschlossener Mauerring wie in M5 mit gelben Schützen innen und
-  // grünen Rittern außen (kein Weg: sie schlagen die Mauer ein)
-  walls2() {
-    world.teamMode = true;
-    tRect(world, 'mauer', .25, 0, .262, .55); tRect(world, 'mauer', .25, .72, .262, 1);
-    placeRect(world, 'krieger', 24, .06, .12, .14, .4, 'blau'); placeRect(world, 'krieger', 24, .36, .12, .44, .4, 'rot');
-    tCircle(world, 'mauer', .8, .5, .22, .18);
-    placeCircle(world, 'schuetze', 10, .8, .5, .08, 'gelb');
-    placeRect(world, 'ritter', 12, .95, .38, .99, .62, 'gruen');
-  },
-  water() {
-    world.teamMode = true; tCircle(world, 'wasser', .5, .5, .18); tCircle(world, 'lava', .2, .5, .08);
-    placeRect(world, 'krieger', 30, .44, .4, .56, .6, 'blau'); placeRect(world, 'krieger', 8, .18, .45, .22, .55, 'blau');
-    placeRect(world, 'grenadier', 10, .8, .4, .84, .6, 'rot');
-  },
-  // Drachenfeuer (Spez. #21): ein Drache gegen einen dichten Bienenschwarm (60, Radius 40 px; fängt gut
-  // Feuer) und eine verteilte Kriegerreihe (Abstand 40 px; Feuer springt nicht über)
-  dragon() {
-    world.teamMode = true;
-    spawn(world, 'drache', world.W * .62, world.H * .5, 'rot');
-    placeCircle(world, 'biene', 60, .4, .3, 40 / world.H, 'blau');
-    for (let i = 0; i < 9; i++) spawn(world, 'krieger', world.W * .4, Math.min(world.H - 8, world.H * .72 - 160 + i * 40), 'blau');
-  },
-  // Liegen (Spez. #22): 4 MG-Schützen und 3 Scharfschützen gegen Schützen 260 px vor den MGs (die MGs
-  // gehen etwas vor und legen sich hin, die Scharfschützen sofort). Von weit rechts stürmen 10 Krieger
-  // heran (gut 10 s): wer sie näher als 140 px hat, steht erst auf (0,8 s ohne Schuss).
-  prone() {
-    world.teamMode = true;
-    const x0 = world.W * .22, cy = world.H * .5;
-    for (let i = 0; i < 4; i++) spawn(world, 'mg', x0, cy - 90 + i * 60, 'blau');
-    for (let i = 0; i < 3; i++) spawn(world, 'sniper', x0 - 70, cy - 70 + i * 70, 'blau');
-    placeRect(world, 'schuetze', 8, (x0 + 260) / world.W, .4, (x0 + 290) / world.W, .6, 'rot');
-    placeRect(world, 'krieger', 10, Math.min(.95, (x0 + 700) / world.W), .35, Math.min(.98, (x0 + 740) / world.W), .65, 'rot');
-  },
-  // Römer (Spez. #25): 24 Römer (Blau, 6 × 4 im Platzabstand, bilden sofort einen Block) marschieren gegen
-  // 20 Schützen (vorn) und 10 Krieger (dahinter, Rot): die Schilde halten die Pfeile ab (Funken), Speersalve
-  // vor dem Angriff, dann charge
-  roemer() {
-    world.teamMode = true;
-    for (let k = 0; k < 24; k++) spawn(world, 'roemer', world.W * .2 - (k % 4) * FORM.SPACING, world.H * .5 + (((k / 4) | 0) - 2.5) * FORM.SPACING, 'blau');
-    placeRect(world, 'schuetze', 20, .62, .38, .68, .62, 'rot');
-    placeRect(world, 'krieger', 10, .76, .42, .79, .58, 'rot');
-  },
-  // Rückzug (Spez. #27): 20 blaue Krieger mit 30 % LP gegen 20 rote mit vollen LP, je ein Sanitäter dahinter.
-  // Blau bricht nach den ersten Treffern ab (Angstaugen, Schweißtropfen), läuft zum eigenen Sanitäter, erholt sich
-  // abseits und kommt ab 60 % zurück; Eingeholte wehren sich.
-  flucht() {
-    world.teamMode = true;
-    const k0 = world.units.length;
-    placeRect(world, 'krieger', 20, .36, .36, .42, .64, 'blau');
-    for (let i = k0; i < world.units.length; i++) world.units[i].hp = .3 * world.units[i].T.hp;
-    placeRect(world, 'krieger', 20, .58, .36, .64, .64, 'rot');
-    spawn(world, 'sani', world.W * .26, world.H * .5, 'blau');
-    spawn(world, 'sani', world.W * .74, world.H * .5, 'rot');
-  },
-  // Fähigkeiten (Spez. #30, Task 2): neun Reihen, je eine kleine blaue Gruppe eines Typs mit Fähigkeit (Schütze,
-  // Sanitäter mit verletzten Kriegern, Soldat, Mörser, Panzer, Wolfsrudel, Bär, Geist, Drache) und rechts davon eine
-  // dichte gemischte rote Gruppe (Krieger, Schützen, Ritter, Römer). Die Abklingzeiten der Blauen starten bei 1–3 s:
-  // jede Fähigkeit ist in den ersten Sekunden zu sehen (Mörser und Panzer, sobald ein Ziel in Reichweite ist).
-  faehigkeiten() {
-    world.teamMode = true;
-    const rows = [['schuetze', 4], ['sani', 2], ['soldat', 4], ['moerser', 2], ['panzer', 1], ['wolf', 5], ['baer', 1], ['geist', 2], ['drache', 1]];
-    const foes = ['krieger', 'schuetze', 'ritter', 'roemer'], W = world.W, dy = world.H / rows.length;
-    rows.forEach(([type, n], i) => {
-      const y = (i + .5) * dy;
-      for (let k = 0; k < n; k++) {
-        const u = spawn(world, type, W * .3 - (k % 3) * 22, y + ((k / 3 | 0) - .5 * (n > 3)) * 22 + ((k % 3) - 1) * 5, 'blau');
-        u.abCd = 1 + world.rng() * 2;
-      }
-      if (type === 'sani') for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', W * .3 + 26, y - 20 + k * 20, 'blau'); a.hp = .4 * a.T.hp; }
-      for (let k = 0; k < 6; k++) spawn(world, foes[(i + (k % 2)) % 4], W * .5 + (k % 3) * 16, y + ((k / 3 | 0) - .5) * 16, 'rot');
-    });
-  },
-  // Zauberbuch (Spez. #31, Task 3): sechs blaue Magier. Oben drei dicht beieinander gegen einen dichten Kriegerblock
-  // (Feuerball, dann Meteor mit Kanalstrahlen); darunter je ein einzelner gegen einen dichten Bienenschwarm (Feuerball,
-  // Blitz, Windstoß, wenn sie heran sind), gegen zwei Ritter (Blitz, dann Windstoß und Steinwand, wenn sie heran sind)
-  // und gegen einen Geist (Blitz auf einen Flieger, Windstoß). Die Magier zaubern ab der ersten Sekunde.
-  magier() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .26;
-    for (let k = 0; k < 3; k++) spawn(world, 'magier', x - (k === 1 ? 18 : 0), H * .22 + (k - 1) * 22, 'blau');
-    placeRect(world, 'krieger', 12, (x + 190) / W, .17, (x + 240) / W, .27, 'rot');
-    spawn(world, 'magier', x, H * .48, 'blau');
-    placeCircle(world, 'biene', 14, (x + 210) / W, .48, 22 / H, 'rot');
-    spawn(world, 'magier', x, H * .68, 'blau');
-    spawn(world, 'ritter', x + 200, H * .66, 'rot'); spawn(world, 'ritter', x + 215, H * .7, 'rot');
-    spawn(world, 'magier', x, H * .88, 'blau');
-    spawn(world, 'geist', x + 210, H * .88, 'rot');
-    for (const u of world.units) if (u.type === 'magier') u.cd = .3 + world.rng() * .5;
-  },
-  // Vampir (Spez. #32, Task 4): drei blaue Vampire gegen sechs rote Krieger gut 320 px entfernt (sie fliegen als
-  // Fledermausschwarm hin und setzen sich davor wieder zusammen, Lebensraub, die Bisskills stehen als Ghule auf) und zwei
-  // rote Magier weit dahinter (680 px), die nach ein paar Sekunden heran sind: ihre Feuerbälle treffen die Vampire doppelt
-  // (der Brand auch). Fällt ein Vampir, zerfallen seine Ghule.
-  vampir() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .2;
-    for (let k = 0; k < 3; k++) spawn(world, 'vampir', x, H * .5 + (k - 1) * 70, 'blau');
-    placeRect(world, 'krieger', 6, (x + 320) / W, .38, (x + 350) / W, .62, 'rot');
-    spawn(world, 'magier', x + 680, H * .44, 'rot'); spawn(world, 'magier', x + 680, H * .56, 'rot');
-  },
-  // --- Task 6: Kreaturen (Spez. #34) --- fünf Reihen, Blau links gegen Rot rechts:
-  // 1. ein verletzter Troll gegen zwei Magier (heilt sich, die Feuerbälle stoppen die Heilung);
-  // 2. ein Zyklop wirft Felsbrocken über eine Mauer auf Krieger dahinter (Staub, Trümmer bleiben liegen);
-  // 3. eine Hexe gegen zwei Ritter (grüne Zauber, nach einer Sekunde wird ein Ritter für 5 s zum Frosch);
-  // 4. ein angeschlagener Phönix gegen Schützen (Feuerspur auf dem Anflug, stirbt, liegt 2 s als Asche, steht wieder auf);
-  // 5. ein Einhorn mit drei verletzten Kriegern gegen Krieger (Hornstoß aus vollem Lauf, Heilaura glitzert).
-  kreaturen() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, x = W * .2, row = i => H * (i + .5) / 5;
-    const t = spawn(world, 'troll', x, row(0), 'blau'); t.hp = .55 * t.T.hp;
-    spawn(world, 'magier', x + 260, row(0) - 16, 'rot'); spawn(world, 'magier', x + 260, row(0) + 16, 'rot');
-    spawn(world, 'zyklop', x, row(1), 'blau').cd = .3;
-    tRect(world, 'mauer', (x + 120) / W, (row(1) - 60) / H, (x + 130) / W, (row(1) + 60) / H);
-    placeRect(world, 'krieger', 6, (x + 230) / W, (row(1) - 30) / H, (x + 260) / W, (row(1) + 30) / H, 'rot');
-    const hx = spawn(world, 'hexe', x, row(2), 'blau'); hx.abCd = 1;
-    spawn(world, 'ritter', x + 190, row(2) - 14, 'rot'); spawn(world, 'ritter', x + 205, row(2) + 14, 'rot');
-    const ph = spawn(world, 'phoenix', x, row(3), 'blau'); ph.hp = 30;
-    placeRect(world, 'schuetze', 6, (x + 200) / W, (row(3) - 30) / H, (x + 225) / W, (row(3) + 30) / H, 'rot');
-    spawn(world, 'einhorn', x - 40, row(4), 'blau');
-    for (let k = 0; k < 3; k++) { const a = spawn(world, 'krieger', x + 10, row(4) - 30 + k * 30, 'blau'); a.hp = .4 * a.T.hp; }
-    placeRect(world, 'krieger', 5, (x + 300) / W, (row(4) - 30) / H, (x + 320) / W, (row(4) + 30) / H, 'rot');
-  },
-  // --- Task 5: Tiere (Spez. #33) --- fünf Reihen, jede zeigt eine Fähigkeit (Abklingzeiten der Blauen bei 0,5–1,5 s):
-  // ein Elefant trampelt durch rote Krieger, bis rote Bienen von rechts kommen und er flieht; ein Krokodil lauert in einem
-  // Teich vor Schützen (abgetaucht, unsichtbar für sie, packt zu); ein Gorilla klopft sich auf die Brust und wirft Krieger
-  // in ihre Gruppe; ein Adler stößt über Krieger hinweg auf die Schützen dahinter; 4 Büffel stürmen als Herde auf Schützen.
-  tiere() {
-    world.teamMode = true;
-    const W = world.W, H = world.H, row = i => (i + .5) * H / 5, cd = u => { u.abCd = .5 + world.rng(); return u; };
-    let y = row(0);
-    cd(spawn(world, 'elefant', W * .22, y, 'blau'));
-    placeRect(world, 'krieger', 8, .36, (y - 30) / H, .4, (y + 30) / H, 'rot');
-    placeCircle(world, 'biene', 6, .78, y / H, 14 / H, 'rot');
-    y = row(1);
-    tCircle(world, 'wasser', .34, y / H, .075);
-    cd(spawn(world, 'krokodil', W * .3, y, 'blau'));
-    placeRect(world, 'schuetze', 4, .44, (y - 30) / H, .46, (y + 30) / H, 'rot');
-    y = row(2);
-    cd(spawn(world, 'gorilla', W * .28, y, 'blau'));
-    placeRect(world, 'krieger', 4, .36, (y - 20) / H, .38, (y + 20) / H, 'rot');
-    placeRect(world, 'krieger', 6, .46, (y - 25) / H, .5, (y + 25) / H, 'rot');
-    y = row(3);
-    cd(spawn(world, 'adler', W * .26, y, 'blau'));
-    placeRect(world, 'krieger', 3, .38, (y - 25) / H, .39, (y + 25) / H, 'rot');
-    placeRect(world, 'schuetze', 3, .52, (y - 25) / H, .53, (y + 25) / H, 'rot');
-    y = row(4);
-    for (let k = 0; k < 4; k++) cd(spawn(world, 'bueffel', W * .22 - (k % 2) * 20, y - 15 + (k >> 1) * 28 + (k % 2) * 8, 'blau'));
-    placeRect(world, 'schuetze', 5, .48, (y - 30) / H, .5, (y + 30) / H, 'rot');
-  },
-  // Boss-Sticker (Spez. #23): je Team 2 Panzer, 2 Hubschrauber und 1 Drache, dazu etwas Infanterie;
-  // die Bosse fahren bzw. fliegen aufeinander zu (Turm dreht, Ketten laufen, Abgas, Rotorwind, Flügelschlag)
-  bosses() {
-    world.teamMode = true;
-    for (const [team, x, s] of [['blau', .16, 1], ['rot', .84, -1]]) {
-      spawn(world, 'panzer', world.W * x, world.H * .32, team); spawn(world, 'panzer', world.W * x, world.H * .68, team);
-      spawn(world, 'heli', world.W * (x + s * .06), world.H * .4, team); spawn(world, 'heli', world.W * (x + s * .06), world.H * .6, team);
-      spawn(world, 'drache', world.W * (x - s * .05), world.H * .5, team);
-      const a = x + s * .1, b = x + s * .13, c = x + s * .02, d = x + s * .04;
-      placeRect(world, 'soldat', 8, Math.min(a, b), .42, Math.max(a, b), .58, team);
-      placeRect(world, 'panzerfaust', 3, Math.min(c, d), .45, Math.max(c, d), .55, team);
-    }
-  },
-};
 if (new URLSearchParams(location.search).has('debug')) {
   window.__kritzel = {
-    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: startBench,
+    world, cam, renderer, fx: renderer.fx, game, ui, audio, actions, bench: bench.start,
     // Schlacht-Modus: enterBattle(), startBattle(), runBatch(n, seed) (Promise), retryBattle(), editBattle(); armyPoints();
     // place(type, n, x0, y0, x1, y1, team) wie placeRect (Anteile von W und H)
     enterBattle, startBattle, runBatch, retryBattle, editBattle, cancelBatch, armyPoints: () => armyPoints(world),
     place(type, n, x0, y0, x1, y1, team) { placeRect(world, type, n, x0, y0, x1, y1, team); rebuildHash(world); ui.updateCounts(); ui.updateBattle(); },
     scene(name) {
-      if (!scenes[name]) return Object.keys(scenes);
+      if (!SCENES[name]) return Object.keys(SCENES);
       if (game.mission || game.battle) game.enterSandbox();
-      clearWorld(); scenes[name](); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
+      clearWorld(); SCENES[name](world); markAll(); rebuildHash(world); ui.closeBanner(); ui.refresh();
       return name;
     },
     crashHeli() { let n = 0; for (const u of world.units) if (u.alive && u.type === 'heli') { hurt(world, u, 1e9, 'rocket', null); n++; } return n; },
@@ -888,7 +935,10 @@ if (new URLSearchParams(location.search).has('debug')) {
   };
 }
 seedDemo();
-if (benchN) startBench();
+if (bench.n) bench.start();
+// Erster Start (Audit 18.11.): Willkommen mit Tutorial, solange es weder gespielt noch übersprungen wurde
+else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
+const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
 requestAnimationFrame(t => { last = t; frame(t); });

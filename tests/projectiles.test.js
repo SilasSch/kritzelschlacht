@@ -342,7 +342,7 @@ test('Gerade Schüsse: Renderer-Felder bleiben stimmig (Position aus t/dur = phy
 const movingTargetTrial = (seed, allyY) => {
   const w = createWorld(1400, 800, seed); w.teamMode = true;
   const s = spawn(w, 'soldat', 300, 300, 'blau'); s.cd = 0;
-  const t = spawn(w, 'reiter', 450, 300, 'rot'); t.mx = 0; t.my = 150;   // Vorhalt ≈ 16 px nach unten
+  const t = spawn(w, 'reiter', 450, 300, 'rot'); t.mx = 0; t.my = 150; t.rvx = 0; t.rvy = 150;   // Vorhalt ≈ 16 px nach unten (aus der tatsächlichen Bewegung rvx/rvy)
   const ally = spawn(w, 'krieger', 420, allyY, 'blau');
   rebuildHash(w);
   // think setzt nur bei s die Wunschbewegung zurück; das Ziel behält my = 150

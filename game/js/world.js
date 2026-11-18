@@ -1,4 +1,5 @@
 // Reine Welt: Einheiten, Gelände-Gitter, Spatial Hash, Zielsuche. Zufall nur über world.rng().
+import { YOUNG, BOT, DOME } from './data.js';
 import { UNITS, CELL, HASH_CELL, RANGED, PATH_RECHECK } from './data.js';
 import { createRng } from './rng.js';
 import { isFleeing } from './morale.js';
@@ -47,13 +48,14 @@ export const isBat = v => v.batT > 0 && !!v.T.fly;
 // Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
 // Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
 export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
-export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v) || aloft(v)) && groundMelee(u);
+export const outOfMelee = (u, v) => (v.T.high || isBat(v) || aloft(v)) && groundMelee(u);
 // --- Task 5: Tiere ---
 // Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist
 // (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
 // combat.think) wie den Hubschrauber; Fernkämpfer schon.
 export const EAGLE_REACH_Z = 14;
-export const aloft = v => v.type === 'adler' && v.z > EAGLE_REACH_Z;
+export const aloft = v => (v.type === 'adler' && v.z > EAGLE_REACH_Z) || v.type === 'ptera';
+// Urzeit: der Flugsaurier fliegt immer hoch (wirft Steine von oben), Nahkämpfer am Boden erreichen ihn nie (aloft)
 // Krokodil (Festlegung 8): versteckt im Wasser (u.hidden, abilities.stepAnimal) sehen es Feinde erst ab HIDE_R px oder
 // bis seenT s nach seinem Biss. Gilt für jede Zielwahl (nearestEnemy, Neuwahl in combat.think, Ausweichziel, Salve, Speer).
 export const HIDE_R = 60;
@@ -107,6 +109,8 @@ export function spawn(world, type, x, y, team) {
     // Wegfindung (combat.think): Zeit bis zur nächsten Linienprüfung (nach id versetzt, nicht alle im selben
     // Schritt), Sperre der Linie zum Ziel (0 frei, pathing.PATH_BLOCK_WALL / PATH_BLOCK_LAVA)
     pathT: 0, pathBlk: 0,
+    // Lufteinheiten (air.js): Blickrichtung, Rest des Überflugs, Bomben des laufenden Teppichs und Takt bis zur nächsten
+    hx: .5, hy: .5, passT: .5, bombK: 0, bombT: .5, droneN: 0,
     // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):
     // px/py (physics.integrate; NaN = noch keine Lage vor dem Schritt), bounced/impact (Abheben), fx/fy
     // (Blickrichtung; 0/0 = noch keine: kein Flankenbonus), follow (Sanitäter). Zahlenfelder starten als Zahl
@@ -132,6 +136,11 @@ export function spawn(world, type, x, y, team) {
     // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
     // fz: Flughöhe der Flieger (physics.integrate führt z mit höchstens FLY_VZ px/s dorthin; Sturzflug senkt sie).
     buffT: .5, spdMul: 1.5, dmgMul: 1.5, fz: .5,
+    // Tatsächliche Bewegung (px/s, geglättet; sim.step nach Physik und Mauern): Vorhalt der Schützen (combat.aimPoint).
+    // u.mx/u.my sind nur die gewünschte Bewegung; wer an Lava oder Mauer steht, will weiter und kommt nicht vom Fleck.
+    rvx: .5, rvy: .5,
+    // Kritzel-Form des Strichs (shapes.js): Name oder null, Schadensfaktor (Igel: weniger Schaden, combat.hurt)
+    shape: null, armor: 1.5,
     // Zauberbuch der Magier (spells.js, Spez. #31): Abklingzeiten von Windstoß, Steinwand und Meteor (s; laufen in
     // combat.think ab), Meteor-Kanal (world.casts-id, 0 = keiner). Für alle anderen bleiben sie 0.
     windCd: .5, wallCd: .5, meteorCd: .5, chanId: 0,
@@ -153,6 +162,13 @@ export function spawn(world, type, x, y, team) {
     dmgOut: .5, orig: null,
     // Bomben ausweichen (dodge.js, Nachtrag 7, #47): Restzeit des Hüpfers (s; Wunschbewegung ruht, physics.integrate)
     hopT: .5,
+    // --- Schrottplatz (abilities.js, Block "Schrottplatz") --- Schild der Roboter (LP), Zeit seit dem letzten Treffer (s),
+    // Aufblitzen des Schilds (s, Darstellung), Sperre des Kurzschlusses im Wasser (s); Schildkuppel: Kuppel-LP und Pause
+    // (s); Springspinne und Raptor: nächster Biss nach dem Sprung macht doppelten Schaden; Treffer-Zähler (Fackel,
+    // Schweißbrenner); Takt des Flickens und des Kräuterrauchs (s).
+    shd: .5, shdT: .5, shdHit: .5, shortCd: .5, domeHp: .5, domeT: .5, pounce: false, hits: 0, tickT: .5,
+    // --- Urzeit --- Restzeit bis zum Erwachsensein (s, 0 = erwachsen; abilities.stepGrow)
+    growT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -161,14 +177,21 @@ export function spawn(world, type, x, y, team) {
   // Task 6: Takte nach id versetzt (nicht alle Einhörner und Phönixe im selben Schritt), ohne world.rng
   u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.auraAt = -9; u.trailT = (u.id % 4) * .06;
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
+  u.hx = 0; u.hy = 0; u.passT = 0; u.bombT = 0;   // Lufteinheiten (air.js)
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
+  // Schrottplatz: voller Schild, Kuppel bereit; Urzeit: Jungtier bzw. Ei (data.YOUNG, UNITS.rexei)
+  u.shd = T.bot ? T.hp * BOT.SHIELD : 0; u.shdT = 0; u.shdHit = 0; u.shortCd = 0; u.tickT = (u.id % 5) * .1;
+  u.domeHp = type === 'kuppel' ? DOME.HP : 0; u.domeT = 0; u.growT = 0;
+  if (type === 'kuppel') world.domeN = (world.domeN | 0) + 1;   // combat.stepProjectiles sucht nur dann Kuppeln
+  if (T.grow) { u.growT = T.grow; u.T = type === 'rex' ? UNITS.rexei : YOUNG[type]; u.hp = u.T.hp; }
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
+  u.rvx = 0; u.rvy = 0; u.armor = 1;   // als Double angelegt (.5 / 1.5), Start in Ruhe und ohne Rüstung
   return u;
 }
 
@@ -218,7 +241,7 @@ export function nearestEnemy(world, u) {
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
           // Nahkämpfer am Boden: kein Hubschrauber, keine Fledermausform, kein Adler oben (Review Task 5: sonst stehen sie unter ihm)
-          if (!v.alive || factionOf(world, v) === f || (gm && (v.type === 'heli' || isBat(v) || aloft(v)))) continue;
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || isBat(v) || aloft(v)))) continue;
           if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser
@@ -261,7 +284,7 @@ export function resizeWorld(world, W, H) {
 // Gelände und Einstellungen bleiben.
 export function clearBattle(world) {
   world.units = []; world.proj = []; world.corpses = []; world.debris = [];
-  world.events.length = 0; world.dead = 0;
+  world.events.length = 0; world.dead = 0; world.domeN = 0;
   world.formations = []; world.formT = 0;
   world.cent.clear(); world.centT = 0;
   // Steinwände gehören zur Schlacht (spells.js): ihre Zellen werden wieder frei, Meteor-Kanäle enden

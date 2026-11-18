@@ -310,6 +310,8 @@ export function look(p, o) {
       o.gR = p.r * .9; o.gTint = 0x8fbaff; o.gAlpha = a * .55;
       o.wR = p.r * 1.1; o.wTint = 0xc4dcff; o.wAlpha = .18 * a;
       break;
+    // Laserbot: roter Strahl mit hellem Kern, kurz voll da, Glühen am Strahl
+    case 'laser': o.frame = F.streak; o.tint = p.col; o.alpha = q < .35 ? 1 : a / .65; o.sy = p.sy; o.gR = p.r * .25; o.gTint = 0xff6a5a; o.gAlpha = a * .35; break;
     case 'boltc': o.frame = F.streak; o.tint = 0xffffff; o.alpha = q < .45 ? 1 : a / .55; o.sy = p.sy; break;
     case 'zap': o.tint = a > .5 ? 0xeaf4ff : 0x8fbaff; o.gR = p.r * 3; o.gTint = 0x7fb0ff; o.gAlpha = a * .8; break;
     case 'gust': o.frame = F.streak; o.tint = p.col; o.r = p.r * (.7 + q * .6); o.alpha = .85 * Math.min(1, q / .15) * a; o.sy = p.sy; break;
@@ -533,6 +535,7 @@ export function createFxCore(hooks = {}, opt = {}) {
   }
 
   // Häufigkeit rate je s für dt: ganze Anzahl plus Zufallsrest
+  const HELI_SMOKE = { HALF: .5, LOW: .25, RATE: 9, RATE_LOW: 20 };
   const count = (rate, dt) => { const n = rate * dt, k = n | 0; return k + (rand() < n - k ? 1 : 0); };
   function bossFx(u, dt) {
     const r = u.T.r * (BOSS_VIS[u.type] || 1), face = u.face < 0 ? -1 : 1;
@@ -553,6 +556,16 @@ export function createFxCore(hooks = {}, opt = {}) {
       return;
     }
     const heli = u.type === 'heli';
+    // Overhaul 18.11.: angeschlagener Heli raucht am Triebwerk (unter halben LP), unter einem Viertel mit Funken
+    if (heli && u.hp < u.T.hp * HELI_SMOKE.HALF) {
+      const lo = u.hp < u.T.hp * HELI_SMOKE.LOW, ex = u.x - face * r * .15, ey = u.y - u.z - r * .85;
+      for (let n = count(lo ? HELI_SMOKE.RATE_LOW : HELI_SMOKE.RATE, dt); n > 0; n--) {
+        const p = add('exhaust', ex + rnd(-3, 3), ey + rnd(-2, 2), EXHAUST.life * rnd(1.4, 2), rnd(3, 4.5), lo ? 0x3a3a40 : SMOKE_COLS[(rand() * 3) | 0] - 0x101010);
+        if (!p) break;
+        p.vx = -face * rnd(14, 30) - (u.mx || 0) * .4; p.vy = -rnd(16, 30); p.drag = 1.2; p.rot = rand() * TAU; p.vrot = rnd(-.8, .8);
+      }
+      if (lo && rand() < dt * 8) { const p = add('ember', ex, ey, rnd(.2, .4), rnd(2, 3)); if (p) { p.vx = rnd(-60, 60); p.vy = -rnd(20, 70); p.drag = DRAG; } }
+    }
     if (!(u.z > 1) || (heli && u.z >= WASH_Z) || (!heli && u.z >= WASH_Z * 1.5)) return;
     const gy = u.y + r * 1.05;
     for (let n = count(heli ? WASH_RATE : GUST_RATE, dt); n > 0; n--) {
@@ -781,6 +794,62 @@ export function createFxCore(hooks = {}, opt = {}) {
         add('ring', x, e.y, .25, Math.max(10, R * 1.5), OUTLINE);
         for (let i = 0; i < 4; i++) puff('dust', x + rnd(-6, 6), e.y + rnd(-3, 3), DUST.life * .7, rnd(3, 4.5));
         break;
+      default: eraFx(e, x, y, R, nx, ny);
+    }
+  }
+  /* --- Schrottplatz und Urzeit (abilities.js) ---
+     short (Kurzschluss im Wasser) und domeHit: Funken; domeBreak: blauer Ring und Splitter; build: Funken und Ring am
+     neuen Minibot; wreck: Schrottteile; magnet: blaue Welle; grow/hatch: Staub, Schalensplitter; pounce: Staub hinter
+     dem Sprung; herbs: grüne Blättchen; tail: Ring in Blickrichtung. */
+  function sparks(x, y, n, s0, s1) {
+    for (let i = 0; i < n; i++) {
+      const a = rand() * TAU, s = rnd(s0, s1), p = add('zap', x, y, rnd(.15, .3), rnd(.8, 1.3)); if (!p) break;
+      p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 20; p.drag = 3;
+    }
+  }
+  function bits(x, y, n, cols, s0, s1, up) {
+    for (let i = 0; i < n; i++) {
+      const a = rand() * TAU, s = rnd(s0, s1), p = add('dot', x, y, rnd(.35, .6), rnd(1.2, 2.4), cols[i % cols.length]); if (!p) break;
+      p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s * .5 - rnd(up * .6, up); p.ay = 420;
+    }
+  }
+  function eraFx(e, x, y, R, nx, ny) {
+    switch (e.k) {
+      case 'short': sparks(x, y - 6, 7, 40, 100); add('ring', x, e.y, .25, R * 1.4, 0x7fd8ff); break;
+      case 'domeHit': sparks(x, y, 4, 30, 80); add('flash', x, y, .08, 3.5); break;
+      case 'domeBreak':
+        wave(x, e.y, R, .45, 0x5fb8e8);
+        for (let i = 0; i < 10; i++) {
+          const a = i / 10 * TAU, p = add('shard', x + Math.cos(a) * R * .8, e.y - 6 + Math.sin(a) * R * .45, rnd(.35, .55), rnd(3, 5), 0x9fdcff); if (!p) break;
+          p.vx = Math.cos(a) * rnd(30, 70); p.vy = Math.sin(a) * 30 - rnd(30, 60); p.ay = 300; p.rot = a;
+        }
+        break;
+      case 'build': sparks(x, y - 6, 6, 30, 80); add('ring', x, e.y, .3, 14, OUTLINE); break;
+      case 'wreck': bits(x, e.y - 6, 12, [0x6f7a8c, 0x9aa3b0, 0x4a5260], 50, 140, 160); puff('smoke', x, y - 6, SMOKE.life * .6, 8); break;
+      case 'magnet': wave(x, e.y, R, .5, 0x4f7bd8); sparks(x, y - 10, 5, 30, 70); break;
+      case 'grow':
+        add('ring', x, e.y, .35, R * 1.6, OUTLINE);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU, d = R * rnd(.5, .9); puff('dust', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6, DUST.life, rnd(3.5, 5.5)); }
+        break;
+      case 'hatch':
+        bits(x, y - 6, 10, [0xf4ecd2, 0xd9cfa8, 0x9bbf6b], 40, 110, 140);
+        add('ring', x, e.y, .35, R * 1.8, OUTLINE);
+        break;
+      case 'pounce':
+        for (let i = 0; i < 4; i++) puff('dust', x - nx * R * rnd(.5, 1.2) + rnd(-4, 4), e.y - ny * R + rnd(-3, 3), DUST.life * .8, rnd(3, 5));
+        break;
+      case 'herbs':
+        for (let i = 0; i < 5; i++) {
+          const a = rand() * TAU, d = R * rnd(.1, .5), p = add('dot', x + Math.cos(a) * d, e.y + Math.sin(a) * d * .6 - 6, rnd(.5, .8), rnd(1.2, 1.8), i % 2 ? 0x3e9d4a : 0x7cc36a); if (!p) break;
+          p.vy = -rnd(14, 26);
+        }
+        break;
+      case 'tail': {
+        const f = e.face < 0 ? -1 : 1;
+        add('ring', x - f * R * .5, e.y, .3, R, OUTLINE);
+        for (let i = 0; i < 4; i++) puff('dust', x - f * R * rnd(.4, .9), e.y + rnd(-4, 4), DUST.life * .8, rnd(3.5, 5));
+        break;
+      }
     }
   }
 
@@ -812,6 +881,13 @@ export function createFxCore(hooks = {}, opt = {}) {
   }
   function spell(e) {
     switch (e.k) {
+      case 'laser': {
+        const x0 = e.x0, y0 = e.y0 - (e.z0 || 0), x1 = e.x1, y1 = e.y1 - (e.z1 || 0);
+        seg('laser', x0, y0, x1, y1, 3.2, .16, 0xe8332a);
+        seg('laser', x0, y0, x1, y1, 1.2, .16, 0xfff0e8);
+        add('flash', x1, y1, .08, 3);
+        break;
+      }
       case 'bolt': {
         const x1 = e.x1, y1 = e.y1 - (e.z1 || 0);
         zigzag(e.x0, e.y0 - (e.z0 || 0), x1, y1, false);

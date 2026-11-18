@@ -10,9 +10,9 @@ test('alter Spielstand (Index 0–8) wird gelesen und in Level-ids übersetzt (S
   assert.deepEqual(s.stars, { 'ga-1': 3, 'ga-2': 2 });
   assert.equal(s.muted, true);
   // geschrieben: ids, dazu der alte Index der Grundausbildung (ein älteres Spiel sieht die Sterne weiter)
-  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 0: 3, 1: 2 }, muted: true });
+  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 0: 3, 1: 2 }, muted: true, medals: {}, tutorial: false });
   s.stars['ga-3'] = 1; s.stars['burg-1'] = 2; s.muted = false;
-  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2, 0: 3, 1: 2, 2: 1 }, muted: false });
+  assert.deepEqual(JSON.parse(serializeSave(s)), { stars: { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2, 0: 3, 1: 2, 2: 1 }, muted: false, medals: {}, tutorial: false });
   // neu lesen verliert nichts und bleibt stabil
   const again = parseSave(serializeSave(s));
   assert.deepEqual(again.stars, { 'ga-1': 3, 'ga-2': 2, 'ga-3': 1, 'burg-1': 2 });
@@ -39,4 +39,55 @@ test('kein oder kaputter Spielstand ergibt den leeren Stand', () => {
   }
   assert.equal(parseSave('{"muted":true}').muted, true);
   assert.equal(parseSave('kaputt').muted, false);
+});
+
+test('Medaillen und Tutorial: lesen, prüfen, schreiben', () => {
+  const s = parseSave(JSON.stringify({ stars: {}, medals: { 'ga-1': 5, 'x': 'kaputt', 'y': -1 }, tutorial: 1 }));
+  assert.deepEqual(s.medals, { 'ga-1': 5 });
+  assert.equal(s.tutorial, true);
+  const back = parseSave(serializeSave(s));
+  assert.deepEqual(back.medals, { 'ga-1': 5 }); assert.equal(back.tutorial, true);
+  const empty = parseSave(null);
+  assert.deepEqual(empty.medals, {}); assert.equal(empty.tutorial, false);
+});
+
+/* ---------- Eigene Level (Audit 18.11.) ---------- */
+test('eigene Level: alte Stände ohne custom, Prüfung der Form, Obergrenze 30', () => {
+  const lv = id => ({ id, n: 'L ' + id, hint: 'h', budget: 60, par: 46, place: [['unit', 'krieger', .7, .5], ['tRect', 'mauer', .6, .2, .62, .8]] });
+  assert.deepEqual(parseSave('{"stars":{},"muted":false}').custom, []);
+  assert.deepEqual(parseSave(null).custom, []);
+  assert.equal(JSON.parse(serializeSave(parseSave(null))).custom, undefined, 'leer: nicht geschrieben (Stand wie bisher)');
+  const s = parseSave(null);
+  s.custom = [lv('custom-a'), lv('custom-b')];
+  const again = parseSave(serializeSave(s));
+  assert.deepEqual(again.custom, s.custom);
+  // Unsinn fällt weg, doppelte ids einmal
+  const raw = JSON.stringify({ stars: {}, custom: [lv('custom-a'), 5, null, { id: 'x' }, lv('custom-a'), { ...lv('y'), place: [['unit', 'drache?', .5, .5]] }, lv('custom-c')] });
+  assert.deepEqual(parseSave(raw).custom.map(l => l.id), ['custom-a', 'custom-c']);
+  assert.deepEqual(parseSave('{"custom":"kaputt"}').custom, []);
+  const many = JSON.stringify({ custom: Array.from({ length: 40 }, (_, i) => lv('c' + i)) });
+  assert.equal(parseSave(many).custom.length, 30);
+});
+
+/* ---------- Tageschallenge (Audit 18.11.) ---------- */
+test('Tageschallenge: daily wird gelesen, geprüft, geschrieben und auf 30 Tage gekürzt', () => {
+  // alter Stand ohne daily: leeres Objekt, geschrieben wie vorher (ohne daily)
+  const old = parseSave('{"stars":{"ga-1":2},"muted":false}');
+  assert.deepEqual(old.daily, {});
+  assert.deepEqual(JSON.parse(serializeSave(old)), { stars: { 'ga-1': 2, 0: 2 }, muted: false, medals: {}, tutorial: false });
+  // Unsinn fällt weg, Sterne höchstens 3
+  const s = parseSave(JSON.stringify({ stars: {}, daily: { '2026-11-18': { spent: 64, stars: 3 }, '2026-11-17': { spent: 'x' },
+    kaputt: { spent: 1 }, '2026-11-16': null, '2026-11-15': { spent: 70.5, stars: 9 } } }));
+  assert.deepEqual(s.daily, { '2026-11-15': { spent: 70.5, stars: 3 }, '2026-11-18': { spent: 64, stars: 3 } });
+  assert.deepEqual(parseSave(serializeSave(s)).daily, s.daily);
+  assert.deepEqual(parseSave(serializeSave(s)).stars, {});
+  for (const t of ['{"daily":null}', '{"daily":[1]}', '{"daily":"x"}']) assert.deepEqual(parseSave(t).daily, {});
+  // nur die letzten 30 Tage
+  const many = {};
+  for (let d = 1; d <= 40; d++) many[`2026-10-${String(d).padStart(2, '0')}`] = { spent: d, stars: 1 };
+  const k = Object.keys(parseSave(JSON.stringify({ daily: many })).daily);
+  assert.equal(k.length, 30);
+  assert.equal(k[0], '2026-10-11');
+  s.daily = many;
+  assert.equal(Object.keys(JSON.parse(serializeSave(s)).daily).length, 30);
 });

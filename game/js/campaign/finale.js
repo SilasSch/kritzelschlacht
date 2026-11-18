@@ -1,7 +1,7 @@
 // Kapitel „Finale“ (Spez. #52): alles gemischt, in den schwersten Schlachten. Jedes Level erlaubt eine feste Auswahl
 // aus mehreren Kategorien; jede Einheit allein verliert, erst die richtige Mischung gewinnt.
 // Felder eines Levels und Regeln: docs/kampagne.md. Prüfen: node tools/balance.mjs missions 8 1400x875 --chapter=finale
-import { F, B, Md } from './areas.js';
+import { F, B, Md, Deep } from './areas.js';
 
 export default {
   id: 'finale',
@@ -11,12 +11,15 @@ export default {
     // Zeitreise: Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer. Ritter fangen die Reiter ab,
     // Soldaten dahinter holen die Drachen herunter, Sanitäter halten die Ritter lange genug am Leben.
     {
-      id: 'fin-1', n: 'Zeitreise', budget: 180, par: 145,
+      // Drachenatem trifft seit dem Fix bis zur Angriffsreichweite, auch Soldaten auf Abstand (vorher nie): der alte Plan
+      // (12 Ritter, 25 Soldaten, 4 Sanitäter, 143) gewann nur noch 0/4; mit Scharfschützen ganz hinten wieder fast immer.
+      // par 145 → 177
+      id: 'fin-1', n: 'Zeitreise', budget: 180, par: 177,
       units: ['roemer', 'ritter', 'grenadier', 'soldat', 'sniper', 'sani'],
       hint: 'Römer, Ritter, Grenadiere, Soldaten, Scharfschützen und Sanitäter aus allen Zeiten. Reiter überrennen jeden Fernkämpfer, Drachen verbrennen jeden Nahkämpfer: Wer fängt die Reiter ab, und wer holt die Drachen herunter?',
       place: [['unit', 'drache', .8, .3], ['unit', 'drache', .8, .7], ['rect', 'reiter', 24, .66, .2, .72, .8], ['rect', 'krieger', 20, .62, .3, .65, .7]],
       plan: {
-        smart: [['ritter', 12, ...F], ['soldat', 25, ...B], ['sani', 4, ...B]],
+        smart: [['ritter', 14, ...F], ['soldat', 24, ...B], ['sniper', 4, ...Deep], ['sani', 4, ...B]],
         spam: [['roemer', 60, ...F]],
       },
     },
@@ -38,14 +41,15 @@ export default {
     // und packen jede Masse, die vorn steht. Schützen vorn halten sie an Land auf (schuetze > krokodil), Mörser hinten
     // schießen über den See auf Magier, Zyklopen und Schützen am anderen Ufer. Mörser allein werden gefressen.
     {
-      id: 'fin-3', n: 'Die Flut', budget: 210, par: 175,
+      id: 'fin-3', n: 'Die Flut', budget: 210, par: 180,
       units: ['krieger', 'schuetze', 'ritter', 'moerser', 'gorilla', 'bueffel', 'hexe'],
       hint: 'Krieger, Schützen, Ritter, Mörser, Gorillas, Büffel und Hexen. Im Wasser lauern Krokodile, unsichtbar bis kurz vor deiner Linie. Was hält sie an Land auf, und was schießt über den ganzen See bis ans andere Ufer?',
       place: [['tRect', 'wasser', .41, 0, .8, 1], ['rect', 'krokodil', 21, .5, .15, .6, .85],
         ['rect', 'magier', 8, .86, .3, .88, .7], ['rect', 'zyklop', 4, .9, .35, .92, .65],
         ['rect', 'schuetze', 10, .84, .3, .85, .7], ['rect', 'schuetze', 12, .88, .2, .9, .8]],
       plan: {
-        smart: [['schuetze', 28, ...F], ['moerser', 12, ...B]],
+        // Audit 18.11.: par 175 → 180 und 30 statt 28 Schützen; mit 28 gewann der Smart-Plan an drei Formen nur 7/8
+        smart: [['schuetze', 30, ...F], ['moerser', 12, ...B]],
         spam: [['krieger', 100, ...F]],
       },
     },

@@ -15,7 +15,7 @@ export default {
       id: 'rom-1', n: 'Der erste Block', budget: 100, par: 80,
       units: ['roemer'],
       hint: 'Nur Römer. Male sie dicht beieinander: Als Block marschieren sie im Gleichschritt und werfen vor dem Zusammenstoß ihre Speere. Verstreut fallen sie einzeln.',
-      place: [['rect', 'krieger', 30, .62, .3, .72, .7], ['rect', 'schuetze', 6, .8, .38, .84, .62]],
+      place: [['rect', 'krieger', 32, .62, .3, .72, .7], ['rect', 'schuetze', 6, .8, .38, .84, .62]],   // Audit 18.11.: 30 → 32 Krieger nach dem Vorhalt-Fix (verstreute Römer gewannen sonst manchmal)
       // Lehre: derselbe Römer, dicht als Block gemalt, gewinnt; über das ganze Feld verstreut verliert er
       answer: ['roemer'],
       plan: { smart: [['roemer', 26, ...blk(26)]], spam: [['roemer', 33, .05, .06, .4, .94]] },
@@ -45,7 +45,7 @@ export default {
       },
     },
     {
-      id: 'rom-4', n: 'Die Furt', budget: 115, par: 110,
+      id: 'rom-4', n: 'Die Furt', budget: 120, par: 115,   // Audit 18.11.: +5 nach dem Vorhalt-Fix (Smart 22 statt 20 Schützen)
       units: ['roemer', 'schuetze'],
       hint: 'Römer und Schützen. Wölfe und Bären waten durch den Fluss, drüben schießen Bogenschützen. Im Wasser sind sie langsam: Ein Block am Ufer hält sie auf, dahinter treffen die Pfeile.',
       place: [
@@ -53,7 +53,7 @@ export default {
         ['rect', 'wolf', 36, .6, .1, .68, .9], ['rect', 'baer', 5, .72, .3, .76, .7], ['rect', 'schuetze', 10, .8, .3, .84, .7],
       ],
       // Schützen allein: die Wölfe holen sie ein; Römer allein: die Bären sprengen den Block
-      plan: { smart: [['roemer', 20, ...blk(20)], ['schuetze', 20, ...B]], spam: [['roemer', 38, ...F]] },
+      plan: { smart: [['roemer', 20, ...blk(20)], ['schuetze', 22, ...B]], spam: [['roemer', 38, ...F]] },
     },
     {
       id: 'rom-5', n: 'Die große Horde', budget: 210, par: 205,

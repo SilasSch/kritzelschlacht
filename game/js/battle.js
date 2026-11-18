@@ -1,9 +1,12 @@
 // Schlacht-Modus (Spez. #45): Schnappschuss der Aufstellung, Wiederherstellen ("Nochmal", "Aufstellung ändern") und die
 // Auswertung "10× auswerten" ohne Zeichnen. Rein: kein DOM, kein PIXI, Zufall nur über world.rng(). main.js baut darauf
 // die Abläufe mit Oberfläche.
+import { UNITS } from './data.js';
 import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain } from './world.js';
 import { step, battleWinner } from './sim.js';
 import { STONE_WALL } from './spells.js';
+import { createRng } from './rng.js';
+import { applyShape } from './shapes.js';
 
 export const STEP = 1 / 60;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -11,11 +14,12 @@ const isSide = t => t === 'blau' || t === 'rot';
 
 // Aufstellung beider Seiten mit Gelände. Ghule (nicht malbar) gehören zu einer Schlacht und kommen nicht mit; ein Frosch
 // kommt als er selbst, die Asche des Phönix mit halben LP (wie saveSandbox in main.js); Steinwände der Magier nicht.
+// Malbar nach u.type, nicht u.T: ein T-Rex trägt als Ei UNITS.rexei (nicht malbar) und ist trotzdem ein T-Rex.
 export function snapshotBattle(world) {
   const units = [];
   for (const u of world.units) {
-    if (!u.alive || !isSide(u.team) || (u.T.paint === false && u.frogFrom === null)) continue;
-    units.push({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn });
+    if (!u.alive || !isSide(u.team) || (UNITS[u.type].paint === false && u.frogFrom === null)) continue;
+    units.push({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn, shape: u.shape });
   }
   const towner = world.towner.slice(), terr = world.terr.slice(), whp = world.whp.slice();
   for (let i = 0; i < towner.length; i++) if (towner[i] === STONE_WALL.OWNER) { terr[i] = 0; towner[i] = 0; whp[i] = 0; }
@@ -37,9 +41,21 @@ export function restoreBattle(world, s) {
   touchTerrain(world);
   for (const u of s.units) {
     const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team);
-    n.hp = u.hp; n.reborn = u.reborn;
+    n.hp = n.growT > 0 ? Math.min(u.hp, n.T.hp) : u.hp; n.reborn = u.reborn;   // Dinos starten wieder klein (Ei, Jungtier)
+    if (u.shape) applyShape(n, u.shape, false);
   }
   rebuildHash(world);
+}
+
+// Kampfbeginn mit festem Zustand (Replay): stellt die Aufstellung wieder her und setzt alles zurück, was die Welt aus
+// früheren Kämpfen mitbringt (Zufall, Zeit, ids, Wegfindung, Zähler für Blöcke und Zauber). Zweimal mit demselben snap und
+// derselben Saat aufgerufen, läuft der Kampf danach Schritt für Schritt gleich, egal was vorher in der Welt geschah.
+export function resetFight(world, snap, seed) {
+  world.rng = createRng(seed);
+  world.time = 0; world.nextId = 1; world.flow = null;
+  world.formNext = 1; world.castNext = 1; world.lastWinT = -9;
+  restoreBattle(world, snap);
+  world.contested = false;
 }
 
 // Seiten tauschen: spiegelt Einheiten und Gelände an der Mittellinie, Blau wird Rot und umgekehrt

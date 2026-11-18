@@ -45,7 +45,7 @@ export default {
       },
     },
     {
-      id: 'rom-4', n: 'Die Furt', budget: 120, par: 115,   // Audit 18.11.: +5 nach dem Vorhalt-Fix (Smart 22 statt 20 Schützen)
+      id: 'rom-4', n: 'Die Furt', budget: 120, par: 120,   // Audit 18.11.: +5 nach dem Vorhalt-Fix (Smart 22 statt 20 Schützen); Wegfindung 18.11.: +5 (24 Schützen)
       units: ['roemer', 'schuetze'],
       hint: 'Römer und Schützen. Wölfe und Bären waten durch den Fluss, drüben schießen Bogenschützen. Im Wasser sind sie langsam: Ein Block am Ufer hält sie auf, dahinter treffen die Pfeile.',
       place: [
@@ -53,7 +53,7 @@ export default {
         ['rect', 'wolf', 36, .6, .1, .68, .9], ['rect', 'baer', 5, .72, .3, .76, .7], ['rect', 'schuetze', 10, .8, .3, .84, .7],
       ],
       // Schützen allein: die Wölfe holen sie ein; Römer allein: die Bären sprengen den Block
-      plan: { smart: [['roemer', 20, ...blk(20)], ['schuetze', 22, ...B]], spam: [['roemer', 38, ...F]] },
+      plan: { smart: [['roemer', 20, ...blk(20)], ['schuetze', 24, ...B]], spam: [['roemer', 38, ...F]] },
     },
     {
       id: 'rom-5', n: 'Die große Horde', budget: 210, par: 205,

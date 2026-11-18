@@ -108,6 +108,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     const b = game.battle, h = b ? b.hot : null;
     if (b && h && h.step === 'fight' && b.phase === 'plan') { b.hot = null; ui.toast('Hotseat beendet: freie Aufstellung.'); }
     const hh = b ? b.hot : null, side = painter(hh), plan = !!b && b.phase === 'plan';
+    if (hh && hh.online) { btn.hidden = true; return; }   // Online 1 gegen 1: ui/online.js zeigt die Leiste
     btn.hidden = !plan;
     btn.textContent = hh ? 'Hotseat beenden' : 'Hotseat';
     btn.classList.toggle('on', !!hh);

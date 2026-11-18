@@ -31,6 +31,7 @@ import { createShareDialog } from './ui/sharedialog.js';
 import { createEditorBar } from './ui/editorbar.js';
 import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallenge (Audit 18.11.)
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
+import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -75,7 +76,8 @@ const game = {
 
   // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3), in einem Level nur
   // die erlaubten (units, cats; Spez. #52). Die Tasten folgen den sichtbaren Plätzen.
-  level: () => (game.mission ? game.mission.def : null),
+  // Online 1 gegen 1 (online.js): battle.hot.def legt die Kategorie der Runde fest
+  level: () => (game.mission ? game.mission.def : game.battle && game.battle.hot && game.battle.hot.def) || null,
   catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN).filter(k => terrainAllowed(game.level(), k))
     : Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false && unitAllowed(game.level(), k))),
   catAllowed: c => catAllowed(game.level(), c),
@@ -305,8 +307,8 @@ function finishMission() {
 // Das Replay stellt denselben Anfang her, rechnet ohne Zeichnen bis REPLAY_S s vor das Ende und spielt den Rest in
 // Zeitlupe (REPLAY_SPEED) ab. Danach erscheint die Auswertung wieder.
 const REPLAY_S = 6, REPLAY_TAIL = 1, REPLAY_SPEED = .35, REPLAY_FF_MS = 14;
-function beginFight() {
-  const f = { snap: snapshotBattle(world), seed: (Math.random() * 2 ** 31) | 0 };
+function beginFight(seed = (Math.random() * 2 ** 31) | 0) {
+  const f = { snap: snapshotBattle(world), seed };
   resetFight(world, f.snap, f.seed);
   renderer.fx.clear(); markAll();
   return f;
@@ -430,8 +432,8 @@ function startBattle() {
 }
 
 // Kampf aus dem aktuellen Stand der Welt (frisch aufgestellt) beginnen
-function fight(b) {
-  b.fight = beginFight();   // Replay (Audit 18.11.)
+function fight(b, seed) {
+  b.fight = beginFight(seed);   // Replay (Audit 18.11.)
   b.stats = createStats(world);
   b.phase = 'fight'; b.t = 0; b.endT = -1; b.result = null; b.evFrom = world.events.length;
   undoStack.length = 0; game.paused = false; audio.init(); audio.play('go');
@@ -441,6 +443,19 @@ function fight(b) {
 function restoreSnap(b) {
   restoreBattle(world, b.snap);
   renderer.fx.clear(); markAll();
+}
+
+// Online 1 gegen 1 (online.js): beide Armeen aus der Liste aufstellen (feste Reihenfolge) und mit der Saat der Runde
+// kämpfen. Auf beiden Geräten dieselbe Liste und Saat, also derselbe Kampf.
+function onlineFight(list, seed) {
+  const b = game.battle; if (!b) return false;
+  cancelBatch(); endReplay(true);
+  clearWorld(); world.teamMode = true;
+  for (const u of list) { const n = spawn(world, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
+  rebuildHash(world);
+  b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
+  fight(b, seed);
+  return true;
 }
 
 // "Nochmal": dieselbe Aufstellung samt Gelände, gleich wieder in den Kampf
@@ -719,6 +734,11 @@ game.playDaily = () => loadLevel(dailyLevel(dateKey()));
 const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, startBattle, markAll, rebuildHash, undoStack });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || hotseat.covered(); }
 
+/* ---------- Online 1 gegen 1 (18.11.) ---------- */
+// Zwei Geräte über die Live-Verbindung des Artefakts (net.js, online.js, ui/online.js)
+const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || online.covered(); }
+
 /* ---------- Schleife ---------- */
 function drainEvents() {
   const ev = world.events;
@@ -804,6 +824,7 @@ function frame(now) {
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
   hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
+  online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }

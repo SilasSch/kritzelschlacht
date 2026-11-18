@@ -460,6 +460,7 @@ export function createUI(game) {
     setText('batGo', plan ? 'Los!' : 'Abbrechen');
     g.disabled = b.phase === 'done';
     if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
+    if (game.onlineUI) game.onlineUI();     // Online 1 gegen 1 (18.11.): Leiste im Online-Spiel
   }
 
   // Verlauf: zwei Linien (Teamfarben, 2 px) über der Zeit, eine Achse; Namen am Linienende, Hover mit Fadenkreuz und Werten

@@ -36,7 +36,7 @@ export const UNITS = {
   mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.11,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
   // Flammenwerfer (18.11., Ideenrunde): kurzer Flammenkegel wie der Drachenatem (combat.flame), zündet alles darin an
   // und setzt Wald in Brand. Erreicht niedrige Flieger (Bienen, Geister), aber nichts Hohes (world.groundMelee).
-  flamme:{n:'Flammenwerfer',cat:'modern',col:'#d9643a',r:9,hp:75,dmg:3.5,range:72,speed:46,cd:.25,cost:5,mass:1.1,d:'Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme, Trolle und dichte Blöcke. Auf Abstand hilflos.'},
+  flamme:{n:'Flammenwerfer',cat:'modern',col:'#d9643a',r:9,hp:75,dmg:3.5,range:72,speed:46,cd:.25,cost:5,mass:1.1,d:'Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme und dichte Blöcke. Auf Abstand hilflos.'},
   // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
   panzerfaust:{n:'Panzerfaust',cat:'modern',col:'#b59060',r:9,hp:85,dmg:70,range:230,splash:22,speed:44,cd:3.5,cost:6,mass:1,d:'Rakete gegen Panzer und Hubschrauber. Lange Nachladezeit.'},
@@ -385,7 +385,7 @@ export const COUNTERS = [
   ['elefant', 'grenadier', 96], ['panzerfaust', 'elefant', 96], ['biene', 'elefant', 96],
   ['krokodil', 'bueffel', 90], ['schuetze', 'krokodil', 90],
   // Flammenwerfer (18.11.): brennt Schwärme und dichte Blöcke weg, verliert gegen Gewehre und schnelle Reiter
-  ['flamme', 'biene', 90], ['flamme', 'troll', 90], ['flamme', 'roemer', 90], ['flamme', 'krieger', 90],
+  ['flamme', 'biene', 90], ['flamme', 'roemer', 90], ['flamme', 'krieger', 90],   // gegen Trolle knapp (je nach Form 1–8 von 8), darum kein Konter
   ['soldat', 'flamme', 90], ['reiter', 'flamme', 90],
   // Pikenier (18.11.): bricht jeden Ansturm, verliert gegen Fußvolk und Schützen
   ['pikenier', 'reiter', 90], ['pikenier', 'bueffel', 90], ['pikenier', 'elefant', 96],

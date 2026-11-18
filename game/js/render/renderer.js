@@ -453,7 +453,7 @@ void main() {
         const p = u.synP;
         if (p && p.alive) {
           let k = 0; while (!(u.syn & (1 << k))) k++;
-          links.line(u.x, u.y - u.z * .5, p.x, p.y - p.z * .5, 1.5, SYN_COL[BIT_KEY[k]], .32);
+          links.line(u.x, u.y - u.z * .5, p.x, p.y - p.z * .5, 2, SYN_COL[BIT_KEY[k]], .5);
         }
       }
       if (u.rv[RV_MARK] > wt) {

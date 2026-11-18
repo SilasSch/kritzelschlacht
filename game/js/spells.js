@@ -54,8 +54,9 @@ export const STONE_WALL = { AHEAD: 40, HALF: 30, N: 7, MIN: 3, T: 12, CD: 10, OW
 // Flucht), bricht er ab (die Übrigen versuchen es frühestens nach RETRY s wieder). Dann: blast R, DMG, Feuer, Brand
 // der Generation GEN; jeder Teilnehmer lädt CD s. Ein Magier ohne Gruppe oder Ziel versucht es nach RETRY s wieder.
 // SKY: Höhe des Sammelpunkts der Strahlen über dem Ziel (nur Darstellung, fxcore).
+// Meteor (Wunsch Silas, 18.11.): weniger Einschlag (70 → 45), dafür Feuer der Generation 0 (springt weiter über), Abklingzeit 30 → 32 s
 export const METEOR = {
-  GROUP_R: 90, MIN: 3, MAX_M: 8, FOES: 6, FOE_R: 60, R: 80, DMG: 70, CHANNEL: 1.5, CD: 30, CAND: 16, GEN: 1, RETRY: 2,
+  GROUP_R: 90, MIN: 3, MAX_M: 8, FOES: 6, FOE_R: 60, R: 80, DMG: 45, CHANNEL: 1.5, CD: 32, CAND: 16, GEN: 0, RETRY: 2,
   SKY: 160, WALL_MUL: 2,
 };
 

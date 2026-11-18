@@ -6,7 +6,7 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL, COUNTERS as ALL_COUNTERS } from './data.js';
+import { UNITS, PLURAL } from './data.js';
 // Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
 // geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
 export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
@@ -17,7 +17,23 @@ export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter
 export const DAILY_COST = { krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4 };
 export const dcost = t => DAILY_COST[t] ?? UNITS[t].cost;
 const inPool = t => DAILY_POOL.includes(t);
-const COUNTERS = ALL_COUNTERS.filter(c => inPool(c[0]) && inPool(c[1]));
+// Feste Konter (Stand 18.11., data.COUNTERS innerhalb von DAILY_POOL): spätere Änderungen an COUNTERS verändern die Tage nicht
+export const DAILY_COUNTERS = [
+  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60], ['ritter', 'reiter', 60], ['biene', 'ritter', 60], ['biene',
+  'schuetze', 60], ['krieger', 'biene', 60], ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60], ['reiter',
+  'schuetze', 60], ['reiter', 'grenadier', 60], ['magier', 'krieger', 60], ['grenadier', 'krieger', 60],
+  ['panzerfaust', 'panzer', 90], ['panzerfaust', 'heli', 90], ['soldat', 'heli', 90], ['panzer', 'krieger', 105],
+  ['panzer', 'soldat', 105], ['mg', 'biene', 90], ['mg', 'krieger', 90], ['sniper', 'ritter', 90], ['roemer',
+  'schuetze', 60], ['roemer', 'krieger', 60], ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier',
+  'roemer', 60], ['moerser', 'roemer', 90], ['mg', 'adler', 90], ['adler', 'sniper', 90], ['vampir', 'zyklop', 90],
+  ['magier', 'vampir', 90], ['troll', 'bueffel', 90], ['krieger', 'troll', 90], ['zyklop', 'grenadier', 90],
+  ['reiter', 'zyklop', 90], ['hexe', 'baer', 90], ['schuetze', 'hexe', 90], ['phoenix', 'vampir', 90], ['soldat',
+  'phoenix', 90], ['einhorn', 'schuetze', 90], ['ritter', 'einhorn', 90], ['elefant', 'grenadier', 96],
+  ['panzerfaust', 'elefant', 96], ['biene', 'elefant', 96], ['krokodil', 'bueffel', 90], ['schuetze', 'krokodil', 90],
+  ['gorilla', 'grenadier', 90], ['ritter', 'gorilla', 90], ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
+  ['magier', 'ritter', 90], ['magier', 'geist', 90]
+];
+const COUNTERS = DAILY_COUNTERS;
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 

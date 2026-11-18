@@ -20,12 +20,12 @@ export const UNITS = {
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
   biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:7,dmg:3,range:2,speed:135,cd:.45,cost:0.55,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
-  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:2.6,cost:8,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
+  magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:3.2,cost:8,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},
   // Vampir (Spez. #32): Biss mit Lebensraub, Fledermausform (BAT_FORM, unten) und Ghule (abilities.js); Teamfarbe am Umhang
   // Task 7: Kosten 6 → 8, LP 160 → 130: 20 Vampire gewannen M4 bis 8/8 und M7 bis 8/8 (Spam muss verlieren)
-  vampir:{n:'Vampir',cat:'mythisch',col:'#7a2944',r:10,hp:130,dmg:18,range:3,speed:54,cd:.8,cost:7,mass:1.2,d:'Beißt und heilt sich dabei. Auf langen Wegen und auf der Flucht fliegt er als Fledermausschwarm. Wen er totbeißt, steht als Ghul auf.'},
+  vampir:{n:'Vampir',cat:'mythisch',col:'#7a2944',r:10,hp:130,dmg:18,range:3,speed:54,cd:.8,cost:7.5,mass:1.2,d:'Beißt und heilt sich dabei. Auf langen Wegen und auf der Flucht fliegt er als Fledermausschwarm. Wen er totbeißt, steht als Ghul auf.'},
   // Ghul (Festlegung 3): nicht malbar, entsteht nur durch den tödlichen Biss eines Vampirs; langsam, schwach, zerfällt
   ghul:{n:'Ghul',cat:'mythisch',col:'#8f9c84',r:9,hp:40,dmg:7,range:3,speed:32,cd:1.1,cost:1,mass:1,paint:false,d:'Entsteht durch den Biss eines Vampirs. Langsam, schwach und hirnlos. Zerfällt mit der Zeit und mit seinem Vampir.'},
   soldat:{n:'Soldat',cat:'modern',col:'#7f8f4f',r:9,hp:55,dmg:9,range:190,speed:50,cd:.9,cost:3,mass:1,d:'Sturmgewehr auf mittlere Distanz. Weicht Nahkämpfern aus.'},
@@ -334,7 +334,7 @@ export const MSG_NO_PAINT = 'Diese Einheit kann man nicht malen.';
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten. Quelle für tools/balance.mjs (über tools/plans.mjs) und die
 // Charakterkarten (stark/schwach gegen, cards.js).
 export const COUNTERS = [
-  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60], ['ritter', 'reiter', 60],
+  ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60],
   ['biene', 'ritter', 60], ['biene', 'schuetze', 60], ['krieger', 'biene', 60],
   ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
   ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
@@ -346,7 +346,7 @@ export const COUNTERS = [
   ['grenadier', 'roemer', 60], ['reiter', 'roemer', 60], ['magier', 'roemer', 60], ['moerser', 'roemer', 90],
   // Task 7: je neue Einheit mindestens ein „schlägt“ und ein „wird geschlagen“ (Bericht Task 7: Duelltabelle, Gründe)
   ['mg', 'adler', 90], ['adler', 'sniper', 90],
-  ['vampir', 'zyklop', 90], ['magier', 'vampir', 90],
+  ['vampir', 'zyklop', 90],
   ['troll', 'bueffel', 90], ['krieger', 'troll', 90],
   ['zyklop', 'grenadier', 90], ['reiter', 'zyklop', 90],
   ['hexe', 'baer', 90], ['schuetze', 'hexe', 90],
@@ -357,7 +357,7 @@ export const COUNTERS = [
   ['gorilla', 'grenadier', 90], ['ritter', 'gorilla', 90],
   ['bueffel', 'grenadier', 90], ['ritter', 'bueffel', 90],
   // Ritter gegen Magier (Feuer und Zauber ×1,5) und Geist gegen Magier (Feuerball trifft ihn voll): als Duell festgehalten
-  ['magier', 'ritter', 90], ['magier', 'geist', 90],
+  ['magier', 'ritter', 90],
   // König (18.11.): allein schwach gegen Fernkampf, aber zäh gegen Wurfgeschosse
   ['koenig', 'grenadier', 100], ['sniper', 'koenig', 100],
   // Lama (18.11.): Tiere gegen Flieger; Wölfe sind schneller bei ihm, als es zurückweichen kann
@@ -451,7 +451,7 @@ RANGED.add('laserbot'); RANGED.add('tesla'); RANGED.add('speer');
 // von H. Einheiten gehören dem Team 'rot'.
 export const MISSIONS = [
   {n:'Erster Zusammenstoß',budget:60,par:43,hint:'Wähle Krieger, male deine Armee links der Linie und drück Los. Für drei Sterne: Ritter halten mehr aus.',place:[['rect','krieger',24,.70,.36,.80,.64]]},
-  {n:'Pfeilregen',budget:95,par:79,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
+  {n:'Pfeilregen',budget:95,par:84,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
   {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
   {n:'Die Festung',budget:122,par:112,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},

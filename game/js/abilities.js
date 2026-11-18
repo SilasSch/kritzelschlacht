@@ -1251,7 +1251,7 @@ export function kingFall(world, u) {
 // Für diese Typen gilt beim Spawn FIRST_CD statt cd (gestreut wie bisher, world.spawn); die Wiederholung bleibt cd.
 // Unverändert: Mörser-Sperrfeuer (Flächenschaden), Sanitäter und Soldat (früher: Soldaten mit Sanitätern zu stark), Krokodil und Adler (ohnehin kurz), Hubschrauber und Drache (eigene
 // Baustellen), Büffel (Herden-Abklingzeit).
-export const FIRST_CD = { schuetze: 12, panzer: 12, wolf: 8, baer: 8, geist: 6, hexe: 6, elefant: 10, gorilla: 6, koenig: 6 };
+export const FIRST_CD = { schuetze: 20, panzer: 12, wolf: 16, baer: 16, geist: 6, elefant: 10, gorilla: 6, koenig: 6 };
 /* ---------- Schrottplatz (5. Kategorie, 18.11.) ----------
    Kategorie-Regeln für alle Roboter (T.bot), aus combat.think je Schritt (stepBot) und combat.hurt (Schild, Blitz):
    Schild aus BOT.SHIELD · LP schluckt Treffer vor den LP und lädt nach BOT.RECHARGE_T s ohne Treffer wieder auf; Blitz

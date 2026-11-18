@@ -1,8 +1,8 @@
 // Tageschallenge (Audit 18.11.): game/js/daily.js
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { UNITS, COUNTERS } from '../game/js/data.js';
-import { dailyLevel, dateKey, shortDate, shareText, PUBLIC_URL, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES, dcost } from '../game/js/daily.js';
+import { UNITS } from '../game/js/data.js';
+import { dailyLevel, dateKey, shortDate, shareText, PUBLIC_URL, recordDaily, countersOf, DAILY_MAIN, DAILY_BOSSES, dcost, DAILY_COUNTERS as COUNTERS } from '../game/js/daily.js';
 import { validateCampaign, unitAllowed, terrainAllowed } from '../game/js/campaign/index.js';
 import { createWorld } from '../game/js/world.js';
 import { step, buildMission, missionResult } from '../game/js/sim.js';

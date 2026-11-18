@@ -16,6 +16,9 @@ const rnd = (world, a, b) => a + world.rng() * (b - a);
 // Zeit je Teil von step, immer mitgezählt (ms, aufsummiert seit Programmstart; SIM_TIME.steps = Schritte).
 // Für Messungen (tools/bench.mjs --profile, __bench.measure) Differenzen bilden. Immer aktiv statt nur unter
 // einem Schalter: ein selten genommener Messzweig ließ V8 step immer wieder verwerfen (Task 13).
+let POS0 = new Float64Array(0);
+const RV_SMOOTH = .15;
+
 export const SIM_PHASES = ['hash', 'flow', 'formMorale', 'think', 'integrate', 'collide', 'walls', 'proj', 'corpses'];
 export const SIM_TIME = { ms: new Float64Array(SIM_PHASES.length), steps: 0 };
 const pnow = globalThis.performance ? () => globalThis.performance.now() : () => 0;
@@ -43,11 +46,20 @@ export function step(world, dt) {
   // Zauber (spells.js): Meteor-Kanäle (nach den Entscheidungen) und befristete Steinwände
   stepSpells(world, dt);
   t1 = pnow(); M[3] += t1 - t0; t0 = t1;
+  // Lage vor der Bewegung, für die tatsächliche Geschwindigkeit (u.rvx/u.rvy) nach Physik und Mauern
+  const nU = units.length;
+  if (POS0.length < nU * 2) POS0 = new Float64Array(nU * 4);
+  for (let i = 0; i < nU; i++) { POS0[i * 2] = units[i].x; POS0[i * 2 + 1] = units[i].y; }
   integrate(world, dt);
   t1 = pnow(); M[4] += t1 - t0; t0 = t1;
   collide(world);
   t1 = pnow(); M[5] += t1 - t0; t0 = t1;
   for (const u of units) if (u.alive) collideWalls(world, u, dt);
+  // Geglättet (etwa 0,1 s), damit Gedränge und Stöße den Vorhalt nicht zittern lassen
+  for (let i = 0; i < nU; i++) {
+    const u = units[i];
+    u.rvx += ((u.x - POS0[i * 2]) / dt - u.rvx) * RV_SMOOTH; u.rvy += ((u.y - POS0[i * 2 + 1]) / dt - u.rvy) * RV_SMOOTH;
+  }
   t1 = pnow(); M[6] += t1 - t0; t0 = t1;
   stepProjectiles(world, dt);
   t1 = pnow(); M[7] += t1 - t0; t0 = t1;

@@ -132,6 +132,11 @@ export function spawn(world, type, x, y, team) {
     // Nahkampfschaden (combat.attack); läuft buffT ab, gehen beide auf 1 zurück (combat.think).
     // fz: Flughöhe der Flieger (physics.integrate führt z mit höchstens FLY_VZ px/s dorthin; Sturzflug senkt sie).
     buffT: .5, spdMul: 1.5, dmgMul: 1.5, fz: .5,
+    // Tatsächliche Bewegung (px/s, geglättet; sim.step nach Physik und Mauern): Vorhalt der Schützen (combat.aimPoint).
+    // u.mx/u.my sind nur die gewünschte Bewegung; wer an Lava oder Mauer steht, will weiter und kommt nicht vom Fleck.
+    rvx: .5, rvy: .5,
+    // Kritzel-Form des Strichs (shapes.js): Name oder null, Schadensfaktor (Igel: weniger Schaden, combat.hurt)
+    shape: null, armor: 1.5,
     // Zauberbuch der Magier (spells.js, Spez. #31): Abklingzeiten von Windstoß, Steinwand und Meteor (s; laufen in
     // combat.think ab), Meteor-Kanal (world.casts-id, 0 = keiner). Für alle anderen bleiben sie 0.
     windCd: .5, wallCd: .5, meteorCd: .5, chanId: 0,
@@ -169,6 +174,7 @@ export function spawn(world, type, x, y, team) {
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
+  u.rvx = 0; u.rvy = 0; u.armor = 1;   // als Double angelegt (.5 / 1.5), Start in Ruhe und ohne Rüstung
   return u;
 }
 

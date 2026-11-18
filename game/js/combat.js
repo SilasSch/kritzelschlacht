@@ -142,7 +142,7 @@ export const shotZ = t => (t.T.fly ? t.z : MUZZLE_Z);
 export function hurt(world, v, a, kind, src, dot = false) {
   if (!v.alive) return 0;
   if (v.ashT > 0) return 0;   // Task 6: Asche des Phönix ist unverwundbar
-  let m = 1; const t = v.type;
+  let m = v.armor; const t = v.type;   // armor: Igel aus einem Kreis-Strich (shapes.js), sonst 1
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
     m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
@@ -468,8 +468,10 @@ const AIM = { x: 0, y: 0 };
 function aimPoint(world, u, t, kind) {
   const K = SHOT[kind], d = Math.hypot(t.x - u.x, t.y - u.y) || 1;
   const lead = K[0] + d / PROJECTILES[kind].speed, sp = K[2] * (u.stance === 'prone' ? PRONE_SPREAD : 1);
-  AIM.x = t.x + t.mx * lead * .8 + rnd(world, -sp, sp);
-  AIM.y = t.y + t.my * lead * .8 + rnd(world, -sp, sp);
+  // Vorhalt mit der tatsächlichen Bewegung (u.rvx/u.rvy, sim.step), nicht der gewünschten (u.mx/u.my): sonst zielten
+  // Schützen an Lava und Mauern ins Leere, wo das Ziel hin will, aber nicht hinkommt (Fehler von Silas, 18.11.)
+  AIM.x = t.x + t.rvx * lead * .8 + rnd(world, -sp, sp);
+  AIM.y = t.y + t.rvy * lead * .8 + rnd(world, -sp, sp);
   return AIM;
 }
 

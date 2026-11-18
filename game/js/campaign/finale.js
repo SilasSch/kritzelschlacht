@@ -38,14 +38,15 @@ export default {
     // und packen jede Masse, die vorn steht. Schützen vorn halten sie an Land auf (schuetze > krokodil), Mörser hinten
     // schießen über den See auf Magier, Zyklopen und Schützen am anderen Ufer. Mörser allein werden gefressen.
     {
-      id: 'fin-3', n: 'Die Flut', budget: 210, par: 175,
+      id: 'fin-3', n: 'Die Flut', budget: 210, par: 180,
       units: ['krieger', 'schuetze', 'ritter', 'moerser', 'gorilla', 'bueffel', 'hexe'],
       hint: 'Krieger, Schützen, Ritter, Mörser, Gorillas, Büffel und Hexen. Im Wasser lauern Krokodile, unsichtbar bis kurz vor deiner Linie. Was hält sie an Land auf, und was schießt über den ganzen See bis ans andere Ufer?',
       place: [['tRect', 'wasser', .41, 0, .8, 1], ['rect', 'krokodil', 21, .5, .15, .6, .85],
         ['rect', 'magier', 8, .86, .3, .88, .7], ['rect', 'zyklop', 4, .9, .35, .92, .65],
         ['rect', 'schuetze', 10, .84, .3, .85, .7], ['rect', 'schuetze', 12, .88, .2, .9, .8]],
       plan: {
-        smart: [['schuetze', 28, ...F], ['moerser', 12, ...B]],
+        // Audit 18.11.: par 175 → 180 und 30 statt 28 Schützen; mit 28 gewann der Smart-Plan an drei Formen nur 7/8
+        smart: [['schuetze', 30, ...F], ['moerser', 12, ...B]],
         spam: [['krieger', 100, ...F]],
       },
     },

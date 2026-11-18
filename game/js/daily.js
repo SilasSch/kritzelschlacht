@@ -6,14 +6,21 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL, COUNTERS } from './data.js';
+import { UNITS, PLURAL, COUNTERS as ALL_COUNTERS } from './data.js';
+// Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
+// geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
+export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
+  'geist', 'drache', 'vampir', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli', 'troll', 'zyklop', 'hexe',
+  'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
+const inPool = t => DAILY_POOL.includes(t);
+const COUNTERS = ALL_COUNTERS.filter(c => inPool(c[0]) && inPool(c[1]));
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
 // Bosse: höchstens einer je Tag, nie der Hauptgegner und nie Konter im Plan (zu grob für das Budget)
 export const DAILY_BOSSES = ['panzer', 'heli', 'elefant', 'drache'];
 const isBoss = t => DAILY_BOSSES.includes(t);
-const paintable = t => UNITS[t] && UNITS[t].paint !== false;
+const paintable = t => inPool(t) && UNITS[t] && UNITS[t].paint !== false;
 
 // Konter je Gegnertyp: a schlägt b (COUNTERS), nur malbare Nicht-Bosse
 export function countersOf(type) {
@@ -136,7 +143,7 @@ export function dailyLevel(dateStr) {
   // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen
   const units = [...new Set([...counters, ...(bossC ? [bossC] : [])])];
   const want = Math.max(units.length, rng() < .5 ? 5 : 6);
-  const others = shuffle(Object.keys(UNITS).filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
+  const others = shuffle(DAILY_POOL.filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
   while (units.length < want) units.push(others.shift());
   const shown = shuffle(units);
 

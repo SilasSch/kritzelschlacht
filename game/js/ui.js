@@ -3,7 +3,7 @@
 import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MSG_NO_PAINT } from './data.js';
 import { CHAPTERS, chapterById, chapterProgress } from './campaign/index.js';
 import { iconURL, TEAM_KEYS } from './render/rig.js';
-import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
+import { unitCard, cardTypes, RETREAT_NOTE, fmtPts, formationCards, FORMATION_NOTE } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
 import { armyPoints } from './sim.js';
 import { MEDALS, hasMedal } from './medals.js';
@@ -23,6 +23,21 @@ const ICON_SOUND = '<path d="M4 9h4l5-4v14l-5-4H4zM17 8a5 5 0 010 8M19.5 5.5a9 9
 const fmt = v => String(v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).replace('.', ',');
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const CAT_NAME = Object.fromEntries(CATEGORIES);
+// Lexikon: Karte einer Kritzel-Form mit dem Strich als Bild (Pinsel aufs Papier, Gegner rechts)
+const FORM_SVG = {
+  keil: '<polyline points="18,14 60,38 18,62"/>',
+  kreis: '<circle cx="38" cy="38" r="24"/>',
+  linie: '<line x1="10" y1="38" x2="66" y2="38"/>',
+};
+function formationHTML(f) {
+  return `<div class="uc-hd">
+    <div class="uc-pic"><svg viewBox="0 0 76 76" width="72" height="72" aria-hidden="true">${FORM_SVG[f.k] || ''}</svg></div>
+    <div class="uc-tt"><div class="uc-nm" style="font-size:${f.name.length > 11 ? 20 : 25}px">${esc(f.name)}</div>
+      <div class="uc-tags"><span class="cat">Formation</span></div></div>
+  </div>
+  <div class="uc-d"><b>So malst du sie:</b> ${esc(f.how)}</div>
+  <div class="uc-ab"><div><b>Bonus</b> ${esc(f.effect)}</div></div>`;
+}
 function cardHTML(t, pic, mini, opt = {}) {
   const c = unitCard(t); if (!c) return '';
   const r = c.raw, st = c.stats;
@@ -170,7 +185,8 @@ export function createUI(game) {
     if (id !== lexId) {
       $('lexNote').textContent = RETREAT_NOTE;
       // erlaubt je Einheit (units und cats des Levels; nicht malbare wie der Ghul bleiben ansehbar, ui-Toast beim Klick)
-      $('lexBody').innerHTML = cardTypes().map(g => `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t => {
+      $('lexBody').innerHTML = `<section class="lexform"><h3>Formationen</h3><p class="fmnote">${esc(FORMATION_NOTE)}</p><div class="lexgrid">${
+        formationCards().map(f => `<div class="uc fmc">${formationHTML(f)}</div>`).join('')}</div></section>` + cardTypes().map(g => `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t => {
         const ok = UNITS[t].paint === false ? game.catAllowed(g.cat) : game.unitAllowed(t);
         return `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : 'In dieser Mission nicht erlaubt' })}</button>`;
       }).join('')}</div></section>`).join('');

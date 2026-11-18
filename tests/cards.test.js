@@ -111,3 +111,13 @@ test('Punkte: bis zwei Nachkommastellen mit Komma (Bienen 0,55)', async () => {
   assert.equal(fmtPts(UNITS.biene.cost), '0,55');
   assert.equal(fmtPts(4.5), '4,5'); assert.equal(fmtPts(40), '40'); assert.equal(fmtPts(.55 * 3), '1,65');
 });
+
+test('Lexikon: Formationen erklären Malweise, Bonus, Mindestzahl und KI', async () => {
+  const { formationCards, FORMATION_NOTE } = await import('../game/js/cards.js');
+  const { SHAPES, SHAPE_MIN_UNITS } = await import('../game/js/shapes.js');
+  const f = formationCards();
+  assert.deepEqual(f.map(x => x.k), Object.keys(SHAPES));
+  for (const x of f) { assert.ok(x.how && x.how.length > 20, x.k); assert.equal(x.effect, SHAPES[x.k].d); }
+  assert.match(FORMATION_NOTE, new RegExp(`mindestens ${SHAPE_MIN_UNITS} Einheiten`));
+  assert.match(FORMATION_NOTE, /KI/);
+});

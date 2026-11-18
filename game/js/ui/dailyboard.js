@@ -5,6 +5,7 @@
 //   - Auf diesem Gerät (überall, auch über den öffentlichen Link): eigene Siege und eingefügte Ergebnis-Codes von Freunden.
 // Jeder Eintrag wird hier nachgerechnet (createCheck in Häppchen); gezählt wird nur das nachgerechnete Ergebnis.
 import { dateKey, shortDate } from '../daily.js';
+import { tr } from '../i18n.js';
 import { createCheck, checkNow, stampOf, SIM_VERSION, rankEntries, resultCode, addLocal, cleanBoard, cleanName, mergeOwn, dayEntries, BOARD_KEEP, NAME_MAX } from '../dailyboard.js';
 import { fmtPts } from '../cards.js';
 
@@ -87,13 +88,13 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
       if (!db) return;
       live.db = db; live.user = user; live.state = 'load';
       live.me = user ? await user.id() : null;
-      const timer = setTimeout(() => { if (live.state === 'load') { live.note = 'Die Bestenliste ist gerade nicht erreichbar.'; render(); } }, 10000);
+      const timer = setTimeout(() => { if (live.state === 'load') { live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); } }, 10000);
       db.collection('scores').onSnapshot(snap => {
         if (!snap.metadata.fromCache) { clearTimeout(timer); live.note = ''; }
         live.state = 'on';
         live.docs = snap.docs.filter(d => d.exists).map(d => ({ id: d.id, data: d.data() }));
         render();
-      }, () => { clearTimeout(timer); live.state = 'off'; live.note = 'Die Bestenliste ist gerade nicht erreichbar.'; render(); });
+      }, () => { clearTimeout(timer); live.state = 'off'; live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); });
     } catch (e) { live.state = 'off'; }
   })();
   const myDoc = () => (live.docs.find(d => d.id === live.me) || {}).data || null;
@@ -108,9 +109,9 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
       const doc = mergeOwn(own, date, army, Date.now(), undefined, res);
       if (store.name) doc.n = store.name;
       await live.db.collection('scores').doc(live.me).set(doc);
-      toast('In die Live-Bestenliste eingetragen.');
+      toast(tr('In die Live-Bestenliste eingetragen.'));
     } catch (e) {
-      live.note = 'Eintragen geht nur mit dem Recht „Mitwirkende“ für dieses Artefakt.';
+      live.note = tr('Eintragen geht nur mit dem Recht „Mitwirkende“ für dieses Artefakt.');
       render();
     } finally { writing = false; }
   }
@@ -145,19 +146,19 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   };
 
   function rows(list) {
-    if (!list.length) return `<tr><td colspan="6" class="empty">Noch niemand. Gewinne die Tageschallenge oder füge den Code eines Freundes ein.</td></tr>`;
+    if (!list.length) return `<tr><td colspan="6" class="empty">${tr('Noch niemand. Gewinne die Tageschallenge oder füge den Code eines Freundes ein.')}</td></tr>`;
     const ranked = rankEntries(list.filter(e => e.res)), bad = list.filter(e => !e.res);
     const ids = ranked.concat(bad).filter(e => e.live).map(e => e.uid);
     if (live.user && ids.length) live.user.profiles(ids).then(ps => { let ch = false; for (const id of ids) { const n = ps[id] && ps[id].name; if (n && live.names[id] !== n) { live.names[id] = n; ch = true; } } if (ch) render(); }, () => {});
-    const nameOf = e => (e.live ? live.names[e.uid] || e.nick || 'Spieler' : e.me ? (store.name || 'Du') : e.n || 'Unbekannt');
+    const nameOf = e => (e.live ? live.names[e.uid] || e.nick || tr('Spieler') : e.me ? (store.name || tr('Du')) : e.n === 'Unbekannt' || !e.n ? tr('Unbekannt') : e.n);
     let place = 0;
     return ranked.concat(bad).map(e => {
       const win = e.res && e.res.win, rk = win ? ++place : '';
-      const ck = e.pending ? 'prüft …' : e.error ? `✗ ${esc(e.error)}` : e.res.old ? '≈ alte Spielversion' : win ? '✓ nachgerechnet' : '✗ verloren';
-      const tag = e.me ? '<span class="tag">du</span>' : e.code ? '<span class="tag">Code</span>' : '';
+      const ck = e.pending ? tr('prüft …') : e.error ? `✗ ${esc(tr(e.error))}` : e.res.old ? '≈ ' + tr('alte Spielversion') : win ? '✓ ' + tr('nachgerechnet') : '✗ ' + tr('verloren');
+      const tag = e.me ? `<span class="tag">${tr('du')}</span>` : e.code ? `<span class="tag">${tr('Code')}</span>` : '';
       return `<tr class="${rk === 1 ? 'r1 ' : ''}${e.me ? 'me ' : ''}${e.error || (e.res && !win) ? 'bad' : ''}">
         <td class="rk">${rk}</td><td>${esc(nameOf(e))}${tag}</td>
-        <td>${e.res ? `${fmtPts(e.res.spent)} P.` : ''}</td><td class="st">${win ? '★'.repeat(e.res.stars) : ''}</td>
+        <td>${e.res ? tr('{n} P.', { n: fmtPts(e.res.spent) }) : ''}</td><td class="st">${win ? '★'.repeat(e.res.stars) : ''}</td>
         <td>${win ? fmtT(e.res.time) : ''}</td><td class="ck">${ck}</td></tr>`;
     }).join('');
   }
@@ -166,21 +167,21 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     if (ov.hidden) return;
     const ds = days(), i = ds.indexOf(day), list = entries(day);
     const mine = list.find(e => e.me && e.res && e.res.win);
-    const src = live.state === 'on' ? 'Live: alle Eingeladenen dieses Artefakts, dazu eingefügte Codes. Jeder Eintrag wird nachgerechnet.'
-      : 'Auf diesem Gerät: deine Siege und Ergebnis-Codes deiner Freunde. Jeder Code wird nachgerechnet, Schummeln geht nicht.';
+    const src = live.state === 'on' ? tr('Live: alle Eingeladenen dieses Artefakts, dazu eingefügte Codes. Jeder Eintrag wird nachgerechnet.')
+      : tr('Auf diesem Gerät: deine Siege und Ergebnis-Codes deiner Freunde. Jeder Code wird nachgerechnet, Schummeln geht nicht.');
     const focus = document.activeElement && document.activeElement.id;
     const keep = { name: $('boardName') ? $('boardName').value : store.name, code: $('boardCode') ? $('boardCode').value : '' };
-    card.innerHTML = `<h2 id="boardTitle">Bestenliste</h2>
+    card.innerHTML = `<h2 id="boardTitle">${tr('Bestenliste')}</h2>
       <div class="bnav"><button class="btn" id="boardPrev" ${i <= 0 ? 'disabled' : ''}>◀</button>
-        <b>Tageschallenge ${shortDate(day)}${day === dateKey() ? ' (heute)' : ''}</b>
+        <b>${tr('Tageschallenge {d}', { d: shortDate(day) })}${day === dateKey() ? ' ' + tr('(heute)') : ''}</b>
         <button class="btn" id="boardNext" ${i >= ds.length - 1 ? 'disabled' : ''}>▶</button></div>
       <p class="src">${esc(src)}${live.note ? `<br><b>${esc(live.note)}</b>` : ''}</p>
-      <table><thead><tr><th></th><th>Name</th><th>Punkte</th><th>Sterne</th><th>Zeit</th><th></th></tr></thead><tbody>${rows(list)}</tbody></table>
-      <p class="src">Platz nach: Sieg, dann weniger Punkte, dann schnellerer Sieg.</p>
-      <div class="addrow"><input id="boardName" maxlength="${NAME_MAX}" placeholder="Dein Name im Code" value="${esc(keep.name)}">
-        <button class="btn" id="boardMine" ${mine ? '' : 'disabled title="Erst die Tageschallenge gewinnen"'}>Mein Ergebnis als Code</button></div>
-      <textarea id="boardCode" rows="2" placeholder="Ergebnis-Code eines Freundes (KS1.…) hier einfügen">${esc(keep.code)}</textarea>
-      <div class="btnrow"><button class="btn" id="boardAdd">Code hinzufügen</button><button class="go" id="boardClose">Schließen</button></div>`;
+      <table><thead><tr><th></th><th>${tr('Name')}</th><th>${tr('Punkte')}</th><th>${tr('Sterne')}</th><th>${tr('Zeit')}</th><th></th></tr></thead><tbody>${rows(list)}</tbody></table>
+      <p class="src">${tr('Platz nach: Sieg, dann weniger Punkte, dann schnellerer Sieg.')}</p>
+      <div class="addrow"><input id="boardName" maxlength="${NAME_MAX}" placeholder="${tr('Dein Name im Code')}" value="${esc(keep.name)}">
+        <button class="btn" id="boardMine" ${mine ? '' : `disabled title="${tr('Erst die Tageschallenge gewinnen')}"`}>${tr('Mein Ergebnis als Code')}</button></div>
+      <textarea id="boardCode" rows="2" placeholder="${tr('Ergebnis-Code eines Freundes (KS1.…) hier einfügen')}">${esc(keep.code)}</textarea>
+      <div class="btnrow"><button class="btn" id="boardAdd">${tr('Code hinzufügen')}</button><button class="go" id="boardClose">${tr('Schließen')}</button></div>`;
     $('boardPrev').onclick = () => { day = ds[Math.max(0, i - 1)]; render(); };
     $('boardNext').onclick = () => { day = ds[Math.min(ds.length - 1, i + 1)]; render(); };
     $('boardClose').onclick = () => { ov.hidden = true; };
@@ -188,10 +189,10 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     $('boardMine').onclick = async () => {
       if (!mine) return;
       const code = await encode(resultCode(day, mine.a, store.name, mine.res, verOf(mine)));
-      shareDlg.showCode(code, 'Ergebnis teilen', `Tageschallenge ${shortDate(day)}: ${fmtPts(mine.res.spent)} Punkte. Wer den Code mit „Code laden“ oder in der Bestenliste einfügt, sieht dich dort. Der Kampf wird nachgerechnet.`);
+      shareDlg.showCode(code, tr('Ergebnis teilen'), tr('Tageschallenge {d}: {p} Punkte. Wer den Code mit „Code laden“ oder in der Bestenliste einfügt, sieht dich dort. Der Kampf wird nachgerechnet.', { d: shortDate(day), p: fmtPts(mine.res.spent) }));
     };
     $('boardAdd').onclick = async () => {
-      try { addCode(await decode($('boardCode').value)); $('boardCode').value = ''; render(); } catch (e) { toast(e.message || 'Der Code passt nicht.'); }
+      try { addCode(await decode($('boardCode').value)); $('boardCode').value = ''; render(); } catch (e) { toast(tr(e.message || 'Der Code passt nicht.')); }
     };
     if (focus && $(focus)) $(focus).focus();
   }
@@ -200,11 +201,11 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
 
   // Ergebnis-Code { k: 'dailyres', d, a, n } (aus „Code laden“ oder der Karte)
   function addCode(d) {
-    if (!d || d.k !== 'dailyres') throw new Error('Das ist kein Ergebnis der Tageschallenge.');
-    if (d.d < days()[0]) throw new Error('Dieses Ergebnis ist älter als eine Woche.');
+    if (!d || d.k !== 'dailyres') throw new Error(tr('Das ist kein Ergebnis der Tageschallenge.'));
+    if (d.d < days()[0]) throw new Error(tr('Dieses Ergebnis ist älter als eine Woche.'));
     addLocal(store.days, d.d, { n: d.n || 'Unbekannt', a: d.a, ...(d.sv ? { v: d.sv, r: d.r } : {}) });
     store.days = cleanBoard(store.days); persist();
-    toast(`${d.n || 'Ergebnis'} eingetragen, wird nachgerechnet.`);
+    toast(tr('{n} eingetragen, wird nachgerechnet.', { n: d.n || tr('Ergebnis') }));
     open(d.d);
   }
 

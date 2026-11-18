@@ -6,7 +6,8 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL } from './data.js';
+import { UNITS } from './data.js';
+import { tr, isEn, unitName, unitPlural, dec } from './i18n.js';   // Sprache (18.11.): nur Name und Hinweis, nie der Zufall
 // Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
 // geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
 export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
@@ -49,7 +50,7 @@ export function dateKey(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 // 'YYYY-MM-DD' → '18.11.'
-export const shortDate = s => { const [, m, d] = s.split('-'); return `${+d}.${+m}.`; };
+export const shortDate = s => { const [, m, d] = s.split('-'); return isEn() ? `${+m}/${+d}` : `${+d}.${+m}.`; };
 
 // FNV-1a über den Text: Saat für createRng
 export function hashStr(s) {
@@ -60,8 +61,9 @@ export function hashStr(s) {
 
 const round5 = v => Math.max(5, Math.round(v / 5) * 5);
 const r2 = v => Math.round(v * 100) / 100;
-const list = a => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} und ${a[a.length - 1]}`);
-const plural = t => PLURAL[t] || UNITS[t].n;
+const list = a => (a.length < 2 ? a.join('') : `${a.slice(0, -1).join(', ')} ${tr('und')} ${a[a.length - 1]}`);
+const plural = t => unitPlural(t);
+const article = n => (isEn() ? (/^[AEIOU]/i.test(n) ? 'an ' : 'a ') : 'ein ') + n;
 const isRanged = t => UNITS[t].range > 20 && !UNITS[t].heal;
 
 export function dailyLevel(dateStr) {
@@ -161,14 +163,15 @@ export function dailyLevel(dateStr) {
   const shown = shuffle(units);
 
   const foes = place.filter(p => p[0] !== 'tRect' && p[0] !== 'tCircle')
-    .map(p => (p[0] === 'unit' ? `ein ${UNITS[p[1]].n}` : `${p[2]} ${p[2] === 1 ? UNITS[p[1]].n : plural(p[1])}`));
-  const tName = { wasser: 'ein See', wald: 'ein Wald', mauer: 'eine Mauer', lava: 'Lava' }[terrain];
-  const hint = `${list(shown.map(plural))}. Gegen dich stehen ${list(foes)}${terrain ? `, davor ${tName}` : ''}. Wer schlägt die ${plural(main)}?`;
+    .map(p => (p[0] === 'unit' ? article(unitName(p[1])) : `${p[2]} ${p[2] === 1 ? unitName(p[1]) : plural(p[1])}`));
+  const tName = tr({ wasser: 'ein See', wald: 'ein Wald', mauer: 'eine Mauer', lava: 'Lava' }[terrain]);
+  const hint = tr('{units}. Gegen dich stehen {foes}{terrain}. Wer schlägt die {main}?', {
+    units: list(shown.map(plural)), foes: list(foes), terrain: terrain ? tr(', davor {t}', { t: tName }) : '', main: plural(main) });
 
   // Kategorien der erlaubten Einheiten (ohne 'gelaende'): in der Tageschallenge wird kein Gelände gemalt
   const cats = [...new Set(units.map(t => UNITS[t].cat))];
   return {
-    id: 'daily-' + dateStr, n: `Tageschallenge ${shortDate(dateStr)}`, daily: dateStr,
+    id: 'daily-' + dateStr, n: tr('Tageschallenge {d}', { d: shortDate(dateStr) }), daily: dateStr,
     hint, budget, par, units: shown, cats, place, main,
     plan: { smart },
   };
@@ -189,19 +192,20 @@ const MEDAL_ICONS = ['🛡️', '⚡', '🎯'];
 //   Schaffst du's billiger? https://claude.ai/…
 // r: { win, spent, budget, stars, time (s), lost, deployed, medals: { mask } } (alles außer win/spent/stars optional)
 export function shareText(dateStr, r) {
-  const pts = String(Math.round(r.spent * 10) / 10).replace('.', ',');
-  const lines = [`🖍️ Kritzelschlacht · Tageschallenge #${dailyNo(dateStr)} (${shortDate(dateStr)})`];
+  const pts = dec(Math.round(r.spent * 10) / 10);
+  const lines = [tr('🖍️ Kritzelschlacht · Tageschallenge #{n} ({d})', { n: dailyNo(dateStr), d: shortDate(dateStr) })];
   if (r.win) {
     const t = r.time > 0 ? ` in ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, '0')}` : '';
-    lines.push(`${'⭐'.repeat(r.stars)}${'✩'.repeat(3 - r.stars)} Sieg mit ${pts}${r.budget ? ` von ${r.budget}` : ''} Punkten${t}`);
-  } else lines.push('💥 Niederlage. Morgen gibt es eine neue Schlacht.');
+    const stars = `${'⭐'.repeat(r.stars)}${'✩'.repeat(3 - r.stars)}`;
+    lines.push(r.budget ? tr('{s} Sieg mit {p} von {b} Punkten{t}', { s: stars, p: pts, b: r.budget, t }) : tr('{s} Sieg mit {p} Punkten{t}', { s: stars, p: pts, t }));
+  } else lines.push(tr('💥 Niederlage. Morgen gibt es eine neue Schlacht.'));
   if (r.deployed > 0) {
     const alive = Math.max(0, r.deployed - (r.lost || 0)), blue = Math.round(alive / r.deployed * 10);
-    lines.push(`${'🟦'.repeat(blue)}${'🟥'.repeat(10 - blue)} ${alive} von ${r.deployed} überlebt`);
+    lines.push(`${'🟦'.repeat(blue)}${'🟥'.repeat(10 - blue)} ${tr('{a} von {n} überlebt', { a: alive, n: r.deployed })}`);
   }
   const mask = r.medals ? r.medals.mask : 0;
-  if (r.win && mask) lines.push(MEDAL_ICONS.filter((_, i) => (mask >> i) & 1).join('') + ' Medaillen');
-  lines.push(`${r.win ? 'Schaffst du\'s billiger?' : 'Schaffst du es?'} ${PUBLIC_URL}`);
+  if (r.win && mask) lines.push(MEDAL_ICONS.filter((_, i) => (mask >> i) & 1).join('') + ' ' + tr('Medaillen'));
+  lines.push(`${r.win ? tr('Schaffst du\'s billiger?') : tr('Schaffst du es?')} ${PUBLIC_URL}`);
   return lines.join('\n');
 }
 

@@ -106,11 +106,12 @@ const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, cl
   heave: .3, fireball: .15, spit: .1, fireTwang: .08, rocket: .12, cannon: .15, thump: .15 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
 const BUSY = { laser: .6, hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
-  twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55, rifle: .65, mg: .5, heliGun: .6, jetGun: .7, bhit: .5, zing: .6 };
+  twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55, rifle: .65, mg: .7, heliGun: .6, jetGun: .7, bhit: .5, zing: .6 };
 // Familien (Schüsse-Overhaul): die Dichte zählt über alle Töne einer Familie (viele verschiedene Gewehre zusammen werden
 // leiser, nicht nur viele gleiche), und je Familie klingen höchstens FAMILY_MAX Stimmen gleichzeitig
-const FAMILY = { rifle: 'gun', mg: 'gun', sniper: 'gun', heliGun: 'gun', jetGun: 'gun', shot: 'gun', bhit: 'tick', bhitBig: 'tick', thunk: 'tick', zing: 'tick', hit: 'tick' };
-const FAMILY_MAX = { gun: 7, tick: 4 };
+// Automatikwaffen (MG, Bordkanonen) zählen für sich: sonst drücken viele Gewehre das MG unter die Hörschwelle
+const FAMILY = { rifle: 'gun', mg: 'auto', sniper: 'gun', heliGun: 'auto', jetGun: 'auto', shot: 'gun', bhit: 'tick', bhitBig: 'tick', thunk: 'tick', zing: 'tick', hit: 'tick' };
+const FAMILY_MAX = { gun: 7, auto: 4, tick: 4 };
 // Nur jeder so vielte Fall klingt (Zufall, nicht aus world.rng): Querschläger sonst zu häufig
 const CHANCE = { zing: .18 };
 const MAX_VOICES = 24;
@@ -385,10 +386,13 @@ export function createAudio() {
       noise(v, 'lowpass', 900, 250, .2, .012, { dt: .03, a: .02 });
       v.wet(.15);
     },
-    mg(v) { // MG: enger, tiefer, leiser Tackerschlag (viele hintereinander)
-      noise(v, 'bandpass', v.f(1500, .12), 900, .03, .042, { q: 1.3 });
-      osc(v, 'sine', v.f(135, .1), 65, .045, .05);
-      v.wet(.08);
+    mg(v) { // MG: kurzer, harter Tackerschlag (viele hintereinander). Knall und Körper im Mittenbereich, damit er auch auf
+      // Laptop-Lautsprechern hörbar bleibt (ein reiner Tiefton um 130 Hz verschwindet dort, Rückmeldung Silas 18.11.)
+      noise(v, 'highpass', v.f(2400, .12), 1600, .022, .055);
+      noise(v, 'bandpass', v.f(1100, .12), 700, .05, .06, { q: 1.1 });
+      osc(v, 'triangle', v.f(320, .1), 140, .05, .035);
+      osc(v, 'sine', v.f(120, .1), 60, .05, .04);
+      v.wet(.1);
     },
     sniper(v) { // Scharfschütze: scharfer Knall, Überschall-Peitsche, langer Nachhall
       noise(v, 'highpass', v.f(3200, .1), 2200, .02, .08);
@@ -397,14 +401,17 @@ export function createAudio() {
       noise(v, 'lowpass', 1100, 180, .6, .028, { dt: .07, a: .03 });
       v.wet(.45);
     },
-    heliGun(v) { // Bordkanone des Hubschraubers: dumpfes Wummern
+    heliGun(v) { // Bordkanone des Hubschraubers: dumpfes Wummern mit hörbarem Knall in der Mitte
+      noise(v, 'bandpass', v.f(1300, .12), 900, .035, .065, { q: 1.2 });
+      osc(v, 'triangle', v.f(260, .1), 120, .06, .03);
       osc(v, 'sine', v.f(105, .1), 48, .08, .075);
       noise(v, 'bandpass', v.f(750, .15), 450, .05, .05, { q: 1.2 });
       v.wet(.12);
     },
     jetGun(v) { // Bordkanone des Jets: kurzes Brrrt aus fünf schnellen Schlägen
       for (let i = 0; i < 5; i++) {
-        noise(v, 'bandpass', v.f(1200, .1), 800, .02, .03, { dt: v.d(i * .021), q: 1.4 });
+        noise(v, 'bandpass', v.f(1200, .1), 800, .02, .048, { dt: v.d(i * .021), q: 1.4 });
+        noise(v, 'highpass', v.f(2600, .1), 1800, .012, .03, { dt: v.d(i * .021) });
         osc(v, 'sine', v.f(95, .08), 60, .025, .03, { dt: v.d(i * .021) });
       }
       v.wet(.15);

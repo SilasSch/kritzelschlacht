@@ -10,6 +10,7 @@ import { MEDALS, hasMedal } from './medals.js';
 /* ---------- Editor (Audit 18.11.) ---------- */
 import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
 import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
+import { tr, unitName, unitPlural, dec } from './i18n.js';   // Sprache (18.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -20,9 +21,9 @@ const ICON_SOUND = '<path d="M4 9h4l5-4v14l-5-4H4zM17 8a5 5 0 010 8M19.5 5.5a9 9
 /* ---------- Charakterkarten (Spez. #29) ---------- */
 // Markup einer Karte aus unitCard (cards.js). pic(t) liefert das Sticker-Porträt (iconURL, gleiche Zeichnung
 // wie der Rig-Atlas), mini(t) die kleinen Symbole für stark/schwach. Nur bei Bedarf gebaut, nie je Bild.
-const fmt = v => String(v >= 10 ? Math.round(v) : Math.round(v * 10) / 10).replace('.', ',');
+const fmt = v => dec(v >= 10 ? Math.round(v) : Math.round(v * 10) / 10);
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const CAT_NAME = Object.fromEntries(CATEGORIES);
+const CAT_NAME = Object.fromEntries(CATEGORIES.map(([k, n]) => [k, tr(n)]));
 // Lexikon: Karte einer Kritzel-Form mit dem Strich als Bild (Pinsel aufs Papier, Gegner rechts)
 const FORM_SVG = {
   keil: '<polyline points="18,14 60,38 18,62"/>',
@@ -33,36 +34,36 @@ function formationHTML(f) {
   return `<div class="uc-hd">
     <div class="uc-pic"><svg viewBox="0 0 76 76" width="72" height="72" aria-hidden="true">${FORM_SVG[f.k] || ''}</svg></div>
     <div class="uc-tt"><div class="uc-nm" style="font-size:${f.name.length > 11 ? 20 : 25}px">${esc(f.name)}</div>
-      <div class="uc-tags"><span class="cat">Formation</span></div></div>
+      <div class="uc-tags"><span class="cat">${tr('Formation')}</span></div></div>
   </div>
-  <div class="uc-d"><b>So malst du sie:</b> ${esc(f.how)}</div>
-  <div class="uc-ab"><div><b>Bonus</b> ${esc(f.effect)}</div></div>`;
+  <div class="uc-d"><b>${tr('So malst du sie:')}</b> ${esc(f.how)}</div>
+  <div class="uc-ab"><div><b>${tr('Bonus')}</b> ${esc(f.effect)}</div></div>`;
 }
 function cardHTML(t, pic, mini, opt = {}) {
   const c = unitCard(t); if (!c) return '';
   const r = c.raw, st = c.stats;
   const row = (label, v, txt) => `<div class="s"><span>${label}</span><i><u style="width:${Math.max(3, v * 100).toFixed(1)}%"></u></i><b>${txt}</b></div>`;
   const vs = (cls, label, list) => `<div><span class="l ${cls}">${label}</span><span class="u">${list.length
-    ? list.map(k => `<span><img src="${mini(k)}" alt="">${esc(UNITS[k].n)}</span>`).join('')
+    ? list.map(k => `<span><img src="${mini(k)}" alt="">${esc(unitName(k))}</span>`).join('')
     : '<em class="none">—</em>'}</span></div>`;
   const nameSize = c.name.length > 11 ? 20 : c.name.length > 8 ? 22 : 25;
   return `<div class="uc-hd">
     <div class="uc-pic"><img src="${pic(t)}" alt=""></div>
     <div class="uc-tt"><div class="uc-nm" style="font-size:${nameSize}px">${esc(c.name)}</div>
       <div class="uc-tags"><span class="cat">${esc(CAT_NAME[c.cat] || c.cat)}</span>${c.tags.map(x => `<span>${x}</span>`).join('')}</div></div>
-    ${opt.key ? `<kbd class="uc-key" title="Taste">${opt.key}</kbd>` : ''}
+    ${opt.key ? `<kbd class="uc-key" title="${tr('Taste')}">${opt.key}</kbd>` : ''}
   </div>
   <div class="uc-d">${esc(c.desc)}</div>
   <div class="uc-st">
-    ${row('Leben', st.hp, r.hp)}
-    ${row(r.heal ? 'Heilung' : 'Schaden', st.dmg, fmt(r.dps) + '/s')}
-    ${row('Tempo', st.speed, r.speed)}
-    ${row('Reichweite', st.range, r.melee ? 'nah' : r.range)}
-    ${row('Kosten', st.cost, fmtPts(r.cost))}
+    ${row(tr('Leben'), st.hp, r.hp)}
+    ${row(r.heal ? tr('Heilung') : tr('Schaden'), st.dmg, fmt(r.dps) + '/s')}
+    ${row(tr('Tempo'), st.speed, r.speed)}
+    ${row(tr('Reichweite'), st.range, r.melee ? tr('nah') : r.range)}
+    ${row(tr('Kosten'), st.cost, fmtPts(r.cost))}
   </div>
   ${c.abil.length ? `<div class="uc-ab">${c.abil.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
   ${c.syn && c.syn.length ? `<div class="uc-ab uc-syn">${c.syn.map(a => `<div><b>${esc(a.n)}</b> ${esc(a.d)}</div>`).join('')}</div>` : ''}
-  <div class="uc-vs">${vs('s', 'Stark gegen', c.strong)}${vs('w', 'Schwach gegen', c.weak)}</div>
+  <div class="uc-vs">${vs('s', tr('Stark gegen'), c.strong)}${vs('w', tr('Schwach gegen'), c.weak)}</div>
   ${opt.note ? `<div class="uc-note">${opt.note}</div>` : ''}`;
 }
 
@@ -82,7 +83,7 @@ export function createUI(game) {
   const tabs = $('tabs');
   for (const [k, n] of CATEGORIES) {
     const b = document.createElement('button');
-    b.textContent = n; b.dataset.cat = k; b.setAttribute('role', 'tab');
+    b.textContent = tr(n); b.dataset.cat = k; b.setAttribute('role', 'tab');
     b.onclick = () => game.setCat(k);
     tabs.append(b);
   }
@@ -100,8 +101,8 @@ export function createUI(game) {
       const b = document.createElement('button');
       b.className = 'ub' + (k === game.sel ? ' on' : '');
       b.dataset.k = k; b.dataset.slot = idx + 1;
-      if (!UNITS[k]) b.title = D.n + ' (Taste ' + (idx + 1) + ')';
-      b.setAttribute('aria-label', D.n);
+      if (!UNITS[k]) b.title = tr('{n} (Taste {k})', { n: tr(D.n), k: idx + 1 });
+      b.setAttribute('aria-label', tr(D.n));
       const img = document.createElement('img'); img.src = icon(k); img.alt = ''; b.append(img);
       if ((mis || game.battle) && UNITS[k]) { const s = document.createElement('small'); s.textContent = fmtPts(UNITS[k].cost); b.append(s); }
       b.onclick = () => game.select(k);
@@ -183,12 +184,12 @@ export function createUI(game) {
   function openLexicon() {
     const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-');
     if (id !== lexId) {
-      $('lexNote').textContent = RETREAT_NOTE;
+      $('lexNote').textContent = tr(RETREAT_NOTE);
       // erlaubt je Einheit (units und cats des Levels; nicht malbare wie der Ghul bleiben ansehbar, ui-Toast beim Klick)
-      $('lexBody').innerHTML = `<section class="lexform"><h3>Formationen</h3><p class="fmnote">${esc(FORMATION_NOTE)}</p><div class="lexgrid">${
+      $('lexBody').innerHTML = `<section class="lexform"><h3>${tr('Formationen')}</h3><p class="fmnote">${esc(tr(FORMATION_NOTE))}</p><div class="lexgrid">${
         formationCards().map(f => `<div class="uc fmc">${formationHTML(f)}</div>`).join('')}</div></section>` + cardTypes().map(g => `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t => {
         const ok = UNITS[t].paint === false ? game.catAllowed(g.cat) : game.unitAllowed(t);
-        return `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : 'In dieser Mission nicht erlaubt' })}</button>`;
+        return `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : tr('In dieser Mission nicht erlaubt') })}</button>`;
       }).join('')}</div></section>`).join('');
       $('lexCard').style.setProperty('--tc', accent());
       lexId = id;
@@ -204,8 +205,8 @@ export function createUI(game) {
   }
   $('lexBody').addEventListener('click', e => {
     const b = e.target.closest('.lexc'); if (!b) return;
-    if (b.classList.contains('off')) { toast('In dieser Mission nicht erlaubt.'); return; }
-    if (UNITS[b.dataset.k] && UNITS[b.dataset.k].paint === false) { toast(MSG_NO_PAINT); return; }   // Ghul: nur ansehen
+    if (b.classList.contains('off')) { toast(tr('In dieser Mission nicht erlaubt.')); return; }
+    if (UNITS[b.dataset.k] && UNITS[b.dataset.k].paint === false) { toast(MSG_NO_PAINT); return; }   // toast übersetzt   // Ghul: nur ansehen
     closeLexicon();
     if (game.cat !== b.dataset.cat) game.setCat(b.dataset.cat);
     game.select(b.dataset.k);
@@ -225,10 +226,10 @@ export function createUI(game) {
     const el = $('info'), sel = game.sel, mis = game.mission || game.battle;
     if (UNITS[sel]) {
       const T = UNITS[sel];
-      el.innerHTML = `<b>${T.n}</b> · LP ${T.hp} · ${T.heal ? 'Heilung ' + T.heal : 'Schaden ' + T.dmg}${mis ? ' · Kosten ' + fmtPts(T.cost) : ''} — ${T.d}`;
+      el.innerHTML = `<b>${esc(tr(T.n))}</b> · ${tr('LP')} ${T.hp} · ${T.heal ? tr('Heilung') + ' ' + T.heal : tr('Schaden') + ' ' + T.dmg}${mis ? ' · ' + tr('Kosten') + ' ' + fmtPts(T.cost) : ''} — ${esc(tr(T.d))}`;
     } else {
       const T = TERRAIN[sel];
-      el.innerHTML = `<b>${T.n}</b>${game.mission && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
+      el.innerHTML = `<b>${esc(tr(T.n))}</b>${game.mission && T.cost ? ' · ' + tr('Kosten {p} je Feld', { p: fmtPts(T.cost) }) : ''} — ${esc(tr(T.d))}${sel !== 'radierer' ? '' : ' ' + tr('Rechtsklick radiert auch.')}`;
     }
     el.title = el.textContent;   // volle Beschreibung, die Zeile kürzt mit …
   }
@@ -242,15 +243,15 @@ export function createUI(game) {
       const f = tm ? u.team : u.type;
       m.set(f, (m.get(f) || 0) + 1); hp.set(f, (hp.get(f) || 0) + u.hp);
     }
-    if (!world.units.length) { el.innerHTML = '<div class="empty">Wähle unten eine Einheit<br>und male aufs Feld.</div>'; return; }
-    if (!m.size) { el.innerHTML = '<div class="empty">Keine Einheiten auf dem Feld.</div>'; return; }
+    if (!world.units.length) { el.innerHTML = `<div class="empty">${tr('Wähle unten eine Einheit<br>und male aufs Feld.')}</div>`; return; }
+    if (!m.size) { el.innerHTML = `<div class="empty">${tr('Keine Einheiten auf dem Feld.')}</div>`; return; }
     const rows = [...m.entries()].sort((a, b) => hp.get(b[0]) - hp.get(a[0])).slice(0, 10);
     const maxHp = Math.max(...hp.values());
-    const bar = (f, c) => `<span class="pw" title="Verbleibende Lebenspunkte"><u style="width:${Math.max(4, hp.get(f) / maxHp * 100)}%;background:${c}"></u></span>`;
+    const bar = (f, c) => `<span class="pw" title="${tr('Verbleibende Lebenspunkte')}"><u style="width:${Math.max(4, hp.get(f) / maxHp * 100)}%;background:${c}"></u></span>`;
     const tc = f => { const c = UNITS[f].col; return c === '#f4f4f6' || c === '#eef3fa' ? '#9aa6b8' : c; };
     el.innerHTML = rows.map(([f, n]) => tm
-      ? `<div class="row"><i class="dot" style="background:${TEAMS[f].c}"></i><b>${n}</b><span>${TEAMS[f].n}</span>${bar(f, TEAMS[f].c)}</div>`
-      : `<div class="row"><img src="${icon(f)}" alt=""><b>${n}</b><span>${n === 1 ? UNITS[f].n : PLURAL[f]}</span>${bar(f, tc(f))}</div>`).join('');
+      ? `<div class="row"><i class="dot" style="background:${TEAMS[f].c}"></i><b>${n}</b><span>${tr(TEAMS[f].n)}</span>${bar(f, TEAMS[f].c)}</div>`
+      : `<div class="row"><img src="${icon(f)}" alt=""><b>${n}</b><span>${n === 1 ? unitName(f) : unitPlural(f)}</span>${bar(f, tc(f))}</div>`).join('');
   }
 
   /* ---------- Teams ---------- */
@@ -259,7 +260,7 @@ export function createUI(game) {
     for (const k in TEAMS) {
       const b = document.createElement('button');
       b.className = 'chip' + (k === game.curTeam ? ' on' : '');
-      b.style.background = TEAMS[k].c; b.title = 'Team ' + TEAMS[k].n; b.setAttribute('aria-label', 'Team ' + TEAMS[k].n);
+      b.style.background = TEAMS[k].c; b.title = tr('Team {t}', { t: tr(TEAMS[k].n) }); b.setAttribute('aria-label', b.title);
       b.onclick = () => game.setTeam(k);
       box.append(b);
     }
@@ -275,20 +276,20 @@ export function createUI(game) {
     if (bat) updateBattle();
     if (mis) {
       // Level ohne Kapitel (Tutorial, Tageschallenge, eigene Level): nur der Name
-      $('misName').textContent = mis.chapter ? `Mission ${mis.idx + 1} · ${mis.def.n}` : mis.def.n; $('misHint').textContent = mis.def.hint;
-      $('misName').title = mis.chapter ? mis.chapter.n : '';
+      $('misName').textContent = mis.chapter ? tr('Mission {i} · {n}', { i: mis.idx + 1, n: tr(mis.def.n) }) : tr(mis.def.n); $('misHint').textContent = tr(mis.def.hint);
+      $('misName').title = mis.chapter ? tr(mis.chapter.n) : '';
     }
     if (game.editorUI) game.editorUI.update();   // Editor (Audit 18.11.)
   }
 
   function updateMission() {
     const mis = game.mission; if (!mis) return;
-    $('budTxt').textContent = `${fmtPts(mis.spent)} / ${mis.budget} Punkte`;
+    $('budTxt').textContent = tr('{a} / {b} Punkte', { a: fmtPts(mis.spent), b: mis.budget });
     const f = $('budFill');
     f.style.width = Math.min(100, mis.spent / mis.budget * 100) + '%';
     f.classList.toggle('over', mis.spent > mis.par);
     const g = $('misGo');
-    g.textContent = mis.phase === 'plan' ? 'Los!' : 'Abbrechen';
+    g.textContent = mis.phase === 'plan' ? tr('Los!') : tr('Abbrechen');
     g.disabled = mis.phase === 'done';
   }
 
@@ -311,12 +312,12 @@ export function createUI(game) {
   /* ---------- Meldungen ---------- */
   let toastTimer = 0;
   function toast(msg) {
-    const t = $('toast'); t.textContent = msg; t.hidden = false;
+    const t = $('toast'); t.textContent = tr(msg); t.hidden = false;   // tr: feste Meldungen anderer Module (Sicherheitsnetz)
     clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 1800);
   }
   let bannerTimer = 0;
   function banner(msg) {
-    const b = $('banner'); b.textContent = msg; b.hidden = false;
+    const b = $('banner'); b.textContent = tr(msg); b.hidden = false;
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
     clearTimeout(bannerTimer); bannerTimer = setTimeout(() => { b.hidden = true; }, 2600);
   }
@@ -328,8 +329,8 @@ export function createUI(game) {
   const starRow = s => `${'★'.repeat(s)}<em>${'★'.repeat(3 - s)}</em>`;
   const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
   function openChapters() {
-    $('listTitle').textContent = 'Kampagne';
-    $('listText').textContent = 'Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.';
+    $('listTitle').textContent = tr('Kampagne');
+    $('listText').textContent = tr('Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.');
     const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
     dailyCard(g, game);   // Tageschallenge (Audit 18.11.): Karte ganz oben
     CHAPTERS.forEach((c, ci) => {
@@ -338,37 +339,37 @@ export function createUI(game) {
       b.disabled = !open;
       if (empty) b.classList.add('soon'); else if (!open) b.classList.add('locked');
       if (p.total && p.done === p.total) b.classList.add('done');
-      const state = empty ? '<span class="tag">Bald verfügbar</span>'
-        : !open ? `<span class="tag lock">${LOCK}Gesperrt</span>`
+      const state = empty ? `<span class="tag">${tr('Bald verfügbar')}</span>`
+        : !open ? `<span class="tag lock">${LOCK}${tr('Gesperrt')}</span>`
         : `<span class="prog"><i style="width:${(p.done / p.total * 100).toFixed(1)}%"></i></span>
-           <span class="cnt"><b class="st">★</b> ${p.stars}/${p.maxStars} · ${p.done}/${p.total} geschafft</span>`;
-      b.innerHTML = `<span class="no">Kapitel ${ci + 1}</span><span class="nm">${esc(c.n)}</span><span class="ds">${esc(c.d)}</span><span class="foot">${state}</span>`;
+           <span class="cnt"><b class="st">★</b> ${p.stars}/${p.maxStars} · ${tr('{a}/{b} geschafft', { a: p.done, b: p.total })}</span>`;
+      b.innerHTML = `<span class="no">${tr('Kapitel {i}', { i: ci + 1 })}</span><span class="nm">${esc(tr(c.n))}</span><span class="ds">${esc(tr(c.d))}</span><span class="foot">${state}</span>`;
       if (open) b.onclick = () => openChapter(c.id);
       g.append(b);
     });
     g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
     $('listBack').hidden = true;
-    $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
+    $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
     $('ovList').hidden = false;
   }
   function openChapter(id) {
     const c = chapterById(id);
     if (!c || !c.levels.length) { openChapters(); return; }
-    $('listTitle').textContent = c.n;
-    $('listText').textContent = `${c.d} Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.`;
+    $('listTitle').textContent = tr(c.n);
+    $('listText').textContent = `${tr(c.d)} ${tr('Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.')}`;
     const g = $('lvGrid'); g.innerHTML = ''; g.className = 'lvgrid';
     c.levels.forEach((m, i) => {
       const b = document.createElement('button'); b.className = 'lv'; b.dataset.id = m.id;
       const open = game.unlocked(m.id), s = game.save.stars[m.id] || 0;
       b.disabled = !open;
       const md = game.save.medals[m.id] || 0;
-      b.innerHTML = `<span class="no">Mission ${i + 1}${open ? '' : ' · gesperrt'}</span><span class="nm">${esc(m.n)}</span><span class="st">${starRow(s)}</span>` +
-        `<span class="md" title="${MEDALS.map((x, k) => `${x.n}${hasMedal(md, k) ? ' ✓' : ''}`).join(' · ')}">${MEDALS.map((x, k) => `<i class="${hasMedal(md, k) ? 'on' : ''}">${x.icon}</i>`).join('')}</span>`;
+      b.innerHTML = `<span class="no">${tr('Mission {i}', { i: i + 1 })}${open ? '' : ' · ' + tr('gesperrt')}</span><span class="nm">${esc(tr(m.n))}</span><span class="st">${starRow(s)}</span>` +
+        `<span class="md" title="${MEDALS.map((x, k) => `${esc(tr(x.n))}${hasMedal(md, k) ? ' ✓' : ''}`).join(' · ')}">${MEDALS.map((x, k) => `<i class="${hasMedal(md, k) ? 'on' : ''}">${x.icon}</i>`).join('')}</span>`;
       b.onclick = () => { $('ovList').hidden = true; game.loadMission(m.id); };
       g.append(b);
     });
     $('listBack').hidden = false;
-    $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
+    $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
     $('ovList').hidden = false;
   }
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
@@ -380,25 +381,25 @@ export function createUI(game) {
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
     const h = $('resTitle');
-    h.textContent = r.win ? 'Sieg!' : r.timeUp ? 'Zeit abgelaufen' : 'Niederlage';
+    h.textContent = r.win ? tr('Sieg!') : r.timeUp ? tr('Zeit abgelaufen') : tr('Niederlage');
     h.className = r.win ? 'win' : '';
     $('resStars').innerHTML = [0, 1, 2].map(i => `<i class="${i < r.stars ? 'on' : ''}">★</i>`).join('');
-    $('resStats').innerHTML = `<li><span>Eingesetzte Punkte</span>${fmtPts(r.spent)} von ${r.budget}</li>
-    <li><span>Drei Sterne bei höchstens</span>${r.par} Punkten</li>
-    <li><span>Eigene Verluste</span>${stats.lostBlue}</li><li><span>Besiegte Gegner</span>${stats.lostRed}</li>
-    <li><span>Kampfdauer</span>${Math.round(r.time)} s</li>
-    ${stats.heroType ? `<li><span>Held der Schlacht</span>${UNITS[stats.heroType].n} mit ${stats.heroK} Siegen</li>` : ''}`;
+    $('resStats').innerHTML = `<li><span>${tr('Eingesetzte Punkte')}</span>${tr('{a} von {b}', { a: fmtPts(r.spent), b: r.budget })}</li>
+    <li><span>${tr('Drei Sterne bei höchstens')}</span>${tr('{n} Punkten', { n: r.par })}</li>
+    <li><span>${tr('Eigene Verluste')}</span>${stats.lostBlue}</li><li><span>${tr('Besiegte Gegner')}</span>${stats.lostRed}</li>
+    <li><span>${tr('Kampfdauer')}</span>${Math.round(r.time)} s</li>
+    ${stats.heroType ? `<li><span>${tr('Held der Schlacht')}</span>${tr('{u} mit {k} Siegen', { u: esc(unitName(stats.heroType)), k: stats.heroK })}</li>` : ''}`;
     // Audit 18.11.: Hinweis nach einer Niederlage, Medaillen (r.medals = { mask, fresh }), Replay
     $('resHint').hidden = !r.hint; $('resHint').textContent = r.hint || '';
     const md = r.medals;
     $('resMedals').hidden = !md;
-    if (md) $('resMedals').innerHTML = MEDALS.map((x, k) => `<span class="${hasMedal(md.mask, k) ? 'on' : ''}${hasMedal(md.fresh, k) ? ' new' : ''}" title="${esc(x.d)}">${x.icon} ${esc(x.n)}</span>`).join('');
+    if (md) $('resMedals').innerHTML = MEDALS.map((x, k) => `<span class="${hasMedal(md.mask, k) ? 'on' : ''}${hasMedal(md.fresh, k) ? ' new' : ''}" title="${esc(tr(x.d))}">${x.icon} ${esc(tr(x.n))}</span>`).join('');
     $('resReplay').hidden = !r.canReplay;
     // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
     $('resNext').hidden = !r.win || !!r.custom;   // eigene Level: keine nächste Mission
-    $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
-    $('resNext').textContent = r.nextLabel || (r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln');
-    $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
+    $('resList').textContent = r.custom === 'editor' ? tr('Zum Editor') : r.custom ? tr('Eigene Level') : tr('Übersicht');
+    $('resNext').textContent = r.nextLabel || (r.hasNext ? tr('Nächste Mission') : tr('Zu den Kapiteln'));
+    $('resRetry').textContent = r.win ? tr('Besser planen') : tr('Nochmal planen');
     dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
@@ -465,7 +466,7 @@ export function createUI(game) {
   // Auswertung: Titel, Dauer, Überlebende, je Seite eine Tabelle, Verlauf als SVG mit Hover, Held, 10× auswerten.
   const teamIcons = {};
   const tIcon = (k, side) => { const id = k + '|' + side; return teamIcons[id] || (teamIcons[id] = iconURL(k, 64, Math.max(0, TEAM_KEYS.indexOf(side)))); };
-  const SIDE_N = { blau: 'Blau', rot: 'Rot' }, SIDE_C = { blau: TEAMS.blau.c, rot: TEAMS.rot.c };
+  const SIDE_N = { blau: tr('Blau'), rot: tr('Rot') }, SIDE_C = { blau: TEAMS.blau.c, rot: TEAMS.rot.c };
   const clock = t => { const s = Math.max(0, Math.floor(t)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   const secs = t => `${Math.round(t)} s`;
   const setText = (id, v) => { const el = $(id); if (el.textContent !== v) el.textContent = v; };
@@ -475,11 +476,11 @@ export function createUI(game) {
     const p = armyPoints(game.world);
     setText('ptsB', fmtPts(p.blau)); setText('ptsR', fmtPts(p.rot));
     const plan = b.phase === 'plan';
-    setText('batHint', plan ? 'Blau malt links, Rot rechts · Gelände überall'
-      : b.phase === 'fight' ? `Kampf läuft · ${clock(b.t)}${b.t > 150 ? ' · ab 3:00 entscheidet die Stärke' : ''}` : `Kampf vorbei · ${clock(b.t)}`);
+    setText('batHint', plan ? tr('Blau malt links, Rot rechts · Gelände überall')
+      : b.phase === 'fight' ? `${tr('Kampf läuft')} · ${clock(b.t)}${b.t > 150 ? ' · ' + tr('ab 3:00 entscheidet die Stärke') : ''}` : `${tr('Kampf vorbei')} · ${clock(b.t)}`);
     $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan;
     const g = $('batGo');
-    setText('batGo', plan ? 'Los!' : 'Abbrechen');
+    setText('batGo', plan ? tr('Los!') : tr('Abbrechen'));
     g.disabled = b.phase === 'done';
     if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
     if (game.onlineUI) game.onlineUI();     // Online 1 gegen 1 (18.11.): Leiste im Online-Spiel
@@ -494,7 +495,7 @@ export function createUI(game) {
     const last = tl[tl.length - 1];
     let yb = Y(last.blau), yr = Y(last.rot);
     if (Math.abs(yb - yr) < 12) { const m = (yb + yr) / 2, s = last.blau >= last.rot ? -1 : 1; yb = m + s * 6; yr = m - s * 6; }
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Armeestärke beider Seiten über die Zeit">
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${tr('Armeestärke beider Seiten über die Zeit')}">
       <line x1="${L}" y1="${T}" x2="${L + w}" y2="${T}" stroke="#e4e6ee" stroke-dasharray="3 3"/>
       <line x1="${L}" y1="${T + h}" x2="${L + w}" y2="${T + h}" stroke="#c9ccd6"/>
       <text x="${L - 5}" y="${T + 4}" text-anchor="end">${fmtPts(max)}</text>
@@ -502,8 +503,8 @@ export function createUI(game) {
       <text x="${L}" y="${H - 4}">0 s</text><text x="${L + w}" y="${H - 4}" text-anchor="end">${secs(tEnd)}</text>
       <path d="${line('blau')}" fill="none" stroke="${SIDE_C.blau}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
       <path d="${line('rot')}" fill="none" stroke="${SIDE_C.rot}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      <text class="lab" x="${L + w + 5}" y="${yb + 3.5}">Blau ${fmtPts(last.blau)}</text>
-      <text class="lab" x="${L + w + 5}" y="${yr + 3.5}">Rot ${fmtPts(last.rot)}</text>
+      <text class="lab" x="${L + w + 5}" y="${yb + 3.5}">${SIDE_N.blau} ${fmtPts(last.blau)}</text>
+      <text class="lab" x="${L + w + 5}" y="${yr + 3.5}">${SIDE_N.rot} ${fmtPts(last.rot)}</text>
       <g class="hov" visibility="hidden"><line y1="${T}" y2="${T + h}" stroke="#2a2a33" stroke-opacity=".35"/>
         <circle r="4" fill="${SIDE_C.blau}" stroke="#fff" stroke-width="2"/><circle r="4" fill="${SIDE_C.rot}" stroke="#fff" stroke-width="2"/></g>
       <rect x="${L}" y="0" width="${w}" height="${H}" fill="transparent"/>
@@ -522,7 +523,7 @@ export function createUI(game) {
       ln.setAttribute('x1', x); ln.setAttribute('x2', x);
       cb.setAttribute('cx', x); cb.setAttribute('cy', yb); cr.setAttribute('cx', x); cr.setAttribute('cy', yr);
       hov.setAttribute('visibility', 'visible');
-      tip.textContent = `${secs(p.t)} · Blau ${fmtPts(p.blau)} · Rot ${fmtPts(p.rot)}`;
+      tip.textContent = `${secs(p.t)} · ${SIDE_N.blau} ${fmtPts(p.blau)} · ${SIDE_N.rot} ${fmtPts(p.rot)}`;
       const br = box.getBoundingClientRect();
       tip.style.left = (r.left - br.left + x / vb.width * r.width) + 'px';
       tip.style.top = (r.top - br.top + Math.min(yb, yr) / vb.height * r.height - 8) + 'px';
@@ -536,28 +537,28 @@ export function createUI(game) {
     const sum = k => rows.reduce((a, r) => a + r[k], 0);
     const num = v => (v ? String(v) : '<span class="z">0</span>');
     const dmgPt = (d, p) => (p > 0 ? fmt(d / p) : '–');
-    const tr = r => `<tr><td class="ty"><span><img src="${tIcon(r.type, side)}" alt="">${esc(r.deployed === 1 || (!r.deployed && r.survived === 1) ? UNITS[r.type].n : PLURAL[r.type] || UNITS[r.type].n)}${r.deployed ? '' : ' <small>beschworen</small>'}</span></td>
+    const trow = r => `<tr><td class="ty"><span><img src="${tIcon(r.type, side)}" alt="">${esc(r.deployed === 1 || (!r.deployed && r.survived === 1) ? unitName(r.type) : unitPlural(r.type))}${r.deployed ? '' : ` <small>${tr('beschworen')}</small>`}</span></td>
       <td>${r.deployed || '<span class="z">–</span>'}</td><td>${num(r.survived)}</td><td>${num(Math.round(r.dmg))}</td><td>${num(r.kills)}</td>
       <td>${r.deployed ? dmgPt(r.dmg, r.deployed * UNITS[r.type].cost) : '<span class="z">–</span>'}</td></tr>`;
-    return `<table class="bt"><caption><i class="tdot ${side}"></i>${SIDE_N[side]} <em>${fmtPts(pts)} Pkt eingesetzt</em></caption>
-      <thead><tr><th>Typ</th><th>Eingesetzt</th><th>Überlebt</th><th>Schaden</th><th>Kills</th><th title="Ausgeteilter Schaden je investiertem Punkt">Schaden/Pkt</th></tr></thead>
-      <tbody>${rows.map(tr).join('')}${rows.length > 1 ? `<tr class="sum"><td>Gesamt</td><td>${sum('deployed')}</td><td>${sum('survived')}</td><td>${Math.round(sum('dmg'))}</td><td>${sum('kills')}</td><td>${dmgPt(sum('dmg'), pts)}</td></tr>` : ''}</tbody></table>`;
+    return `<table class="bt"><caption><i class="tdot ${side}"></i>${SIDE_N[side]} <em>${tr('{p} Pkt eingesetzt', { p: fmtPts(pts) })}</em></caption>
+      <thead><tr><th>${tr('Typ')}</th><th>${tr('Eingesetzt')}</th><th>${tr('Überlebt')}</th><th>${tr('Schaden')}</th><th>${tr('Kills')}</th><th title="${tr('Ausgeteilter Schaden je investiertem Punkt')}">${tr('Schaden/Pkt')}</th></tr></thead>
+      <tbody>${rows.map(trow).join('')}${rows.length > 1 ? `<tr class="sum"><td>${tr('Gesamt')}</td><td>${sum('deployed')}</td><td>${sum('survived')}</td><td>${Math.round(sum('dmg'))}</td><td>${sum('kills')}</td><td>${dmgPt(sum('dmg'), pts)}</td></tr>` : ''}</tbody></table>`;
   }
 
   function showBattleResult(r) {
     const h = $('batTitle');
-    h.textContent = r.winner === 'draw' ? 'Unentschieden' : `${SIDE_N[r.winner]} gewinnt!`;
+    h.textContent = r.winner === 'draw' ? tr('Unentschieden') : tr('{s} gewinnt!', { s: SIDE_N[r.winner] });
     h.className = r.winner === 'draw' ? '' : r.winner;
     const timeUp = r.survivors.blau > 0 && r.survivors.rot > 0;
-    $('batSub').textContent = `Dauer ${clock(r.time)}${timeUp ? ' · Zeit abgelaufen, entschieden nach Armeestärke' : ''}`;
-    $('batSurv').innerHTML = ['blau', 'rot'].map(s => `<span><i class="tdot ${s}"></i>${r.survivors[s]} überlebt</span>`).join('');
+    $('batSub').textContent = `${tr('Dauer')} ${clock(r.time)}${timeUp ? ' · ' + tr('Zeit abgelaufen, entschieden nach Armeestärke') : ''}`;
+    $('batSurv').innerHTML = ['blau', 'rot'].map(s => `<span><i class="tdot ${s}"></i>${tr('{n} überlebt', { n: r.survivors[s] })}</span>`).join('');
     $('batTables').innerHTML = ['blau', 'rot'].map(s => tableHTML(s, r.table.filter(x => x.side === s))).join('');
     const gb = $('batGraph'); gb.innerHTML = graphSVG(r.timeline); bindGraph(gb.parentElement, r.timeline);
     const he = r.hero;
     $('batHero').innerHTML = he
-      ? `<div class="pic"><img src="${tIcon(he.type, he.side)}" alt=""></div><div><div class="k"><span class="crown">♛</span> Held der Schlacht</div>
-         <div class="n">${esc(UNITS[he.type].n)}</div><div class="k">${SIDE_N[he.side]} · ${he.kills} ${he.kills === 1 ? 'Kill' : 'Kills'}</div></div>`
-      : '<div class="k">Kein Held: niemand hat einen Gegner besiegt.</div>';
+      ? `<div class="pic"><img src="${tIcon(he.type, he.side)}" alt=""></div><div><div class="k"><span class="crown">♛</span> ${tr('Held der Schlacht')}</div>
+         <div class="n">${esc(unitName(he.type))}</div><div class="k">${SIDE_N[he.side]} · ${he.kills} ${he.kills === 1 ? 'Kill' : 'Kills'}</div></div>`
+      : `<div class="k">${tr('Kein Held: niemand hat einen Gegner besiegt.')}</div>`;
     const bb = game.battle;
     if (bb && bb.batchRes) batchDone(bb.batchRes); else { $('batBatch').hidden = true; $('batTen').disabled = false; }
     $('batReplay').hidden = !game.canReplay();
@@ -569,17 +570,17 @@ export function createUI(game) {
   function batchProgress(k, n) {
     const box = $('batBatch');
     if (k < 0) { box.hidden = true; $('batTen').disabled = false; return; }
-    box.innerHTML = `<div class="row"><b>Auswertung</b><span>${k}/${n}</span><div class="prog"><i style="width:${k / n * 100}%"></i></div><button class="mini" id="batCancel">Abbrechen</button></div>
-      <div class="k" style="color:var(--muted);font-size:12.5px">Dieselbe Aufstellung kämpft ${n}-mal mit anderen Zufallswerten.</div>`;
+    box.innerHTML = `<div class="row"><b>${tr('Auswertung')}</b><span>${k}/${n}</span><div class="prog"><i style="width:${k / n * 100}%"></i></div><button class="mini" id="batCancel">${tr('Abbrechen')}</button></div>
+      <div class="k" style="color:var(--muted);font-size:12.5px">${tr('Dieselbe Aufstellung kämpft {n}-mal mit anderen Zufallswerten.', { n })}</div>`;
     $('batCancel').onclick = () => game.cancelBatch();
     box.hidden = false; $('batTen').disabled = true;
   }
   function batchDone(res) {
     const box = $('batBatch'), w = res.wins, n = w.blau + w.rot + w.draw;
-    const seg = (k, c) => (w[k] ? `<i style="flex:${w[k]};background:${c}" title="${k === 'draw' ? 'Unentschieden' : SIDE_N[k]} ${w[k]}"></i>` : '');
-    box.innerHTML = `<div class="row"><b>${n}× ausgewertet</b></div>
+    const seg = (k, c) => (w[k] ? `<i style="flex:${w[k]};background:${c}" title="${k === 'draw' ? tr('Unentschieden') : SIDE_N[k]} ${w[k]}"></i>` : '');
+    box.innerHTML = `<div class="row"><b>${tr('{n}× ausgewertet', { n })}</b></div>
       <div class="split">${seg('blau', SIDE_C.blau)}${seg('draw', '#c9ccd6')}${seg('rot', SIDE_C.rot)}</div>
-      <div class="res">Blau ${w.blau} · Rot ${w.rot} · Unentschieden ${w.draw}, Ø ${secs(res.avgTime)}</div>`;
+      <div class="res">${SIDE_N.blau} ${w.blau} · ${SIDE_N.rot} ${w.rot} · ${tr('Unentschieden')} ${w.draw}, Ø ${secs(res.avgTime)}</div>`;
     box.hidden = false; $('batTen').disabled = false;
   }
 

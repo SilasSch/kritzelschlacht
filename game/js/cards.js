@@ -4,6 +4,7 @@
 import { UNITS, COUNTERS, CATEGORIES, RANGED } from './data.js';
 import { synergiesOf } from './synergy.js';
 import { SHAPES, SHAPE_HOW, SHAPE_MIN_UNITS } from './shapes.js';
+import { tr, dec } from './i18n.js';   // Sprache (18.11.): Kartentexte übersetzt, die Daten bleiben deutsch
 
 // Gilt für alle Einheiten (Spez. #27); steht einmal im Lexikon statt auf jeder Karte
 export const RETREAT_NOTE = 'Alle Einheiten ziehen sich ab 25 % Leben zurück, erholen sich abseits und kehren ab 60 % in den Kampf zurück. Römer im Block halten bis 15 % durch. Geister und Ghule fliehen nie.';
@@ -12,11 +13,11 @@ export const RETREAT_NOTE = 'Alle Einheiten ziehen sich ab 25 % Leben zurück, e
 export const FORMATION_NOTE = `Eine Formation gilt für einen einzelnen Pinselstrich mit mindestens ${SHAPE_MIN_UNITS} Einheiten. ` +
   'Erkannt wird der Weg des Pinsels, die Einheitenart ist egal. Eine Einblendung und ein Signalhorn bestätigen die Form. ' +
   'Gegner der KI (Missionen, Tageschallenge) bekommen keine Formationen; im Online-1-gegen-1 und im Hotseat malt der Gegner selbst und kann sie auch nutzen.';
-export const formationCards = () => Object.keys(SHAPES).map(k => ({ k, name: SHAPES[k].n, how: SHAPE_HOW[k], effect: SHAPES[k].d }));
+export const formationCards = () => Object.keys(SHAPES).map(k => ({ k, name: tr(SHAPES[k].n), how: tr(SHAPE_HOW[k]), effect: tr(SHAPES[k].d) }));
 
 // Punkte (Kosten, Budget) mit bis zu zwei Nachkommastellen und Komma: Bienen kosten 0,55 (Nachtrag 4, #37), eine Stelle
 // zeigte 0,6
-export const fmtPts = v => String(Math.round(v * 100) / 100).replace('.', ',');
+export const fmtPts = v => dec(Math.round(v * 100) / 100);
 
 // Fernkampf ab dieser Reichweite (px); darunter Nahkampf
 const MELEE_MAX = 20;
@@ -49,17 +50,17 @@ export function unitCard(type) {
   if (!T) return null;
   const M = maxima();
   const tags = [];
-  if (T.heal) tags.push('Heilt');
-  else tags.push(T.range >= MELEE_MAX || RANGED.has(type) ? 'Fernkampf' : 'Nahkampf');
-  if (T.fly) tags.push('Fliegt');
-  if (T.splash) tags.push('Flächenschaden');
+  if (T.heal) tags.push(tr('Heilt'));
+  else tags.push(T.range >= MELEE_MAX || RANGED.has(type) ? tr('Fernkampf') : tr('Nahkampf'));
+  if (T.fly) tags.push(tr('Fliegt'));
+  if (T.splash) tags.push(tr('Flächenschaden'));
   // nicht malbar (Ghul): erscheint nur im Lexikon, die Fähigkeitstexte sagen, wie er entsteht (Vorgabe 3)
-  if (T.paint === false) tags.push('Nicht malbar');
+  if (T.paint === false) tags.push(tr('Nicht malbar'));
   return {
     type,
-    name: T.n,
+    name: tr(T.n),
     cat: T.cat,
-    desc: T.d,
+    desc: tr(T.d),
     stats: {
       hp: rel(T.hp, M.hp, true),
       dmg: rel(dps(T), M.dmg, true),
@@ -73,8 +74,8 @@ export function unitCard(type) {
       melee: T.range < MELEE_MAX,
     },
     tags,
-    abil: (T.abil || []).map(a => ({ n: a.n, d: a.d })),
-    syn: synergiesOf(type),   // Synergien mit anderen Truppen (data.SYNERGY)
+    abil: (T.abil || []).map(a => ({ n: tr(a.n), d: tr(a.d) })),
+    syn: synergiesOf(type).map(s => ({ ...s, n: tr(s.n), d: tr(s.d) })),   // Synergien mit anderen Truppen (data.SYNERGY)
     strong: uniq(COUNTERS.filter(c => c[0] === type && UNITS[c[1]]).map(c => c[1])),
     weak: uniq(COUNTERS.filter(c => c[1] === type && UNITS[c[0]]).map(c => c[0])),
   };
@@ -85,7 +86,7 @@ export function cardTypes() {
   const out = [];
   for (const [cat, name] of CATEGORIES) {
     const types = Object.keys(UNITS).filter(t => UNITS[t].cat === cat);
-    if (types.length) out.push({ cat, name, types });
+    if (types.length) out.push({ cat, name: tr(name), types });
   }
   return out;
 }

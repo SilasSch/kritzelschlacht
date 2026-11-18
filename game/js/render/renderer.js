@@ -18,6 +18,7 @@ import { DODGE, DODGE_KINDS } from '../dodge.js';
 import { createFx } from './fx.js';
 import { TRACER } from './fxcore.js';   // Schüsse-Overhaul: Leuchtspur der Kugeln je Schütze
 import { createWords } from './words.js';
+import { tr } from '../i18n.js';
 const LASER_T = 1.5;   // Sniper-Laser: so lange vor dem Schuss sichtbar (s)
 import { createQuadBatch, newMat, mat, mul } from './quads.js';
 
@@ -79,11 +80,11 @@ export function createRenderer(canvasHost) {
 
   /* ---------- Gelände (Offscreen-Canvas, Code aus drawTerrain) ---------- */
   const zoneG = new PIXI.Graphics();
-  const zoneText = new PIXI.Text('deine Seite', { fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: 0x4d82f0 });
+  const zoneText = new PIXI.Text(tr('deine Seite'), { fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: 0x4d82f0 });
   zoneText.alpha = .8; zoneText.anchor.set(1, .75); zoneText.resolution = 3;
   // Schlacht-Modus (Spez. #45): Mittellinie mit den Seiten Blau (links) und Rot (rechts)
   const sideStyle = c => ({ fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: c });
-  const sideB = new PIXI.Text('Blau', sideStyle(0x3f7cff)), sideR = new PIXI.Text('Rot', sideStyle(0xff4d4d));
+  const sideB = new PIXI.Text(tr('Blau'), sideStyle(0x3f7cff)), sideR = new PIXI.Text(tr('Rot'), sideStyle(0xff4d4d));
   sideB.alpha = sideR.alpha = .85; sideB.anchor.set(1, .75); sideR.anchor.set(0, .75); sideB.resolution = sideR.resolution = 3;
   const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d');
   let terrTex = null;

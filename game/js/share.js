@@ -10,6 +10,7 @@ import { STONE_WALL } from './spells.js';
 import { applyShape } from './shapes.js';
 import { validDuel } from './duel.js';   // Code-Duell (18.11.)
 import { validResult } from './dailyboard.js';   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
+import { tr } from './i18n.js';
 
 export const PREFIX = 'KS';
 const Q = 10000;   // Koordinaten als ganze Zahlen 0..Q
@@ -44,24 +45,24 @@ export async function encode(data) {
 // Liefert die Daten oder wirft einen Error mit verständlicher Meldung
 export async function decode(text) {
   const m = /KS([01])\.([A-Za-z0-9_-]+)/.exec(String(text || '').replace(/\s+/g, ''));
-  if (!m) throw new Error('Das ist kein Kritzelschlacht-Code.');
+  if (!m) throw new Error(tr('Das ist kein Kritzelschlacht-Code.'));
   let bytes;
   try {
     bytes = unb64url(m[2]);
     if (m[1] === '1') {
-      if (!canZip()) throw new Error('Dieser Browser kann den Code nicht entpacken.');
+      if (!canZip()) throw new Error(tr('Dieser Browser kann den Code nicht entpacken.'));
       bytes = await pipe(bytes, DecompressionStream);
     }
-  } catch (e) { throw new Error('Der Code ist unvollständig oder beschädigt.'); }
+  } catch (e) { throw new Error(tr('Der Code ist unvollständig oder beschädigt.')); }
   let data;
-  try { data = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { throw new Error('Der Code ist unvollständig oder beschädigt.'); }
+  try { data = JSON.parse(new TextDecoder().decode(bytes)); } catch (e) { throw new Error(tr('Der Code ist unvollständig oder beschädigt.')); }
   validate(data);
   return data;
 }
 
 /* ---------- Prüfung ---------- */
 function validate(d) {
-  const bad = msg => { throw new Error(msg || 'Der Code passt nicht zu dieser Version des Spiels.'); };
+  const bad = msg => { throw new Error(tr(msg || 'Der Code passt nicht zu dieser Version des Spiels.')); };
   if (!d || d.v !== 1) bad();
   if (d.k === 'battle') {
     if (!Array.isArray(d.units) || !Array.isArray(d.terr)) bad();

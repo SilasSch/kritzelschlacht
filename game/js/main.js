@@ -37,6 +37,16 @@ import { createOnlineUI } from './ui/online.js';               // Online 1 gegen
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
+import { tr, unitName, unitPlural, translateDom, LANG, switchLang } from './i18n.js';   // Sprache (18.11.)
+
+// Feste Texte aus index.html übersetzen, bevor die Leisten gebaut werden; Knopf DE/EN in der Kopfleiste
+document.documentElement.lang = LANG;
+translateDom(document.getElementById('app'));
+if (document.getElementById('bLang')) {
+  const lb = document.getElementById('bLang');
+  lb.textContent = LANG === 'en' ? 'DE' : 'EN';
+  lb.onclick = () => switchLang(LANG === 'en' ? 'de' : 'en', () => ui.toast(tr('Die Sprache gilt beim nächsten Öffnen des Spiels.')));
+}
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -153,7 +163,7 @@ const game = {
     if (m && m.phase !== 'plan') return;
     if (b && b.phase !== 'plan') return;
     const s = undoStack.pop();
-    if (!s) { ui.toast('Nichts zum Rückgängigmachen.'); return; }
+    if (!s) { ui.toast(tr('Nichts zum Rückgängigmachen.')); return; }
     const spent = undoStroke(world, s);
     if (m) m.spent = spent;
     hotseat.onUndo(spent);   // Hotseat (Audit 18.11.)
@@ -261,7 +271,7 @@ function loadLevelDef(def, opts = {}) {
 function startMission() {
   const m = game.mission;
   rebuildHash(world);
-  if (!(world.facCount.get(PLAYER) > 0)) { ui.toast('Male zuerst deine Armee.'); return; }
+  if (!(world.facCount.get(PLAYER) > 0)) { ui.toast(tr('Male zuerst deine Armee.')); return; }
   snap = {
     id: m.id, spent: m.spent, GW: world.GW, GH: world.GH,
     units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y, shape: u.shape })),
@@ -272,7 +282,7 @@ function startMission() {
   let daily = null;
   if (m.def.daily) {
     try { const army = armyOf(world); daily = { army, ...dailySnapshot(m.def.daily, army) }; }
-    catch (e) { ui.toast(e.message || 'Diese Armee passt nicht zur Tageschallenge.'); return; }
+    catch (e) { ui.toast(tr(e.message || 'Diese Armee passt nicht zur Tageschallenge.')); return; }
   }
   m.phase = 'battle'; m.t = 0; m.endT = -1; m.result = null;
   // Replay (Audit 18.11.): Kampf aus festem Zustand starten, damit er sich genau wiederholen lässt
@@ -320,7 +330,7 @@ function finishMission() {
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
   m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, lost: ui.lostBlue(), deployed: army.length, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
-    daily, nextLabel: m.chapter || m.custom || daily ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+    daily, nextLabel: m.chapter || m.custom || daily ? null : tr('Zur Kampagne'), hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
 }
@@ -350,7 +360,7 @@ function startReplay() {
   world.events.length = 0; renderer.fx.clear(); markAll();
   game.replayState = { t: 0, from: Math.max(0, src.T - REPLAY_S), to: src.T + REPLAY_TAIL, play: false, acc: 0 };
   game.paused = false;
-  ui.replayBar(true, 'wird vorbereitet …');
+  ui.replayBar(true, tr('wird vorbereitet …'));
   audio.init(); audio.play('whoosh');
 }
 // Ende des Replays: Auswertung wieder zeigen (quiet: ohne, beim Wechsel des Modus)
@@ -366,8 +376,8 @@ function replayFrame(realDt) {
   if (!r.play) {
     const end = performance.now() + REPLAY_FF_MS;
     while (r.t < r.from && performance.now() < end) { step(world, STEP); world.events.length = 0; r.t += STEP; }
-    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, `Zeitlupe · letzte ${Math.round(r.to - r.from)} s`); }
-    else ui.replayBar(true, `wird vorbereitet … ${Math.round(r.t / r.from * 100)} %`);
+    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, tr("Zeitlupe · letzte {n} s", { n: Math.round(r.to - r.from) })); }
+    else ui.replayBar(true, `${tr('wird vorbereitet …')} ${Math.round(r.t / r.from * 100)} %`);
     return;
   }
   if (game.paused) { renderer.fx.update(realDt * .5, null); return; }
@@ -390,11 +400,11 @@ function startTutorial() {
   const own = () => world.units.some(u => u.alive && u.team === PLAYER);
   const m = () => game.mission;
   coach.start([
-    { text: 'Unten ist deine Malleiste. Der Krieger ist schon gewählt, die Zahl rechts unten ist sein Preis in Punkten.', at: () => $('units'), next: 'Weiter' },
-    { text: 'Male mit gedrückter Maustaste links der gestrichelten Linie. Jeder Strich setzt Krieger, solange dein Budget reicht.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), done: own },
-    { text: 'Tipp: Ein Strich als Pfeil mit der Spitze nach rechts macht einen Sturmkeil, ein Kreis einen Igel, eine lange Linie eine Schlachtreihe.', at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), next: 'Weiter' },
-    { text: 'Fertig? Dann drück „Los!“.', at: () => $('misGo'), done: () => m() && m().kind === 'tutorial' && m().phase !== 'plan' },
-    { text: 'Jetzt kämpfen sie von allein. Rot verliert, wenn niemand mehr steht.', at: () => $('misBar'), done: () => !m() || m().kind !== 'tutorial' || m().phase === 'done' },
+    { text: tr('Unten ist deine Malleiste. Der Krieger ist schon gewählt, die Zahl rechts unten ist sein Preis in Punkten.'), at: () => $('units'), next: tr('Weiter') },
+    { text: tr('Male mit gedrückter Maustaste links der gestrichelten Linie. Jeder Strich setzt Krieger, solange dein Budget reicht.'), at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), done: own },
+    { text: tr('Tipp: Ein Strich als Pfeil mit der Spitze nach rechts macht einen Sturmkeil, ein Kreis einen Igel, eine lange Linie eine Schlachtreihe.'), at: () => ({ x: host.clientWidth * .25, y: host.clientHeight * .3 }), next: tr('Weiter') },
+    { text: tr('Fertig? Dann drück „Los!“.'), at: () => $('misGo'), done: () => m() && m().kind === 'tutorial' && m().phase !== 'plan' },
+    { text: tr('Jetzt kämpfen sie von allein. Rot verliert, wenn niemand mehr steht.'), at: () => $('misBar'), done: () => !m() || m().kind !== 'tutorial' || m().phase === 'done' },
   ], () => { save.tutorial = true; persist(); });
 }
 
@@ -442,13 +452,13 @@ function sideCounts() {
   for (const u of world.units) if (u.alive) { if (u.team === 'blau') bl++; else if (u.team === 'rot') rt++; }
   return { blau: bl, rot: rt };
 }
-const MSG_TWO = 'Male zuerst zwei Armeen: Blau links, Rot rechts.';
+const MSG_TWO = tr('Male zuerst zwei Armeen: Blau links, Rot rechts.');
 
 function startBattle() {
   const b = game.battle; if (!b || b.phase !== 'plan') return false;
   rebuildHash(world);
   const n = sideCounts();
-  if (!n.blau || !n.rot) { ui.toast(!n.blau && !n.rot ? MSG_TWO : `Male zuerst eine Armee für ${n.blau ? 'Rot (rechts)' : 'Blau (links)'}.`); return false; }
+  if (!n.blau || !n.rot) { ui.toast(!n.blau && !n.rot ? MSG_TWO : (n.blau ? tr('Male zuerst eine Armee für Rot (rechts).') : tr('Male zuerst eine Armee für Blau (links).'))); return false; }
   b.snap = snapshotBattle(world);
   fight(b);
   return true;
@@ -597,7 +607,7 @@ function editorLevel() {
 function editorTest() { const lv = editorLevel(); if (lv) loadMission(lv, 'editor'); }
 function editorShare() {
   const lv = editorLevel(); if (!lv) return;
-  shareDlg.showCode(encode(levelData(lv)), 'Level teilen', 'Wer diesen Code mit „Code laden“ einfügt, kann dein Level spielen.');
+  shareDlg.showCode(encode(levelData(lv)), tr('Level teilen'), tr('Wer diesen Code mit „Code laden“ einfügt, kann dein Level spielen.'));
 }
 function saveCustom(lv, replaceId = null) {
   const r = upsertCustom(save.custom, lv, replaceId);
@@ -607,14 +617,14 @@ function saveCustom(lv, replaceId = null) {
 }
 function editorSave() {
   const lv = editorLevel(); if (!lv) return;
-  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast('Gespeichert unter Missionen → Eigene Level.'); }
+  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast(tr('Gespeichert unter Missionen → Eigene Level.')); }
 }
 const customById = id => save.custom.find(l => l.id === id) || null;
 function playCustom(id) { const l = customById(id); if (l) loadMission(l, 'list'); }
 function editCustom(id) { const l = customById(id); if (l) enterEditor(l); }
 function shareCustom(id) {
   const l = customById(id); if (!l) return;
-  shareDlg.showCode(encode(levelData(l)), 'Level teilen', `„${l.n}“: Wer diesen Code mit „Code laden“ einfügt, kann das Level spielen.`);
+  shareDlg.showCode(encode(levelData(l)), tr('Level teilen'), tr('„{n}“: Wer diesen Code mit „Code laden“ einfügt, kann das Level spielen.', { n: l.n }));
 }
 function deleteCustom(id) {
   save.custom = save.custom.filter(l => l.id !== id); persist();
@@ -628,8 +638,8 @@ function customBack() {
 function shareBattle() {
   const b = game.battle; if (!b || b.phase !== 'plan') return;
   const n = sideCounts();
-  if (!n.blau && !n.rot) { ui.toast('Male zuerst eine Aufstellung.'); return; }
-  shareDlg.showCode(encode(battleData(world)), 'Schlacht teilen', 'Wer diesen Code mit „Code laden“ einfügt, bekommt genau diese Aufstellung samt Gelände.');
+  if (!n.blau && !n.rot) { ui.toast(tr('Male zuerst eine Aufstellung.')); return; }
+  shareDlg.showCode(encode(battleData(world)), tr('Schlacht teilen'), tr('Wer diesen Code mit „Code laden“ einfügt, bekommt genau diese Aufstellung samt Gelände.'));
 }
 // Code laden: Schlacht (in die Planung des Schlacht-Modus) oder eigenes Level (gespeichert und gleich als Mission)
 async function loadCode(text) {
@@ -643,12 +653,12 @@ async function loadCode(text) {
     game.battle.snap = null;
     markAll(); rebuildHash(world);
     ui.updateBattle(); ui.updateCounts();
-    ui.toast('Schlacht geladen.');
+    ui.toast(tr('Schlacht geladen.'));
     return;
   }
   const lv = d.level;
-  if (!isLevel(lv)) throw new Error('Der Code passt nicht zu dieser Version des Spiels.');
-  if (!customById(lv.id) && saveCustom(lv)) ui.toast(`„${lv.n}“ unter Eigene Level gespeichert.`);
+  if (!isLevel(lv)) throw new Error(tr('Der Code passt nicht zu dieser Version des Spiels.'));
+  if (!customById(lv.id) && saveCustom(lv)) ui.toast(tr('„{n}“ unter Eigene Level gespeichert.', { n: lv.n }));
   loadMission(lv, 'list');
 }
 const openCodeLoad = () => shareDlg.openLoad(loadCode);
@@ -677,10 +687,10 @@ const actions = {
     if (stroke.first) {
       stroke.first = false;
       const b = game.battle;
-      if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? 'Während des Kampfes wird nicht gemalt.' : 'Plane neu, um weiter zu malen.'); stroke.blocked = true; }
-      else if (b && b.phase !== 'plan') { ui.toast(b.phase === 'fight' ? 'Während des Kampfes wird nicht gemalt.' : 'Ändere die Aufstellung, um weiter zu malen.'); stroke.blocked = true; }
-      else if (m && wx > zoneX(world)) { ui.toast('Male nur links der gestrichelten Linie.'); stroke.blocked = true; }
-      else if (game.editor && !erase && UNITS[game.sel] && wx <= zoneX(world)) ui.toast('Gegner nur rechts der gestrichelten Linie, Gelände überall.');
+      if (m && m.phase !== 'plan') { ui.toast(m.phase === 'battle' ? tr('Während des Kampfes wird nicht gemalt.') : tr('Plane neu, um weiter zu malen.')); stroke.blocked = true; }
+      else if (b && b.phase !== 'plan') { ui.toast(b.phase === 'fight' ? tr('Während des Kampfes wird nicht gemalt.') : tr('Ändere die Aufstellung, um weiter zu malen.')); stroke.blocked = true; }
+      else if (m && wx > zoneX(world)) { ui.toast(tr('Male nur links der gestrichelten Linie.')); stroke.blocked = true; }
+      else if (game.editor && !erase && UNITS[game.sel] && wx <= zoneX(world)) ui.toast(tr('Gegner nur rechts der gestrichelten Linie, Gelände überall.'));
     }
     if (stroke.blocked) return;
     pointer.erasing = erase;
@@ -732,7 +742,7 @@ function shapeStroke(s) {
   const k = classifyStroke(s.path, game.brush, dir);
   if (!k) return;
   for (const u of us) applyShape(u, k);
-  ui.toast(`${SHAPES[k].n}! ${us.length} ${us.length === 1 ? 'Einheit' : 'Einheiten'}: ${SHAPES[k].d}`);
+  ui.toast(tr(us.length === 1 ? '{f}! {n} Einheit: {d}' : '{f}! {n} Einheiten: {d}', { f: tr(SHAPES[k].n), n: us.length, d: tr(SHAPES[k].d) }));
   audio.play('horn');   // Formbonus: Signalhorn
 }
 
@@ -803,7 +813,7 @@ function simStep() {
     }
   } else {
     const f = sandboxWinner(world);
-    if (f) ui.banner(world.teamMode ? `Team ${TEAMS[f].n} gewinnt!` : `${PLURAL[f] || UNITS[f].n} gewinnen!`);
+    if (f) ui.banner(world.teamMode ? tr('Team {t} gewinnt!', { t: tr(TEAMS[f].n) }) : tr('{u} gewinnen!', { u: unitPlural(f) }));
   }
 }
 

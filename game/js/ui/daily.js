@@ -2,6 +2,7 @@
 // Das Level kommt aus daily.js (rein); main.js lädt es mit game.playDaily() und speichert den Bestwert in save.daily.
 import { dailyLevel, dateKey, shortDate, shareText } from '../daily.js';
 import { fmtPts } from '../cards.js';
+import { tr } from '../i18n.js';
 
 const CSS = `
 .daily{grid-column:1/-1;display:flex;align-items:center;gap:14px 18px;flex-wrap:wrap;border:2px solid var(--ink);border-radius:18px;padding:14px 16px;
@@ -32,7 +33,7 @@ function addStyle() {
   const s = document.createElement('style'); s.textContent = CSS; document.head.append(s);
 }
 const MSG_COPIED = 'Ergebnis kopiert.';
-const DAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+const DAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'].map(d => tr(d));
 const stars = s => `${'★'.repeat(s)}<em>${'★'.repeat(3 - s)}</em>`;
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -42,11 +43,11 @@ export function dailyCard(grid, game) {
   const now = new Date(), day = dateKey(now), L = dailyLevel(day), best = (game.save.daily || {})[day];
   const el = document.createElement('div');
   el.className = 'daily'; el.id = 'dailyCard';
-  el.innerHTML = `<div class="dt"><span class="no">${DAYS[now.getDay()]}, ${shortDate(day)}<span class="new">Täglich neu</span></span>
-      <span class="nm">Tageschallenge</span>
-      <span class="ds">${esc(L.hint)} Budget ${L.budget}, drei Sterne bis ${L.par} Punkte.</span></div>
-    <div class="best">${best ? `Bestwert heute<b>${fmtPts(best.spent)} Punkte</b><span class="st">${stars(best.stars)}</span>` : 'Heute noch nicht geschafft'}</div>
-    <div class="btns"><button class="go" id="dailyPlay">${best ? 'Nochmal' : 'Spielen'}</button>${game.board ? '<button class="btn" id="dailyBoard">🏆 Bestenliste</button>' : ''}</div>`;
+  el.innerHTML = `<div class="dt"><span class="no">${DAYS[now.getDay()]}, ${shortDate(day)}<span class="new">${tr('Täglich neu')}</span></span>
+      <span class="nm">${tr('Tageschallenge')}</span>
+      <span class="ds">${esc(L.hint)} ${tr('Budget {b}, drei Sterne bis {p} Punkte.', { b: L.budget, p: L.par })}</span></div>
+    <div class="best">${best ? `${tr('Bestwert heute')}<b>${tr('{n} Punkte', { n: fmtPts(best.spent) })}</b><span class="st">${stars(best.stars)}</span>` : tr('Heute noch nicht geschafft')}</div>
+    <div class="btns"><button class="go" id="dailyPlay">${best ? tr('Nochmal') : tr('Spielen')}</button>${game.board ? `<button class="btn" id="dailyBoard">🏆 ${tr('Bestenliste')}</button>` : ''}</div>`;
   el.querySelector('#dailyPlay').onclick = () => { document.getElementById('ovList').hidden = true; game.playDaily(); };
   if (game.board) el.querySelector('#dailyBoard').onclick = () => game.board.open(day);
   grid.prepend(el);
@@ -61,10 +62,10 @@ export function dailyResult(r, toast, game) {
   const { date, best } = r.daily, text = shareText(date, r);
   const box = document.createElement('div');
   box.className = 'resdaily'; box.id = 'resDaily';
-  box.innerHTML = `<div class="row"><span>Bestwert heute</span><b>${best ? `${fmtPts(best.spent)} Punkte ${'★'.repeat(best.stars)}` : '–'}</b></div>
+  box.innerHTML = `<div class="row"><span>${tr('Bestwert heute')}</span><b>${best ? `${tr('{n} Punkte', { n: fmtPts(best.spent) })} ${'★'.repeat(best.stars)}` : '–'}</b></div>
     <pre class="share" id="resShareTxt">${esc(text)}</pre>
-    <div class="copyrow"><button class="btn" id="resCopy">📋 Ergebnis kopieren</button><small>Fertig zum Posten, ohne deine Lösung zu verraten.</small></div>
-    ${game && game.board ? `<div class="row"><span>${r.win ? (game.board.live() ? 'Steht in der Live-Bestenliste.' : 'Als Code teilen: Freunde fügen ihn in ihre Bestenliste ein.') : 'Wer liegt heute vorn?'}</span><button class="btn" id="resBoard">🏆 Bestenliste</button></div>` : ''}
+    <div class="copyrow"><button class="btn" id="resCopy">📋 ${tr('Ergebnis kopieren')}</button><small>${tr('Fertig zum Posten, ohne deine Lösung zu verraten.')}</small></div>
+    ${game && game.board ? `<div class="row"><span>${r.win ? (game.board.live() ? tr('Steht in der Live-Bestenliste.') : tr('Als Code teilen: Freunde fügen ihn in ihre Bestenliste ein.')) : tr('Wer liegt heute vorn?')}</span><button class="btn" id="resBoard">🏆 ${tr('Bestenliste')}</button></div>` : ''}
     <textarea id="resShare" rows="5" readonly hidden></textarea>`;
   document.getElementById('resStats').after(box);
   if (game && game.board) box.querySelector('#resBoard').onclick = () => game.board.open(date);
@@ -73,8 +74,8 @@ export function dailyResult(r, toast, game) {
   let t = 0;
   btn.onclick = () => copyText(text, box.querySelector('#resShare'), msg => {
     const ok = msg === MSG_COPIED;
-    btn.textContent = ok ? '✓ Kopiert' : 'Text markiert: Strg+C'; btn.classList.toggle('ok', ok); toast(msg);
-    clearTimeout(t); t = setTimeout(() => { btn.textContent = '📋 Ergebnis kopieren'; btn.classList.remove('ok'); }, 2500);
+    btn.textContent = ok ? '✓ ' + tr('Kopiert') : tr('Text markiert: Strg+C'); btn.classList.toggle('ok', ok); toast(msg);
+    clearTimeout(t); t = setTimeout(() => { btn.textContent = '📋 ' + tr('Ergebnis kopieren'); btn.classList.remove('ok'); }, 2500);
   });
 }
 
@@ -84,7 +85,7 @@ export function copyText(text, ta, toast) {
     ta.value = text; ta.hidden = false; ta.focus(); ta.select();
     let ok = false;
     try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-    toast(ok ? MSG_COPIED : 'Text ist markiert: mit Strg+C kopieren.');
+    toast(ok ? MSG_COPIED : tr('Text ist markiert: mit Strg+C kopieren.'));
   };
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) {

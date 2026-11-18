@@ -5,28 +5,29 @@ import { CATEGORIES } from '../data.js';
 import { armyPoints } from '../sim.js';
 import { suggestBudget, UNIT_CATS, NAME_MAX, HINT_MAX } from '../editor.js';
 import { fmtPts } from '../cards.js';
+import { tr } from '../i18n.js';
 
 const $ = id => document.getElementById(id);
-const CAT_N = Object.fromEntries(CATEGORIES);
+const CAT_N = Object.fromEntries(CATEGORIES.map(([k, n]) => [k, tr(n)]));
 
 export function createEditorBar(game) {
   const bar = document.createElement('div');
   bar.className = 'misbar edbar shadow p'; bar.id = 'edBar'; bar.hidden = true;
-  bar.innerHTML = `<div class="mt"><div class="mn">Level-Editor</div><div class="mh">Male Gegner rechts der Linie · Gelände überall</div></div>
+  bar.innerHTML = `<div class="mt"><div class="mn">${tr('Level-Editor')}</div><div class="mh">${tr('Male Gegner rechts der Linie · Gelände überall')}</div></div>
     <div class="edf">
-      <input id="edName" type="text" maxlength="${NAME_MAX}" placeholder="Name des Levels" aria-label="Name des Levels">
-      <input id="edHint" type="text" maxlength="${HINT_MAX}" placeholder="Hinweis für Spieler (optional)" aria-label="Hinweis">
+      <input id="edName" type="text" maxlength="${NAME_MAX}" placeholder="${tr('Name des Levels')}" aria-label="${tr('Name des Levels')}">
+      <input id="edHint" type="text" maxlength="${HINT_MAX}" placeholder="${tr('Hinweis für Spieler (optional)')}" aria-label="${tr('Hinweis')}">
     </div>
     <div class="edf">
-      <label class="edb">Budget <input id="edBud" type="number" min="1" max="99999" step="1" inputmode="numeric" aria-label="Budget"></label>
+      <label class="edb">${tr('Budget')} <input id="edBud" type="number" min="1" max="99999" step="1" inputmode="numeric" aria-label="Budget"></label>
       <span class="edpts" id="edPts"></span>
     </div>
-    <div class="edcats" role="group" aria-label="Erlaubte Einheiten">${UNIT_CATS.map(k =>
+    <div class="edcats" role="group" aria-label="${tr('Erlaubte Einheiten')}">${UNIT_CATS.map(k =>
       `<label><input type="checkbox" data-cat="${k}" checked>${CAT_N[k]}</label>`).join('')}</div>
-    <button class="btn" id="edClear">Leeren</button>
-    <button class="btn" id="edShare">Teilen</button>
-    <button class="btn" id="edSave">Speichern</button>
-    <button class="go" id="edTest">Testen</button>`;
+    <button class="btn" id="edClear">${tr('Leeren')}</button>
+    <button class="btn" id="edShare">${tr('Teilen')}</button>
+    <button class="btn" id="edSave">${tr('Speichern')}</button>
+    <button class="go" id="edTest">${tr('Testen')}</button>`;
   const anchor = $('batBar') || $('misBar');
   anchor.after(bar);
 
@@ -37,7 +38,7 @@ export function createEditorBar(game) {
   bar.querySelectorAll('.edcats input').forEach(cb => {
     cb.onchange = () => {
       const on = [...bar.querySelectorAll('.edcats input')].filter(c => c.checked).map(c => c.dataset.cat);
-      if (!on.length) { cb.checked = true; game.toast('Mindestens eine Kategorie muss erlaubt sein.'); return; }
+      if (!on.length) { cb.checked = true; game.toast(tr('Mindestens eine Kategorie muss erlaubt sein.')); return; }
       if (meta()) meta().cats = on;
     };
   });
@@ -62,7 +63,7 @@ export function createEditorBar(game) {
     lastPts = p;
     const s = suggestBudget(p);
     $('edBud').placeholder = String(s);
-    $('edPts').textContent = `Gegner ${fmtPts(p)} Pkt · Vorschlag ${s}`;
+    $('edPts').textContent = tr('Gegner {p} Pkt · Vorschlag {s}', { p: fmtPts(p), s });
   }
   // nach ui.updateMode: Leiste, Reiter und Knöpfe für den Editor
   function update() {
@@ -75,7 +76,7 @@ export function createEditorBar(game) {
       lastPts = -1; tick();
     }
     if (mis && mis.custom === 'editor') $('mMis').classList.remove('on');
-    if (mis) $('misList').textContent = mis.custom === 'editor' ? 'Zum Editor' : mis.custom ? 'Eigene Level' : 'Übersicht';
+    if (mis) $('misList').textContent = mis.custom === 'editor' ? tr('Zum Editor') : mis.custom ? tr('Eigene Level') : tr('Übersicht');
   }
   return { update, tick, fill };
 }

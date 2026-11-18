@@ -11,6 +11,7 @@ import { getRoom } from '../net.js';
 // Live-Version des Artefakts (mit room-Capability, nur auf Einladung); die öffentliche Version verweist darauf
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
 import { fmtPts } from '../cards.js';
+import { tr } from '../i18n.js';
 
 const CSS = `
 #ovOnl{z-index:7}
@@ -60,7 +61,7 @@ const CSS = `
 @media (prefers-reduced-motion:reduce){.onlban.hi,.onlask .card,.onlbox .peer{animation:none}}
 `;
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const SIDE_N = { blau: 'Blau', rot: 'Rot' };
+const SIDE_N = { blau: tr('Blau'), rot: tr('Rot') };
 const GONE_MS = 6000;      // so lange darf der Gegner fehlen (Neuverbindung), bevor die Karte „Gegner ist weg“ kommt
 const JOIN_MS = 8000;      // so lange sucht der Gast nach dem Host
 
@@ -73,15 +74,15 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
-  btn.className = 'btn'; btn.id = 'batOnl'; btn.textContent = 'Online 1v1';
-  btn.title = 'Zwei Spieler auf zwei Geräten: jede Runde eine zufällige Kategorie, gleiches Budget, verdeckt malen';
+  btn.className = 'btn'; btn.id = 'batOnl'; btn.textContent = tr('Online 1v1');
+  btn.title = tr('Zwei Spieler auf zwei Geräten: jede Runde eine zufällige Kategorie, gleiches Budget, verdeckt malen');
   $('batGo').before(btn);
   btn.onclick = () => { if (m) confirmLeave(); else { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openLobby(); } };
 
   // Aufgeben: Runde an den Gegner (beim Malen, Warten oder im Kampf)
   const giveBtn = document.createElement('button');
-  giveBtn.className = 'btn'; giveBtn.id = 'onlGive'; giveBtn.textContent = '🏳️ Aufgeben'; giveBtn.hidden = true;
-  giveBtn.title = 'Diese Runde aufgeben: der Punkt geht an deinen Gegner';
+  giveBtn.className = 'btn'; giveBtn.id = 'onlGive'; giveBtn.textContent = '🏳️ ' + tr('Aufgeben'); giveBtn.hidden = true;
+  giveBtn.title = tr('Diese Runde aufgeben: der Punkt geht an deinen Gegner');
   $('batGo').before(giveBtn);
   giveBtn.onclick = () => { if (canGiveUp(m)) giveCard(); };
 
@@ -141,12 +142,12 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const box = ask.firstChild;
     if (k === 'same' || k === 'declined') {
       box.innerHTML = k === 'same'
-        ? `<div class="big">⚔️</div><h2 id="onlAskT">Dein Gegner will eine Revanche!</h2>
-          <p>Gleiche Regel (${esc(CAT_NAME[m.cfg.cat])}), gleiche Karte (${esc(MAP[m.cfg.map].n)}), gleiches Budget. Ihr malt beide neu.</p>
-          <div class="btnrow"><button class="go" id="onlAskYes">Revanche annehmen</button><button class="btn" id="onlAskNo">Ablehnen, neue Abstimmung</button></div>`
-        : `<div class="big">🗳️</div><h2 id="onlAskT">Dein Gegner will lieber neu abstimmen</h2>
-          <p>Keine Revanche: Ihr stimmt über eine neue Regel und Karte ab.</p>
-          <div class="btnrow"><button class="go" id="onlAskNo">Okay, neue Abstimmung</button><button class="btn" id="onlAskLeave">Verlassen</button></div>`;
+        ? `<div class="big">⚔️</div><h2 id="onlAskT">${tr('Dein Gegner will eine Revanche!')}</h2>
+          <p>${tr('Gleiche Regel ({r}), gleiche Karte ({m}), gleiches Budget. Ihr malt beide neu.', { r: esc(tr(CAT_NAME[m.cfg.cat])), m: esc(tr(MAP[m.cfg.map].n)) })}</p>
+          <div class="btnrow"><button class="go" id="onlAskYes">${tr('Revanche annehmen')}</button><button class="btn" id="onlAskNo">${tr('Ablehnen, neue Abstimmung')}</button></div>`
+        : `<div class="big">🗳️</div><h2 id="onlAskT">${tr('Dein Gegner will lieber neu abstimmen')}</h2>
+          <p>${tr('Keine Revanche: Ihr stimmt über eine neue Regel und Karte ab.')}</p>
+          <div class="btnrow"><button class="go" id="onlAskNo">${tr('Okay, neue Abstimmung')}</button><button class="btn" id="onlAskLeave">${tr('Verlassen')}</button></div>`;
       ask.hidden = false;
       const y = $('onlAskYes'), n = $('onlAskNo'), l = $('onlAskLeave');
       if (y) y.onclick = () => act(wantNext(m, true));
@@ -156,41 +157,41 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       chime(true);
     } else ask.hidden = true;
     if (k === 'new') {
-      setSticky({ html: '<span>Dein Gegner will die nächste Runde.</span><button class="go" id="onlBanGo">Los</button>', hi: true,
+      setSticky({ html: `<span>${tr('Dein Gegner will die nächste Runde.')}</span><button class="go" id="onlBanGo">${tr('Los')}</button>`, hi: true,
         wire: () => { $('onlBanGo').onclick = () => act(wantNext(m, false)); } });
       chime(false);
-    } else if (k === 'waitSame') setSticky({ html: '<span>⏳ Revanche angefragt, warte auf deinen Gegner …</span>' });
-    else if (k === 'waitNew') setSticky({ html: '<span>⏳ Warte auf deinen Gegner …</span>' });
+    } else if (k === 'waitSame') setSticky({ html: `<span>⏳ ${tr('Revanche angefragt, warte auf deinen Gegner …')}</span>` });
+    else if (k === 'waitNew') setSticky({ html: `<span>⏳ ${tr('Warte auf deinen Gegner …')}</span>` });
     else setSticky(null);
   }
   function clearNotes() { clearTimeout(banT); banT = 0; sticky = null; askKey = ''; ban.hidden = true; ask.hidden = true; }
 
   async function openLobby() {
     let pick = ONLINE_DEFAULT;
-    showCard('lobby', `<h2 id="onlTitle">Online 1 gegen 1</h2><p class="muted">Verbinde …</p>`);
+    showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
     net = await getRoom();
     if (shown !== 'lobby') return;
     if (!net) {
-      showCard('lobby', `<h2 id="onlTitle">Online 1 gegen 1</h2>
-        <p>Das Online-Spiel braucht die Live-Verbindung des Claude-Artefakts. Sie ist hier nicht verfügbar.</p>
-        <p class="muted">Öffne das Spiel als Claude-Artefakt und melde dich an. Dein Gegner braucht ebenfalls Zugriff auf das Artefakt (Einladung) und muss angemeldet sein; über einen öffentlichen Link geht es nicht.</p>
-        <p>Live spielen: in der <a href="${LIVE_URL}" target="_blank" rel="noopener">Live-Version</a> (nur mit Einladung).</p>
-        <p><b>Ohne Anmeldung:</b> Nimm das <b>Code-Duell</b> (Knopf daneben). Du verschickst deine Armee als Code, dein Gegner malt verdeckt dagegen.</p>
-        <div class="btnrow"><button class="btn" id="onlCancel">Schließen</button></div>`);
+      showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2>
+        <p>${tr('Das Online-Spiel braucht die Live-Verbindung des Claude-Artefakts. Sie ist hier nicht verfügbar.')}</p>
+        <p class="muted">${tr('Öffne das Spiel als Claude-Artefakt und melde dich an. Dein Gegner braucht ebenfalls Zugriff auf das Artefakt (Einladung) und muss angemeldet sein; über einen öffentlichen Link geht es nicht.')}</p>
+        <p>${tr('Live spielen: in der <a href="{u}" target="_blank" rel="noopener">Live-Version</a> (nur mit Einladung).', { u: LIVE_URL })}</p>
+        <p>${tr('<b>Ohne Anmeldung:</b> Nimm das <b>Code-Duell</b> (Knopf daneben). Du verschickst deine Armee als Code, dein Gegner malt verdeckt dagegen.')}</p>
+        <div class="btnrow"><button class="btn" id="onlCancel">${tr('Schließen')}</button></div>`);
       $('onlCancel').onclick = hideCard; return;
     }
-    showCard('lobby', `<h2 id="onlTitle">Online 1 gegen 1</h2>
-      <p>Jede Runde wird eine Kategorie ausgelost. Beide malen gleichzeitig mit demselben Budget, ohne die Armee des anderen zu sehen. Aufgedeckt wird beim Kampf.</p>
-      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick ? ' on' : ''}" data-v="${v}"><b>${v}</b><span>Punkte je Seite</span></button>`).join('')}</div>
-      <div class="row"><button class="go" id="onlCreate">Raum erstellen</button></div>
-      <div class="row"><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="Raumcode"><button class="btn" id="onlJoin">Beitreten</button></div>
+    showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2>
+      <p>${tr('Jede Runde wird eine Kategorie ausgelost. Beide malen gleichzeitig mit demselben Budget, ohne die Armee des anderen zu sehen. Aufgedeckt wird beim Kampf.')}</p>
+      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick ? ' on' : ''}" data-v="${v}"><b>${v}</b><span>${tr('Punkte je Seite')}</span></button>`).join('')}</div>
+      <div class="row"><button class="go" id="onlCreate">${tr('Raum erstellen')}</button></div>
+      <div class="row"><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="${tr('Raumcode')}"><button class="btn" id="onlJoin">${tr('Beitreten')}</button></div>
       <div class="rooms" id="onlRooms"></div>
-      <div class="btnrow"><button class="btn" id="onlCancel">Abbrechen</button></div>`);
+      <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
     card.querySelectorAll('.hotbud .btn').forEach(b => {
       b.onclick = () => { pick = +b.dataset.v; card.querySelectorAll('.hotbud .btn').forEach(x => x.classList.toggle('on', x === b)); };
     });
     $('onlCreate').onclick = () => start('host', makeCode(), pick);
-    const join = () => { const c = normCode($('onlCode').value); if (!c) { ui.toast('Der Code hat 4 Zeichen, z. B. KX7P.'); return; } start('guest', c); };
+    const join = () => { const c = normCode($('onlCode').value); if (!c) { ui.toast(tr('Der Code hat 4 Zeichen, z. B. KX7P.')); return; } start('guest', c); };
     $('onlJoin').onclick = join;
     $('onlCode').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') join(); };
     $('onlCancel').onclick = hideCard;
@@ -198,8 +199,8 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const render = () => {
       const box = $('onlRooms'); if (!box) return;
       const rs = openRooms(net.peers());
-      box.innerHTML = rs.length ? `<span class="muted">Offene Räume</span>${rs.map(r => `<button class="btn" data-c="${esc(r.code)}"><span>Raum ${esc(r.code)}</span><span>${r.budget} Punkte · Beitreten</span></button>`).join('')}`
-        : '<span class="muted">Gerade wartet niemand. Erstelle einen Raum und gib deinem Gegner den Code.</span>';
+      box.innerHTML = rs.length ? `<span class="muted">${tr('Offene Räume')}</span>${rs.map(r => `<button class="btn" data-c="${esc(r.code)}"><span>${tr('Raum {c}', { c: esc(r.code) })}</span><span>${tr('{n} Punkte', { n: r.budget })} · ${tr('Beitreten')}</span></button>`).join('')}`
+        : `<span class="muted">${tr('Gerade wartet niemand. Erstelle einen Raum und gib deinem Gegner den Code.')}</span>`;
       box.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => start('guest', b.dataset.c); });
     };
     try { lobbyUnsub = net.onPeers(render, () => {}); } catch (e) { /* ohne Lobby-Liste */ }
@@ -209,15 +210,15 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   function waitCard() {
     if (m.role === 'host') {
-      showCard('wait', `<h2 id="onlTitle">Warte auf Gegner</h2><p>Gib deinem Gegner diesen Code. Er öffnet das Spiel, geht auf Schlacht → Online 1v1 und tritt bei.</p>
-        <div class="code">${esc(m.code)}</div><p class="muted">${m.budget} Punkte je Seite · du bist Blau (links)</p>
-        <div class="btnrow"><button class="btn" id="onlCancel">Abbrechen</button></div>`);
+      showCard('wait', `<h2 id="onlTitle">${tr('Warte auf Gegner')}</h2><p>${tr('Gib deinem Gegner diesen Code. Er öffnet das Spiel, geht auf Schlacht → Online 1v1 und tritt bei.')}</p>
+        <div class="code">${esc(m.code)}</div><p class="muted">${tr('{n} Punkte je Seite · du bist Blau (links)', { n: m.budget })}</p>
+        <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
     } else {
       const late = Date.now() - joinT > JOIN_MS;
-      showCard('wait', `<h2 id="onlTitle">Raum ${esc(m.code)}</h2><p>${late ? '<span class="warn">Hier ist noch niemand.</span> Stimmt der Code? Du kannst weiter warten.' : 'Verbinde mit dem Gegner …'}</p>
-        <p class="muted">Du bist Rot (rechts).</p><div class="btnrow"><button class="btn" id="onlCancel">Abbrechen</button></div>`);
+      showCard('wait', `<h2 id="onlTitle">${tr('Raum {c}', { c: esc(m.code) })}</h2><p>${late ? tr('<span class="warn">Hier ist noch niemand.</span> Stimmt der Code? Du kannst weiter warten.') : tr('Verbinde mit dem Gegner …')}</p>
+        <p class="muted">${tr('Du bist Rot (rechts).')}</p><div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
     }
-    $('onlCancel').onclick = () => leave('Online-Spiel abgebrochen.');
+    $('onlCancel').onclick = () => leave(tr('Online-Spiel abgebrochen.'));
   }
   // Abstimmung: drei Regeln und drei Karten; gleiche Wahl gewinnt, sonst das Los
   let pickR = null, pickM = null;
@@ -226,13 +227,13 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (!done) { if (!c.opts.rules.includes(pickR)) pickR = c.opts.rules[0]; if (!c.opts.maps.includes(pickM)) pickM = c.opts.maps[0]; }
     const selR = done ? m.vote.rule : pickR, selM = done ? m.vote.map : pickM;
     card.classList.add('vote');
-    showCard('vote', `<h2 id="onlTitle">Runde ${c.r}: Abstimmung</h2>
-      <p class="muted">Ihr wählt beide. Gleiche Wahl gewinnt, sonst entscheidet das Los zwischen euren beiden Stimmen. ${scoreText()}.</p>
-      <h3>Was darf gemalt werden?</h3>
-      <div class="vopts" id="vRules">${c.opts.rules.map(id => `<button class="btn${id === selR ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}><b>${esc(RULE[id].n)}</b><span>${esc(RULE[id].d)}</span></button>`).join('')}</div>
-      <h3>Karte</h3>
-      <div class="vopts" id="vMaps">${c.opts.maps.map(id => `<button class="btn${id === selM ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}>${mapSVG(id)}<b>${esc(MAP[id].n)}</b><span>${esc(MAP[id].d)}</span></button>`).join('')}</div>
-      <div class="btnrow">${done ? '<button class="go" disabled>Warte auf die Stimme deines Gegners …</button>' : '<button class="go" id="onlVote">Abstimmen</button>'}<button class="btn" id="onlCancel">Spiel verlassen</button></div>`);
+    showCard('vote', `<h2 id="onlTitle">${tr('Runde {r}: Abstimmung', { r: c.r })}</h2>
+      <p class="muted">${tr('Ihr wählt beide. Gleiche Wahl gewinnt, sonst entscheidet das Los zwischen euren beiden Stimmen.')} ${scoreText()}.</p>
+      <h3>${tr('Was darf gemalt werden?')}</h3>
+      <div class="vopts" id="vRules">${c.opts.rules.map(id => `<button class="btn${id === selR ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}><b>${esc(tr(RULE[id].n))}</b><span>${esc(tr(RULE[id].d))}</span></button>`).join('')}</div>
+      <h3>${tr('Karte')}</h3>
+      <div class="vopts" id="vMaps">${c.opts.maps.map(id => `<button class="btn${id === selM ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}>${mapSVG(id)}<b>${esc(tr(MAP[id].n))}</b><span>${esc(tr(MAP[id].d))}</span></button>`).join('')}</div>
+      <div class="btnrow">${done ? `<button class="go" disabled>${tr('Warte auf die Stimme deines Gegners …')}</button>` : `<button class="go" id="onlVote">${tr('Abstimmen')}</button>`}<button class="btn" id="onlCancel">${tr('Spiel verlassen')}</button></div>`);
     if (!done) {
       card.querySelectorAll('#vRules .btn').forEach(b => { b.onclick = () => { pickR = b.dataset.v; voteCard(); }; });
       card.querySelectorAll('#vMaps .btn').forEach(b => { b.onclick = () => { pickM = b.dataset.v; voteCard(); }; });
@@ -242,26 +243,26 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   }
   function roundCard() {
     const c = m.cfg, ag = c.agreed || {};
-    const how = (ok, what) => (ok ? `${what}: ihr wart euch einig.` : `${what}: das Los hat entschieden.`);
+    const how = (ok, what) => tr(ok ? '{w}: ihr wart euch einig.' : '{w}: das Los hat entschieden.', { w: what });
     ov.classList.add('onl-round');
-    showCard('round', `<h2 id="onlTitle">${c.rematch ? 'Revanche' : `Runde ${c.r}`}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
-      <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(MAP[c.map].n)}</b><br><span class="muted">${esc(MAP[c.map].d)}</span></div></div>
-      <p>${esc(RULE[c.cat].d)}. ${budgetOf(c)} Punkte. Du bist <b>${SIDE_N[m.side]}</b> (${m.side === 'blau' ? 'links' : 'rechts'}). Dein Gegner sieht nichts, bis beide fertig sind.</p>
-      <p class="muted">${c.rematch ? 'Gleiches Setup wie eben, ihr malt beide neu.' : `${how(ag.rule, 'Regel')} ${how(ag.map, 'Karte')}`}</p>
-      <div class="btnrow"><button class="go" id="onlOk">Los geht's</button></div>`);
+    showCard('round', `<h2 id="onlTitle">${c.rematch ? tr('Revanche') : tr('Runde {r}', { r: c.r })}: <span class="cat">${esc(tr(CAT_NAME[c.cat]))}</span></h2>
+      <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(tr(MAP[c.map].n))}</b><br><span class="muted">${esc(tr(MAP[c.map].d))}</span></div></div>
+      <p>${esc(tr(RULE[c.cat].d))}. ${tr('{n} Punkte', { n: budgetOf(c) })}. ${tr(m.side === 'blau' ? 'Du bist <b>{s}</b> (links). Dein Gegner sieht nichts, bis beide fertig sind.' : 'Du bist <b>{s}</b> (rechts). Dein Gegner sieht nichts, bis beide fertig sind.', { s: SIDE_N[m.side] })}</p>
+      <p class="muted">${c.rematch ? tr('Gleiches Setup wie eben, ihr malt beide neu.') : `${how(ag.rule, tr('Regel'))} ${how(ag.map, tr('Karte'))}`}</p>
+      <div class="btnrow"><button class="go" id="onlOk">${tr('Los geht\'s')}</button></div>`);
     $('onlOk').onclick = hideCard; $('onlOk').focus();
     clearTimeout(roundT); roundT = setTimeout(() => { if (shown === 'round') hideCard(); }, 5000);
   }
   function goneCard() {
     chime(true);
-    showCard('gone', `<h2 id="onlTitle">Gegner ist weg</h2><p>Die Verbindung zum Gegner ist abgerissen. Kommt er zurück, geht es weiter.</p>
-      <div class="btnrow"><button class="btn" id="onlStay">Warten</button><button class="go" id="onlCancel">Spiel verlassen</button></div>`);
+    showCard('gone', `<h2 id="onlTitle">${tr('Gegner ist weg')}</h2><p>${tr('Die Verbindung zum Gegner ist abgerissen. Kommt er zurück, geht es weiter.')}</p>
+      <div class="btnrow"><button class="btn" id="onlStay">${tr('Warten')}</button><button class="go" id="onlCancel">${tr('Spiel verlassen')}</button></div>`);
     $('onlStay').onclick = hideCard;
-    $('onlCancel').onclick = () => leave('Online-Spiel beendet.');
+    $('onlCancel').onclick = () => leave(tr('Online-Spiel beendet.'));
   }
   function giveCard() {
-    showCard('giveq', `<h2 id="onlTitle">Runde aufgeben?</h2><p>Die Runde und der Punkt gehen an deinen Gegner. Danach geht es mit Revanche oder einer neuen Runde weiter.</p>
-      <div class="btnrow"><button class="go" id="onlGiveYes">🏳️ Aufgeben</button><button class="btn" id="onlStay">Weiterspielen</button></div>`);
+    showCard('giveq', `<h2 id="onlTitle">${tr('Runde aufgeben?')}</h2><p>${tr('Die Runde und der Punkt gehen an deinen Gegner. Danach geht es mit Revanche oder einer neuen Runde weiter.')}</p>
+      <div class="btnrow"><button class="go" id="onlGiveYes">🏳️ ${tr('Aufgeben')}</button><button class="btn" id="onlStay">${tr('Weiterspielen')}</button></div>`);
     $('onlStay').onclick = hideCard;
     $('onlGiveYes').onclick = () => { if (canGiveUp(m)) act(giveUp(m)); else hideCard(); };
   }
@@ -278,34 +279,34 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   function gaveCard() {
     if (!m || !m.cfg || m.phase !== 'result') return;
     const mine = !!m.gave, other = m.side === 'blau' ? 'rot' : 'blau', waiting = m.want > m.cfg.r;
-    showCard('gave', `<h2 id="onlTitle">${mine ? '🏳️ Du gibst auf' : '🏆 Dein Gegner gibt auf!'}</h2>
-      <p>Runde ${m.cfg.r} geht an <b>${SIDE_N[mine ? other : m.side]}</b>. Stand: ${scoreText()}.</p>
-      ${waiting ? `<p class="muted">${m.same ? 'Du willst Revanche, warte auf deinen Gegner …' : 'Warte auf deinen Gegner …'}</p>` : ''}
-      <div class="btnrow"><button class="go" id="onlGSame"${waiting && m.same ? ' disabled' : ''} title="Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu">Revanche</button>
-        <button class="go" id="onlGNext"${waiting && !m.same ? ' disabled' : ''}>Nächste Runde</button><button class="btn" id="onlGLeave">Verlassen</button></div>`);
+    showCard('gave', `<h2 id="onlTitle">${mine ? '🏳️ ' + tr('Du gibst auf') : '🏆 ' + tr('Dein Gegner gibt auf!')}</h2>
+      <p>${tr('Runde {r} geht an <b>{s}</b>. Stand: {x}.', { r: m.cfg.r, s: SIDE_N[mine ? other : m.side], x: scoreText() })}</p>
+      ${waiting ? `<p class="muted">${m.same ? tr('Du willst Revanche, warte auf deinen Gegner …') : tr('Warte auf deinen Gegner …')}</p>` : ''}
+      <div class="btnrow"><button class="go" id="onlGSame"${waiting && m.same ? ' disabled' : ''} title="${tr('Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu')}">${tr('Revanche')}</button>
+        <button class="go" id="onlGNext"${waiting && !m.same ? ' disabled' : ''}>${tr('Nächste Runde')}</button><button class="btn" id="onlGLeave">${tr('Verlassen')}</button></div>`);
     $('onlGSame').onclick = () => act(wantNext(m, true));
     $('onlGNext').onclick = () => act(wantNext(m, false));
     $('onlGLeave').onclick = () => confirmLeave();
   }
   function confirmLeave() {
-    showCard('leave', `<h2 id="onlTitle">Online-Spiel verlassen?</h2><p>Stand: ${scoreText()}.</p>
-      <div class="btnrow"><button class="go" id="onlCancel">Verlassen</button><button class="btn" id="onlStay">Weiterspielen</button></div>`);
+    showCard('leave', `<h2 id="onlTitle">${tr('Online-Spiel verlassen?')}</h2><p>${tr('Stand: {x}.', { x: scoreText() })}</p>
+      <div class="btnrow"><button class="go" id="onlCancel">${tr('Verlassen')}</button><button class="btn" id="onlStay">${tr('Weiterspielen')}</button></div>`);
     $('onlStay').onclick = hideCard;
-    $('onlCancel').onclick = () => leave('Online-Spiel beendet.');
+    $('onlCancel').onclick = () => leave(tr('Online-Spiel beendet.'));
   }
-  const scoreText = () => (m ? `Blau ${m.score.blau} : ${m.score.rot} Rot` : '');
+  const scoreText = () => (m ? `${SIDE_N.blau} ${m.score.blau} : ${m.score.rot} ${SIDE_N.rot}` : '');
 
   /* ---------- Verbindung ---------- */
   async function start(role, code, budget) {
     hideCard();
     const b = game.battle; if (!b || b.phase !== 'plan') return;
     net = net || await getRoom(); if (!net) return;
-    try { room = await net.join(roomName(code)); } catch (e) { ui.toast('Keine Verbindung zum Raum. Versuch es gleich noch mal.'); return; }
+    try { room = await net.join(roomName(code)); } catch (e) { ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
     // voll? (zwei andere Spieler schon drin)
     const others = room.peers().filter(p => !p.isMe && p.presence && p.presence.ks === PROTO);
     if (others.length >= 2 || (role === 'host' && others.length)) {
       room.leave(); room = null;
-      ui.toast(role === 'host' ? 'Code schon vergeben, bitte noch einmal.' : 'Der Raum ist schon voll.');
+      ui.toast(role === 'host' ? tr('Code schon vergeben, bitte noch einmal.') : tr('Der Raum ist schon voll.'));
       return;
     }
     m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; joinT = Date.now(); lastPub = '';
@@ -361,12 +362,12 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       else if (e === 'voted') voteCard();
       else if (e === 'round') beginRound();
       else if (e === 'fight') beginFight();
-      else if (e === 'error') ui.toast(`Die Armee des Gegners war ungültig (${m.error}). Sie kämpft nicht mit.`);
+      else if (e === 'error') ui.toast(tr('Die Armee des Gegners war ungültig ({e}). Sie kämpft nicht mit.', { e: tr(m.error) }));
       else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') { decorate(); if (shown === 'gave') gaveCard(); }
       else if (e === 'gave') { stopFight(); gaveCard(); }
       else if (e === 'peergave') { stopFight(); gaveCard(); chime(true); }
-      else if (e === 'peerready') flash('✅ Dein Gegner ist fertig mit Malen!');
-      else if (e === 'peervoted' && m.phase === 'vote') flash(m.vote ? '🗳️ Dein Gegner hat auch abgestimmt' : '🗳️ Dein Gegner hat abgestimmt, jetzt du!');
+      else if (e === 'peerready') flash('✅ ' + tr('Dein Gegner ist fertig mit Malen!'));
+      else if (e === 'peervoted' && m.phase === 'vote') flash('🗳️ ' + (m.vote ? tr('Dein Gegner hat auch abgestimmt') : tr('Dein Gegner hat abgestimmt, jetzt du!')));
     }
     updateAsk(); publish(); sync();
   }
@@ -396,7 +397,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   }
   function ready() {
     const b = game.battle; if (!b || !m || m.phase !== 'paint') return;
-    if (!world.units.some(u => u.alive && u.team === m.side)) { ui.toast(`Male zuerst deine Armee (${CAT_NAME[m.cfg.cat]}).`); return; }
+    if (!world.units.some(u => u.alive && u.team === m.side)) { ui.toast(tr('Male zuerst deine Armee ({c}).', { c: tr(CAT_NAME[m.cfg.cat]) })); return; }
     b.hot.step = 'online';   // nicht mehr malen
     undoStack.length = 0;
     act(markReady(m, packArmy(world, m.side)));
@@ -405,7 +406,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (!m || !m.fight) return;
     hideCard();
     onlineFight(m.fight.units, m.fight.seed, m.fight.map);
-    ui.toast('Aufgedeckt!');
+    ui.toast(tr('Aufgedeckt!'));
   }
 
   /* ---------- Ergebnis ---------- */
@@ -419,17 +420,17 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (!on || !m.cfg || (m.phase !== 'result' && m.phase !== 'fight')) { if (box) box.remove(); return; }
     if (!box) { box = document.createElement('div'); box.className = 'onlbox'; box.id = 'onlRes'; $('ovBat').querySelector('.btnrow').before(box); }
     const off = officialWinner(m), mine = m.res ? m.res.w : null;
-    const note = !off ? 'Warte auf das Ergebnis des Gegners …'
-      : off !== mine && mine ? `Gewertet wird das Ergebnis von Blau (${off === 'draw' ? 'unentschieden' : SIDE_N[off] + ' gewinnt'}); auf deinem Gerät lief der Kampf etwas anders.`
-      : off === 'draw' ? 'Unentschieden, kein Punkt.' : off === m.side ? 'Du gewinnst die Runde!' : 'Dein Gegner gewinnt die Runde.';
+    const note = !off ? tr('Warte auf das Ergebnis des Gegners …')
+      : off !== mine && mine ? tr('Gewertet wird das Ergebnis von Blau ({w}); auf deinem Gerät lief der Kampf etwas anders.', { w: off === 'draw' ? tr('unentschieden') : tr('{s} gewinnt', { s: SIDE_N[off] }) })
+      : off === 'draw' ? tr('Unentschieden, kein Punkt.') : off === m.side ? tr('Du gewinnst die Runde!') : tr('Dein Gegner gewinnt die Runde.');
     const waiting = m.want > m.cfg.r, pw = m.peerWant;
-    const peerTxt = pw === 'same' ? 'Dein Gegner will eine Revanche.' : pw === 'new' ? 'Dein Gegner will die nächste Runde.' : '';
-    const myTxt = waiting ? (m.same ? (pw === 'new' ? 'Du willst Revanche, dein Gegner eine neue Runde: drück „Nächste Runde“, um weiterzumachen.' : 'Du willst Revanche, warte auf deinen Gegner …') : 'Warte auf deinen Gegner …') : '';
-    box.innerHTML = `<div><div class="muted">Runde ${m.cfg.r} · ${esc(CAT_NAME[m.cfg.cat])} · ${esc(MAP[m.cfg.map].n)} · du bist ${SIDE_N[m.side]}</div>
-        <div class="sc"><span class="blau">Blau ${m.score.blau}</span> : <span class="rot">${m.score.rot} Rot</span></div><div class="muted">${esc(note)}</div>
+    const peerTxt = pw === 'same' ? tr('Dein Gegner will eine Revanche.') : pw === 'new' ? tr('Dein Gegner will die nächste Runde.') : '';
+    const myTxt = waiting ? (m.same ? (pw === 'new' ? tr('Du willst Revanche, dein Gegner eine neue Runde: drück „Nächste Runde“, um weiterzumachen.') : tr('Du willst Revanche, warte auf deinen Gegner …')) : tr('Warte auf deinen Gegner …')) : '';
+    box.innerHTML = `<div><div class="muted">${tr('Runde {r}', { r: m.cfg.r })} · ${esc(tr(CAT_NAME[m.cfg.cat]))} · ${esc(tr(MAP[m.cfg.map].n))} · ${tr('du bist {s}', { s: SIDE_N[m.side] })}</div>
+        <div class="sc"><span class="blau">${SIDE_N.blau} ${m.score.blau}</span> : <span class="rot">${m.score.rot} ${SIDE_N.rot}</span></div><div class="muted">${esc(note)}</div>
         ${peerTxt ? `<div class="peer">${esc(peerTxt)}</div>` : ''}${myTxt ? `<div class="muted">${esc(myTxt)}</div>` : ''}</div>
-      <div class="btnrow"><button class="go" id="onlSame"${waiting && m.same ? ' disabled' : ''} title="Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu">Revanche</button>
-        <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="Neue Abstimmung über Regel und Karte">Nächste Runde</button><button class="btn" id="onlLeave">Verlassen</button></div>`;
+      <div class="btnrow"><button class="go" id="onlSame"${waiting && m.same ? ' disabled' : ''} title="${tr('Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu')}">${tr('Revanche')}</button>
+        <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="${tr('Neue Abstimmung über Regel und Karte')}">${tr('Nächste Runde')}</button><button class="btn" id="onlLeave">${tr('Verlassen')}</button></div>`;
     $('onlNext').onclick = () => act(wantNext(m, false));
     $('onlSame').onclick = () => act(wantNext(m, true));
     $('onlLeave').onclick = () => confirmLeave();
@@ -441,19 +442,19 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const b = game.battle, plan = !!b && b.phase === 'plan';
     const on = !!m && !!b && b === battleRef && !!b.hot;
     btn.hidden = !b || (!on && (!plan || !!b.hot));
-    btn.textContent = on ? 'Online verlassen' : 'Online 1v1';
+    btn.textContent = on ? tr('Online verlassen') : tr('Online 1v1');
     btn.classList.toggle('on', on);
     giveBtn.hidden = !on || !canGiveUp(m);
     if (!on) return;
     $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;
     const c = m.cfg, ph = m.phase;
     $('batClear').hidden = ph !== 'paint';
-    setText(go, ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …');
+    setText(go, tr(ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …'));
     go.disabled = !(ph === 'paint' || ph === 'vote' || (ph === 'result' && m.want <= c.r));
-    const head = c && c.cat ? `Online · Runde ${c.r} · ${CAT_NAME[c.cat]} · ${MAP[c.map].n} · ${scoreText()}` : c ? `Online · Runde ${c.r} · ${scoreText()}` : `Online · Raum ${m.code}`;
-    const tail = ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
-      : ph === 'paint' ? `du malst ${m.side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(b.hot.spent[m.side])} / ${budgetOf(c)} Punkte`
-      : ph === 'ready' ? 'fertig, der Gegner malt noch' : ph === 'xfer' ? 'decke auf …' : ph === 'fight' ? 'Kampf läuft' : 'Runde vorbei';
+    const head = c && c.cat ? `Online · ${tr('Runde {r}', { r: c.r })} · ${tr(CAT_NAME[c.cat])} · ${tr(MAP[c.map].n)} · ${scoreText()}` : c ? `Online · ${tr('Runde {r}', { r: c.r })} · ${scoreText()}` : `Online · ${tr('Raum {c}', { c: m.code })}`;
+    const tail = ph === 'paint' ? tr(m.side === 'blau' ? 'du malst links: {a} / {b} Punkte' : 'du malst rechts: {a} / {b} Punkte', { a: fmtPts(b.hot.spent[m.side]), b: budgetOf(c) })
+      : tr(ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
+      : ph === 'ready' ? 'fertig, der Gegner malt noch' : ph === 'xfer' ? 'decke auf …' : ph === 'fight' ? 'Kampf läuft' : 'Runde vorbei');
     setText($('batHint'), `${head} · ${tail}`);
     // eigene Punkte zeigen, die des Gegners erst im Kampf
     if (plan) {

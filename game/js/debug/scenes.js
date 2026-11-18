@@ -216,4 +216,23 @@ export const SCENES = {
     const y = spawn(world, 'raptor', W * .45, H * .62, 'rot'), e = spawn(world, 'rex', W * .55, H * .62, 'rot');
     y.cd = e.cd = 1e9;
   },
+  // Schüsse (Overhaul 18.11.): alle Fernkampfwaffen der Moderne/Armee gegen einen Haufen Krieger, Luftkampf darüber
+  schuesse(world) {
+    world.teamMode = true;
+    placeRect(world, 'soldat', 6, .3, .3, .33, .5, 'blau'); placeRect(world, 'mg', 2, .27, .35, .28, .45, 'blau');
+    placeRect(world, 'sniper', 2, .2, .3, .22, .4, 'blau'); placeRect(world, 'panzerfaust', 2, .3, .55, .32, .62, 'blau');
+    placeRect(world, 'schuetze', 4, .27, .55, .29, .7, 'blau'); placeRect(world, 'grenadier', 3, .33, .6, .35, .7, 'blau');
+    spawn(world, 'moerser', world.W * .2, world.H * .6, 'blau'); spawn(world, 'panzer', world.W * .23, world.H * .5, 'blau');
+    placeRect(world, 'krieger', 40, .44, .3, .52, .7, 'rot'); spawn(world, 'heli', world.W * .47, world.H * .45, 'rot');
+    spawn(world, 'jet', world.W * .4, world.H * .3, 'blau'); spawn(world, 'jet', world.W * .6, world.H * .25, 'rot');
+  },
+  // dasselbe für Fantasy, Tiere und Urzeit: Pfeile, Brandpfeile, Speere, Feuerbälle, Hexenzauber, Spucke, Felsen, Steine
+  schuesse2(world) {
+    world.teamMode = true;
+    placeRect(world, 'schuetze', 5, .3, .3, .32, .5, 'blau'); placeRect(world, 'magier', 2, .27, .35, .28, .45, 'blau');
+    placeRect(world, 'hexe', 2, .3, .55, .32, .62, 'blau'); placeRect(world, 'lama', 2, .27, .6, .29, .7, 'blau');
+    spawn(world, 'zyklop', world.W * .22, world.H * .5, 'blau'); placeRect(world, 'speer', 3, .33, .6, .35, .7, 'blau');
+    placeRect(world, 'ptera', 2, .4, .4, .42, .5, 'blau');
+    placeRect(world, 'krieger', 40, .44, .3, .52, .7, 'rot');
+  },
 };

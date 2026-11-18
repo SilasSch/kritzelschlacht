@@ -27,7 +27,7 @@ export function eventSound(e) {
     case 'crash': return 'crash';
     case 'terrain': return e.kind === 'ash' ? 'sizzle' : null;
     case 'hit': return ARROWISH.has(e.kind) ? 'thunk' : null;          // Pfeil/Pilum steckt im Ziel
-    case 'miss': return ARROWISH.has(e.kind) ? 'thwip' : null;         // ... oder im Boden
+    case 'miss': return ARROWISH.has(e.kind) ? 'thwip' : e.kind === 'bullet' ? 'zing' : null;   // ... oder im Boden; Kugel: Querschläger (CHANCE)
     case 'ignite': return 'ignite';
     case 'burn': return 'crackle';
     case 'extinguish': return 'hiss';
@@ -56,6 +56,14 @@ export function deathVoice(type) {
 // Ton eines sound-Ereignisses im Zusammenhang des vorigen Ereignisses (Zauber, Schuss) schärfen
 const SPELL_VOICE = { 'bolt:shot': 'zap', 'meteor:impact': 'meteor', 'wind:whoosh': 'wind', 'wall:thud': 'wall' };
 const SHOT_VOICE = { 'rocket:whoosh': 'rocket', 'hex:whoosh': 'hex', 'breath:fire': 'breath', 'shell:cannon': 'cannon' };
+// Schüsse-Overhaul (18.11.): eigener Klang je Waffe aus dem Schützen (shot-Ereignis ut) und dem Grundton der Art
+// (combat.SHOT): Sturmgewehr, MG, Scharfschütze, Bordkanonen von Heli und Jet, Brandpfeil, Granate, Stein des
+// Flugsauriers, Felsbrocken des Zyklopen, Feuerball, Lama-Spucke. Das Bug-MG des Panzers (mg) klingt wie das MG.
+const WEAPON_VOICE = {
+  'soldat:shot': 'rifle', 'mg:shot': 'mg', 'sniper:shot': 'sniper', 'heli:shot': 'heliGun', 'jet:shot': 'jetGun',
+  'grenadier:throw': 'grenade', 'ptera:throw': 'drop', 'zyklop:throw': 'heave', 'magier:fire': 'fireball', 'lama:thwip': 'spit',
+};
+const KIND_VOICE = { 'firearrow:twang': 'fireTwang' };
 
 // Ereignis e (+ voriges Ereignis mit Position prev) -> { k, size, x, y } oder null. x/y null: ohne Ort (mittig).
 export function resolveSound(e, prev) {
@@ -65,7 +73,9 @@ export function resolveSound(e, prev) {
   if (e.type === 'sound' && prev) {
     if (k === 'die' && prev.type === 'death') { k = deathVoice(prev.unitType); size = UNITS[prev.unitType] ? UNITS[prev.unitType].r : 9; }
     else if (prev.type === 'spell') k = SPELL_VOICE[prev.k + ':' + k] || k;
-    else if (prev.type === 'shot') k = SHOT_VOICE[prev.kind + ':' + k] || k;
+    else if (prev.type === 'shot') k = (prev.mg && k === 'shot' ? 'mg' : WEAPON_VOICE[prev.ut + ':' + k]) || KIND_VOICE[prev.kind + ':' + k] || SHOT_VOICE[prev.kind + ':' + k] || k;
+    // Kugel im Körper: kurzes Klopfen statt des Hiebs aus dem Nahkampf (Scharfschütze: kräftiger)
+    else if (prev.type === 'hit' && prev.kind === 'bullet' && k === 'hit') k = prev.ut === 'sniper' ? 'bhitBig' : 'bhit';
     else if (prev.type === 'blast') size = prev.R || 0;
   }
   const at = posOf(e) ? e : prev;
@@ -91,10 +101,18 @@ export function spatial(cam, x, y) {
 const GAP = .03;
 const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, clink: .07, die: .06, dieBeast: .08, dieBug: .12,
   shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, notify: .6, ui: .05, rise: .4, ignite: .2,
-  twang: .05, fire: .12, jet: .6, whistle: .3 };
+  twang: .05, fire: .12, jet: .6, whistle: .3,
+  rifle: .045, mg: .045, sniper: .12, heliGun: .06, jetGun: .11, bhit: .05, bhitBig: .1, zing: .25, grenade: .15, drop: .15,
+  heave: .3, fireball: .15, spit: .1, fireTwang: .08, rocket: .12, cannon: .15, thump: .15 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
 const BUSY = { laser: .6, hit: .55, clink: .5, shot: .6, thunk: .55, thwip: .5, die: .7, dieBug: .5, land: .6, crackle: .5, ignite: .5,
-  twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55 };
+  twang: .7, heal: .6, fire: .7, pop: .6, scribble: .55, rifle: .65, mg: .5, heliGun: .6, jetGun: .7, bhit: .5, zing: .6 };
+// Familien (Schüsse-Overhaul): die Dichte zählt über alle Töne einer Familie (viele verschiedene Gewehre zusammen werden
+// leiser, nicht nur viele gleiche), und je Familie klingen höchstens FAMILY_MAX Stimmen gleichzeitig
+const FAMILY = { rifle: 'gun', mg: 'gun', sniper: 'gun', heliGun: 'gun', jetGun: 'gun', shot: 'gun', bhit: 'tick', bhitBig: 'tick', thunk: 'tick', zing: 'tick', hit: 'tick' };
+const FAMILY_MAX = { gun: 7, tick: 4 };
+// Nur jeder so vielte Fall klingt (Zufall, nicht aus world.rng): Querschläger sonst zu häufig
+const CHANCE = { zing: .18 };
 const MAX_VOICES = 24;
 export const DEFAULT_VOLUME = .6;
 // Pentatonik für das Plopp beim Malen von Einheiten: steigt, solange schnell nacheinander gesetzt wird
@@ -102,7 +120,7 @@ const POP_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
 
 export function createAudio() {
   let AC = null, noiseB = null, mix, comp, master, sfxBus, uiBus, wetIn, hasPan = false;
-  const lastT = {}, recent = {};
+  const lastT = {}, recent = {}, famEnds = {};
   let ends = [], popStep = 0, popT = -9, cam = null, rate = 1;
 
   const audio = {
@@ -150,12 +168,20 @@ export function createAudio() {
       if (!R) return;
       const now = AC.currentTime;
       if (lastT[k] && now - lastT[k] < (MIN_GAP[k] || GAP) / rate) return;
-      lastT[k] = now;
+      if (CHANCE[k] && Math.random() >= CHANCE[k]) return;
       ends = ends.filter(t => t > now);
       const prio = k === 'win' || k === 'lose' || k === 'go' || k === 'notify';
       if (!prio && ends.length >= MAX_VOICES) return;
-      // Dichte: der n-te gleiche Ton binnen 0,4 s ist 1/(1 + 0,6·(n−1)) so laut, häufige Töne (BUSY) grundsätzlich leiser
-      const rc = recent[k] || (recent[k] = []);
+      const fam = FAMILY[k];
+      let fe = null;
+      if (fam) {
+        fe = famEnds[fam] = (famEnds[fam] || []).filter(t => t > now);
+        if (fe.length >= FAMILY_MAX[fam]) return;
+      }
+      lastT[k] = now;
+      // Dichte: der n-te gleiche Ton (bzw. Ton derselben Familie) binnen 0,4 s ist 1/(1 + 0,6·(n−1)) so laut,
+      // häufige Töne (BUSY) grundsätzlich leiser
+      const rc = recent[fam || k] || (recent[fam || k] = []);
       while (rc.length && now - rc[0] > .4) rc.shift();
       rc.push(now);
       const dens = (BUSY[k] || 1) / (1 + .6 * (rc.length - 1));
@@ -165,6 +191,7 @@ export function createAudio() {
       const v = voice(ui ? uiBus : sfxBus, sp.pan, sp.gain * dens, now + (ui ? 0 : Math.random() * .012));
       R(v, o || {});
       ends.push(now + v.len + .05);
+      if (fe) fe.push(now + Math.min(v.len, .25));
     },
   };
 
@@ -345,22 +372,95 @@ export function createAudio() {
     thunk(v) { noise(v, 'bandpass', v.f(1900, .2), 1200, .025, .05, { q: 2 }); osc(v, 'sine', v.f(260, .15), 140, .05, .045); },
     thwip(v) { noise(v, 'bandpass', v.f(1500, .2), 800, .05, .09, { q: 1.2 }); },
     throw(v) { noise(v, 'bandpass', v.f(450, .15), 1500, .2, .085, { a: .06, q: 1.4 }); },
-    thump(v) { osc(v, 'sine', v.f(90, .1), 40, .25, .16); noise(v, 'lowpass', 300, 100, .2, .1); noise(v, 'highpass', 2000, 1500, .03, .04); v.wet(.25); },
+    thump(v) { // Mörser: hohles Rohr-Plopp und tiefer Stoß
+      osc(v, 'sine', v.f(90, .1), 40, .25, .15); noise(v, 'lowpass', 300, 100, .2, .09); noise(v, 'highpass', 2000, 1500, .03, .04);
+      noise(v, 'bandpass', v.f(420, .08), 300, .16, .05, { q: 6 });
+      v.wet(.3);
+    },
+    // Schüsse-Overhaul (18.11.): je Waffe ein eigener, kurzer Klang; Knall oben, Körper unten, Nachhall nur bei großen
+    rifle(v) { // Sturmgewehr: trockener Knall, Körper, kurzer Nachhall übers Feld
+      noise(v, 'highpass', v.f(2200, .15), 1300, .028, .05);
+      noise(v, 'bandpass', v.f(1100, .15), 600, .06, .05, { q: 1.1 });
+      osc(v, 'sine', v.f(170, .12), 60, .06, .06);
+      noise(v, 'lowpass', 900, 250, .2, .012, { dt: .03, a: .02 });
+      v.wet(.15);
+    },
+    mg(v) { // MG: enger, tiefer, leiser Tackerschlag (viele hintereinander)
+      noise(v, 'bandpass', v.f(1500, .12), 900, .03, .042, { q: 1.3 });
+      osc(v, 'sine', v.f(135, .1), 65, .045, .05);
+      v.wet(.08);
+    },
+    sniper(v) { // Scharfschütze: scharfer Knall, Überschall-Peitsche, langer Nachhall
+      noise(v, 'highpass', v.f(3200, .1), 2200, .02, .08);
+      noise(v, 'bandpass', v.f(1900, .1), 650, .11, .065, { q: 1 });
+      osc(v, 'sine', v.f(125, .1), 38, .14, .1, { a: .003 });
+      noise(v, 'lowpass', 1100, 180, .6, .028, { dt: .07, a: .03 });
+      v.wet(.45);
+    },
+    heliGun(v) { // Bordkanone des Hubschraubers: dumpfes Wummern
+      osc(v, 'sine', v.f(105, .1), 48, .08, .075);
+      noise(v, 'bandpass', v.f(750, .15), 450, .05, .05, { q: 1.2 });
+      v.wet(.12);
+    },
+    jetGun(v) { // Bordkanone des Jets: kurzes Brrrt aus fünf schnellen Schlägen
+      for (let i = 0; i < 5; i++) {
+        noise(v, 'bandpass', v.f(1200, .1), 800, .02, .03, { dt: v.d(i * .021), q: 1.4 });
+        osc(v, 'sine', v.f(95, .08), 60, .025, .03, { dt: v.d(i * .021) });
+      }
+      v.wet(.15);
+    },
+    bhit(v) { // Kugel im Körper: leises Klopfen
+      noise(v, 'bandpass', v.f(1700, .2), 1100, .02, .03, { q: 2 });
+      osc(v, 'sine', v.f(280, .15), 140, .03, .024);
+    },
+    bhitBig(v) { // Scharfschütze trifft: kräftiger Klatsch
+      noise(v, 'bandpass', v.f(1200, .15), 600, .06, .07, { q: 1.2 });
+      osc(v, 'sine', v.f(180, .1), 55, .11, .08);
+    },
+    zing(v) { // Querschläger: kurzes, leises Sirren
+      osc(v, 'sine', v.f(2700, .15), 1300, .15, .012, { a: .004 });
+      noise(v, 'highpass', 3500, 3000, .015, .015);
+    },
+    fireTwang(v) { RECIPES.twang(v); noise(v, 'lowpass', 300, 1500, .2, .045, { a: .04, dt: .01 }); },
+    grenade(v) { // Granate: Wurf und zischende Lunte
+      RECIPES.throw(v);
+      noise(v, 'highpass', 4200, 5000, .35, .014, { a: .03, dt: .02 });
+    },
+    drop(v) { noise(v, 'bandpass', v.f(500, .15), 1100, .18, .05, { a: .05, q: 1.4 }); },   // Flugsaurier lässt den Stein los
+    heave(v) { // Zyklop wirft: Ächzen und schwerer Luftzug
+      osc(v, 'sawtooth', v.f(95, .1), 70, .22, .03, { lp: 500, a: .03 });
+      noise(v, 'bandpass', v.f(260, .1), 800, .38, .09, { a: .06, q: 1.2 });
+    },
+    fireball(v) { // Feuerball: Wuff und Knistern
+      noise(v, 'lowpass', 300, 1400, .28, .06, { a: .025 });
+      osc(v, 'sine', v.f(120, .1), 210, .22, .04, { a: .02 });
+      crackle(v, 4, .25, .03);
+      v.wet(.25);
+    },
+    spit(v) { // Lama: "Ptui" mit kleinem Blubb
+      noise(v, 'bandpass', v.f(2400, .15), 1100, .05, .055, { q: 2 });
+      osc(v, 'sine', v.f(850, .12), 380, .045, .022);
+      osc(v, 'sine', v.f(480, .15), 950, .035, .018, { dt: .035 });
+    },
     shot(v) { // Gewehr: Knall, Körper, kurzer Nachklang
       noise(v, 'highpass', v.f(1400, .2), 900, .035, .06);
       noise(v, 'bandpass', v.f(2600, .2), 1400, .07, .06, { q: 1 });
       osc(v, 'sine', v.f(190, .15), 60, .05, .07);
       v.wet(.15);
     },
-    cannon(v) {
+    cannon(v) { // Panzerkanone: scharfer Knall vorn, dann tiefer Donner
+      noise(v, 'highpass', 3000, 2000, .02, .06);
       noise(v, 'highpass', 2000, 1000, .05, .07);
       osc(v, 'sine', v.f(70, .1), 28, .55, .3, { a: .004 });
       noise(v, 'lowpass', 1100, 160, .65, .26, { a: .003 });
       v.wet(.4);
     },
-    rocket(v) {
-      noise(v, 'bandpass', v.f(2600, .15), 1100, .5, .07, { a: .02, q: 1 });
-      noise(v, 'lowpass', 400, 200, .45, .08);
+    rocket(v) { // Rakete: Zündknall, dann Fauchen, das sich entfernt
+      noise(v, 'highpass', 2500, 1800, .025, .05);
+      osc(v, 'sine', v.f(140, .1), 70, .06, .05);
+      noise(v, 'bandpass', v.f(1400, .15), 2600, .45, .06, { a: .03, q: 1.2, dt: .015 });
+      noise(v, 'lowpass', 400, 200, .45, .07);
+      v.wet(.2);
     },
     hex(v) { osc(v, 'sine', v.f(520, .1), 880, .3, .04, { vib: [11, 25] }); noise(v, 'bandpass', 900, 1600, .25, .025); v.wet(.4); },
 

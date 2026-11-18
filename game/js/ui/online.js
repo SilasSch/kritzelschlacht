@@ -4,7 +4,7 @@
 // die Armee des Gegners kommt erst zum Kampf in die Welt.
 import {
   createMatch, view, hostStart, markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms,
-  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote, budgetOf,
+  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote, budgetOf, giveUp, canGiveUp,
 } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { getRoom } from '../net.js';
@@ -77,6 +77,13 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   btn.title = 'Zwei Spieler auf zwei Geräten: jede Runde eine zufällige Kategorie, gleiches Budget, verdeckt malen';
   $('batGo').before(btn);
   btn.onclick = () => { if (m) confirmLeave(); else { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openLobby(); } };
+
+  // Aufgeben: Runde an den Gegner (beim Malen, Warten oder im Kampf)
+  const giveBtn = document.createElement('button');
+  giveBtn.className = 'btn'; giveBtn.id = 'onlGive'; giveBtn.textContent = '🏳️ Aufgeben'; giveBtn.hidden = true;
+  giveBtn.title = 'Diese Runde aufgeben: der Punkt geht an deinen Gegner';
+  $('batGo').before(giveBtn);
+  giveBtn.onclick = () => { if (canGiveUp(m)) giveCard(); };
 
   // „Los!“: im Online-Spiel Fertig / Nächste Runde (vor dem Hotseat-Haken, der sonst Deckkarten zeigt)
   const go = $('batGo'), goPrev = go.onclick;
@@ -252,6 +259,34 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     $('onlStay').onclick = hideCard;
     $('onlCancel').onclick = () => leave('Online-Spiel beendet.');
   }
+  function giveCard() {
+    showCard('giveq', `<h2 id="onlTitle">Runde aufgeben?</h2><p>Die Runde und der Punkt gehen an deinen Gegner. Danach geht es mit Revanche oder einer neuen Runde weiter.</p>
+      <div class="btnrow"><button class="go" id="onlGiveYes">🏳️ Aufgeben</button><button class="btn" id="onlStay">Weiterspielen</button></div>`);
+    $('onlStay').onclick = hideCard;
+    $('onlGiveYes').onclick = () => { if (canGiveUp(m)) act(giveUp(m)); else hideCard(); };
+  }
+  // Kampf anhalten (Runde durch Aufgeben vorbei); das Feld bleibt stehen, malen geht nicht (step 'online')
+  function stopFight() {
+    const b = game.battle; if (!b || b !== battleRef) return;
+    game.endReplay(true);
+    if (b.hot) b.hot.step = 'online';
+    if (b.phase !== 'plan') { b.phase = 'plan'; b.result = null; b.endT = -1; }
+    $('ovBat').hidden = true; document.body.classList.remove('bat-res');
+    ui.updateBattle(); ui.updateControls();
+  }
+  // Ergebnis nach Aufgeben (eigenes oder des Gegners), mit Revanche / Nächste Runde
+  function gaveCard() {
+    if (!m || !m.cfg || m.phase !== 'result') return;
+    const mine = !!m.gave, other = m.side === 'blau' ? 'rot' : 'blau', waiting = m.want > m.cfg.r;
+    showCard('gave', `<h2 id="onlTitle">${mine ? '🏳️ Du gibst auf' : '🏆 Dein Gegner gibt auf!'}</h2>
+      <p>Runde ${m.cfg.r} geht an <b>${SIDE_N[mine ? other : m.side]}</b>. Stand: ${scoreText()}.</p>
+      ${waiting ? `<p class="muted">${m.same ? 'Du willst Revanche, warte auf deinen Gegner …' : 'Warte auf deinen Gegner …'}</p>` : ''}
+      <div class="btnrow"><button class="go" id="onlGSame"${waiting && m.same ? ' disabled' : ''} title="Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu">Revanche</button>
+        <button class="go" id="onlGNext"${waiting && !m.same ? ' disabled' : ''}>Nächste Runde</button><button class="btn" id="onlGLeave">Verlassen</button></div>`);
+    $('onlGSame').onclick = () => act(wantNext(m, true));
+    $('onlGNext').onclick = () => act(wantNext(m, false));
+    $('onlGLeave').onclick = () => confirmLeave();
+  }
   function confirmLeave() {
     showCard('leave', `<h2 id="onlTitle">Online-Spiel verlassen?</h2><p>Stand: ${scoreText()}.</p>
       <div class="btnrow"><button class="go" id="onlCancel">Verlassen</button><button class="btn" id="onlStay">Weiterspielen</button></div>`);
@@ -327,7 +362,9 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       else if (e === 'round') beginRound();
       else if (e === 'fight') beginFight();
       else if (e === 'error') ui.toast(`Die Armee des Gegners war ungültig (${m.error}). Sie kämpft nicht mit.`);
-      else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') decorate();
+      else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') { decorate(); if (shown === 'gave') gaveCard(); }
+      else if (e === 'gave') { stopFight(); gaveCard(); }
+      else if (e === 'peergave') { stopFight(); gaveCard(); chime(true); }
       else if (e === 'peerready') flash('✅ Dein Gegner ist fertig mit Malen!');
       else if (e === 'peervoted' && m.phase === 'vote') flash(m.vote ? '🗳️ Dein Gegner hat auch abgestimmt' : '🗳️ Dein Gegner hat abgestimmt, jetzt du!');
     }
@@ -406,6 +443,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     btn.hidden = !b || (!on && (!plan || !!b.hot));
     btn.textContent = on ? 'Online verlassen' : 'Online 1v1';
     btn.classList.toggle('on', on);
+    giveBtn.hidden = !on || !canGiveUp(m);
     if (!on) return;
     $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;
     const c = m.cfg, ph = m.phase;

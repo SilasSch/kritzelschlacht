@@ -1,31 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { worldSizeFor, createCamera, worldToScreen, WORLD_ASPECT_MIN, WORLD_ASPECT_MAX, WORLD_MAX_W, WORLD_MAX_H } from '../game/js/camera.js';
+import { WORLD_W, WORLD_H, createCamera, resizeCamera, worldToScreen, setPadding } from '../game/js/camera.js';
 
-const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
+const near = (a, b, e = 1e-3) => Math.abs(a - b) < e;
 
-test('worldSizeFor: bis 1920×1080 wie bisher (Viewport / Grundzoom .55–1.15)', () => {
-  for (const [vw, vh] of [[1280, 800], [1366, 768], [1920, 1080], [1440, 900], [1024, 768]]) {
-    const bz = Math.min(1.15, Math.max(.55, Math.min(vw / 1400, vh / 820)));
-    const s = worldSizeFor(vw, vh);
-    assert.ok(near(s.bz, bz), `${vw}x${vh}`);
-    assert.ok(near(s.W, vw / bz) && near(s.H, vh / bz), `${vw}x${vh}`);
+// Das Spielfeld hängt nicht vom Fenster ab: jedes Fenster zeigt die ganze Welt, mittig, nur anders skaliert
+test('feste Welt passt in jedes Fenster, mittig mit Rand', () => {
+  for (const [vw, vh] of [[1280, 800], [1920, 1080], [2560, 1080], [5120, 1440], [900, 1600], [640, 420], [3840, 2160]]) {
+    const c = createCamera(vw, vh, WORLD_W, WORLD_H);
+    const tl = worldToScreen(c, 0, 0), br = worldToScreen(c, WORLD_W, WORLD_H);
+    assert.ok(tl.x >= -1e-6 && tl.y >= -1e-6 && br.x <= vw + 1e-6 && br.y <= vh + 1e-6, `${vw}x${vh}`);
+    assert.ok(near(tl.x, vw - br.x) && near(tl.y, vh - br.y), `${vw}x${vh} nicht mittig`);
+    assert.ok(near(br.x - tl.x, vw) || near(br.y - tl.y, vh), `${vw}x${vh} füllt keine Seite`);
   }
 });
 
-test('worldSizeFor: Seitenverhältnis und Größe begrenzt, Welt passt immer in die Ansicht', () => {
-  for (const [vw, vh] of [[2560, 1080], [3440, 1440], [3840, 1080], [5120, 1440], [900, 1600], [600, 1400], [3840, 2160], [7680, 2160], [640, 420], [400, 300]]) {
-    const s = worldSizeFor(vw, vh), a = s.W / s.H;
-    assert.ok(a >= WORLD_ASPECT_MIN - 1e-9 && a <= WORLD_ASPECT_MAX + 1e-9, `${vw}x${vh}: Verhältnis ${a}`);
-    assert.ok(s.W <= WORLD_MAX_W + 1e-6 && s.H <= WORLD_MAX_H + 1e-6, `${vw}x${vh}: ${s.W}x${s.H}`);
-    assert.ok(s.W * s.bz <= vw + 1e-6 && s.H * s.bz <= vh + 1e-6, `${vw}x${vh}: passt nicht`);
-  }
+test('Resize ändert nur die Kamera: dieselbe Weltstelle bleibt sichtbar', () => {
+  const c = createCamera(1920, 1080, WORLD_W, WORLD_H);
+  resizeCamera(c, 3840, 1080, WORLD_W, WORLD_H);
+  assert.equal(c.worldW, WORLD_W); assert.equal(c.worldH, WORLD_H);
+  const tl = worldToScreen(c, 0, 0), br = worldToScreen(c, WORLD_W, WORLD_H);
+  assert.ok(near(tl.y, 0) && near(br.y, 1080) && near(tl.x, 3840 - br.x));
 });
 
-test('worldSizeFor: 32:9 zentriert die Welt mit Rand links und rechts', () => {
-  const s = worldSizeFor(3840, 1080), c = createCamera(3840, 1080, s.W, s.H);
-  assert.ok(near(c.zoom, s.bz));
-  const tl = worldToScreen(c, 0, 0), br = worldToScreen(c, s.W, s.H);
-  assert.ok(tl.x > 500 && near(tl.x, 3840 - br.x, 1e-3));
-  assert.ok(near(tl.y, 0, 1e-3) && near(br.y, 1080, 1e-3));
+test('setPadding: Welt mit freiem Platz rückt zwischen die HUD-Leisten', () => {
+  const c = createCamera(760, 640, WORLD_W, WORLD_H);   // Welt 760×427,5, 212,5 px frei
+  setPadding(c, 60, 140);
+  let tl = worldToScreen(c, 0, 0), br = worldToScreen(c, WORLD_W, WORLD_H);
+  assert.ok(near(tl.y, 60 + (212.5 - 200) / 2, .01) && near(tl.x, 0));
+  setPadding(c, 100, 300);                              // zu wenig Platz: Verhältnis 1 : 3
+  tl = worldToScreen(c, 0, 0);
+  assert.ok(near(tl.y, 212.5 / 4, .01));
+  setPadding(c, 0, 0);
+  tl = worldToScreen(c, 0, 0); br = worldToScreen(c, WORLD_W, WORLD_H);
+  assert.ok(near(tl.y, 640 - br.y));
 });

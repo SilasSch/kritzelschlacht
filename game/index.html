@@ -64,7 +64,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .go:active{transform:translateY(2px);box-shadow:0 1px 0 #c4541f}
 .go:disabled{opacity:.45;cursor:default}
 
-.bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto) minmax(0,1fr);align-items:end;gap:10px}
+/* Feste Spalten: die Malleiste bleibt mittig, auch wenn der Teamkampf-Schalter (Missionen) fehlt */
+.bottom>.counts{grid-column:1;justify-self:start}.bottom>.palette{grid-column:2}.bottom>.teams{grid-column:3;justify-self:end}
 .counts{border-radius:14px;padding:8px 12px;min-width:150px;max-height:40vh;overflow:auto;font-size:13.5px}
 .counts .row{display:flex;align-items:center;gap:8px;padding:2px 0;font-variant-numeric:tabular-nums}
 .counts img{width:22px;height:22px}
@@ -168,7 +170,9 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 @media (min-width:3200px) and (min-height:1800px){.hud,.ov .card{zoom:1.5}}
 
 @media (max-width:820px){
-  .palette{order:3;width:100%}
+  .bottom{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .bottom>.palette{grid-column:1/-1;grid-row:2;width:auto}
+  .bottom>.teams{grid-column:2}
   .counts{min-width:0;font-size:12.5px;max-height:22vh}
   .misbar .mh{display:none}
   .toast{bottom:190px}
@@ -333,7 +337,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
       <button class="go" id="batGo">Los!</button>
     </div>
 
-    <div style="flex:1"></div>
+    <div id="hudGap" style="flex:1"></div>
 
     <div class="bottom">
       <div class="counts shadow p" id="counts" aria-live="polite"></div>

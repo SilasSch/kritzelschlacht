@@ -2,9 +2,9 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
-import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
+import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain } from './world.js';
 import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
-import { createCamera, resizeCamera, worldSizeFor } from './camera.js';
+import { createCamera, resizeCamera, setPadding, WORLD_W, WORLD_H } from './camera.js';
 import { bindInput } from './input.js';
 import { createStroke, stamp, paintTerrain, undo as undoStroke, strokeEmpty, zoneX, PLAYER, BY_HALF } from './paint.js';
 import { createStats } from './stats.js';
@@ -30,10 +30,9 @@ function persist() { try { localStorage.setItem(SAVE_KEY, serializeSave(save)); 
 /* ---------- Welt, Kamera, Renderer ---------- */
 const host = document.getElementById('app');
 const viewport = () => ({ vw: Math.max(280, host.clientWidth || innerWidth), vh: Math.max(280, host.clientHeight || innerHeight) });
-// Weltgröße und Grundzoom aus dem Viewport (camera.worldSizeFor: begrenztes Seitenverhältnis und Größe, Rest ist Rand)
+// Feste Weltgröße (camera.WORLD_W × WORLD_H), das Fenster bestimmt nur den Maßstab der Kamera
 let { vw, vh } = viewport();
-let ws = worldSizeFor(vw, vh);
-const world = createWorld(ws.W, ws.H, (Math.random() * 2 ** 31) | 0);
+const world = createWorld(WORLD_W, WORLD_H, (Math.random() * 2 ** 31) | 0);
 const cam = createCamera(vw, vh, world.W, world.H);
 const renderer = createRenderer(host);
 renderer.resize(vw, vh);
@@ -662,16 +661,21 @@ function frame(now) {
 function onResize() {
   const v = viewport();
   if (v.vw === vw && v.vh === vh) return;
-  vw = v.vw; vh = v.vh; ws = worldSizeFor(vw, vh);
-  resizeWorld(world, ws.W, ws.H);
+  vw = v.vw; vh = v.vh;
+  // Nur Kamera und Leinwand: die Welt bleibt gleich groß, Einheiten, Gelände und Rückgängig bleiben unberührt
   resizeCamera(cam, vw, vh, world.W, world.H);
   renderer.resize(vw, vh);
-  // Rückgängig kennt Zellindizes des alten Gitters: Verlauf leeren und einen laufenden Strich sperren
-  // (malt nicht weiter und landet beim Loslassen nicht im Verlauf)
-  undoStack.length = 0;
-  if (stroke) stroke.blocked = true;
-  markAll();
+  updatePad();
 }
+// Freier Platz zwischen oberer und unterer HUD-Leiste (#hudGap): ist neben dem Feld Platz (anderes Seitenverhältnis),
+// rückt das Feld dorthin, statt unter den Leisten zu liegen
+const hudGap = document.getElementById('hudGap');
+function updatePad() {
+  if (!hudGap) return;
+  const g = hudGap.getBoundingClientRect(), h = host.getBoundingClientRect();
+  setPadding(cam, g.top - h.top, h.bottom - g.bottom);
+}
+if (hudGap && typeof ResizeObserver === 'function') new ResizeObserver(updatePad).observe(hudGap);
 let resizeQueued = false;
 const queueResize = () => { if (resizeQueued) return; resizeQueued = true; requestAnimationFrame(() => { resizeQueued = false; onResize(); }); };
 window.addEventListener('resize', queueResize);

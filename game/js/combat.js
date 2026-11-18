@@ -606,10 +606,12 @@ const MZ = {};
 function breath(world, u, nx, ny, t) {
   const T = u.T, f = factionOf(world, u);
   u.fireT = 0;
-  query(world, u.x, u.y, T.range + 30, v => {
+  // Reichweite wie in think (reach = range + r + r): sonst greift der Drache Ziele auf Abstand an (Hexe: 145 px),
+  // die der Kegel nie erreicht (nur bis range + v.r = 119 px), und Fernkämpfer nehmen keinen Schaden
+  query(world, u.x, u.y, T.range + T.r + MAX_R, v => {
     if (factionOf(world, v) === f) return;
     const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy);
-    if (d > T.range + v.T.r) return;
+    if (d > T.range + T.r + v.T.r) return;
     if ((dx * nx + dy * ny) / (d || 1) < .82) return;
     hurt(world, v, T.dmg, 'fire', u);
     if (v.alive) ignite(world, v, 0, u);

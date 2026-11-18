@@ -170,6 +170,21 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 | 43 | **Charakterkarten:** Die Karte beim Drüberfahren verschwindet zuverlässig, sobald die Maus die Einheit verlässt. |
 | 44 | **GitHub:** Das Projekt liegt im privaten Repo `SilasSch/kritzelschlacht`. |
 
+## Nachtrag 6 (2026-11-18, vom Nutzer gewünscht): Battle-Modus
+
+**Absicht:** Armeen frei ausprobieren, ohne Regeln, mit Statistiken danach. Zwei Seiten reichen.
+
+| # | Entscheidung |
+|---|---|
+| 45 | **Battle-Modus „Schlacht“**:<ul><li>Ein neuer Reiter neben Sandkasten und Missionen.</li><li>Das Feld ist in zwei Hälften geteilt, Blau links und Rot rechts. Man malt frei auf beiden Seiten, ohne Budget; die Seite ergibt sich aus der Hälfte. Gelände ist frei malbar, Rückgängig und Pause funktionieren wie gewohnt.</li><li>Oben steht laufend der Punktwert beider Armeen, nur zur Info.</li><li>Erst „Los!“ startet den Kampf.</li><li>„Nochmal“ stellt dieselben Armeen samt Gelände wieder auf.</li><li>„10× auswerten“ lässt dieselbe Aufstellung 10-mal im Schnelldurchlauf mit verschiedenen Zufallswerten kämpfen und zeigt, wie oft jede Seite gewinnt.</li></ul> |
+| 46 | **Auswertung nach der Schlacht**:<ul><li>Gewinner, Dauer, Überlebende je Seite.</li><li>Eine Tabelle je Einheitentyp und Seite: eingesetzt, überlebt, ausgeteilter Schaden, Kills und Schaden je investiertem Punkt.</li><li>Ein kleiner Verlaufsgraph der Armeestärke (Punktwert der Lebenden) beider Seiten über die Zeit.</li><li>Der Held der Schlacht: die Einheit mit den meisten Kills.</li><li>Beschworene Einheiten (Ghule) zählen für ihre Seite, aber nicht als „eingesetzt“. Frösche zählen als ihr ursprünglicher Typ.</li><li>Der Sieg geht an die Seite, die übrig bleibt. Nach 180 s entscheidet die verbleibende Armeestärke.</li></ul> |
+
+**Ansätze:**
+- (a) **Gewählt:** ein eigener Modus, der die Planungsphase der Missionen für beide Seiten öffnet (Schnappschuss, Neustart, Ergebnisbildschirm). Damit gibt es eine saubere Ausgangslage für „Nochmal“ und „10× auswerten“.
+- (b) **Verworfen:** im Sandkasten nur einen Startknopf ergänzen. Dort kämpft alles sofort, und es gäbe keinen festen Ausgangsstand für Wiederholungen.
+
+**Dem Bauenden überlassen:** das genaue Layout der Auswertung und des Graphen, im Stil der bestehenden Oberfläche.
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.
@@ -185,7 +200,6 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 - **Bomben ausweichen:** Einheiten weichen geworfenen Bomben mit einer gewissen Wahrscheinlichkeit aus.
 - **Schöneres Wasser.**
 - **Weitere Verbesserungen** an Verhalten, Grafik und Physik: Vorschläge von Claude, Auswahl durch den Nutzer offen.
-- **Battle-Modus:** Man baut zwei Seiten auf, beim Start kämpfen sie gegeneinander, danach gibt es Statistiken. Wird nach Nachtrag 3 im Gespräch ausgearbeitet.
 
 ## Zurückgestellt
 

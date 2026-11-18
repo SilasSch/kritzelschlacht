@@ -6,14 +6,25 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL, COUNTERS as ALL_COUNTERS } from './data.js';
+import { UNITS, PLURAL } from './data.js';
 // Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
 // geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
 export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
   'geist', 'drache', 'vampir', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli', 'troll', 'zyklop', 'hexe',
   'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
 const inPool = t => DAILY_POOL.includes(t);
-const COUNTERS = ALL_COUNTERS.filter(c => inPool(c[0]) && inPool(c[1]));
+// Konter und Kosten der Auswahl, eingefroren am 18.11.: Balance-Änderungen (data.js) verändern die Tage nicht.
+// Die Kämpfe selbst laufen mit den aktuellen Werten (Bestenliste: SIM_VERSION in dailyboard.js).
+const DAILY_COUNTERS_TXT = `ritter>krieger ritter>schuetze ritter>reiter biene>ritter biene>schuetze krieger>biene wolf>schuetze wolf>grenadier
+reiter>schuetze reiter>grenadier magier>krieger grenadier>krieger panzerfaust>panzer panzerfaust>heli soldat>heli
+panzer>krieger panzer>soldat mg>biene mg>krieger sniper>ritter roemer>schuetze roemer>krieger grenadier>roemer
+reiter>roemer magier>roemer moerser>roemer mg>adler adler>sniper vampir>zyklop magier>vampir troll>bueffel
+krieger>troll zyklop>grenadier reiter>zyklop hexe>baer schuetze>hexe phoenix>vampir soldat>phoenix einhorn>schuetze
+ritter>einhorn elefant>grenadier panzerfaust>elefant biene>elefant krokodil>bueffel schuetze>krokodil
+gorilla>grenadier ritter>gorilla bueffel>grenadier ritter>bueffel magier>ritter magier>geist`;
+const COUNTERS = DAILY_COUNTERS_TXT.split(/\s+/).map(p => p.split('>')).filter(c => UNITS[c[0]] && UNITS[c[1]]);
+export const DAILY_COST = {krieger: 2, schuetze: 2.5, ritter: 4.5, grenadier: 4, reiter: 3, roemer: 3, sani: 3.5, wolf: 1.5, baer: 10, biene: 0.55, magier: 5, geist: 3, drache: 40, vampir: 8, soldat: 3, mg: 3.5, sniper: 7, panzerfaust: 6, moerser: 8.5, panzer: 35, heli: 18, troll: 7.5, zyklop: 12, hexe: 5, phoenix: 9.25, einhorn: 4.5, elefant: 24, krokodil: 4.75, gorilla: 6, adler: 4, bueffel: 4};
+const costOf = t => DAILY_COST[t] ?? UNITS[t].cost;
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
@@ -73,8 +84,8 @@ export function dailyLevel(dateStr) {
   // Boss (etwa jeder vierte Tag), nur wenn sein Konter mit ins Spiel kommt
   let boss = null;
   if (rng() < .28 && total >= 90) {
-    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && UNITS[b].cost <= total * .4);
-    if (cand.length) { boss = pick(cand); rest -= UNITS[boss].cost; }
+    const cand = ['panzer', 'heli', 'elefant'].filter(b => countersOf(b).length && costOf(b) <= total * .4);
+    if (cand.length) { boss = pick(cand); rest -= costOf(boss); }
   }
   const sideTypes = shuffle(side).slice(0, nGroups - 1);
   const mainShare = sideTypes.length ? between(.55, .7) : 1;
@@ -86,8 +97,8 @@ export function dailyLevel(dateStr) {
   let enemyPts = 0;
   const xs = [[.6, .68], [.7, .78], [.8, .88]];
   groups.forEach(([t, pts], i) => {
-    const n = Math.max(1, Math.round(pts / UNITS[t].cost));
-    enemyPts += n * UNITS[t].cost;
+    const n = Math.max(1, Math.round(pts / costOf(t)));
+    enemyPts += n * costOf(t);
     // Fernkämpfer eher hinten, Nahkämpfer vorn
     const slot = xs[Math.min(xs.length - 1, i)];
     const y0 = r2(between(.14, .3)), y1 = r2(between(.7, .86));
@@ -95,7 +106,7 @@ export function dailyLevel(dateStr) {
     const x0 = r2(slot[0] + between(0, slot[1] - slot[0] - w)), x1 = r2(x0 + w);
     place.push(['rect', t, n, x0, y0, x1, y1]);
   });
-  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += UNITS[boss].cost; }
+  if (boss) { place.push(['unit', boss, r2(between(.84, .92)), r2(between(.3, .7))]); enemyPts += costOf(boss); }
 
   // Gelände in der gegnerischen Hälfte (vor den Gegnern), an etwa jedem zweiten Tag
   let terrain = null;
@@ -123,21 +134,21 @@ export function dailyLevel(dateStr) {
   const shares = new Map();
   const assign = (c, pts) => shares.set(c, (shares.get(c) || 0) + pts);
   for (const p of place) {
-    if (p[0] === 'rect') assign(beat(p[1]), p[2] * UNITS[p[1]].cost);
-    else if (p[0] === 'unit') assign(bossC, UNITS[p[1]].cost);
+    if (p[0] === 'rect') assign(beat(p[1]), p[2] * costOf(p[1]));
+    else if (p[0] === 'unit') assign(bossC, costOf(p[1]));
   }
   const smart = [];
   let cost = 0, melee = 0;
   for (const [c, pts] of shares) {
-    const n = Math.max(1, Math.floor(pts / enemyPts * par / UNITS[c].cost));
+    const n = Math.max(1, Math.floor(pts / enemyPts * par / costOf(c)));
     const area = isRanged(c) ? B : melee++ ? Md : F;
-    smart.push([c, n, ...area]); cost += n * UNITS[c].cost;
+    smart.push([c, n, ...area]); cost += n * costOf(c);
   }
   // Rundung kann über par führen: vom teuersten Posten abziehen
   while (cost > par + 1e-6) {
-    const e = smart.reduce((a, b) => (UNITS[b[0]].cost * b[1] > UNITS[a[0]].cost * a[1] ? b : a));
+    const e = smart.reduce((a, b) => (costOf(b[0]) * b[1] > costOf(a[0]) * a[1] ? b : a));
     if (e[1] <= 1) break;
-    e[1]--; cost -= UNITS[e[0]].cost;
+    e[1]--; cost -= costOf(e[0]);
   }
 
   // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen

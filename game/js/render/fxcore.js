@@ -963,6 +963,11 @@ export function createFxCore(hooks = {}, opt = {}) {
         add('ring', e.x, e.y, .4, 14, WATER);
         break;
       }
+      // Lama-Spucke trifft: kleine weiße Spritzer
+      case 'spit':
+        if (!take('misc')) break;
+        for (let i = 0; i < 4; i++) { const p = add('dot', e.x + rnd(-3, 3), e.y + rnd(-3, 3), rnd(.25, .4), rnd(1.3, 2), 0xe8f2f7); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(10, 50); p.ay = 200; }
+        break;
       // Waldbrand (wildfire.js): je brennender Zelle ein paar Flammen, gegen Ende Rauch; beim Ausbrennen ein Rußfleck
       case 'blaze': {
         if (!take('misc')) break;

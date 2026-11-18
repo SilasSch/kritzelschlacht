@@ -34,7 +34,7 @@ test('Daten: fünf neue Tiere, Tiere hat 8 malbare Einheiten, Texte nur in data.
     assert.ok(unitCard(t).abil.length > 0);
   }
   const tiere = Object.keys(UNITS).filter(k => UNITS[k].cat === 'tiere' && UNITS[k].paint !== false);
-  assert.deepEqual(tiere, ['wolf', 'baer', 'biene', ...NEW]);
+  assert.deepEqual(tiere, ['wolf', 'baer', 'biene', 'elefant', 'krokodil', 'gorilla', 'adler', 'lama', 'bueffel']);   // Lama: 18.11.
   assert.ok(cardTypes().find(g => g.cat === 'tiere').types.includes('elefant'));
   // Abklingzeiten aus dem Plan (Büffel: Herdenzeit HERD.CD in u.herdCd)
   assert.equal(ABILITY.elefant.cd, 20); assert.equal(ABILITY.krokodil.cd, 8); assert.equal(ABILITY.gorilla.cd, 12); assert.equal(ABILITY.adler.cd, 10);

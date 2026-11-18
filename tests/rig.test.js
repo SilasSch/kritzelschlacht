@@ -134,7 +134,7 @@ test('Rig-Aufbau: Teile pro Typ (ohne Waffe/Kopfbedeckung bleiben sie leer)', as
     assert.equal(L.shadow.variants, 5, `${t}: Teamring je Team`);
     // Ghul: Lumpen in Teamfarbe; Task 6: Kreaturen mit Akzent in Teamfarbe (rig.T6_ACCENT); Task 5: Krokodil, Gorilla,
     // Adler, Büffel mit Halstuch in Teamfarbe (der Elefant trägt seine Decke als eigenes Boss-Teil, sein Körper bleibt eine Variante)
-    const accent = ['krokodil', 'gorilla', 'adler', 'bueffel'].includes(t);
+    const accent = ['krokodil', 'gorilla', 'adler', 'bueffel', 'lama'].includes(t);
     assert.equal(L.body.variants, TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined || accent ? 5 : 1, `${t}: Teamfarbe`);
     assert.equal(!!L.pupilL, !!L.pupilR, t);
   }

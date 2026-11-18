@@ -62,6 +62,7 @@ export const UNITS = {
   gorilla:{n:'Gorilla',cat:'tiere',col:'#4a4552',r:12,hp:200,dmg:22,range:3,speed:52,cd:.95,cost:6,mass:3,tier:1,d:'Starker Nahkämpfer. Wirft Gegner in die Menge und schlägt sich auf die Brust.'},
   // Task 7: Kosten 3 → 4 (Spam gewann M7 öfter als der Geist; Nahkämpfer erreichen ihn oben nicht)
   adler:{n:'Adler',cat:'tiere',col:'#8a5a32',r:8,hp:55,dmg:9,range:3,speed:105,cd:.8,cost:4,fly:1,flyZ:30,mass:.5,tier:1,d:'Kreist hoch oben und stößt auf Schützen herab. Nahkämpfer erwischen ihn nur unten. Schützen, Soldaten und MGs holen ihn runter.'},
+  lama:{n:'Lama',cat:'tiere',col:'#efe4d2',r:11,hp:90,dmg:9,range:185,speed:50,cd:1.3,cost:3.5,mass:1.5,d:'Spuckt auf Abstand, auch auf Flieger. Wen die Spucke trifft, der wird 2 s lang langsamer.'},
   bueffel:{n:'Büffel',cat:'tiere',col:'#5a4334',r:12,hp:140,dmg:13,range:3,speed:50,cd:1.1,cost:4,mass:3,tier:1,d:'Herdentier. Ab 3 Büffeln stürmt die Herde los und rammt alles um. Einzeln eher harmlos.'},
 };
 
@@ -205,6 +206,10 @@ const ABIL = {
     {n:'Sturzflug', d:'Alle 10 s stößt er auf ein Ziel herab, am liebsten auf Fernkämpfer. Der erste Treffer macht dreifachen Schaden.'},
     {n:'Hoch oben', d:'Nahkämpfer erreichen ihn nur, wenn er zum Angriff herabstößt.'},
   ],
+  lama: [
+    {n:'Spucke', d:'Trifft am Boden und in der Luft. Getroffene sind 2 s lang 40 % langsamer.'},
+    {n:'Auf Abstand', d:'Weicht Nahkämpfern aus wie ein Schütze.'},
+  ],
   bueffel: [
     {n:'Stampede', d:'Ab 3 Büffeln nah beieinander stürmt die Herde 2 s lang los und rammt alles um. Danach 20 s Pause.'},
     {n:'Herde', d:'Bleibt bei den anderen Büffeln.'},
@@ -272,6 +277,8 @@ export const COUNTERS = [
   ['magier', 'ritter', 90], ['magier', 'geist', 90],
   // König (18.11.): allein schwach gegen Fernkampf, aber zäh gegen Wurfgeschosse
   ['koenig', 'grenadier', 100], ['sniper', 'koenig', 100],
+  // Lama (18.11.): Tiere gegen Flieger; Wölfe sind schneller bei ihm, als es zurückweichen kann
+  ['lama', 'hexe', 90], ['lama', 'phoenix', 90], ['wolf', 'lama', 90],
 ];
 
 // sp: Tempofaktor für Bodentruppen auf der Zelle (ohne: 1); haz: Lava und Mauer, die Bodentruppen meiden
@@ -295,7 +302,7 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 // --- Task 6: Kreaturen ---
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
-Object.assign(PLURAL, {koenig:'Könige'});
+Object.assign(PLURAL, {koenig:'Könige', lama:'Lamas'});
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['gelaende','Gelände']];
@@ -306,7 +313,7 @@ export const TEAMS = {blau:{n:'Blau',c:'#3f7cff',body:'#5b8def'},rot:{n:'Rot',c:
 export const TINT = new Set(['koenig','krieger','schuetze','grenadier','magier','reiter','roemer','soldat','mg','sniper','panzerfaust','moerser','panzer','heli','vampir']);
 
 // Fernkämpfer (Zielvorlieben von Geist/Reiter, KI)
-export const RANGED = new Set(['schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
+export const RANGED = new Set(['lama','schuetze','grenadier','magier','soldat','mg','sniper','panzerfaust','moerser']);
 // --- Task 6: Kreaturen --- (Hexe und Zyklop: Geister und Reiter jagen sie bevorzugt)
 RANGED.add('hexe'); RANGED.add('zyklop');
 

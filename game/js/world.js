@@ -160,6 +160,8 @@ export function spawn(world, type, x, y, team) {
     hopT: .5,
     // König (abilities.KING): Restzeit seiner Aura auf dieser Einheit (s; mutig: flieht nicht, Nahkampf stärker)
     braveT: .5,
+    // Lama-Spucke (combat.SPIT): Restzeit der Verlangsamung (s)
+    slowT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -171,6 +173,7 @@ export function spawn(world, type, x, y, team) {
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
   u.braveT = 0;   // Königsaura: als Double angelegt
+  u.slowT = 0;    // Lama-Spucke: als Double angelegt
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
   // erste Abklingzeit: A.first (FIRST_CD, abilities.js), sonst die normale; nach id gestreut wie bisher

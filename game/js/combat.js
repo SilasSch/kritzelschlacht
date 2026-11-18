@@ -57,12 +57,15 @@ function backStep(u, dt) { const r = u.rv; r[RV_BACK] += dt; if (r[RV_BACK] >= S
 function endBack(u) { const r = u.rv; if (r[RV_BACK] > 0) { r[RV_BACK] = 0; r[RV_BCD] = SNIPER.BACK_CD; } }
 // Fernkämpfer, die nach dem Schuss vor Nahkämpfern zurückweichen (think, Zweig nach dem Angriff). Der
 // Scharfschütze fehlt: er weicht schon im Zweig davor (SNIPER.KEEP) zurück, ein KITE-Eintrag käme nie zum Zug.
-export const KITE = new Set(['schuetze', 'soldat']);
+export const KITE = new Set(['schuetze', 'soldat', 'lama']);
 // Schützen mit geraden Schüssen (Kugel, Rakete, Feuerball): prüfen vor dem Schuss die Schusslinie
 export const STRAIGHT = new Set(['soldat', 'mg', 'sniper', 'panzerfaust', 'heli', 'magier']);
 const STRAIGHT_KIND = { soldat: 'bullet', mg: 'bullet', sniper: 'bullet', heli: 'bullet', panzerfaust: 'rocket', magier: 'fire' };
 // --- Task 6: Kreaturen --- Hexe: gerader Zauber 'hex' (Schusslinie prüfen wie die Schützen)
 STRAIGHT.add('hexe'); STRAIGHT_KIND.hexe = 'hex';
+// Lama (Ideenrunde 18.11.): Spucke, gerade wie der Hexenzauber, trifft auch Flieger und bremst (SPIT)
+STRAIGHT.add('lama'); STRAIGHT_KIND.lama = 'spit';
+export const SPIT = { T: 2, SLOW: .6 };
 
 // Liegen (Spez. #22): MG-Schützen und Scharfschützen legen sich hin, wenn ein Ziel in Reichweite ist und
 // kein Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R ist. Haltung u.stance: 'stand' → 'down'
@@ -90,6 +93,7 @@ export const PROJECTILES = {
   fire: { arc: false, speed: 330 }, pilum: { arc: true, speed: 430 }, firearrow: { arc: true, speed: 520 },
   // --- Task 6: Kreaturen --- boulder: Felsbrocken des Zyklopen (Bogen, landBoulder); hex: Zauber der Hexe (gerade, hexImpact)
   boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
+  spit: { arc: false, speed: 380 },
 };
 // Bögen, die wie ein Pfeil den nächsten Körper am Landepunkt treffen (alle anderen Bögen explodieren)
 export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow']);
@@ -107,6 +111,7 @@ const SHOT = {
   // --- Task 6: Kreaturen ---
   boulder: [.6, .42, 16, 'throw'],
   hex: [0, 0, 6, 'whoosh'],
+  spit: [0, 0, 7, 'thwip'],
 };
 
 // Höhen der geraden Schüsse: am Boden in Laufhöhe (unter WALL_CLEAR_Z, Mauern blocken),
@@ -196,7 +201,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
-Object.assign(PARTS, { koenig: ['headgear', 'weapon'] });
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
@@ -865,7 +870,8 @@ export function think(world, u, dt) {
   if (u.meteorCd > 0) u.meteorCd -= dt;
   // Verstärkung (Heulen, abilities.js) läuft ab
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
-  if (u.braveT > 0) u.braveT -= dt;   // Königsaura läuft ab (abilities.KING)
+  if (u.braveT > 0) u.braveT -= dt;
+  if (u.slowT > 0) u.slowT -= dt;   // Lama-Spucke läuft ab   // Königsaura läuft ab (abilities.KING)
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
@@ -1193,6 +1199,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     // Zyklop: nahe Feinde (auch in der Ecke auf der Flucht) unbeholfen schlagen statt werfen (cyclopsHit)
     case 'zyklop': if (d < CYCLOPS.MIN_D) { u.cd *= CYCLOPS.MELEE_CD; cyclopsHit(world, u, t); } else { fire(world, u, t, 'boulder'); u.swingT = .25; } break;
     case 'hexe': fire(world, u, t, 'hex', ax, ay); break;
+    case 'lama': fire(world, u, t, 'spit', ax, ay); break;
     case 'baer': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
@@ -1384,6 +1391,7 @@ function landArc(world, p, src) {
 // Gerader Schuss am Ende: v = getroffener Körper, cell = Mauerzelle (−1), (x, y) = Trefferpunkt am Boden
 function impact(world, p, v, cell, x, y, src) {
   if (p.kind === 'hex') { hexImpact(world, p, v, x, y, src); return; }   // Task 6
+  if (p.kind === 'spit') { spitImpact(world, p, v, x, y, src); return; }
   if (p.kind === 'bullet') {
     if (v) {
       const a = p.dmg * (.85 + world.rng() * .3);
@@ -1428,6 +1436,15 @@ function landBoulder(world, p, src) {
   sound(world, 'impact');
 }
 
+// Lama-Spucke am Ende: Schaden des Lamas (Art 'spit': kein Feuer, kein Schildblock) und SPIT.T s Verlangsamung
+function spitImpact(world, p, v, x, y, src) {
+  if (v) {
+    hurt(world, v, p.dmg * (.85 + world.rng() * .3), 'spit', src);
+    if (v.alive) v.slowT = SPIT.T;
+    emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'spit' });
+    emit(world, { type: 'spit', x: v.x, y: v.y - v.z });
+  } else emit(world, { type: 'spit', x, y });
+}
 // Hexenzauber am Ende: trifft den Körper mit dem Schaden der Hexe (Art 'hex': kein Feuer, kein Schildblock), sonst verpufft er
 function hexImpact(world, p, v, x, y, src) {
   if (v) {

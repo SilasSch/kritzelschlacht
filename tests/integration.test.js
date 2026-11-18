@@ -65,7 +65,7 @@ test('Nicht malbar: der Frosch (Task 6) fällt unter den paint:false-Rückhalt v
 test('Kategorien: Tiere 8 und Mythisch 9 malbare Einheiten; mixed bleibt fest, mixed2 hat beide neuen Sätze', () => {
   const keys = c => Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false);
   assert.deepEqual(CATEGORIES.map(c => c[0]), ['armee', 'tiere', 'mythisch', 'modern', 'gelaende']);
-  assert.deepEqual(keys('tiere'), ['wolf', 'baer', 'biene', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel']);
+  assert.deepEqual(keys('tiere'), ['wolf', 'baer', 'biene', 'elefant', 'krokodil', 'gorilla', 'adler', 'lama', 'bueffel']);   // Lama: Ideenrunde 18.11.
   assert.deepEqual(keys('mythisch'), ['magier', 'geist', 'drache', 'vampir', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn']);
   const neu = ['elefant', 'krokodil', 'gorilla', 'adler', 'bueffel', 'troll', 'zyklop', 'hexe', 'phoenix', 'einhorn'];
   for (const t of neu) { assert.ok(mixed2Types().includes(t), t); assert.ok(!MIXED_TYPES.includes(t), t); }

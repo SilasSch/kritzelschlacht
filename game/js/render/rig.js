@@ -839,7 +839,7 @@ const DEF = {
    Boss-Sticker (#23, BOSS_VIS 1,3): Körper mit Beinen (Bild 0/1 = Schritt), Decke in Teamfarbe, Kopfgruppe am Hals
    (Drehpunkt ELE_GEO.head, nickt um headRot) mit Kopf und Stoßzähnen, Ohr (wedelt: pose.wing) und Rüssel (schwingt:
    pose.tailSwing, hebt sich beim Schlag und beim Trampeln); Augen in der Kopfgruppe. */
-const TEAM_ACCENT = new Set(['krokodil', 'gorilla', 'adler', 'bueffel', 'elefant']);
+const TEAM_ACCENT = new Set(['krokodil', 'gorilla', 'adler', 'bueffel', 'elefant', 'lama']);
 // Halstuch: dreieckiger Zipfel in Teamfarbe vom Knoten (x, y) aus, Richtung a (rad), Länge l (r-Einheiten)
 function scarf(c, r, k, x, y, a, l) {
   const cx = Math.cos(a), sy = Math.sin(a), px = -sy, py = cx, w = l * .45;
@@ -864,6 +864,23 @@ Object.assign(DEF, {
       E(c, r * 1.78, -r * .12, r * .05, r * .04, O, 0);
       for (const p of [this.eyes.L, this.eyes.R]) E(c, p[0] * r, p[1] * r + r * .08, r * .2, r * .16, k.col, 1.2);
       scarf(c, r, k, .5, -.1, 1.75, .5);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Lama: wolliger heller Körper, langer Hals, Kopf mit Bananenohren, Decke in Teamfarbe
+  lama: {
+    eyes: eyePair(.82, -1.22, .15),
+    body(c, r, k, f) {
+      const l = f ? .14 : -.14;
+      for (const [x, s] of [[-.6, 1], [-.3, -1], [.3, 1], [.58, -1]]) Ln(c, [[x * r, r * .3], [(x + s * l) * r, r * .98]], '#c9b79a', 2.2);
+      E(c, -r * .82, -r * .1, r * .22, r * .2, k.col, 1.2);
+      E(c, 0, r * .1, r * .95, r * .55, k.col);
+      for (const x of [-.6, -.25, .1, .45]) E(c, x * r, -r * .32, r * .2, r * .14, k.col, 0);
+      RR(c, -r * .45, -r * .2, r * .8, r * .42, r * .1, k.shield);
+      Ln(c, [[r * .55, -r * .05], [r * .66, -r * 1.05]], k.col, 5.2);
+      E(c, r * .82, -r * 1.2, r * .4, r * .3, k.col);
+      poly(c, r, [[.6, -1.42], [.55, -1.78], [.7, -1.48]], k.col, 1.1); poly(c, r, [[.88, -1.45], [.92, -1.8], [1.0, -1.46]], k.col, 1.1);
+      E(c, r * 1.14, -r * 1.08, r * .14, r * .1, '#d9c6a8', 1);
       whites(c, r, this.eyes);
     },
   },

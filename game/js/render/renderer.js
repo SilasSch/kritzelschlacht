@@ -810,6 +810,8 @@ void main() {
       // Task 6: Felsbrocken des Zyklopen (grauer Stein mit Umriss und Glanz), Hexenzauber (grüne Kugel mit hellem Kern)
       else if (p.kind === 'boulder') { disc(x, y, 5.6, OC); disc(x, y, 4.5, 0x9aa0aa); disc(x - 1.4, y - 1.5, 1.6, 0xc3c8cf); }
       else if (p.kind === 'hex') { disc(x, y, 4.4, 0x3f9a4a); disc(x, y, 2.9, 0x9df58a); disc(x, y, 1.3, 0xeaffd8); }
+      // Lama-Spucke: hellblauer Tropfen mit kleinem Nachzügler
+      else if (p.kind === 'spit') { disc(x, y, 3.2, 0x7fa6c2); disc(x, y, 2.3, 0xdcecf5); disc(x - ca * 5, y - sa * 5, 1.4, 0xdcecf5); }
       else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
     }
     stats.projShadows = ns; stats.targets = nt;

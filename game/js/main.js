@@ -45,7 +45,7 @@ translateDom(document.getElementById('app'));
 if (document.getElementById('bLang')) {
   const lb = document.getElementById('bLang');
   lb.textContent = LANG === 'en' ? 'DE' : 'EN';
-  lb.onclick = () => switchLang(LANG === 'en' ? 'de' : 'en');
+  lb.onclick = () => switchLang(LANG === 'en' ? 'de' : 'en', () => ui.toast(tr('Die Sprache gilt beim nächsten Öffnen des Spiels.')));
 }
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;

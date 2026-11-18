@@ -12,12 +12,22 @@ import { UNITS, PLURAL } from './data.js';
 export const LANGS = ['de', 'en'];
 export const LANG_KEY = 'kritzelschlacht-lang';
 
-// Vorauswahl: ?lang=…, dann die gespeicherte Wahl, dann die Browsersprache (Deutsch nur bei de-*, sonst Englisch).
-// Ohne DOM (Node, Tests, tools/) immer Deutsch.
+// Vorauswahl: ein Wechsel in diesem Tab (window.name), dann ?lang=…, dann die gespeicherte Wahl (localStorage, sonst
+// sessionStorage), dann die Browsersprache (Deutsch nur bei de-*, sonst Englisch). window.name überlebt das Neuladen
+// im selben Rahmen, auch im eingebetteten Claude-Artefakt ohne Speicher. Ohne DOM (Node, Tests, tools/) immer Deutsch.
+const NAME_RE = /(?:^|;)kritzelschlacht-lang=(\w+)/;
+const fromName = env => { try { const m = NAME_RE.exec(env.name || ''); return m && LANGS.includes(m[1]) ? m[1] : null; } catch (e) { return null; } };
+function stored(env) {
+  for (const k of ['localStorage', 'sessionStorage']) {
+    try { const s = env[k] && env[k].getItem(LANG_KEY); if (LANGS.includes(s)) return s; } catch (e) { /* kein Speicher */ }
+  }
+  return null;
+}
 export function detectLang(env = globalThis) {
   if (typeof env.document === 'undefined') return 'de';
+  const tab = fromName(env); if (tab) return tab;
   try { const q = new URLSearchParams(env.location.search).get('lang'); if (LANGS.includes(q)) return q; } catch (e) { /* kein location */ }
-  try { const s = env.localStorage.getItem(LANG_KEY); if (LANGS.includes(s)) return s; } catch (e) { /* kein Speicher */ }
+  const s = stored(env); if (s) return s;
   try {
     const nav = env.navigator || {}, list = nav.languages && nav.languages.length ? nav.languages : [nav.language || ''];
     return /^de\b/i.test(list[0] || '') ? 'de' : 'en';
@@ -45,17 +55,21 @@ export function unitPlural(k) {
 // Zahlen: Komma im Deutschen, Punkt im Englischen
 export const dec = s => (LANG === 'en' ? String(s) : String(s).replace('.', ','));
 
-// Sprache wechseln: merken und neu laden (alle Leisten, Karten und Dialoge werden so frisch gebaut).
-// Ohne Speicher trägt ?lang= die Wahl über das Neuladen.
-export function switchLang(l) {
+// Sprache wechseln: an allen drei Orten merken und die Seite neu laden (alle Leisten, Karten, Dialoge und Pixi-Texte
+// werden so frisch gebaut). Die Adresse wird nie geändert: Im Claude-Artefakt läuft das Spiel in einem eingebetteten
+// Rahmen, dessen Adresse wir nicht anfassen. window.name geht vor ?lang=, damit der Wechsel auch bei Links mit
+// ?lang= gilt. Lädt der Rahmen nicht neu, meldet onStuck das nach 1,5 s.
+export function remember(l, env = globalThis) {
+  for (const k of ['localStorage', 'sessionStorage']) {
+    try { env[k].setItem(LANG_KEY, l); } catch (e) { /* kein Speicher */ }
+  }
+  try { env.name = String(env.name || '').replace(NAME_RE, '').replace(/^;/, '') + ';kritzelschlacht-lang=' + l; } catch (e) { /* kein window.name */ }
+}
+export function switchLang(l, onStuck) {
   if (!LANGS.includes(l)) return;
-  let stored = false;
-  try { localStorage.setItem(LANG_KEY, l); stored = localStorage.getItem(LANG_KEY) === l; } catch (e) { /* kein Speicher */ }
-  try {
-    const u = new URL(location.href);
-    if (stored && !u.searchParams.has('lang')) { location.reload(); return; }
-    u.searchParams.set('lang', l); location.replace(u.href);
-  } catch (e) { location.reload(); }
+  remember(l);
+  try { location.reload(); } catch (e) { /* Neuladen gesperrt */ }
+  if (onStuck) setTimeout(onStuck, 1500);
 }
 
 // Feste Texte aus index.html: Textknoten und die Attribute title, aria-label, placeholder. Elemente mit data-i18n

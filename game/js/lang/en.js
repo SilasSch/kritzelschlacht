@@ -1137,5 +1137,6 @@ const EN = {
   "Kurz warten": "Hold on",
   "Neu laden": "Reload",
   "(Esc)": "(Esc)",
+  'Die Sprache gilt beim nächsten Öffnen des Spiels.': 'The language applies the next time you open the game.',
 };
 export default EN;

@@ -1,6 +1,7 @@
 // Start, Spielzustand und Schleife. Fester Simulationsschritt 1/60 s, Tempo 1/2/4×, Zeitlupe 0,3×, Pause.
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
-import { UNITS, TERRAIN, CATEGORIES, TEAMS, MISSIONS, PLURAL } from './data.js';
+import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
+import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
 import { createWorld, spawn, rebuildHash, resizeWorld, clearBattle, touchTerrain } from './world.js';
 import { step, SIM_PHASES, SIM_TIME, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect, placeCircle, tRect, tCircle } from './sim.js';
 import { createCamera, resizeCamera } from './camera.js';
@@ -51,16 +52,23 @@ const markAll = () => { touchTerrain(world); renderer.markTerrainDirty(0, 0, wor
 /* ---------- Spielzustand und Aktionen ---------- */
 const game = {
   world, save,
-  mission: null,      // { idx, def, budget, par, spent, phase:'plan'|'battle'|'done', t, endT, result }
+  // { id, idx (Nummer im Kapitel ab 0), chapter, def (das Level, campaign/), budget, par, spent, phase:'plan'|'battle'|'done', t, endT, result }
+  mission: null,
   // Schlacht-Modus (Spez. #45): { phase:'plan'|'fight'|'done', snap, stats, batch, t, endT, result, evFrom, batchRes } oder null
   battle: null,
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
 
-  // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3)
-  catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN) : Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false)),
-  catAllowed: c => !(game.mission && game.mission.def.cats && !game.mission.def.cats.includes(c)),
-  unlocked: i => i === 0 || (save.stars[i - 1] || 0) > 0,
+  // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3), in einem Level nur
+  // die erlaubten (units, cats; Spez. #52). Die Tasten folgen den sichtbaren Plätzen.
+  level: () => (game.mission ? game.mission.def : null),
+  catKeys: c => (c === 'gelaende' ? Object.keys(TERRAIN).filter(k => terrainAllowed(game.level(), k))
+    : Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false && unitAllowed(game.level(), k))),
+  catAllowed: c => catAllowed(game.level(), c),
+  unitAllowed: k => unitAllowed(game.level(), k),
+  // Level (id oder, wie früher, Index der Grundausbildung) und Kapitel freigeschaltet?
+  unlocked: x => levelUnlocked(save.stars, levelId(x)),
+  chapterUnlocked: id => chapterUnlocked(save.stars, id),
 
   setCat(c) {
     if (!game.catAllowed(c)) return;
@@ -123,8 +131,15 @@ const game = {
   loadMission,
   go() { const m = game.mission; if (!m) return; if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission(); },
   retryMission,
-  nextMission() { if (game.mission) loadMission(Math.min(MISSIONS.length - 1, game.mission.idx + 1)); },
+  // "Nächste Mission": das nächste Level im Kapitel, nach dem letzten die Kapitelübersicht
+  nextMission() {
+    const m = game.mission; if (!m) return;
+    const n = nextLevel(m.id);
+    if (n && game.unlocked(n.id)) loadMission(n.id); else ui.openChapters();
+  },
 };
+// Index der Grundausbildung (alte Aufrufe, Debug) → id
+const levelId = x => (typeof x === 'number' ? (CHAPTERS[0].levels[x] || {}).id : x);
 
 const ui = createUI(game);
 
@@ -206,15 +221,19 @@ function enterSandbox() {
 }
 
 /* ---------- Missionen ---------- */
-function loadMission(i) {
+// x: id eines Levels (campaign/) oder Index der Grundausbildung
+function loadMission(x) {
+  const e = levelInfo(levelId(x)); if (!e) return;
   if (!game.mission && !game.battle) saveSandbox();
   leaveBattle();
   clearWorld();
-  buildMission(world, i);
-  const def = MISSIONS[i];
-  game.mission = { idx: i, def, budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null };
+  const def = e.level;
+  buildMission(world, def);
+  game.mission = { id: def.id, idx: e.li, chapter: e.chapter, def, budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null };
   game.paused = false;
-  if (def.cats && !def.cats.includes(game.cat)) { game.cat = def.cats[0]; game.sel = game.catKeys(game.cat)[0]; }
+  // Auswahl auf eine erlaubte Kategorie und Einheit setzen (units, cats)
+  if (!game.catAllowed(game.cat)) game.cat = CATEGORIES.map(c => c[0]).find(game.catAllowed) || 'gelaende';
+  if (!game.catKeys(game.cat).includes(game.sel)) game.sel = game.catKeys(game.cat)[0];
   markAll();
   ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh();
 }
@@ -224,7 +243,7 @@ function startMission() {
   rebuildHash(world);
   if (!(world.facCount.get(PLAYER) > 0)) { ui.toast('Male zuerst deine Armee.'); return; }
   snap = {
-    idx: m.idx, spent: m.spent, GW: world.GW, GH: world.GH,
+    id: m.id, spent: m.spent, GW: world.GW, GH: world.GH,
     units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y })),
     terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
   };
@@ -236,9 +255,9 @@ function startMission() {
 // "Nochmal planen" / "Besser planen" / "Abbrechen": Mission neu laden und den Plan wiederherstellen
 function retryMission() {
   const m = game.mission; if (!m) return;
-  if (!snap || snap.idx !== m.idx) { loadMission(m.idx); return; }
+  if (!snap || snap.id !== m.id) { loadMission(m.id); return; }
   const s = snap;
-  loadMission(s.idx);
+  loadMission(s.id);
   if (s.GW === world.GW && s.GH === world.GH) {
     for (let k = 0; k < world.terr.length; k++) if (s.towner[k]) { world.terr[k] = s.terr[k]; world.towner[k] = 1; world.whp[k] = s.whp[k]; }
   }
@@ -251,9 +270,9 @@ function finishMission() {
   const m = game.mission; if (!m) return;
   const win = m.result === 'win';
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
-  if (win) save.stars[m.idx] = Math.max(save.stars[m.idx] || 0, stars);
+  if (win) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
   persist();
-  ui.showResult({ win, timeUp: m.t > 180, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: m.idx < MISSIONS.length - 1 });
+  ui.showResult({ win, timeUp: m.t > 180, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!nextLevel(m.id) });
   audio.play(win ? 'win' : 'lose');
 }
 

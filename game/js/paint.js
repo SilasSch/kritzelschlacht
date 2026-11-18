@@ -1,17 +1,20 @@
 // Malregeln: Einheiten stempeln, Gelände malen, Radierer, Rückgängig. Port aus kritzelschlacht.html.
 // Rein: kein DOM, kein PIXI, Zufall nur über world.rng().
-// mission = null (Sandkasten) oder { budget, spent } (spent wird hier fortgeschrieben).
+// mission = null (Sandkasten) oder { budget, spent, def } (spent wird hier fortgeschrieben; def: das Level, campaign/,
+// dessen units und cats festlegen, was gemalt werden darf).
 // phase = 'plan' | 'battle' | 'done' (nur in Missionen relevant).
 import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
 import { clearSpellWalls, STONE_WALL } from './spells.js';
 import { releaseUnit } from './abilities.js';
+import { unitAllowed, terrainAllowed } from './campaign/index.js';
 
 export const UNIT_CAP = 2600;
 export const ZONE = 0.42;        // Missionen: gemalt wird nur bei x <= zoneX (Anteil des Missionsrahmens)
 export const PLAYER = 'blau';
 export const MSG_BUDGET = 'Budget aufgebraucht.';
 export const MSG_FULL = 'Das Schlachtfeld ist voll.';
+export const MSG_NOT_ALLOWED = 'In dieser Mission nicht erlaubt.';
 // Schlacht-Modus (Spez. #45): team = BY_HALF, dann gehört jede gestempelte Einheit der Seite ihrer Feldhälfte
 export const BY_HALF = 'half';
 export const sideAt = (world, x) => (x < world.W / 2 ? 'blau' : 'rot');
@@ -45,6 +48,8 @@ export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
   const T = UNITS[sel];
   // nicht malbar (paint: false, der Ghul): Rückhalt, falls die Auswahl doch einmal darauf steht
   if (!T || T.paint === false) return { placed: 0, warning: null };
+  // Level mit units oder cats (Spez. #52): nur erlaubte Einheiten (die Leiste zeigt nur diese; hier der Rückhalt)
+  if (mission && mission.def && !unitAllowed(mission.def, sel)) return { placed: 0, warning: warn(stroke, MSG_NOT_ALLOWED) };
   if (world.totalAlive > UNIT_CAP) return { placed: 0, warning: warn(stroke, MSG_FULL) };
   const r = T.r, minD = r * 2.05, { W, H } = world;
   const tries = Math.min(140, Math.ceil((R * R) / ((minD * .9) ** 2) * 1.4) + 1);
@@ -80,6 +85,9 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
   const g0x = Math.floor((x - R) / CELL), g1x = Math.floor((x + R) / CELL);
   const g0y = Math.floor((y - R) / CELL), g1y = Math.floor((y + R) / CELL);
   let changed = false, broke = false;
+  if (mission && mission.def && !terrainAllowed(mission.def, key)) {
+    return { changed, warning: warn(stroke, MSG_NOT_ALLOWED), cells: { gx0: 0, gy0: 0, gx1: -1, gy1: -1 } };
+  }
   for (let gy = Math.max(0, g0y); gy <= Math.min(GH - 1, g1y); gy++) for (let gx = Math.max(0, g0x); gx <= Math.min(GW - 1, g1x); gx++) {
     const cx = gx * CELL + 5, cy = gy * CELL + 5;
     if ((cx - x) ** 2 + (cy - y) ** 2 > R * R) continue;

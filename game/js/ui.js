@@ -1,6 +1,7 @@
 // HUD: Palette, Zähler, Missionsleiste, Dialoge, Banner, Toasts, Charakterkarten und Lexikon. Markup kommt aus index.html.
 // Liest den Spielzustand aus `game` (main.js) und ruft dessen Aktionen auf.
-import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS, MSG_NO_PAINT } from './data.js';
+import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MSG_NO_PAINT } from './data.js';
+import { CHAPTERS, chapterById, chapterProgress } from './campaign/index.js';
 import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
@@ -155,14 +156,14 @@ export function createUI(game) {
   // Klick auf eine erlaubte Karte wählt die Einheit. Schließt mit Esc, Knopf oder Klick daneben.
   let lexId = '';
   function openLexicon() {
-    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.idx : '-');
+    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-');
     if (id !== lexId) {
       $('lexNote').textContent = RETREAT_NOTE;
-      $('lexBody').innerHTML = cardTypes().map(g => {
-        const ok = game.catAllowed(g.cat);
-        return `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t =>
-          `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : 'In dieser Mission nicht erlaubt' })}</button>`).join('')}</div></section>`;
-      }).join('');
+      // erlaubt je Einheit (units und cats des Levels; nicht malbare wie der Ghul bleiben ansehbar, ui-Toast beim Klick)
+      $('lexBody').innerHTML = cardTypes().map(g => `<section><h3>${esc(g.name)}</h3><div class="lexgrid">${g.types.map(t => {
+        const ok = UNITS[t].paint === false ? game.catAllowed(g.cat) : game.unitAllowed(t);
+        return `<button class="uc lexc${ok ? '' : ' off'}" data-k="${t}" data-cat="${g.cat}"${ok ? '' : ' aria-disabled="true"'}>${cardHTML(t, portrait, icon, { note: ok ? '' : 'In dieser Mission nicht erlaubt' })}</button>`;
+      }).join('')}</div></section>`).join('');
       $('lexCard').style.setProperty('--tc', accent());
       lexId = id;
     }
@@ -244,7 +245,10 @@ export function createUI(game) {
     $('teamToggle').checked = game.world.teamMode;
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
-    if (mis) { $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint; }
+    if (mis) {
+      $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint;
+      $('misName').title = mis.chapter.n;
+    }
   }
 
   function updateMission() {
@@ -287,20 +291,53 @@ export function createUI(game) {
   }
   function closeBanner() { $('banner').hidden = true; }
 
-  /* ---------- Missionen ---------- */
-  function openMissionList() {
-    const g = $('lvGrid'); g.innerHTML = '';
-    MISSIONS.forEach((m, i) => {
-      const b = document.createElement('button'); b.className = 'lv';
-      const open = game.unlocked(i), s = game.save.stars[i] || 0;
+  /* ---------- Kampagne: Kapitel und Level (Spez. #52) ---------- */
+  // Eine Übersicht (ovList) mit zwei Ansichten: die Kapitel als Karten (Titel, Beschreibung, Fortschritt, Schloss; leere
+  // Kapitel „Bald verfügbar“), und die Level eines Kapitels mit Sternen und Schlössern wie früher die Missionsliste.
+  const starRow = s => `${'★'.repeat(s)}<em>${'★'.repeat(3 - s)}</em>`;
+  const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
+  function openChapters() {
+    $('listTitle').textContent = 'Kampagne';
+    $('listText').textContent = 'Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.';
+    const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
+    CHAPTERS.forEach((c, ci) => {
+      const b = document.createElement('button'); b.className = 'ch'; b.dataset.ch = c.id;
+      const p = chapterProgress(game.save.stars, c.id), empty = !p.total, open = !empty && game.chapterUnlocked(c.id);
       b.disabled = !open;
-      b.innerHTML = `<span class="no">Mission ${i + 1}${open ? '' : ' · gesperrt'}</span><span class="nm">${m.n}</span><span class="st">${'★'.repeat(s)}<em>${'★'.repeat(3 - s)}</em></span>`;
-      b.onclick = () => { $('ovList').hidden = true; game.loadMission(i); };
+      if (empty) b.classList.add('soon'); else if (!open) b.classList.add('locked');
+      if (p.total && p.done === p.total) b.classList.add('done');
+      const state = empty ? '<span class="tag">Bald verfügbar</span>'
+        : !open ? `<span class="tag lock">${LOCK}Gesperrt</span>`
+        : `<span class="prog"><i style="width:${(p.done / p.total * 100).toFixed(1)}%"></i></span>
+           <span class="cnt"><b class="st">★</b> ${p.stars}/${p.maxStars} · ${p.done}/${p.total} geschafft</span>`;
+      b.innerHTML = `<span class="no">Kapitel ${ci + 1}</span><span class="nm">${esc(c.n)}</span><span class="ds">${esc(c.d)}</span><span class="foot">${state}</span>`;
+      if (open) b.onclick = () => openChapter(c.id);
       g.append(b);
     });
+    $('listBack').hidden = true;
     $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
     $('ovList').hidden = false;
   }
+  function openChapter(id) {
+    const c = chapterById(id);
+    if (!c || !c.levels.length) { openChapters(); return; }
+    $('listTitle').textContent = c.n;
+    $('listText').textContent = `${c.d} Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.`;
+    const g = $('lvGrid'); g.innerHTML = ''; g.className = 'lvgrid';
+    c.levels.forEach((m, i) => {
+      const b = document.createElement('button'); b.className = 'lv'; b.dataset.id = m.id;
+      const open = game.unlocked(m.id), s = game.save.stars[m.id] || 0;
+      b.disabled = !open;
+      b.innerHTML = `<span class="no">Mission ${i + 1}${open ? '' : ' · gesperrt'}</span><span class="nm">${esc(m.n)}</span><span class="st">${starRow(s)}</span>`;
+      b.onclick = () => { $('ovList').hidden = true; game.loadMission(m.id); };
+      g.append(b);
+    });
+    $('listBack').hidden = false;
+    $('listClose').textContent = game.mission ? 'Zurück zum Sandkasten' : 'Schließen';
+    $('ovList').hidden = false;
+  }
+  // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
+  const openMissionList = () => (game.mission ? openChapter(game.mission.chapter.id) : openChapters());
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
@@ -313,7 +350,9 @@ export function createUI(game) {
     <li><span>Eigene Verluste</span>${stats.lostBlue}</li><li><span>Besiegte Gegner</span>${stats.lostRed}</li>
     <li><span>Kampfdauer</span>${Math.round(r.time)} s</li>
     ${stats.heroType ? `<li><span>Held der Schlacht</span>${UNITS[stats.heroType].n} mit ${stats.heroK} Siegen</li>` : ''}`;
-    $('resNext').hidden = !(r.win && r.hasNext);
+    // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
+    $('resNext').hidden = !r.win;
+    $('resNext').textContent = r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln';
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
     $('ovRes').hidden = false;
   }
@@ -342,13 +381,14 @@ export function createUI(game) {
   $('brush').oninput = e => game.setBrush(+e.target.value);
   $('teamToggle').onchange = e => game.setTeamMode(e.target.checked);
   $('mSand').onclick = () => game.enterSandbox();
-  $('mMis').onclick = () => openMissionList();
+  $('mMis').onclick = () => openChapters();
   $('misList').onclick = () => openMissionList();
   $('misGo').onclick = () => game.go();
   $('resRetry').onclick = () => { $('ovRes').hidden = true; game.retryMission(); };
   $('resNext').onclick = () => { $('ovRes').hidden = true; game.nextMission(); };
   $('resList').onclick = () => { $('ovRes').hidden = true; openMissionList(); };
   $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
+  $('listBack').onclick = () => openChapters();
   $('mBat').onclick = () => game.enterBattle();
   // Auswertung schließen (Esc oder Klick daneben): das Schlachtfeld bleibt zu sehen, der Reiter "Schlacht" zeigt sie wieder
   function hideBattleResult() { $('ovBat').hidden = true; document.body.classList.remove('bat-res'); }
@@ -483,7 +523,7 @@ export function createUI(game) {
 
   return {
     updateBattle, batchProgress, batchDone, showBattleResult,
-    refresh, toast, banner, closeBanner, showResult, openMissionList,
+    refresh, toast, banner, closeBanner, showResult, openMissionList, openChapters, openChapter,
     renderUnits, updateCounts, updateMission, updateMode, updateControls, syncBrush, buildChips,
     hideOverlays, resetBattle, onEvent, openLexicon, closeLexicon, lexiconOpen: () => !$('ovLex').hidden,
   };

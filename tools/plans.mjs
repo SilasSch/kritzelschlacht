@@ -1,50 +1,65 @@
 // Testarmeen pro Mission und Konter-Erwartungen für tools/balance.mjs und die Tests.
 // Plan = Array<[type, n, x0, y0, x1, y1]> (blaue Rechtecke; x in Anteilen des Missionsrahmens world.frameX, y von H).
-import { UNITS, MISSIONS } from '../game/js/data.js';
+// Kampagne (Spez. #52): Die Lösungspläne und Spam-Regeln stehen am Level im Kapitelmodul (game/js/campaign/<kapitel>.js:
+// plan, spamMustLose, answer …), damit jedes Kapitel eine eigene Datei bleibt. Hier nur die Auswahl der Level für die
+// Prüfung (--chapter) und die Namen von früher für die Grundausbildung.
+import { UNITS } from '../game/js/data.js';
 import { placeRect } from '../game/js/sim.js';
 import { frameX, spawn } from '../game/js/world.js';
+import { CHAPTERS, chapterById, paintableUnits, unitAllowed, spamMustLose } from '../game/js/campaign/index.js';
+import { F } from '../game/js/campaign/areas.js';
 
-const F = [.32, .3, .38, .7];   // Front
-const B = [.18, .32, .25, .68]; // hinten
-const Md = [.26, .32, .31, .68]; // Mitte
-const Deep = [.05, .1, .12, .9]; // ganz hinten, über fast die ganze Höhe verteilt
+const GA = CHAPTERS[0].levels;   // Grundausbildung, Index 0..8 = Mission 1..9
 
-// Index 0..8 = Mission 1..9
-export const MISSION_PLANS = [
-  { smart: [['ritter', 9, ...F]], spam: [['krieger', 30, ...F]] },
-  // M2: nur 4 Grenadiere: ihre Bomben fallen in den Nahkampf vor den Rittern und treffen die eigenen Ritter mit
-  // Task 7: Budget 100 → 95, Spam 50 → 47 Krieger (mehr passt nicht ins Budget)
-  // Nachtrag 7 (#47): par 70 → 75, 14 Ritter + 3 Grenadiere statt 12 + 4 (die Schützen weichen den Bomben aus)
-  { smart: [['ritter', 14, ...F], ['grenadier', 3, ...B]], spam: [['krieger', 47, ...F]] },
-  // M3, M6: Bienen kosten 0,55 statt 0,5 (Nachtrag 4, #37). Task 7: par 85 → 90 bzw. 90 → 95 und 163 bzw. 172 Bienen
-  // (154 bzw. 163 gewannen an einzelnen Formen nur 3/8 bzw. 4/8; die alten Pläne hatten 170 bzw. 180)
-  { smart: [['biene', 163, ...F]], spam: [['krieger', 55, ...F]] },
-  { smart: [['reiter', 30, ...F]], spam: [['krieger', 60, ...F]] },
-  { smart: [['magier', 14, ...B]], spam: [['krieger', 55, ...F]] },
-  // M6: 163 Bienen hinten (B) statt vorn: der Schwarm sammelt sich, bevor die Reiter da sind (vorn 5/8, hinten 8/8)
-  { smart: [['biene', 172, ...B]], spam: [['wolf', 80, ...F]] },
-  // M7: Bären und Wölfe kommen durch die Lavalücke (Wegfindung); weit hinten und breit verteilt (beides nötig)
-  // schießen die Schützen am längsten, bevor die Tiere heran sind
-  { smart: [['schuetze', 34, ...Deep]], spam: [['krieger', 55, ...F]] },
-  { smart: [['schuetze', 14, ...Md], ['magier', 16, ...B]], spam: [['krieger', 85, ...F]] },
-  // M9: Task 7: Panzerfäuste in der Mitte statt hinten (gleiche Kosten): mit Rückzug kamen sie von hinten zu spät an die
-  // Panzer (5/8 an 1400×1050, vorher an einzelnen Formen 6/8); in der Mitte 8/8 an allen Formen
-  { smart: [['soldat', 16, ...F], ['panzerfaust', 12, ...Md]], spam: [['krieger', 75, ...F]] },
-];
+// Früher hier, jetzt am Level (grundausbildung.js): Index 0..8 = Mission 1..9
+export const MISSION_PLANS = GA.map(l => l.plan);
+// Missionen (Index), deren Spam-Plan verlieren muss: M2, M4, M5, M7, M8, M9 (level.spamMustLose)
+export const SPAM_MUST_LOSE = GA.map((l, i) => (spamMustLose(l) ? i : -1)).filter(i => i >= 0);
 
-// Missionen (Index), deren Spam-Plan verlieren muss: M2, M4, M5, M7, M8, M9.
-// M3 (Eiserne Front) und M6 (Wilde Jagd) sind ausgenommen; der M1-Spam (Einstieg) muss gewinnen.
-export const SPAM_MUST_LOSE = [1, 3, 4, 6, 7, 8];
+// Level für die Prüfung: alle Kapitel oder nur die in chapterArg (kommagetrennte ids). Je Level { level, chapter, ci, li,
+// tag, seed }: tag ist der Name in der Ausgabe (Grundausbildung wie früher M1..M9, sonst die id), seed(s) die Saat des
+// Laufs s (Grundausbildung wie früher 1000 · (li + 1) + s; andere Kapitel dazu + 100 · ci, unabhängig von anderen Kapiteln).
+export function selectLevels(chapterArg) {
+  const want = chapterArg ? chapterArg.split(',').map(s => s.trim()).filter(Boolean) : null;
+  if (want) for (const id of want) if (!chapterById(id)) throw new Error(`unbekanntes Kapitel: ${id} (bekannt: ${CHAPTERS.map(c => c.id).join(', ')})`);
+  const out = [];
+  CHAPTERS.forEach((chapter, ci) => {
+    if (want && !want.includes(chapter.id)) return;
+    chapter.levels.forEach((level, li) => out.push({
+      level, chapter, ci, li,
+      tag: ci === 0 ? `M${li + 1}` : level.id,
+      seed: s => 1000 * (li + 1) + (ci === 0 ? 0 : 100 * ci) + s,
+    }));
+  });
+  return out;
+}
+// --chapter=… aus den Argumenten; der Rest bleibt in der alten Reihenfolge (cmd, runs, Form)
+export function parseArgs(argv) {
+  const chapter = (argv.find(a => a.startsWith('--chapter=')) || '').slice('--chapter='.length) || null;
+  return { chapter, pos: argv.filter(a => !a.startsWith('--')) };
+}
 
 // Spam einzelner neuer Einheiten mit vollem Budget (Spez. Nachtrag 3, Einschränkungen): wo der Spam-Plan einer
-// Mission verlieren muss (SPAM_MUST_LOSE), darf auch eine neue Einheit allein die Mission nicht billig lösen. Grund:
+// Mission verlieren muss (spamMustLose), darf auch eine neue Einheit allein die Mission nicht billig lösen. Grund:
 // nur der Krieger-Spam war geprüft, und 23 Römer (unter par) gewannen M5 mit drei Sternen (finale Prüfung, Römer-
-// Runde). Geprüft wird jede gelistete Einheit in jeder dieser Missionen, deren Kategorien sie erlauben
-// (MISSIONS[i].cats). Ein späterer Plan nimmt hier alle neuen Einheiten auf.
+// Runde). Geprüft wird jede gelistete Einheit in jedem dieser Level, das sie erlaubt (units, cats), außer sie ist dort
+// die Lösung (level.answer). Ein späterer Plan nimmt hier alle neuen Einheiten auf.
 export const UNIT_SPAM = ['roemer'];
-export const unitSpamAllowed = (i, type) => !MISSIONS[i].cats || MISSIONS[i].cats.includes(UNITS[type].cat);
+// lv: Level oder (wie früher) Index der Grundausbildung
+const lvl = lv => (typeof lv === 'number' ? GA[lv] : lv);
+export const unitSpamAllowed = (lv, type) => unitAllowed(lvl(lv), type) && UNITS[type].paint !== false;
 // Plan: so viele wie das Budget hergibt, an der Front
-export const unitSpamPlan = (i, type) => [[type, Math.floor(MISSIONS[i].budget / UNITS[type].cost + 1e-9), ...F]];
+export const unitSpamPlan = (lv, type) => [[type, Math.floor(lvl(lv).budget / UNITS[type].cost + 1e-9), ...F]];
+// Malbare Einheiten, deren Spam newspam in einem Level prüft
+export const spamTypes = lv => paintableUnits(lvl(lv));
+
+// newspam für neue Kapitel (Spez. #52): jede einzelne erlaubte Einheit verliert mit vollem Budget mindestens 6/8,
+// außer das Level nennt sie als Lösung (level.answer). Liefert die Anmerkung der Zeile und ob sie besteht.
+export function chapterSpamVerdict(level, type, wins, runs, loseMin = 6 / 8) {
+  if ((runs - wins) / runs >= loseMin) return { ok: true, note: '' };
+  if ((level.answer || []).includes(type)) return { ok: true, note: 'ok: Lösung des Levels (answer)' };
+  return { ok: false, note: `FAIL (${type} spam < 6/8 losses)` };
+}
 
 // newspam (tools/balance.mjs, Task 7; Vorgabe 6): geprüft und gemeldet werden alle malbaren Einheiten, das Gate (Exitcode)
 // gilt für die Einheiten dieser Runde (NEW_UNITS, mit dem Römer der Vorrunde). Eine neue Einheit verliert mit vollem
@@ -67,10 +82,9 @@ export const SPAM_ROLE = {
   elefant: 'baer',
   krokodil: 'krieger', // Nahkämpfer am Boden
 };
-// Lösung der Mission (Index → Typen): dort darf die neue Einheit mit vollem Budget gewinnen. M5 (Die Festung) lehrt
-// Reichweite über die Mauer (Hinweis: Magier schießen weiter als Schützen; Smart-Plan 14 Magier); der Zyklop ist genau
-// diese Artillerie (280 px über Mauern). Er gewann M5 auch mit 5 Zyklopen (Kosten 14) oder 200 px Reichweite 8/8.
-export const SPAM_ANSWER = { 4: ['zyklop'] };
+// Lösung der Mission (Index → Typen): dort darf die neue Einheit mit vollem Budget gewinnen. Jetzt level.answer
+// (grundausbildung.js: M5 Die Festung, der Zyklop).
+export const SPAM_ANSWER = Object.fromEntries(GA.map((l, i) => [i, l.answer]).filter(e => e[1]));
 
 // [a, b, Punkte]: a schlägt b bei gleichen Punkten. Liegt in game/js/data.js (die Charakterkarten lesen sie).
 export { COUNTERS } from '../game/js/data.js';

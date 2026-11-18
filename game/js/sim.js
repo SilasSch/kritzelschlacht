@@ -1,6 +1,7 @@
 // Reiner Simulationsschritt (Körperphysik in physics.js), Missionsaufbau, Missionsergebnis, Sieger im Sandkasten.
 // Port aus kritzelschlacht.html. Kein DOM, Zufall nur über world.rng().
 import { MISSIONS, TERRAIN, CELL, UNITS } from './data.js';
+import { levelById } from './campaign/index.js';
 import { spawn, setCell, rebuildHash, clearBattle, touchTerrain, frameX } from './world.js';
 import { think, stepProjectiles } from './combat.js';
 import { integrate, collide, collideWalls, stepCorpses, stepDebris } from './physics.js';
@@ -143,10 +144,11 @@ export function tCircle(world, key, cx, cy, rr, inner = 0) {
   }
 }
 
-// Baut Mission i auf (leert vorher die Schlacht per clearBattle und das Gelände). Gegner gehören 'rot'.
+// Baut eine Mission auf (leert vorher die Schlacht per clearBattle und das Gelände). Gegner gehören 'rot'.
+// i: Index in MISSIONS (Grundausbildung), id eines Levels (campaign/) oder das Level selbst.
 // x-Angaben der Mission sind Anteile des Missionsrahmens (world.frameX), y Anteile von H.
 export function buildMission(world, i) {
-  const m = MISSIONS[i];
+  const m = typeof i === 'number' ? MISSIONS[i] : typeof i === 'string' ? levelById(i) : i;
   clearBattle(world);
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0); touchTerrain(world);
   world.contested = false; world.teamMode = true;

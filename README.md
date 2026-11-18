@@ -39,3 +39,8 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 Das Spiel läuft als Multi-File-Artefakt: `game/index.html` ist die Seite, alle übrigen Dateien unter `game/`
 (`js/**`, `vendor/pixi.min.js`, `fonts/*`) gehen mit ihrem Pfad relativ zu `game/` in `files`.
 Neue Module müssen dort mit aufgenommen werden, sonst fehlen sie im Artefakt.
+
+Wichtig fürs öffentliche Teilen: Die Prüfung lässt nur gängige Bild-, Video- und Audioformate zu. Schriftdateien (`.woff2`)
+und das lokale `pixi.min.js` (enthält data:-URIs für AVIF/WebM) lassen sie scheitern, dann ist der Link nur noch privat.
+Für das Artefakt daher den `@font-face`-Block durch den Google-Fonts-Link ersetzen, Pixi von
+`https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js` laden und `fonts/` sowie `vendor/` nicht mit hochladen.

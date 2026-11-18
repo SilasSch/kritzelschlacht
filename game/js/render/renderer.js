@@ -396,6 +396,11 @@ void main() {
     if (v.id <= u.id || !v.wall || v.state !== 'ok' || !v.alive || factionOf(LK_W, v) !== LK_F) return;
     const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < LK_D) { LK_D = e; LK_B = v; }
   }
+  function wedgeTest(v) {
+    const u = LK_U;
+    if (v.id <= u.id || !v.wedge || v.state !== 'ok' || !v.alive || factionOf(LK_W, v) !== LK_F) return;
+    const e = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (e < LK_D) { LK_D = e; LK_B = v; }
+  }
   function drawUnits(world, cam, t) {
     const tm = world.teamMode;
     // Sichtbarer Weltausschnitt mit Rand für große Figuren, Balken und Krone
@@ -430,6 +435,14 @@ void main() {
       query(world, u.x, u.y, 42, linkTest);
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
       if (b) links.line(u.x + u.face * u.T.r * .8, u.y - u.z, b.x + b.face * b.T.r * .8, b.y - b.z, 3, tm ? C(TEAMS[u.team].c) : 0x6f7a8c, .5);
+    }
+    // Keil der Reiter (combat.WEDGE): dünne Linien in Teamfarbe zwischen Nachbarn im Keil, nur in Bewegung
+    for (const u of groundList) {
+      if (!u.wedge || u.state !== 'ok' || u.run <= 0) continue;
+      LK_W = world; LK_U = u; LK_F = factionOf(world, u); LK_B = null; LK_D = 70 * 70;
+      query(world, u.x, u.y, 70, wedgeTest);
+      const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
+      if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + b.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
     }
     nBoss = 0;
     bodies(groundList, groundQ, groundBars, t, tm, inv);

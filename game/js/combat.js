@@ -127,8 +127,16 @@ export const MELEE_RECHECK = .1, FLEE_RECHECK = .1, RETARGET_FAR = 300, RETARGET
 // Takt der Zielsuche (s, Grundwert + Zufall) und der Gruppenmitte (groupInfo), gestreckt in Task 13
 export const RETARGET_T = [.45, .3], GROUP_T = [.35, .15], HEAL_RETARGET_T = [.5, .3];
 // Nur diese Typen lesen die Gruppenmitte (Rudel, Schwarm, Schildwall, Reihe halten); alle anderen sparen sich groupInfo
+// Keil der Reiter (Wunsch Silas, 18.11.): ab MIN Reitern in der Gruppe (groupInfo, 70 px, sich selbst mitgezählt) reiten
+// sie als Keil. Ihr Sturmangriff trifft Schildträger (SHIELDED) mit SHIELD-fachem Schaden, ein Schildwall dämpft ihn nicht
+// (÷ WALL_MELEE), und der Stoß schiebt weiter (PUSH statt 260). Sichtbar: Linien zwischen den Reitern im Keil (renderer)
+// und ein größerer Aufprall (fxcore, charge.wedge). Gegen alle anderen Ziele wirkt der Keil nicht.
+export const WEDGE = { MIN: 3, SHIELD: 1.5, PUSH: 340 };
+export const SHIELDED = new Set(['ritter', 'roemer']);
+const WALL_MELEE = .65;   // Schildwall: Pfeile und Schwerter × 0,65 (hurt)
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
+GROUP_USERS.add('reiter');    // Keil (WEDGE): Reiter, die zusammen reiten
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4, WATER_ID = 1;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -146,7 +154,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'vampir' && isFire(kind)) m *= 2;
   if (t === 'ritter') {
     m *= kind === 'poison' ? 1 : kind === 'arrow' ? .35 : kind === 'melee' ? .7 : kind === 'bullet' ? .8 : 1.5;
-    if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= .65;
+    if (v.wall && (kind === 'arrow' || kind === 'melee')) m *= WALL_MELEE;
   }
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? 1.4 : kind === 'arrow' || kind === 'melee' ? .5 : 1;
@@ -907,6 +915,7 @@ export function think(world, u, dt) {
   }
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
+  u.wedge = u.type === 'reiter' && u.gn >= WEDGE.MIN;
   if (T.heal) { healer(world, u, dt); return; }
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
   // Adler oben)
@@ -1197,8 +1206,10 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       if (flank) a *= 1.35;
       // Sturmangriff der Reiter, danach Durchritt
       if (u.type === 'reiter' && u.run > .7) {
-        a *= 2.6; knock(t, dx / d, dy / d, 260);
-        emit(world, { type: 'charge', x: t.x, y: t.y });
+        // Keil: im Verband stoßen die Lanzen durch Schilde (Ritter, Römer); den Abzug des Schildwalls heben sie auf
+        const lance = u.wedge && SHIELDED.has(t.type);
+        a *= 2.6 * (lance ? WEDGE.SHIELD / (t.wall ? WALL_MELEE : 1) : 1); knock(t, dx / d, dy / d, lance ? WEDGE.PUSH : 260);
+        emit(world, { type: 'charge', x: t.x, y: t.y, wedge: u.wedge });
         u.st = .6; u.cvx = dx / d * T.speed; u.cvy = dy / d * T.speed;
       }
       // Task 6: Hornstoß des Einhorns aus vollem Lauf (abilities.UNICORN), danach Durchlauf

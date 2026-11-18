@@ -82,6 +82,7 @@ const ABIL = {
   reiter: [
     {n:'Flankenritt', d:'Reitet seitlich am Ziel vorbei, statt frontal anzugreifen.'},
     {n:'Sturmangriff', d:'Im vollen Galopp macht der Stoß fast dreifachen Schaden. Danach reitet er durch und wendet.'},
+    {n:'Keil', d:'Ab 3 Reitern nebeneinander reiten sie als Keil: der Sturmangriff macht gegen Ritter und Römer 50 % mehr Schaden und bricht durch den Schildwall.'},
   ],
   roemer: [
     {n:'Blockformation', d:'Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.'},

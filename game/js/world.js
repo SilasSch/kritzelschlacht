@@ -93,7 +93,7 @@ export function spawn(world, type, x, y, team) {
     hp: T.hp, alive: true, state: 'ok', stunT: 0, peakZ: 0, face: team === 'rot' ? -1 : 1,
     aimX: 0, aimY: 0, tg: null, cd: world.rng() * T.cd, rt: world.rng() * 0.3, kills: 0,
     hitT: 0, fireT: 1, swingT: 0, seed: world.rng() * 10, gx: x, gy: y, gn: 1, gt: 0, att: 0, st: 0,
-    cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, blockedT: 0, lofFlip: false, lofT: -9,
+    cvx: 0, cvy: 0, run: 0, blk: 0, bcell: -1, wall: false, wedge: false, blockedT: 0, lofFlip: false, lofT: -9,
     // Brand (combat.ignite): Restdauer, Generation, Verursacher, Sprungtakt; lofWait: Drossel des Zielchecks (combat.lofCheck)
     burnT: 0, burnGen: 0, burnSrc: null, burnCk: 0, lofWait: 0,
     // Gift der Bienen (combat.poison, Nachtrag 4, #37): Restdauer (s), Verursacher; bei der Biene das Ziel ihres ersten Stichs

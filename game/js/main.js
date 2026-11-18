@@ -33,6 +33,7 @@ import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallen
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
+import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
 
 const STEP = 1 / 60, SLOW = .3, MAX_STEPS = 6, UNDO_MAX = 40;
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -448,10 +449,11 @@ function restoreSnap(b) {
 
 // Online 1 gegen 1 (online.js): beide Armeen aus der Liste aufstellen (feste Reihenfolge) und mit der Saat der Runde
 // kämpfen. Auf beiden Geräten dieselbe Liste und Saat, also derselbe Kampf.
-function onlineFight(list, seed) {
+function onlineFight(list, seed, map = 'feld') {
   const b = game.battle; if (!b) return false;
   cancelBatch(); endReplay(true);
   clearWorld(); world.teamMode = true;
+  applyMap(world, map); markAll();   // Karte der Runde (rules.js), auf beiden Geräten gleich
   for (const u of list) { const n = spawn(world, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
   rebuildHash(world);
   b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
@@ -738,10 +740,10 @@ const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
 
 /* ---------- Online 1 gegen 1 (18.11.) ---------- */
 // Zwei Geräte über die Live-Verbindung des Artefakts (net.js, online.js, ui/online.js)
-const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack });
+const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack, markAll });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || online.covered(); }
 // Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung (duel.js, ui/duel.js)
-const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle });
+const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle, markAll });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || duel.covered(); }
 
 /* ---------- Schleife ---------- */

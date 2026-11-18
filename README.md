@@ -30,7 +30,7 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 | Einstieg, Spielfluss | `js/main.js`, `js/ui.js`, `js/ui/*` (Tutorial-Blasen, Editor-Leiste, Teilen-Dialog, Tageschallenge, Hotseat) |
 | Simulation (ohne DOM) | `sim.js`, `world.js`, `combat.js`, `physics.js`, `pathing.js`, `morale.js`, `spells.js`, `abilities.js`, `battle.js` |
 | Inhalte | `data.js` (Einheiten, Gelände, Konter), `campaign/*` (Kapitel, Tutorial), `docs/kampagne.md` |
-| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
+| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `rules.js` (Regeln und Karten für 1 gegen 1), `online.js` (Online 1 gegen 1), `duel.js` (Code-Duell), `save.js` |
 | Netz | `net.js` (Live-Verbindung des Artefakts, `room`-Capability; `?nettest` simuliert sie über BroadcastChannel in mehreren Tabs) |
 | Darstellung | `render/*`, `camera.js` (Zoom auf feste Welt), `glguard.js` (WebGL-Kontextverlust) |
 | Debug | `debug/scenes.js`, `benchhud.js`, `sandbox.js` |
@@ -52,3 +52,9 @@ alle Betrachter), daher keine Themen-Freigaben. Beide Spieler müssen angemeldet
 
 **Code-Duell** (`duel.js`, `ui/duel.js`) ist das 1 gegen 1 ohne Live-Verbindung: Herausforderung und Antwort als
 `KS1.`-Code (Typ `duel` / `duelres`), geht für jeden, auch über den öffentlichen Link.
+
+**Regeln, Karten, Revanche** (`rules.js`): 14 Regeln (einzelne Kategorien, Mischungen wie Armee + Tiere, Auswahl nach
+Eigenschaft wie Nur Fernkampf, Luftkampf, Kleinvieh) und 6 spiegelgleiche Karten (Feld, Fluss, Furten, Wäldchen, Bollwerk,
+See). Online stimmen beide aus je 3 gelosten Regeln und Karten ab (gleiche Stimme gewinnt, sonst Los); im Code-Duell wählt
+der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Budget neu, beide malen neu.
+Beim Veröffentlichen `js/rules.js` mit hochladen.

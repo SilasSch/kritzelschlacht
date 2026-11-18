@@ -11,8 +11,10 @@ import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
 import {
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
-  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK,
+  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound,
 } from '../game/js/online.js';
+import { RULES, RULE_IDS, MAP_IDS, ruleAllows, applyMap, mapParts, resolveVote, mapSVG } from '../game/js/rules.js';
+const allowed = (rule, maxCost = 6) => Object.keys(UNITS).filter(t => ruleAllows(rule, t) && UNITS[t].cost < maxCost);
 
 const W = 1600, H = 900;
 
@@ -25,15 +27,49 @@ test('Online: Codes sind 4 Zeichen ohne Verwechsler, Eingabe wird normalisiert',
   assert.equal(roomName('KX7P'), 'ks1v1-kx7p');
 });
 
-test('Online: Runden würfeln eine Kategorie, nie zweimal hintereinander dieselbe', () => {
+test('Online: Runden bieten drei Regeln und drei Karten zur Wahl, nie die Regel der letzten Runde', () => {
   const rng = createRng(9);
-  let c = nextRound(null, 150, rng);
-  assert.equal(c.r, 1); assert.ok(ONLINE_CATS.includes(c.cat)); assert.equal(c.budget, 150);
-  const seen = new Set([c.cat]);
-  for (let i = 0; i < 40; i++) { const n = nextRound(c, 150, rng); assert.notEqual(n.cat, c.cat); assert.equal(n.r, c.r + 1); seen.add(n.cat); c = n; }
-  assert.equal(seen.size, ONLINE_CATS.length);
+  let c = randomRound(null, 150, rng);
+  assert.equal(c.r, 1); assert.ok(ONLINE_CATS.includes(c.cat)); assert.ok(MAP_IDS.includes(c.map)); assert.equal(c.budget, 150);
+  const seen = new Set([c.cat]), maps = new Set();
+  for (let i = 0; i < 60; i++) {
+    const n = nextRound(c, 150, rng);
+    assert.equal(n.cat, null); assert.equal(n.opts.rules.length, 3); assert.equal(n.opts.maps.length, 3);
+    assert.equal(new Set(n.opts.rules).size, 3); assert.ok(!n.opts.rules.includes(c.cat));
+    n.opts.rules.forEach(x => seen.add(x)); n.opts.maps.forEach(x => maps.add(x));
+    c = { ...n, cat: n.opts.rules[0] };
+  }
+  assert.equal(seen.size, RULE_IDS.length); assert.equal(maps.size, MAP_IDS.length);
   assert.equal(nextRound(null, 999, rng).budget, 150);
   assert.deepEqual(roundDef({ cat: 'tiere', budget: 100 }).cats, ['tiere']);
+});
+
+test('Regeln: gemischte und Eigenschafts-Regeln erlauben die richtigen Einheiten, jede hat genug Auswahl', () => {
+  assert.ok(ruleAllows('wildnis', 'ritter') && ruleAllows('wildnis', 'wolf') && !ruleAllows('wildnis', 'panzer'));
+  assert.ok(ruleAllows('fern', 'schuetze') && !ruleAllows('fern', 'krieger') && !ruleAllows('fern', 'sani'));
+  assert.ok(ruleAllows('luft', 'drache') && !ruleAllows('luft', 'panzer'));
+  assert.ok(ruleAllows('alles', 'panzer') && !ruleAllows('alles', 'ghul'));
+  for (const r of RULES) {
+    const n = Object.keys(UNITS).filter(t => ruleAllows(r.id, t)).length;
+    assert.ok(n >= 4, `${r.id}: ${n} Einheiten`);
+    assert.ok(Object.keys(UNITS).some(t => ruleAllows(r.id, t) && UNITS[t].cost <= 100), r.id);
+  }
+  assert.deepEqual(resolveVote('a', 'a', () => .9), { pick: 'a', agreed: true });
+  assert.equal(resolveVote('a', 'b', () => .2).pick, 'a'); assert.equal(resolveVote('a', 'b', () => .7).pick, 'b');
+});
+
+test('Karten: spiegelgleich für beide Seiten, Gelände gehört niemandem', () => {
+  for (const id of MAP_IDS) {
+    const w = createWorld(W, H, 1); applyMap(w, id);
+    for (let gy = 0; gy < w.GH; gy++) for (let gx = 0; gx < w.GW; gx++) {
+      const i = gy * w.GW + gx, j = gy * w.GW + (w.GW - 1 - gx);
+      assert.equal(w.terr[i], w.terr[j], `${id} nicht spiegelgleich bei ${gx},${gy}`);
+      assert.equal(w.towner[i], 0);
+    }
+    if (id !== 'feld') assert.ok(w.terr.some(x => x), id);
+    assert.match(mapSVG(id), /^<svg/);
+  }
+  assert.equal(mapParts('nix').length, 0);
 });
 
 // Eine Seite malt mit den Regeln der Runde (hotseat.js mit def = Kategorie)
@@ -88,9 +124,18 @@ function link(A, B, maxRounds = 200) {
   return { evA, evB };
 }
 
+// Beide stimmen ab (a, b: [Regel, Karte]; ohne Angabe die erste Wahl); danach malen beide
+function voteBoth(A, B, a, b) {
+  link(A, B);
+  const o = A.cfg.opts;
+  castVote(A, ...(a || [o.rules[0], o.maps[0]])); castVote(B, ...(b || a || [o.rules[0], o.maps[0]]));
+  return link(A, B);
+}
+
 // Kampf so, wie ui/online.js ihn aufstellt (main.js onlineFight): Welt leeren, Liste spawnen, Schnappschuss, Saat
-function runFight(list, seed) {
+function runFight(list, seed, map = 'feld') {
   const w = createWorld(W, H, 77); w.teamMode = true;
+  applyMap(w, map);
   for (const u of list) { const n = spawn(w, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
   const snap = snapshotBattle(w);
   resetFight(w, snap, seed);
@@ -102,12 +147,22 @@ function runFight(list, seed) {
 test('Online: ganzer Ablauf zweier Spieler, beide sehen denselben Kampf und denselben Punktestand', () => {
   const A = createMatch('host', 100, createRng(4)), B = createMatch('guest');
   assert.equal(A.side, 'blau'); assert.equal(B.side, 'rot');
-  assert.deepEqual(hostStart(A), ['round']);
-  let { evB } = link(A, B);
+  assert.deepEqual(hostStart(A), ['vote']);
+  const v = link(A, B);
+  assert.ok(v.evB.includes('vote')); assert.equal(B.phase, 'vote'); assert.deepEqual(B.cfg.opts, A.cfg.opts);
+  // verschiedene Stimmen: das Los entscheidet zwischen beiden, beide bekommen dasselbe
+  const o = A.cfg.opts;
+  castVote(A, o.rules[0], o.maps[1]);
+  assert.equal(A.phase, 'vote', 'wartet auf den Gast');
+  assert.equal(castVote(B, 'gibtsnicht', o.maps[0]).length, 0);
+  castVote(B, o.rules[2], o.maps[1]);
+  const { evB } = link(A, B);
   assert.ok(evB.includes('round'));
-  assert.deepEqual(B.cfg, A.cfg); assert.equal(B.phase, 'paint');
+  assert.deepEqual(B.cfg, A.cfg); assert.equal(B.phase, 'paint'); assert.equal(A.phase, 'paint');
+  assert.ok([o.rules[0], o.rules[2]].includes(A.cfg.cat)); assert.equal(A.cfg.map, o.maps[1]);
+  assert.deepEqual(A.cfg.agreed, { rule: false, map: true });
   const cfg = A.cfg;
-  const pick = Object.keys(UNITS).filter(t => UNITS[t].cat === cfg.cat && UNITS[t].paint !== false && UNITS[t].cost < 6);
+  const pick = allowed(cfg.cat);
   // jeder malt in seiner eigenen Welt, sieht also den anderen nicht
   const wA = createWorld(W, H, 11), wB = createWorld(W, H, 22); wA.teamMode = wB.teamMode = true;
   paintSide(wA, 'blau', cfg, pick[0], 30); paintSide(wB, 'rot', cfg, pick[pick.length - 1], 30);
@@ -123,7 +178,8 @@ test('Online: ganzer Ablauf zweier Spieler, beide sehen denselben Kampf und dens
   assert.deepEqual(A.fight.units, B.fight.units);
   assert.ok(A.fight.units.some(u => u.team === 'blau') && A.fight.units.some(u => u.team === 'rot'));
   // derselbe Kampf auf beiden Geräten
-  const fa = runFight(A.fight.units, A.fight.seed), fb = runFight(B.fight.units, B.fight.seed);
+  assert.equal(A.fight.map, cfg.map); assert.equal(B.fight.map, cfg.map);
+  const fa = runFight(A.fight.units, A.fight.seed, A.fight.map), fb = runFight(B.fight.units, B.fight.seed, B.fight.map);
   assert.ok(fa.r); assert.equal(fa.r, fb.r); assert.equal(fa.alive, fb.alive);
   finishFight(A, fa.r); finishFight(B, fb.r);
   link(A, B);
@@ -134,15 +190,31 @@ test('Online: ganzer Ablauf zweier Spieler, beide sehen denselben Kampf und dens
   wantNext(A); link(A, B);
   assert.equal(A.phase, 'result');
   wantNext(B); const n = link(A, B);
-  assert.ok(n.evB.includes('round'));
-  assert.equal(A.cfg.r, 2); assert.equal(B.cfg.r, 2); assert.notEqual(A.cfg.cat, cfg.cat);
-  assert.equal(A.phase, 'paint'); assert.equal(B.phase, 'paint');
+  assert.ok(n.evB.includes('vote'));
+  assert.equal(A.cfg.r, 2); assert.equal(B.cfg.r, 2); assert.ok(!A.cfg.opts.rules.includes(cfg.cat));
+  assert.equal(A.phase, 'vote'); assert.equal(B.phase, 'vote');
+  voteBoth(A, B);
+  assert.equal(A.phase, 'paint'); assert.equal(B.phase, 'paint'); assert.equal(B.cfg.cat, A.cfg.opts.rules[0]);
   assert.equal(finishFight(A, 'blau').length, 0, 'zählt nicht doppelt');
+  // Revanche: nur wenn beide wollen; gleiche Regel, Karte, Budget, neue Saat, keine Abstimmung
+  const r2 = { ...A.cfg };
+  const wA2 = createWorld(W, H, 31), wB2 = createWorld(W, H, 32); wA2.teamMode = wB2.teamMode = true;
+  paintSide(wA2, 'blau', r2, allowed(r2.cat)[0], 10); paintSide(wB2, 'rot', r2, allowed(r2.cat)[0], 10);
+  markReady(A, packArmy(wA2, 'blau')); markReady(B, packArmy(wB2, 'rot')); link(A, B);
+  finishFight(A, 'draw'); finishFight(B, 'draw'); link(A, B);
+  wantNext(A, true); link(A, B);
+  assert.equal(B.peerWant, 'same');
+  wantNext(B, true); const rm = link(A, B);
+  assert.ok(rm.evB.includes('round'));
+  assert.equal(A.phase, 'paint'); assert.equal(B.phase, 'paint');
+  assert.equal(B.cfg.r, r2.r + 1); assert.equal(B.cfg.cat, r2.cat); assert.equal(B.cfg.map, r2.map); assert.equal(B.cfg.budget, r2.budget);
+  assert.notEqual(B.cfg.seed, r2.seed); assert.ok(B.cfg.rematch);
 });
 
 test('Online: große Armeen gehen in mehreren Stücken über, die presence bleibt unter 4 KiB', () => {
   const A = createMatch('host', 250, createRng(1)), B = createMatch('guest');
-  hostStart(A); A.cfg.cat = 'tiere'; link(A, B); B.cfg.cat = 'tiere';
+  hostStart(A); link(A, B); A.cfg.opts.rules[0] = 'tiere'; B.cfg.opts.rules[0] = 'tiere'; voteBoth(A, B);
+  assert.equal(B.cfg.cat, 'tiere');
   const wA = createWorld(W, H, 3), wB = createWorld(W, H, 4); wA.teamMode = wB.teamMode = true;
   paintSide(wA, 'blau', A.cfg, 'biene', 80); paintSide(wB, 'rot', A.cfg, 'wolf', 10);
   const nA = wA.units.length;
@@ -163,12 +235,12 @@ test('Online: große Armeen gehen in mehreren Stücken über, die presence bleib
 
 test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten stören nicht', () => {
   const A = createMatch('host', 100, createRng(2)), B = createMatch('guest');
-  hostStart(A); link(A, B);
+  hostStart(A); voteBoth(A, B);
   const wB = createWorld(W, H, 5); wB.teamMode = true;
   // Gast schummelt: 60 Panzer weit über dem Budget
   for (let i = 0; i < 60; i++) spawn(wB, 'panzer', 900 + (i % 6) * 100, 60 + Math.floor(i / 6) * 80, 'rot');
   const wA = createWorld(W, H, 6); wA.teamMode = true;
-  spawn(wA, Object.keys(UNITS).find(t => UNITS[t].cat === A.cfg.cat), 200, 300, 'blau');
+  spawn(wA, allowed(A.cfg.cat)[0], 200, 300, 'blau');
   markReady(A, packArmy(wA, 'blau')); markReady(B, packArmy(wB, 'rot'));
   const { evA } = link(A, B);
   assert.ok(evA.includes('error'));
@@ -178,7 +250,7 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   const C = createMatch('guest');
   for (const junk of [null, 5, 'x', [], { ks: 2, cfg: {} }, { ks: 1, cfg: { r: 'a' } }, { ks: 1, cfg: { r: 1, cat: 'gelaende', budget: 100 } }]) onPeer(C, junk, W, H);
   assert.equal(C.cfg, null);
-  assert.equal(pickPeer([{ isMe: true, presence: { ks: 1 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 }, peer: 'p2' }]).peer, 'p2');
+  assert.equal(pickPeer([{ isMe: true, presence: { ks: 2 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 } }, { isMe: false, presence: { ks: 2 }, peer: 'p2' }]).peer, 'p2');
   assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150 } } }, { isMe: false, presence: { open: { code: 'zz', budget: 150 } } }]), [{ code: 'KX7P', budget: 150 }]);
 });
 
@@ -187,8 +259,8 @@ import { encode, decode } from '../game/js/share.js';
 import { challengeData, answerData, duelList, validDuel } from '../game/js/duel.js';
 
 test('Code-Duell: Herausforderung und Antwort als Code, beide sehen denselben Kampf', async () => {
-  const cfg = nextRound(null, 150, createRng(12));
-  const pick = Object.keys(UNITS).filter(t => UNITS[t].cat === cfg.cat && UNITS[t].paint !== false && UNITS[t].cost < 6);
+  const cfg = randomRound(null, 150, createRng(12));
+  const pick = allowed(cfg.cat);
   const wA = createWorld(W, H, 1), wB = createWorld(W, H, 2); wA.teamMode = wB.teamMode = true;
   paintSide(wA, 'blau', cfg, pick[0], 25); paintSide(wB, 'rot', cfg, pick[pick.length - 1], 25);
   const ch = await decode(await encode(challengeData(cfg, packArmy(wA, 'blau'))));
@@ -198,7 +270,8 @@ test('Code-Duell: Herausforderung und Antwort als Code, beide sehen denselben Ka
   // B kämpft beim Einfügen seiner Armee, A beim Laden der Antwort: gleiche Liste, gleiche Saat, gleicher Kampf
   const lB = duelList(answerData(ch, packArmy(wB, 'rot'))), lA = duelList(ans);
   assert.deepEqual(lA, lB);
-  const fa = runFight(lA, ans.cfg.seed), fb = runFight(lB, ch.cfg.seed);
+  assert.equal(ans.cfg.map, cfg.map);
+  const fa = runFight(lA, ans.cfg.seed, ans.cfg.map), fb = runFight(lB, ch.cfg.seed, ch.cfg.map);
   assert.equal(fa.r, fb.r); assert.equal(fa.alive, fb.alive);
 });
 

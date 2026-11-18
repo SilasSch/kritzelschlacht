@@ -4,8 +4,9 @@
 // die Armee des Gegners kommt erst zum Kampf in die Welt.
 import {
   createMatch, view, hostStart, markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms,
-  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO,
+  makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote,
 } from '../online.js';
+import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { getRoom } from '../net.js';
 // Live-Version des Artefakts (mit room-Capability, nur auf Einladung); die öffentliche Version verweist darauf
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
@@ -13,6 +14,16 @@ import { fmtPts } from '../cards.js';
 
 const CSS = `
 #ovOnl{z-index:7}
+.card.vote{max-width:680px}
+.vopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.vopts .btn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px 12px}
+.vopts .btn b{font-family:var(--f-logo);font-weight:400;font-size:19px;letter-spacing:.5px}
+.vopts .btn span{font-size:12px;color:var(--muted);font-weight:600;line-height:1.3}
+.vopts .btn svg{width:100%;height:auto;border-radius:6px}
+.vopts .btn.on{background:var(--sel);border-color:var(--selb);box-shadow:0 0 0 2px var(--selb)}
+.vopts .btn:disabled{opacity:1}
+.card.onl h3{margin:4px 0 0;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.card.onl .mapprev svg{width:220px;height:auto;border-radius:8px;display:block}
 .card.onl{max-width:520px;align-items:flex-start}
 .card.onl .code{font-family:var(--f-logo);font-size:44px;letter-spacing:6px;line-height:1;padding:8px 16px;border:2px dashed var(--ink);border-radius:14px;background:#fffbe9}
 .card.onl .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -34,7 +45,7 @@ const SIDE_N = { blau: 'Blau', rot: 'Rot' };
 const GONE_MS = 6000;      // so lange darf der Gegner fehlen (Neuverbindung), bevor die Karte „Gegner ist weg“ kommt
 const JOIN_MS = 8000;      // so lange sucht der Gast nach dem Host
 
-export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack }) {
+export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack, markAll }) {
   const $ = id => document.getElementById(id);
   const style = document.createElement('style'); style.textContent = CSS; document.head.append(style);
 
@@ -54,6 +65,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (!m) { if (goPrev) goPrev.call(go, e); return; }
     e.currentTarget.blur();
     if (m.phase === 'paint') ready();
+    else if (m.phase === 'vote') voteCard();
     else if (m.phase === 'result') { act(wantNext(m)); }
   };
 
@@ -64,8 +76,8 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   $('app').append(ov);
   const card = ov.firstChild;
   let shown = '';
-  const hideCard = () => { ov.hidden = true; shown = ''; ov.classList.remove('onl-round'); if (lobbyUnsub) { lobbyUnsub(); lobbyUnsub = null; } };
-  const showCard = (kind, html) => { card.innerHTML = html; shown = kind; ov.hidden = false; };
+  const hideCard = () => { ov.hidden = true; shown = ''; card.classList.remove('vote'); ov.classList.remove('onl-round'); if (lobbyUnsub) { lobbyUnsub(); lobbyUnsub = null; } };
+  const showCard = (kind, html) => { if (kind !== 'vote') card.classList.remove('vote'); card.innerHTML = html; shown = kind; ov.hidden = false; };
 
   async function openLobby() {
     let pick = ONLINE_DEFAULT;
@@ -121,11 +133,35 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     }
     $('onlCancel').onclick = () => leave('Online-Spiel abgebrochen.');
   }
+  // Abstimmung: drei Regeln und drei Karten; gleiche Wahl gewinnt, sonst das Los
+  let pickR = null, pickM = null;
+  function voteCard() {
+    const c = m.cfg, done = !!m.vote;
+    if (!done) { if (!c.opts.rules.includes(pickR)) pickR = c.opts.rules[0]; if (!c.opts.maps.includes(pickM)) pickM = c.opts.maps[0]; }
+    const selR = done ? m.vote.rule : pickR, selM = done ? m.vote.map : pickM;
+    card.classList.add('vote');
+    showCard('vote', `<h2 id="onlTitle">Runde ${c.r}: Abstimmung</h2>
+      <p class="muted">Ihr wählt beide. Gleiche Wahl gewinnt, sonst entscheidet das Los zwischen euren beiden Stimmen. ${scoreText()}.</p>
+      <h3>Was darf gemalt werden?</h3>
+      <div class="vopts" id="vRules">${c.opts.rules.map(id => `<button class="btn${id === selR ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}><b>${esc(RULE[id].n)}</b><span>${esc(RULE[id].d)}</span></button>`).join('')}</div>
+      <h3>Karte</h3>
+      <div class="vopts" id="vMaps">${c.opts.maps.map(id => `<button class="btn${id === selM ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}>${mapSVG(id)}<b>${esc(MAP[id].n)}</b><span>${esc(MAP[id].d)}</span></button>`).join('')}</div>
+      <div class="btnrow">${done ? '<button class="go" disabled>Warte auf die Stimme deines Gegners …</button>' : '<button class="go" id="onlVote">Abstimmen</button>'}<button class="btn" id="onlCancel">Spiel verlassen</button></div>`);
+    if (!done) {
+      card.querySelectorAll('#vRules .btn').forEach(b => { b.onclick = () => { pickR = b.dataset.v; voteCard(); }; });
+      card.querySelectorAll('#vMaps .btn').forEach(b => { b.onclick = () => { pickM = b.dataset.v; voteCard(); }; });
+      $('onlVote').onclick = () => act(castVote(m, pickR, pickM));
+    }
+    $('onlCancel').onclick = () => confirmLeave();
+  }
   function roundCard() {
-    const c = m.cfg;
+    const c = m.cfg, ag = c.agreed || {};
+    const how = (ok, what) => (ok ? `${what}: ihr wart euch einig.` : `${what}: das Los hat entschieden.`);
     ov.classList.add('onl-round');
-    showCard('round', `<h2 id="onlTitle">Runde ${c.r}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
-      <p>Male deine Armee nur aus <b>${esc(CAT_NAME[c.cat])}</b>, ${c.budget} Punkte. Du bist <b>${SIDE_N[m.side]}</b> (${m.side === 'blau' ? 'links' : 'rechts'}). Dein Gegner sieht nichts, bis beide fertig sind.</p>
+    showCard('round', `<h2 id="onlTitle">${c.rematch ? 'Revanche' : `Runde ${c.r}`}: <span class="cat">${esc(CAT_NAME[c.cat])}</span></h2>
+      <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(MAP[c.map].n)}</b><br><span class="muted">${esc(MAP[c.map].d)}</span></div></div>
+      <p>${esc(RULE[c.cat].d)}. ${c.budget} Punkte. Du bist <b>${SIDE_N[m.side]}</b> (${m.side === 'blau' ? 'links' : 'rechts'}). Dein Gegner sieht nichts, bis beide fertig sind.</p>
+      <p class="muted">${c.rematch ? 'Gleiches Setup wie eben, ihr malt beide neu.' : `${how(ag.rule, 'Regel')} ${how(ag.map, 'Karte')}`}</p>
       <div class="btnrow"><button class="go" id="onlOk">Los geht's</button></div>`);
     $('onlOk').onclick = hideCard; $('onlOk').focus();
     clearTimeout(roundT); roundT = setTimeout(() => { if (shown === 'round') hideCard(); }, 5000);
@@ -206,20 +242,34 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   /* ---------- Ablauf ---------- */
   function act(evs) {
     for (const e of evs) {
-      if (e === 'round') beginRound();
+      if (e === 'vote') beginVote();
+      else if (e === 'voted') voteCard();
+      else if (e === 'round') beginRound();
       else if (e === 'fight') beginFight();
       else if (e === 'error') ui.toast(`Die Armee des Gegners war ungültig (${m.error}). Sie kämpft nicht mit.`);
-      else if (e === 'peerres' || e === 'score' || e === 'result') decorate();
+      else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') decorate();
     }
     publish(); sync();
   }
-  function beginRound() {
-    const b = game.battle; if (!b || !m) return;
+  // Neue Runde: Feld leeren, nicht malen, abstimmen
+  function resetField(step, def) {
+    const b = game.battle; if (!b || !m) return null;
     game.endReplay(true);
     $('ovBat').hidden = true; document.body.classList.remove('bat-res');
     b.phase = 'plan'; b.stats = null; b.result = null; b.endT = -1; b.t = 0; b.snap = null; b.batchRes = null;
     clearWorld(); world.teamMode = true; undoStack.length = 0;
-    b.hot = { online: true, budget: m.cfg.budget, step: m.side, spent: { blau: 0, rot: 0 }, def: roundDef(m.cfg) };
+    b.hot = { online: true, budget: m.cfg.budget, step, spent: { blau: 0, rot: 0 }, def };
+    return b;
+  }
+  function beginVote() {
+    if (!resetField('online', null)) return;
+    ui.updateBattle(); ui.updateCounts(); ui.updateControls();
+    audio.play('whoosh');
+    voteCard();
+  }
+  function beginRound() {
+    const b = resetField(m.side, roundDef(m.cfg)); if (!b) return;
+    applyMap(world, m.cfg.map); markAll();
     game.setCat(m.cfg.cat);
     ui.updateBattle(); ui.updateCounts(); ui.updateControls();
     audio.play('whoosh');
@@ -235,7 +285,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   function beginFight() {
     if (!m || !m.fight) return;
     hideCard();
-    onlineFight(m.fight.units, m.fight.seed);
+    onlineFight(m.fight.units, m.fight.seed, m.fight.map);
     ui.toast('Aufgedeckt!');
   }
 
@@ -253,10 +303,16 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const note = !off ? 'Warte auf das Ergebnis des Gegners …'
       : off !== mine && mine ? `Gewertet wird das Ergebnis von Blau (${off === 'draw' ? 'unentschieden' : SIDE_N[off] + ' gewinnt'}); auf deinem Gerät lief der Kampf etwas anders.`
       : off === 'draw' ? 'Unentschieden, kein Punkt.' : off === m.side ? 'Du gewinnst die Runde!' : 'Dein Gegner gewinnt die Runde.';
-    box.innerHTML = `<div><div class="muted">Runde ${m.cfg.r} · ${esc(CAT_NAME[m.cfg.cat])} · du bist ${SIDE_N[m.side]}</div>
-        <div class="sc"><span class="blau">Blau ${m.score.blau}</span> : <span class="rot">${m.score.rot} Rot</span></div><div class="muted">${esc(note)}</div></div>
-      <div class="btnrow"><button class="go" id="onlNext"${m.want > m.cfg.r ? ' disabled' : ''}>${m.want > m.cfg.r ? 'Warte auf Gegner …' : 'Nächste Runde'}</button><button class="btn" id="onlLeave">Verlassen</button></div>`;
-    $('onlNext').onclick = () => act(wantNext(m));
+    const waiting = m.want > m.cfg.r, pw = m.peerWant;
+    const peerTxt = pw === 'same' ? 'Dein Gegner will eine Revanche.' : pw === 'new' ? 'Dein Gegner will die nächste Runde.' : '';
+    const myTxt = waiting ? (m.same ? (pw === 'new' ? 'Du willst Revanche, dein Gegner eine neue Runde: drück „Nächste Runde“, um weiterzumachen.' : 'Du willst Revanche, warte auf deinen Gegner …') : 'Warte auf deinen Gegner …') : '';
+    box.innerHTML = `<div><div class="muted">Runde ${m.cfg.r} · ${esc(CAT_NAME[m.cfg.cat])} · ${esc(MAP[m.cfg.map].n)} · du bist ${SIDE_N[m.side]}</div>
+        <div class="sc"><span class="blau">Blau ${m.score.blau}</span> : <span class="rot">${m.score.rot} Rot</span></div><div class="muted">${esc(note)}</div>
+        ${peerTxt || myTxt ? `<div class="muted"><b>${esc(peerTxt)}</b> ${esc(myTxt)}</div>` : ''}</div>
+      <div class="btnrow"><button class="go" id="onlSame"${waiting && m.same ? ' disabled' : ''} title="Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu">Revanche</button>
+        <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="Neue Abstimmung über Regel und Karte">Nächste Runde</button><button class="btn" id="onlLeave">Verlassen</button></div>`;
+    $('onlNext').onclick = () => act(wantNext(m, false));
+    $('onlSame').onclick = () => act(wantNext(m, true));
     $('onlLeave').onclick = () => confirmLeave();
   }
 
@@ -272,10 +328,10 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;
     const c = m.cfg, ph = m.phase;
     $('batClear').hidden = ph !== 'paint';
-    setText(go, ph === 'paint' ? 'Fertig' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …');
-    go.disabled = !(ph === 'paint' || (ph === 'result' && m.want <= c.r));
-    const head = c ? `Online · Runde ${c.r} · ${CAT_NAME[c.cat]} · ${scoreText()}` : `Online · Raum ${m.code}`;
-    const tail = ph === 'wait' ? 'warte auf Gegner'
+    setText(go, ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …');
+    go.disabled = !(ph === 'paint' || ph === 'vote' || (ph === 'result' && m.want <= c.r));
+    const head = c && c.cat ? `Online · Runde ${c.r} · ${CAT_NAME[c.cat]} · ${MAP[c.map].n} · ${scoreText()}` : c ? `Online · Runde ${c.r} · ${scoreText()}` : `Online · Raum ${m.code}`;
+    const tail = ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
       : ph === 'paint' ? `du malst ${m.side === 'blau' ? 'links' : 'rechts'}: ${fmtPts(b.hot.spent[m.side])} / ${c.budget} Punkte`
       : ph === 'ready' ? 'fertig, der Gegner malt noch' : ph === 'xfer' ? 'decke auf …' : ph === 'fight' ? 'Kampf läuft' : 'Runde vorbei';
     setText($('batHint'), `${head} · ${tail}`);

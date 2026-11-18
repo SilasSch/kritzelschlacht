@@ -400,8 +400,10 @@ void main() {
     groundList.length = 0; airList.length = 0;
     let top = null, culled = 0;
     const SC = stats.stances; SC.stand = SC.down = SC.prone = SC.up = 0;
+    const hidden = overlay.hiddenTeam;   // Hotseat (Audit 18.11.): diese Seite nicht zeichnen (setOverlay)
     for (const u of world.units) {
       if (!u.alive) continue;
+      if (hidden && u.team === hidden) continue;
       if (PRONE.has(u.type)) SC[u.stance]++;
       if (u.kills >= 3 && (!top || u.kills > top.kills)) top = u;
       if (u.x < vx0 || u.x > vx1 || u.y < vy0 || u.y > vy1) { culled++; continue; }

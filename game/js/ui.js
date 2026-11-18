@@ -6,6 +6,7 @@ import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
 import { armyPoints } from './sim.js';
+import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -246,8 +247,9 @@ export function createUI(game) {
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
     if (mis) {
-      $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint;
-      $('misName').title = mis.chapter.n;
+      // Tageschallenge (Audit 18.11.): ohne Kapitel
+      $('misName').textContent = mis.chapter ? `Mission ${mis.idx + 1} · ${mis.def.n}` : mis.def.n; $('misHint').textContent = mis.def.hint;
+      $('misName').title = mis.chapter ? mis.chapter.n : 'Tageschallenge';
     }
   }
 
@@ -300,6 +302,7 @@ export function createUI(game) {
     $('listTitle').textContent = 'Kampagne';
     $('listText').textContent = 'Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.';
     const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
+    dailyCard(g, game);   // Tageschallenge (Audit 18.11.): Karte ganz oben
     CHAPTERS.forEach((c, ci) => {
       const b = document.createElement('button'); b.className = 'ch'; b.dataset.ch = c.id;
       const p = chapterProgress(game.save.stars, c.id), empty = !p.total, open = !empty && game.chapterUnlocked(c.id);
@@ -337,7 +340,7 @@ export function createUI(game) {
     $('ovList').hidden = false;
   }
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
-  const openMissionList = () => (game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+  const openMissionList = () => (game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
@@ -354,6 +357,7 @@ export function createUI(game) {
     $('resNext').hidden = !r.win;
     $('resNext').textContent = r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln';
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
+    dailyResult(r, toast);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
 
@@ -422,6 +426,7 @@ export function createUI(game) {
     const g = $('batGo');
     setText('batGo', plan ? 'Los!' : 'Abbrechen');
     g.disabled = b.phase === 'done';
+    if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
   }
 
   // Verlauf: zwei Linien (Teamfarben, 2 px) über der Zeit, eine Achse; Namen am Linienende, Hover mit Fadenkreuz und Werten

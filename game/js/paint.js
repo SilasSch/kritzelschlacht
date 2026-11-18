@@ -3,6 +3,8 @@
 // mission = null (Sandkasten) oder { budget, spent, def } (spent wird hier fortgeschrieben; def: das Level, campaign/,
 // dessen units und cats festlegen, was gemalt werden darf).
 // phase = 'plan' | 'battle' | 'done' (nur in Missionen relevant).
+// Hotseat (Audit 18.11.): mission.team (Standard PLAYER) ist die malende Seite, mission.zone = [x0, x1] ihre Malzone in px
+// (statt der Missionslinie zoneX).
 import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
 import { clearSpellWalls, STONE_WALL } from './spells.js';
@@ -33,6 +35,8 @@ export const strokeEmpty = s => !s.units.length && !s.cells.size && !s.erased.le
 export const zoneX = world => frameX(world, ZONE);
 
 export function canPaintAt(world, x, mission, phase) {
+  // Hotseat (Audit 18.11.): mission.zone = [x0, x1] in px, die Hälfte der malenden Seite
+  if (mission && mission.zone) return phase === 'plan' && x >= mission.zone[0] && x <= mission.zone[1];
   return !(mission && (phase !== 'plan' || x > zoneX(world)));
 }
 
@@ -71,7 +75,7 @@ export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
       if (mission.spent + T.cost > mission.budget + EPS) { warning = warn(stroke, MSG_BUDGET); break; }
       mission.spent += T.cost;
     }
-    const nu = spawn(world, sel, px, py, mission ? PLAYER : team === BY_HALF ? sideAt(world, px) : team);
+    const nu = spawn(world, sel, px, py, mission ? mission.team || PLAYER : team === BY_HALF ? sideAt(world, px) : team);
     placed++;
     if (stroke) stroke.units.push(nu);
   }
@@ -111,7 +115,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
   if (key === 'radierer') {
     query(world, x, y, R + 10, v => {
       if ((v.x - x) ** 2 + (v.y - y) ** 2 > R * R) return;
-      if (mission && v.team !== PLAYER) return;
+      if (mission && v.team !== (mission.team || PLAYER)) return;
       // Nicht Gemaltes (paint: false, der Ghul) war nie bezahlt und kommt mit Rückgängig nicht wieder (sonst ein Ghul ohne Vampir).
       // Task 6: ein verfluchter Frosch zählt als sein ursprünglicher Typ (u.frogFrom), die Asche des Phönix mit halben LP
       // (wie beim Sichern des Sandkastens); reborn geht mit, sonst stünde der Phönix nach Rückgängig ein zweites Mal auf.

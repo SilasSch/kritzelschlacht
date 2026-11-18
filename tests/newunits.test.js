@@ -84,3 +84,16 @@ test('Stinktier: Stinkwolke erschreckt nahe Gegner, Maschinen nicht', async () =
   assert.ok(!(b.fearT > 0), 'Minibot riecht nichts');
   assert.ok(STINK.R >= 40);
 });
+
+test('Dornenhecke: Bodentruppen nehmen Schaden, Flieger und Panzer nicht', async () => {
+  const { THORN } = await import('../game/js/physics.js');
+  const w = mkWorld();
+  for (let gy = 30; gy <= 50; gy++) for (let gx = 30; gx <= 50; gx++) setCell(w, gy * w.GW + gx, TERRAIN.dornen.id);
+  const k = spawn(w, 'krieger', 400, 400, 'blau'), b = spawn(w, 'biene', 400, 410, 'blau'), p = spawn(w, 'panzer', 420, 420, 'blau');
+  for (const u of [k, b, p]) { u.cd = 1e9; u.abCd = 1e9; }
+  rebuildHash(w);
+  const h = [k.hp, b.hp, p.hp];
+  run(w, 1);
+  assert.ok(h[0] - k.hp >= THORN.DPS * .5, `Krieger ${h[0] - k.hp}`);
+  assert.equal(b.hp, h[1]); assert.equal(p.hp, h[2]);
+});

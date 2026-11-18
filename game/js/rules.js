@@ -120,7 +120,7 @@ export function resolveVote(a, b, rand) {
 }
 
 // Kleine Vorschau einer Karte als SVG-Text (für Abstimmung und Code-Duell); Mittellinie gestrichelt
-const T_COL = { wasser: '#8fcdf2', lava: '#ff7a45', wald: '#6dbb63', mauer: '#8d8d96' };
+const T_COL = { wasser: '#8fcdf2', lava: '#ff7a45', wald: '#6dbb63', mauer: '#8d8d96', dornen: '#8a9a5b' };
 export function mapSVG(id, w = 120, h = 68) {
   const parts = mapParts(id).map(p => (p[0] === 'rect'
     ? `<rect x="${(p[2] * w).toFixed(1)}" y="${(p[3] * h).toFixed(1)}" width="${((p[4] - p[2]) * w).toFixed(1)}" height="${((p[5] - p[3]) * h).toFixed(1)}" fill="${T_COL[p[1]]}"/>`

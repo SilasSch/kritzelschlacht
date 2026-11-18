@@ -36,7 +36,7 @@ export function createWorld(W, H, seed = 1) {
 // Felder in u.rv (Float64Array): Sammelpunkt der Flucht x/y, world.time seiner Wahl (−9 = keiner), dort angekommen (0/1),
 // Drossel des Fluchtbeginns (s; morale.js, #50); Scharfschütze: Zeit im laufenden Zurückweichen, Sperre danach, Abklingzeit
 // des Messers (s; combat.js, #51)
-export const RV_X = 0, RV_Y = 1, RV_T = 2, RV_IN = 3, RV_CK = 4, RV_BACK = 5, RV_BCD = 6, RV_KNIFE = 7, RV_N = 8;
+export const RV_X = 0, RV_Y = 1, RV_T = 2, RV_IN = 3, RV_CK = 4, RV_BACK = 5, RV_BCD = 6, RV_KNIFE = 7, RV_SYNT = 8, RV_MARK = 9, RV_KLINGE = 10, RV_SYNFX = 11, RV_N = 12;
 
 // Fraktion: im Teammodus das Team, sonst die Art u.kin (beim Spawn der Typ; Ghule tragen die ihres Vampirs, Spez. #32)
 export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
@@ -181,6 +181,8 @@ export function spawn(world, type, x, y, team) {
   u.pathT = (u.id % 8) * PATH_RECHECK / 8;
   world.units.push(u);   // fireT: 1 = letzter Schuss lange her (kein Rückstoß im Ruhezustand)
   if (world.hash.length) world.hash[hidx(world, x, y)].push(u);
+  u.rv[RV_SYNT] = (u.id % 5) * .1; u.rv[RV_MARK] = -9; u.rv[RV_KLINGE] = -9; u.rv[RV_SYNFX] = -9;
+  u.syn = 0; u.synP = null;   // Synergien (synergy.js): Bits der Nähe-Synergien, nächster Partner
   u.rvx = 0; u.rvy = 0; u.armor = 1;   // als Double angelegt (.5 / 1.5), Start in Ruhe und ohne Rüstung
   return u;
 }

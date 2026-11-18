@@ -283,6 +283,22 @@ export const COUNTERS = [
 
 // sp: Tempofaktor für Bodentruppen auf der Zelle (ohne: 1); haz: Lava und Mauer, die Bodentruppen meiden
 // (freie Römer, Flucht). Daraus TERR_SPEED und TERR_HAZ nach id (unten).
+// Synergien zwischen verschiedenen Truppen (Wunsch Silas, 18.11.: nicht nur Rudel, auch gemischte Truppen).
+// a: wer den Vorteil hat, b: wer ihn auslöst. Werte und Verhalten in synergy.js (SYN); Text ≤ 140 Zeichen (Karte).
+// near: wirkt, solange ein eigener Partner bis R px nah ist (Linie auf dem Feld); sonst löst ein Ereignis aus (Funken).
+export const SYNERGY = [
+  {k:'schild', n:'Schildschutz', a:['schuetze'], b:['ritter','roemer'], near:true, d:'Schützen bis 70 px bei einem Ritter oder Römer nehmen 40 % weniger Schaden durch Pfeile und Kugeln.'},
+  {k:'zange', n:'Zange', a:['reiter'], b:['krieger','ritter','roemer'], d:'Reiter machen 40 % mehr Schaden gegen Feinde, die gerade mit eigenen Kriegern, Rittern oder Römern kämpfen.'},
+  {k:'feldarzt', n:'Feldarzt', a:['ritter','roemer'], b:['sani'], d:'Sanitäter heilen Ritter und Römer 50 % stärker.'},
+  {k:'jagd', n:'Jagdpartner', a:['wolf','baer'], b:['adler'], d:'Wen ein Adler trifft, ist 4 s markiert: Wölfe und Bären machen gegen ihn 30 % mehr Schaden.'},
+  {k:'schreck', n:'Schreckbeute', a:['vampir','ghul'], b:['geist','gorilla','baer'], d:'Vampire und Ghule machen 50 % mehr Schaden gegen erschreckte Feinde (Spuk, Brustklopfen, Brüllen).'},
+  {k:'feuerschutz', n:'Feuerschutz', a:['soldat'], b:['mg'], near:true, d:'Soldaten bis 140 px um ein eigenes MG schießen 25 % schneller.'},
+  {k:'geleit', n:'Geleitschutz', a:['soldat','mg','panzerfaust'], b:['panzer'], near:true, d:'Infanterie bis 100 px um einen eigenen Panzer nimmt 30 % weniger Schaden durch Kugeln, Pfeile und Explosionen.'},
+  {k:'klebrig', n:'Klebrig', a:['schuetze','soldat','mg','sniper'], b:['lama'], d:'Von Lamaspucke Gebremste nehmen 25 % mehr Schaden durch Pfeile und Kugeln.'},
+  {k:'klinge', n:'Zauberklinge', a:['krieger','ritter','reiter','roemer'], b:['magier'], near:true, d:'Nahkämpfer der Armee bis 130 px um einen eigenen Magier setzen ihr Ziel in Brand, höchstens alle 3 s.'},
+  {k:'turm', n:'Kriegselefant', a:['schuetze'], b:['elefant'], near:true, d:'Schützen bis 80 px um einen eigenen Elefanten machen 30 % mehr Schaden.'},
+];
+
 export const TERRAIN = {
   wasser:{n:'Wasser',id:1,cost:.04,sp:.4,d:'Bremst Bodentruppen auf 40 % Tempo.'},
   lava:{n:'Lava',id:2,cost:.12,sp:.8,haz:true,d:'Verbrennt alles, was nicht fliegt. Niemand läuft freiwillig hinein, Hineingeschleuderte laufen sofort heraus.'},

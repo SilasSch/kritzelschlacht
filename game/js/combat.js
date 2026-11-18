@@ -16,6 +16,8 @@ import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepF
 import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
 import { stepKingAura, kingFall, KING } from './abilities.js';
 import { igniteArea, igniteUnder } from './wildfire.js';
+import { SYN, SB, stepSynergy, synFx, ZANGE_A, ZANGE_B, FELD_A, JAGD_A, SCHRECK_A, KLEBRIG_A } from './synergy.js';
+import { RV_MARK, RV_KLINGE } from './world.js';
 import { aloft, unseen } from './world.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
 
@@ -172,6 +174,25 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
       (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
+  // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
+  if (v.syn) {
+    if ((v.syn & SB.schild) && (kind === 'arrow' || kind === 'bullet')) m *= SYN.SCHILD;
+    if ((v.syn & SB.geleit) && (kind === 'arrow' || kind === 'bullet' || kind === 'blast')) m *= SYN.GELEIT;
+  }
+  if (src) {
+    const st = src.type;
+    if (JAGD_A.has(st) && v.rv[RV_MARK] > world.time) { m *= SYN.JAGD; synFx(world, v, 'jagd'); }
+    else if (SCHRECK_A.has(st) && v.fearT > 0 && kind === 'melee') { m *= SYN.SCHRECK; synFx(world, v, 'schreck'); }
+    else if (v.slowT > 0 && (kind === 'arrow' || kind === 'bullet') && KLEBRIG_A.has(st)) { m *= SYN.KLEBRIG; synFx(world, v, 'klebrig'); }
+    if ((src.syn & SB.turm) && kind === 'arrow') m *= SYN.TURM;
+    if (kind === 'melee') {
+      if (st === 'adler') v.rv[RV_MARK] = world.time + SYN.MARK_T;
+      if ((src.syn & SB.klinge) && src.rv[RV_KLINGE] <= world.time && v.alive && !v.T.fly) {
+        src.rv[RV_KLINGE] = world.time + SYN.KLINGE_DT;
+        if (ignite(world, v, BURN_MAX_GEN, src)) synFx(world, v, 'klinge');
+      }
+    }
+  }
   // Treffer-Quetschen (rig.js) nur bei echten Treffern: Schaden über Zeit (Lava, Brand) würde hitT sonst
   // jeden Schritt erneuern; dafür zeigt der Renderer das burn-Ereignis bzw. die Flammen am Körper.
   const h0 = v.hp, d = a * m; v.hp -= d;
@@ -871,7 +892,8 @@ export function think(world, u, dt) {
   // Verstärkung (Heulen, abilities.js) läuft ab
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.braveT > 0) u.braveT -= dt;
-  if (u.slowT > 0) u.slowT -= dt;   // Lama-Spucke läuft ab   // Königsaura läuft ab (abilities.KING)
+  if (u.slowT > 0) u.slowT -= dt;
+  stepSynergy(world, u, dt);   // Nähe-Synergien (synergy.js)   // Lama-Spucke läuft ab   // Königsaura läuft ab (abilities.KING)
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
@@ -1187,6 +1209,7 @@ function lineBlocked(world, u, nx, ny, dt) {
 export function attack(world, u, t, d, dx, dy, ax, ay) {
   const T = u.T; if (u.cd > 0) return;
   u.cd = T.cd * (.85 + world.rng() * .3);
+  if (u.syn & SB.feuerschutz) u.cd *= SYN.FEUERSCHUTZ;   // Synergie: Soldat beim MG
   switch (u.type) {
     case 'schuetze': fire(world, u, t, 'arrow'); break;
     case 'grenadier': fire(world, u, t, 'bomb'); break;
@@ -1227,6 +1250,11 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         a *= 2.6 * (lance ? WEDGE.SHIELD / (t.wall ? WALL_MELEE : 1) : 1); knock(t, dx / d, dy / d, lance ? WEDGE.PUSH : 260);
         emit(world, { type: 'charge', x: t.x, y: t.y, wedge: u.wedge });
         u.st = .6; u.cvx = dx / d * T.speed; u.cvy = dy / d * T.speed;
+      }
+      // Synergie Zange: Ziel kämpft gerade mit eigenem Fußvolk (Krieger, Ritter, Römer)
+      if (ZANGE_A.has(u.type)) {
+        const o = t.tg;
+        if (o && o !== u && o.alive && ZANGE_B.has(o.type) && factionOf(world, o) === factionOf(world, u)) { a *= SYN.ZANGE; synFx(world, t, 'zange'); }
       }
       // Task 6: Hornstoß des Einhorns aus vollem Lauf (abilities.UNICORN), danach Durchlauf
       if (u.type === 'einhorn' && u.run > .7) {
@@ -1312,7 +1340,7 @@ function healer(world, u, dt) {
   if (!u.follow && d <= T.range && u.cd <= 0) {
     u.cd = T.cd;
     if (HEAL_STACK.SPLASH > 0) query(world, t.x, t.y, HEAL_STACK.SPLASH_R, v => { if (v !== t) healOne(world, f, v, T.heal * HEAL_STACK.SPLASH); });
-    healOne(world, f, t, T.heal);
+    healOne(world, f, t, T.heal * (FELD_A.has(t.type) ? SYN.FELDARZT : 1));   // Synergie Feldarzt
   }
 }
 

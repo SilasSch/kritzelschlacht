@@ -2,6 +2,7 @@
 // Kein DOM; ui.js baut daraus die Karte beim Hover bzw. bei Auswahl und das Lexikon. Alles wird aus den
 // Spieldaten gelesen, neue Einheiten erscheinen also ohne Zusatzarbeit.
 import { UNITS, COUNTERS, CATEGORIES, RANGED } from './data.js';
+import { synergiesOf } from './synergy.js';
 
 // Gilt für alle Einheiten (Spez. #27); steht einmal im Lexikon statt auf jeder Karte
 export const RETREAT_NOTE = 'Alle Einheiten ziehen sich ab 25 % Leben zurück, erholen sich abseits und kehren ab 60 % in den Kampf zurück. Römer im Block halten bis 15 % durch. Geister und Ghule fliehen nie.';
@@ -66,6 +67,7 @@ export function unitCard(type) {
     },
     tags,
     abil: (T.abil || []).map(a => ({ n: a.n, d: a.d })),
+    syn: synergiesOf(type),   // Synergien mit anderen Truppen (data.SYNERGY)
     strong: uniq(COUNTERS.filter(c => c[0] === type && UNITS[c[1]]).map(c => c[1])),
     weak: uniq(COUNTERS.filter(c => c[1] === type && UNITS[c[0]]).map(c => c[0])),
   };

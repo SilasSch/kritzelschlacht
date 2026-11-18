@@ -7,7 +7,8 @@
 /* global PIXI */
 import { TEAMS, CELL, UNITS } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
-import { query, factionOf } from '../world.js';
+import { query, factionOf, RV_MARK } from '../world.js';
+import { SYN_COL, BIT_KEY } from '../synergy.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
 import { shadowParams, corpseLook, projScreen, SHADOW_ALPHA, PRONE_DROP, PRONE_GUN, bossMemory, dragonHead, drawnMuzzle } from './pose.js';
@@ -444,6 +445,22 @@ void main() {
       query(world, u.x, u.y, 70, wedgeTest);
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
       if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + b.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
+    }
+    // Synergien (synergy.js): dünne Linie zum Partner in der Farbe der Synergie; vom Adler Markierte mit Fadenkreuz
+    const wt = world.time;
+    for (const list of [groundList, airList]) for (const u of list) {
+      if (u.syn && u.state === 'ok') {
+        const p = u.synP;
+        if (p && p.alive) {
+          let k = 0; while (!(u.syn & (1 << k))) k++;
+          links.line(u.x, u.y - u.z * .5, p.x, p.y - p.z * .5, 1.5, SYN_COL[BIT_KEY[k]], .32);
+        }
+      }
+      if (u.rv[RV_MARK] > wt) {
+        const r = u.T.r + 4, y = u.y - u.z - u.T.r * .6, c = SYN_COL.jagd;
+        links.line(u.x - r - 4, y, u.x - r + 2, y, 2, c, .7); links.line(u.x + r - 2, y, u.x + r + 4, y, 2, c, .7);
+        links.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); links.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
+      }
     }
     nBoss = 0;
     bodies(groundList, groundQ, groundBars, t, tm, inv);

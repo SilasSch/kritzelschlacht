@@ -13,6 +13,7 @@ import { shade } from './rig.js';
 import { projScreen, BOSS, BOSS_VIS, CHANNEL_LIFT } from './pose.js';
 import { METEOR, WIND } from '../spells.js';
 import { cellIndex } from '../world.js';
+import { SYN_COL } from '../synergy.js';
 
 export const FX_CAP = 3000;
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24 };
@@ -968,6 +969,13 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (!take('misc')) break;
         for (let i = 0; i < 4; i++) { const p = add('dot', e.x + rnd(-3, 3), e.y + rnd(-3, 3), rnd(.25, .4), rnd(1.3, 2), 0xe8f2f7); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(10, 50); p.ay = 200; }
         break;
+      // Synergie (synergy.js) ausgelöst: kleine Funken in der Farbe der Synergie steigen vom Ziel auf
+      case 'syn': {
+        if (!take('misc')) break;
+        const c = SYN_COL[e.k] || 0xffffff;
+        for (let i = 0; i < 5; i++) { const p = add('dot', e.x + rnd(-5, 5), e.y - e.z + rnd(-4, 2), rnd(.35, .55), rnd(1.6, 2.4), c); if (!p) break; p.vx = rnd(-25, 25); p.vy = -rnd(40, 80); p.drag = 1.5; }
+        break;
+      }
       // Waldbrand (wildfire.js): je brennender Zelle ein paar Flammen, gegen Ende Rauch; beim Ausbrennen ein Rußfleck
       case 'blaze': {
         if (!take('misc')) break;

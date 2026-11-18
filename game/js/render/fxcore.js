@@ -1123,7 +1123,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       const proj = world.proj;
       for (let i = 0; i < proj.length; i++) {
         const p = proj[i];
-        if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow') continue;
+        if (p.kind !== 'fire' && p.kind !== 'rocket' && p.kind !== 'firearrow' && p.kind !== 'aam') continue;
         projScreen(p, TR);
         if (p.kind === 'firearrow') {
           if (rand() < dt * 24) { const f = add('fire', TR.x, TR.y, .18, rnd(1.4, 2.2)); if (f) { f.vx = rnd(-8, 8); f.vy = -rnd(5, 15); f.drag = DRAG; } }

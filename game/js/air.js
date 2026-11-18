@@ -14,6 +14,10 @@ import { factionOf, query, unseen } from './world.js';
 import { fire, clearShot, blast, hurt } from './combat.js';
 
 export const AIR = new Set(['jet', 'kampfdrohne', 'bomber']);
+// Luft-Luft-Raketen des Jets (18.11.): gegen Flieger in Reichweite RANGE vor der Nase (cos ≥ AIM) N Raketen im Abstand GAP s,
+// dann CD s Pause. Die Rakete lenkt mit höchstens TURN rad/s ihrem Ziel nach (SPEED px/s, Höhe folgt dem Ziel), trifft bei
+// Berührung (Abstand ≤ Radius + HIT px) mit DMG Schaden als Rakete und verpufft nach LIFE s, wenn das Ziel ausweicht oder fällt.
+export const MISSILE = { RANGE: 340, AIM: .6, N: 2, GAP: .3, CD: 6, SPEED: 430, TURN: 4.5, DMG: 40, HIT: 6, LIFE: 2.4 };
 export const JET = { TURN: 2.4, PASS: .55, PASS_D: 90, AIM: .93, AIR: 3, GROUND: 1, EDGE: 70 };
 export const BOMBER = { TURN: 1.2, PASS: 1.6, PASS_D: 70, EDGE: 90, N: 6, GAP: .25, FALL: 320, GROUP_R: 45, HIT_D: 40 };
 export const DRONE = { SEEK: 380, DIVE: 40, RETARGET: .6, SHARE: 6 };
@@ -99,12 +103,57 @@ function stepJet(world, u, dt) {
   if (!t) { steer(world, u, world.W / 2, world.H / 2, dt, JET.TURN, JET.EDGE, false); return; }
   steer(world, u, t.x, t.y, dt, JET.TURN, JET.EDGE, passing(world, u, t, dt, JET));
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
+  jetMissiles(world, u, t, dx, dy, d, dt);
   if (u.cd > 0 || d > T.range + T.r + t.T.r || (dx * u.hx + dy * u.hy) / d < JET.AIM) return;
   const a = clearShot(world, u, t, 'bullet');
   if (!a) return;
   u.cd = T.cd * (.85 + world.rng() * .3);
   fire(world, u, t, 'bullet', a.x, a.y, T.dmg * (t.T.fly ? JET.AIR : JET.GROUND));
   world.events.push({ type: 'sound', k: 'shot' });
+}
+
+// Raketensalve gegen Flieger: läuft angefangen zu Ende (auf das aktuelle Ziel, wenn es noch fliegt)
+function jetMissiles(world, u, t, dx, dy, d, dt) {
+  const M = MISSILE;
+  if (u.mslCd > 0) u.mslCd -= dt;
+  if (u.mslK > 0) {
+    u.mslT -= dt;
+    if (u.mslT <= 0) { if (t.T.fly) launch(world, u, t); u.mslK--; u.mslT = M.GAP; if (u.mslK === 0) u.mslCd = M.CD; }
+    return;
+  }
+  if (u.mslCd > 0 || !t.T.fly || d > M.RANGE || (dx * u.hx + dy * u.hy) / d < M.AIM) return;
+  u.mslK = M.N; u.mslT = 0;
+}
+function launch(world, u, t) {
+  const M = MISSILE, s = world.rng() < .5 ? -1 : 1;
+  // startet unter dem Flügel, leicht zur Seite, in Flugrichtung
+  world.proj.push({ kind: 'aam', arc: false, homing: true, x: u.x - u.hy * s * 6, y: u.y + u.hx * s * 6, z: u.z - 4,
+    vx: u.hx * M.SPEED, vy: u.hy * M.SPEED, t: 0, life: M.LIFE, tg: t, src: u, f: null, dmg: M.DMG, R: 0 });
+  world.events.push({ type: 'sound', k: 'rocket', x: u.x, y: u.y });
+}
+// Schritt einer Luft-Luft-Rakete (combat.stepProjectiles); true = fertig (Treffer oder verpufft)
+export function stepMissile(world, p, dt) {
+  const M = MISSILE, t = p.tg;
+  if (t && t.alive && !(t.ashT > 0)) {
+    const cur = Math.atan2(p.vy, p.vx);
+    let da = Math.atan2(t.y - p.y, t.x - p.x) - cur;
+    if (da > Math.PI) da -= 2 * Math.PI; else if (da < -Math.PI) da += 2 * Math.PI;
+    const a = cur + Math.max(-M.TURN * dt, Math.min(M.TURN * dt, da));
+    p.vx = Math.cos(a) * M.SPEED; p.vy = Math.sin(a) * M.SPEED;
+    p.z += Math.max(-80 * dt, Math.min(80 * dt, t.z - p.z));
+  }
+  p.x += p.vx * dt; p.y += p.vy * dt;
+  if (t && t.alive && Math.hypot(t.x - p.x, t.y - p.y) <= t.T.r + M.HIT && Math.abs(t.z - p.z) < t.T.r + 16) {
+    hurt(world, t, p.dmg, 'rocket', p.src && p.src.alive ? p.src : null);
+    world.events.push({ type: 'blast', x: t.x, y: t.y - t.z, R: 16, kind: 'rocket', shake: 2, water: false, air: true });
+    world.events.push({ type: 'sound', k: 'boom' });
+    return true;
+  }
+  if (p.t >= p.life || p.x < -40 || p.y < -40 || p.x > world.W + 40 || p.y > world.H + 40) {
+    world.events.push({ type: 'blast', x: p.x, y: p.y - p.z, R: 8, kind: 'rocket', shake: 0, water: false, air: true });
+    return true;
+  }
+  return false;
 }
 
 function stepDrone(world, u, dt) {

@@ -370,7 +370,10 @@ export function corpseLook(c, t, out = {}) {
 // linear zur Zielhöhe tz. Gerade Schüsse: Logiklage am Boden plus Mündungsversatz (x0 − sx, y0 − sy),
 // Höhe über der Laufhöhe MUZZLE_Z hebt sie an (Flieger schießen aus ihrer Höhe schräg nach unten).
 export function projScreen(p, out = {}) {
-  if (p.drop) {
+  if (p.homing) {
+    // Luft-Luft-Rakete (air.js): Lage am Boden minus Höhe, Winkel aus der Flugrichtung
+    out.x = p.x; out.y = p.y - p.z; out.a = Math.atan2(p.vy, p.vx);
+  } else if (p.drop) {
     // Fliegerbombe (air.js): fällt aus der Höhe drop mit wachsendem Tempo, Spitze zeigt in Fallrichtung
     const q = p.t < p.dur ? p.t / p.dur : 1;
     out.x = p.x0 + (p.x1 - p.x0) * q; out.y = p.y0 + (p.y1 - p.y0) * q - p.drop * (1 - q * q);

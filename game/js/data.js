@@ -183,6 +183,7 @@ const ABIL = {
   jet: [
     {n:'Überflug', d:'Fliegt nie still: rast aufs Ziel zu, feuert, solange es vor der Nase ist, schießt vorbei und dreht in weitem Bogen.'},
     {n:'Luftüberlegenheit', d:'Jagt zuerst Flieger und macht gegen sie dreifachen Schaden. Bodentruppen beharkt er nur im Vorbeiflug.'},
+    {n:'Luft-Luft-Raketen', d:'Alle 6 s zwei Raketen gegen Flieger vor der Nase. Sie lenken ihrem Ziel nach, wer scharf ausweicht, entkommt.'},
   ],
   kampfdrohne: [
     {n:'Kamikaze', d:'Stürzt sich auf das teuerste Ziel im Umkreis. Die Ladung trifft nur Feinde und wirkt wie eine Rakete. Schwärme verteilen sich.'},

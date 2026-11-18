@@ -638,8 +638,9 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
       t: 0, dur: g.len / P.speed, h: 0, x: u.x, y: u.y, z: g.z0, z0: g.z0, zt: g.zt, el: g.el,
       sx: u.x, sy: u.y, nx: g.nx, ny: g.ny, len: g.len, sp: P.speed, f, src: u, dmg, R, tg: t, pass: null });
   }
-  // mg: Bug-MG des Panzers (Mündungsversatz mz; Mündungsfeuer und Hülsen in fxcore, Nachtrag 7, #49)
-  emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0, mg: !!mz });
+  // mg: Bug-MG des Panzers (Mündungsversatz mz; Mündungsfeuer und Hülsen in fxcore, Nachtrag 7, #49); ut: Typ des Schützen,
+  // nur für Optik und Klang je Waffe (fxcore, audio; Schüsse-Overhaul 18.11.)
+  emit(world, { type: 'shot', kind, x: mx, y: my, z: u.z, face: u.face, tx: ax, ty: ay, shake: kind === 'shell' ? 2 : 0, mg: !!mz, ut: u.type });
   sound(world, K[3]);
 }
 
@@ -1573,11 +1574,11 @@ function impact(world, p, v, cell, x, y, src) {
       const a = p.dmg * (.85 + world.rng() * .3);
       if (shieldBlocks(v, 'bullet', p.nx, p.ny)) { shieldHit(world, v, a, 'bullet', p.nx, p.ny, src); return; }
       hurt(world, v, a, 'bullet', src);
-      emit(world, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'bullet' });
+      emit(world, { type: 'hit', x: v.x, y: v.y, z: v.z, flank: false, kind: 'bullet', ut: p.src.type, a: Math.atan2(p.ny, p.nx) });
       sound(world, 'hit');
     } else {
       if (cell >= 0) hitWall(world, cell, p.dmg * BULLET_WALL, p.sx, p.sy);
-      emit(world, { type: 'miss', kind: 'bullet', x, y, a: Math.atan2(p.ny, p.nx) });
+      emit(world, { type: 'miss', kind: 'bullet', x, y, a: Math.atan2(p.ny, p.nx), ut: p.src.type, wall: cell >= 0 });
     }
     return;
   }

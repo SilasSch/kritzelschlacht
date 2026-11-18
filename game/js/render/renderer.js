@@ -16,7 +16,9 @@ import { bossMuzzle, TURN_SQUASH } from '../muzzle.js';
 import { PRONE } from '../combat.js';
 import { DODGE, DODGE_KINDS } from '../dodge.js';
 import { createFx } from './fx.js';
+import { TRACER } from './fxcore.js';   // Schüsse-Overhaul: Leuchtspur der Kugeln je Schütze
 import { createWords } from './words.js';
+import { tr } from '../i18n.js';
 const LASER_T = 1.5;   // Sniper-Laser: so lange vor dem Schuss sichtbar (s)
 import { createQuadBatch, newMat, mat, mul } from './quads.js';
 
@@ -78,11 +80,11 @@ export function createRenderer(canvasHost) {
 
   /* ---------- Gelände (Offscreen-Canvas, Code aus drawTerrain) ---------- */
   const zoneG = new PIXI.Graphics();
-  const zoneText = new PIXI.Text('deine Seite', { fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: 0x4d82f0 });
+  const zoneText = new PIXI.Text(tr('deine Seite'), { fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: 0x4d82f0 });
   zoneText.alpha = .8; zoneText.anchor.set(1, .75); zoneText.resolution = 3;
   // Schlacht-Modus (Spez. #45): Mittellinie mit den Seiten Blau (links) und Rot (rechts)
   const sideStyle = c => ({ fontFamily: 'Nunito, system-ui, sans-serif', fontWeight: '800', fontSize: 15, fill: c });
-  const sideB = new PIXI.Text('Blau', sideStyle(0x3f7cff)), sideR = new PIXI.Text('Rot', sideStyle(0xff4d4d));
+  const sideB = new PIXI.Text(tr('Blau'), sideStyle(0x3f7cff)), sideR = new PIXI.Text(tr('Rot'), sideStyle(0xff4d4d));
   sideB.alpha = sideR.alpha = .85; sideB.anchor.set(1, .75); sideR.anchor.set(0, .75); sideB.resolution = sideR.resolution = 3;
   const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d');
   let terrTex = null;
@@ -835,11 +837,17 @@ void main() {
         shadowParams(p.z, SH);
         blobShadow(p.x0 + (p.x1 - p.x0) * q, p.y0 + (p.y1 - p.y0) * q, rx, rx * .4); ns++;
       }
-      if (p.kind === 'arrow') projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
-      else if (p.kind === 'firearrow') {
-        // Brandpfeil: Pfeil mit glühender Spitze (die Flammenspur kommt aus fxcore.update)
-        projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 1.5, 0x8a5a2b);
-        disc(x + ca * 5, y + sa * 5, 2.6, 0xff8a3d); disc(x + ca * 5, y + sa * 5, 1.4, 0xffe066);
+      // Schüsse-Overhaul (18.11.): Pfeile mit Federn, Spitze und zwei blassen Fahrtstrichen dahinter
+      if (p.kind === 'arrow' || p.kind === 'firearrow') {
+        const nx = -sa * 1.6, ny = ca * 1.6;
+        projQ.line(x - ca * 14 + nx, y - sa * 14 + ny, x - ca * 7 + nx, y - sa * 7 + ny, 1, 0x9aa0aa, .45);
+        projQ.line(x - ca * 16 - nx, y - sa * 16 - ny, x - ca * 8 - nx, y - sa * 8 - ny, 1, 0x9aa0aa, .45);
+        projQ.line(x - ca * 6, y - sa * 6, x + ca * 6, y + sa * 6, 1.6, 0x8a5a2b);
+        projQ.line(x - ca * 6, y - sa * 6, x - ca * 3 + nx, y - sa * 3 + ny, 1.2, 0xe5574f);
+        projQ.line(x - ca * 6, y - sa * 6, x - ca * 3 - nx, y - sa * 3 - ny, 1.2, 0xe5574f);
+        if (p.kind === 'arrow') projQ.line(x + ca * 4.5, y + sa * 4.5, x + ca * 7, y + sa * 7, 2.2, OC);
+        // Brandpfeil: glühende Spitze (die Flammenspur kommt aus fxcore.update)
+        else { disc(x + ca * 6, y + sa * 6, 2.8, 0xff8a3d); disc(x + ca * 6, y + sa * 6, 1.5, 0xffe066); }
       }
       else if (p.kind === 'pilum') {
         // Römerspeer: dünner Holzschaft, langer Eisenschaft und helle Spitze, mit Umriss; entlang der Bahn
@@ -850,8 +858,9 @@ void main() {
         projQ.line(x + ca * 6.6, y + sa * 6.6, x + ca * 9.2, y + sa * 9.2, 1.7, 0xe6ebf0);
       }
       else if (p.kind === 'aam') {
-        // Luft-Luft-Rakete: weißer Körper mit Umriss, rote Spitze, Flamme hinten
-        disc(x - ca * 7, y - sa * 7, 2.6, 0xffb03a);
+        // Luft-Luft-Rakete: weißer Körper mit Umriss, rote Spitze, flackernde Flamme hinten
+        const fl = 1 + Math.random() * .5;
+        disc(x - ca * 9, y - sa * 9, 3.4 * fl, 0xff8a3d); disc(x - ca * 7.5, y - sa * 7.5, 1.8 * fl, 0xfff1a8);
         projQ.line(x - ca * 6, y - sa * 6, x + ca * 6, y + sa * 6, 4.4, OC);
         projQ.line(x - ca * 5.2, y - sa * 5.2, x + ca * 4.6, y + sa * 4.6, 2.6, 0xf2f4f7);
         disc(x + ca * 5.2, y + sa * 5.2, 1.5, 0xe5574f);
@@ -863,20 +872,46 @@ void main() {
         projQ.line(x - ca * 7 - sa * 3, y - sa * 7 + ca * 3, x - ca * 7 + sa * 3, y - sa * 7 - ca * 3, 1.6, OC);
         disc(x + ca * 4.5, y + sa * 4.5, 1.8, 0xe5574f);
       }
-      else if (p.kind === 'bomb' || p.kind === 'mortar') {
-        disc(x, y, 4.5, OC); disc(x, y, 3.5, 0x2f3340);
-        if (p.kind === 'bomb') disc(x + 2, y - 4, 1.6, 0xffb800);
-      } else if (p.kind === 'bullet') projQ.line(x - ca * 7, y - sa * 7, x + ca * 3, y + sa * 3, 1.6, 0xe0a020);
-      else if (p.kind === 'rocket') {
-        disc(x - ca * 6, y - sa * 6, 3, 0xff8a3d);
-        projQ.line(x - ca * 4, y - sa * 4, x + ca * 4, y + sa * 4, 3.4, OC);
-      } else if (p.kind === 'shell') disc(x, y, 3.2, 0x2f3340);
+      // Stein des Flugsauriers (p.stone): grauer Brocken statt Granate
+      else if (p.stone) { disc(x, y, 4.3, OC); disc(x, y, 3.3, 0x9aa0aa); disc(x - 1, y - 1.1, 1.2, 0xc3c8cf); }
+      else if (p.kind === 'bomb') {
+        // Granate: Körper mit Umriss und Glanz, glimmende Lunte (die Funken kommen aus fxcore.update)
+        disc(x, y, 4.6, OC); disc(x, y, 3.6, 0x3a3f4a); disc(x - 1.2, y - 1.3, 1.1, 0x8d929c);
+        projQ.line(x + 1.5, y - 3.5, x + 2.6, y - 5.6, 1.2, 0x8a5a2b); disc(x + 2.8, y - 6, 1.4 + Math.random() * .8, 0xffb800);
+      } else if (p.kind === 'mortar') {
+        // Mörsergranate: länglich entlang der Bahn mit Leitwerk hinten
+        projQ.line(x - ca * 5, y - sa * 5, x + ca * 4, y + sa * 4, 6, OC);
+        projQ.line(x - ca * 4, y - sa * 4, x + ca * 3.2, y + sa * 3.2, 4, 0x4a5240);
+        projQ.line(x - ca * 6 - sa * 2.6, y - sa * 6 + ca * 2.6, x - ca * 6 + sa * 2.6, y - sa * 6 - ca * 2.6, 1.5, OC);
+      } else if (p.kind === 'bullet') {
+        // Leuchtspur je Schütze (fxcore.TRACER): dünner blasser Schweif, kräftigere Mitte, heller Kern zum Kopf hin
+        const T = TRACER[p.src && p.src.type] || TRACER._, L = T[0], w = T[1];
+        projQ.line(x - ca * L, y - sa * L, x - ca * L * .4, y - sa * L * .4, w * .5, T[2], .45);
+        projQ.line(x - ca * L * .5, y - sa * L * .5, x + ca, y + sa, w, T[2]);
+        projQ.line(x - ca * L * .25, y - sa * L * .25, x + ca, y + sa, w * .45, 0xfff1a8);
+      } else if (p.kind === 'rocket') {
+        // Panzerfaust-Rakete: Körper mit Umriss und roter Spitze, flackernde Flamme hinten (Rauch aus fxcore.update)
+        const fl = 1 + Math.random() * .5;
+        disc(x - ca * 7, y - sa * 7, 3.6 * fl, 0xff8a3d); disc(x - ca * 6, y - sa * 6, 2 * fl, 0xfff1a8);
+        projQ.line(x - ca * 5, y - sa * 5, x + ca * 5, y + sa * 5, 4.4, OC);
+        projQ.line(x - ca * 4.2, y - sa * 4.2, x + ca * 3, y + sa * 3, 2.4, 0x6b7a4a);
+        disc(x + ca * 4.2, y + sa * 4.2, 1.5, 0xe5574f);
+      } else if (p.kind === 'shell') {
+        // Granate des Panzers: dunkles Geschoss mit Umriss und kurzem Fahrtstrich
+        projQ.line(x - ca * 16, y - sa * 16, x - ca * 4, y - sa * 4, 2.2, 0x9aa0aa, .5);
+        projQ.line(x - ca * 4, y - sa * 4, x + ca * 2, y + sa * 2, 5.6, OC); disc(x + ca * 2, y + sa * 2, 2.8, OC);
+        projQ.line(x - ca * 3.2, y - sa * 3.2, x + ca * 2, y + sa * 2, 3.6, 0x6f6a5a); disc(x + ca * 2, y + sa * 2, 1.8, 0x6f6a5a);
+      }
       // Task 6: Felsbrocken des Zyklopen (grauer Stein mit Umriss und Glanz), Hexenzauber (grüne Kugel mit hellem Kern)
       else if (p.kind === 'boulder') { disc(x, y, 5.6, OC); disc(x, y, 4.5, 0x9aa0aa); disc(x - 1.4, y - 1.5, 1.6, 0xc3c8cf); }
       else if (p.kind === 'hex') { disc(x, y, 4.4, 0x3f9a4a); disc(x, y, 2.9, 0x9df58a); disc(x, y, 1.3, 0xeaffd8); }
       // Lama-Spucke: hellblauer Tropfen mit kleinem Nachzügler
       else if (p.kind === 'spit') { disc(x, y, 3.2, 0x7fa6c2); disc(x, y, 2.3, 0xdcecf5); disc(x - ca * 5, y - sa * 5, 1.4, 0xdcecf5); }
-      else { disc(x, y, 6, 0xff8a3d); disc(x, y, 3.5, 0xffe066); }
+      else {
+        // Feuerball: Flammenschweif aus drei kleiner werdenden Scheiben, dann Kugel mit hellem Kern
+        disc(x - ca * 9, y - sa * 9, 2.4, 0xe5574f); disc(x - ca * 5.5, y - sa * 5.5, 4, 0xff8a3d);
+        disc(x, y, 6, 0xff8a3d); disc(x, y, 3.8, 0xffe066); disc(x + ca, y + sa, 1.8, 0xfff8dc);
+      }
     }
     stats.projShadows = ns; stats.targets = nt;
   }

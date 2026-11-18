@@ -401,6 +401,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
         <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
         <button class="ib shadow" id="bPause" title="Pause (P)" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIco"><path d="M9 5v14M15 5v14"/></svg></button>
         <span class="volw"><button class="ib shadow" id="bMute" title="Ton (M)" aria-label="Ton an oder aus"><svg viewBox="0 0 24 24" id="muteIco"></svg></button><span class="volpop shadow"><input type="range" id="vol" min="0" max="100" value="60" aria-label="Lautstärke"></span></span>
+        <button class="ib shadow txt" id="bLang" title="Sprache: Deutsch / English" aria-label="Sprache wechseln">EN</button><!-- Sprache (18.11.), main.js -->
         <button class="ib shadow" id="bClear" title="Alles leeren" aria-label="Alles leeren"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
       </div>
     </div>
@@ -501,7 +502,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
   <div class="ov" id="ovWelcome" hidden>
     <div class="card shadow welcome" role="dialog" aria-labelledby="welTitle">
       <h2 id="welTitle">Willkommen!</h2>
-      <p>In der <b>Kritzelschlacht</b> malst du deine Armee aufs Feld und schaust zu, wie sie kämpft. Eine kurze Übungsmission zeigt dir in einer Minute, wie es geht.</p>
+      <p data-i18n>In der <b>Kritzelschlacht</b> malst du deine Armee aufs Feld und schaust zu, wie sie kämpft. Eine kurze Übungsmission zeigt dir in einer Minute, wie es geht.</p>
       <div class="btnrow"><button class="go" id="welTut">Tutorial spielen</button><button class="btn" id="welSkip">Erst mal rumkritzeln</button></div>
     </div>
   </div>

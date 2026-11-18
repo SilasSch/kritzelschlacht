@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FX_CAP, FRAME_LIMITS, SMOKE, DUST, LIGHT_T, LIGHT_ALPHA, SHAKE_MAX, GLOW_KINDS, CRASH_SMOKE_MUL,
-  WARM_KINDS, WARM_TINT, WARM_ALPHA, HALO_ALPHA, groundWarm,
+  WARM_KINDS, GUN_FX, IMPACT_FX, WARM_TINT, WARM_ALPHA, HALO_ALPHA, groundWarm,
   createParticles, createFxCore, createDecalAger, AGER_MAX_DT, decayShake, blastShake, puffLook, groundLight, landDust, emberCount, look,
 } from '../game/js/render/fxcore.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R } from '../game/js/combat.js';
@@ -137,20 +137,47 @@ test('crash: wie blast, Rauch doppelt so lang; Heli-Absturz mit eigenem blast z�
   assert.equal(kinds(e.core).light, 2);
 });
 
-test('shot: Mündungsblitz 0,07 s bei bullet/shell/rocket, shell mit Rauchstoß; breath speit Feuer', () => {
-  for (const kind of ['bullet', 'shell', 'rocket']) {
+test('shot: Mündungsfeuer je Waffe (GUN_FX): Blitz und Strahlen, shell mit Rauchstoß und Ring; breath speit Feuer', () => {
+  for (const kind of ['bullet', 'shell', 'rocket', 'mortar']) {
     const { core } = mkCore();
-    core.consume([{ type: 'shot', kind, x: 10, y: 10, face: 1 }]);
+    core.consume([{ type: 'shot', kind, x: 10, y: 10, face: 1, tx: 200, ty: 10 }]);
     const k = kinds(core);
     assert.equal(k.flash, 1, kind);
-    near(core.store.live.find(p => p.k === 'flash').life, .07);
+    near(core.store.live.find(p => p.k === 'flash').life, GUN_FX[kind].life);
+    assert.equal(k.mgflash, 3, kind);
     assert.equal(!!k.smoke, kind === 'shell', kind);
   }
+  // Scharfschütze: Leuchtspur bis zum Zielpunkt, Hülse und Druckring; MG ohne Leuchtspur
+  const sn = mkCore().core;
+  sn.consume([{ type: 'shot', kind: 'bullet', ut: 'sniper', x: 10, y: 10, face: 1, tx: 300, ty: 10 }]);
+  assert.equal(kinds(sn).tracer, 2); assert.equal(kinds(sn).casing, 1); assert.equal(kinds(sn).wave, 1);
+  const mg = mkCore().core;
+  mg.consume([{ type: 'shot', kind: 'bullet', ut: 'mg', x: 10, y: 10, face: 1, tx: 300, ty: 10 }]);
+  assert.equal(kinds(mg).tracer, undefined); assert.equal(kinds(mg).casing, 1);
+  // Panzerfaust: Rückstrahl hinter dem Rohr (gegen die Schussrichtung)
+  const pf = mkCore().core;
+  pf.consume([{ type: 'shot', kind: 'rocket', ut: 'panzerfaust', x: 100, y: 10, face: 1, tx: 300, ty: 10 }]);
+  assert.ok(pf.store.live.filter(p => p.k === 'wisp' && p.x < 100).length >= GUN_FX.rocket.back);
   const { core } = mkCore();
   core.consume([{ type: 'shot', kind: 'bomb', x: 10, y: 10, face: 1 }]);
   assert.equal(core.store.count, 0);
   core.consume([{ type: 'shot', kind: 'breath', x: 10, y: 10, face: 1, nx: 1, ny: 0 }]);
   assert.ok(kinds(core).jet >= 16, 'Flammenstrahl (Spez. #21), nicht mehr 4 Punkte');
+});
+
+test('Einschläge: Kugel im Körper Blitz und Funken (Scharfschütze mit Ring), im Boden Staub, in der Mauer Splitter', () => {
+  const a = mkCore().core;
+  a.consume([{ type: 'hit', kind: 'bullet', ut: 'soldat', x: 0, y: 0, a: 0 }]);
+  assert.equal(kinds(a).flash, 1); assert.equal(kinds(a).spark, IMPACT_FX.sparks);
+  const b = mkCore().core;
+  b.consume([{ type: 'hit', kind: 'bullet', ut: 'sniper', x: 0, y: 0, a: 0 }]);
+  assert.equal(kinds(b).spark, IMPACT_FX.bigSparks); assert.equal(kinds(b).wave, 1);
+  const c = mkCore().core;
+  c.consume([{ type: 'miss', kind: 'bullet', x: 0, y: 0, a: 0 }]);
+  assert.equal(kinds(c).dust, 1); assert.equal(kinds(c).dot, IMPACT_FX.dirt);
+  const d = mkCore().core;
+  d.consume([{ type: 'miss', kind: 'bullet', x: 0, y: 0, a: 0, wall: true }]);
+  assert.equal(kinds(d).dust, undefined); assert.ok(d.store.live.every(p => p.k !== 'dot' || p.col === IMPACT_FX.chipCol));
 });
 
 test('land: Staubwolke nach impact; splash: 10 Tropfen und ein Ring; Asche und Tod als Decal', () => {
@@ -208,7 +235,7 @@ test('Flugspuren: Rakete raucht (normal), Feuerball glüht', () => {
 test('Aussehen: Glühen (additiv) nur bei Feuer, Explosion, Mündungsblitz und Bodenlicht; Rauch grau und normal', () => {
   // Spez. #21: Flammenstrahl (jet, spark) und brennende Einheiten (flame) sind Feuer
   // Spez. #31 (Task 3): Blitz (bolt, zap), Kanalfunken (mote), Feuerkugel (orb) und Meteor glühen auch
-  assert.deepEqual([...GLOW_KINDS].sort(), ['bolt', 'core', 'ember', 'fire', 'flame', 'flash', 'jet', 'light', 'meteor', 'mgflash', 'mote', 'orb', 'spark', 'zap']);
+  assert.deepEqual([...GLOW_KINDS].sort(), ['bolt', 'core', 'ember', 'fire', 'flame', 'flash', 'jet', 'light', 'meteor', 'mgflash', 'mote', 'orb', 'spark', 'tracer', 'zap']);
   const { core } = mkCore();
   core.consume([
     { type: 'blast', x: 0, y: 0, R: 40, kind: 'blast' }, { type: 'blast', x: 0, y: 0, R: 40, kind: 'fire' },

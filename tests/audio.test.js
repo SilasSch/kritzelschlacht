@@ -38,11 +38,32 @@ test('eventSound: neue Töne für Pfeile, Feuer, Heilung, Horn; Lava zischt', ()
   assert.equal(eventSound({ type: 'hit', kind: 'arrow' }), 'thunk');
   assert.equal(eventSound({ type: 'hit', kind: 'melee' }), null);   // Ton kommt als sound-Ereignis
   assert.equal(eventSound({ type: 'miss', kind: 'pilum' }), 'thwip');
-  assert.equal(eventSound({ type: 'miss', kind: 'bullet' }), null);
+  assert.equal(eventSound({ type: 'miss', kind: 'bullet' }), 'zing');   // Querschläger (nur jeder fünfte etwa, CHANCE)
   assert.equal(eventSound({ type: 'charge', horn: true }), 'horn');
   assert.equal(eventSound({ type: 'charge' }), null);
   assert.equal(eventSound({ type: 'terrain', kind: 'ash' }), 'sizzle');
   assert.equal(eventSound({ type: 'heal' }), 'heal');
+});
+
+test('resolveSound: eigener Klang je Waffe (Schüsse-Overhaul), Kugeltreffer klopfen statt Hieb', () => {
+  const shot = (ut, kind, k, mg) => resolveSound({ type: 'sound', k }, { type: 'shot', kind, ut, mg, x: 1, y: 1 }).k;
+  assert.equal(shot('soldat', 'bullet', 'shot'), 'rifle');
+  assert.equal(shot('mg', 'bullet', 'shot'), 'mg');
+  assert.equal(shot('sniper', 'bullet', 'shot'), 'sniper');
+  assert.equal(shot('heli', 'bullet', 'shot'), 'heliGun');
+  assert.equal(shot('jet', 'bullet', 'shot'), 'jetGun');
+  assert.equal(shot('panzer', 'bullet', 'shot', true), 'mg');
+  assert.equal(shot('heli', 'rocket', 'whoosh'), 'rocket');
+  assert.equal(shot('schuetze', 'firearrow', 'twang'), 'fireTwang');
+  assert.equal(shot('grenadier', 'bomb', 'throw'), 'grenade');
+  assert.equal(shot('ptera', 'bomb', 'throw'), 'drop');
+  assert.equal(shot('zyklop', 'boulder', 'throw'), 'heave');
+  assert.equal(shot('magier', 'fire', 'fire'), 'fireball');
+  assert.equal(shot('lama', 'spit', 'thwip'), 'spit');
+  assert.equal(shot('unbekannt', 'bullet', 'shot'), 'shot');
+  const hit = ut => resolveSound({ type: 'sound', k: 'hit' }, { type: 'hit', kind: 'bullet', ut, x: 1, y: 1 }).k;
+  assert.equal(hit('soldat'), 'bhit'); assert.equal(hit('sniper'), 'bhitBig');
+  assert.equal(resolveSound({ type: 'sound', k: 'hit' }, { type: 'hit', kind: 'melee', x: 1, y: 1 }).k, 'hit');
 });
 
 test('spatial: links/rechts, außerhalb leiser, ohne Ort mittig', () => {

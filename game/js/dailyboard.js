@@ -42,7 +42,7 @@ export const VERSIONS = {
   v1w2hbq9: { until: '2026-11-18' },   // Bienen 1 Punkt, dafür 24 LP, Stich 4, Gift 5/s, Kugeln ×2,5, Blitze ×1,6 (18.11.)
   vsjyhqn: { until: '2026-11-19' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.); bis 19.11., weil das Update kurz vor Mitternacht kam (offene Tabs spielen den 19. noch mit dieser Version)
   v1oqxao2: { until: '2026-11-19' },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
-  v3rqwd4: { until: null },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
+  vh9f0ah: { until: null },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

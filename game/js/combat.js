@@ -149,7 +149,7 @@ export const WEDGE = { MIN: 3, SHIELD: 1.5, PUSH: 340 };
 export const SHIELDED = new Set(['ritter', 'roemer']);
 // Römer-Aufwertung (18.11.): Schildstoß (attack) und Scutum gegen Nahkampf von vorn (hurt), nur für Blockmitglieder
 // (u.form, bleibt beim Sturmangriff gesetzt; formOn ist dann schon aus). Verstreute Römer bekommen beides nicht (rom-1).
-export const SHOVE = { CD: 4, MUL: 1.3, PUSH: 150, STUN: .5, MAXM: 4, FRONT: .8 };
+export const SHOVE = { CD: 4, MUL: 1.3, PUSH: 150, STUN: .5, MAXM: 4, FRONT: .9 };
 const WALL_MELEE = .65;   // Schildwall: Pfeile und Schwerter × 0,65 (hurt)
 export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'soldat']);
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)

@@ -135,7 +135,7 @@ const ABIL = {
     {n:'Blockformation', d:'Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.'},
     {n:'Speersalve', d:'Vor dem Zusammenstoß wirft der Block Reihe für Reihe seine Speere.'},
     {n:'Schilde', d:'Nur in Formation: Pfeile, Kugeln und Speere von vorn prallen fast wirkungslos ab.'},
-    {n:'Schildstoß', d:'Im Block: alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 20 % weniger.'},
+    {n:'Schildstoß', d:'Im Block: alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 10 % weniger.'},
   ],
   sani: [
     {n:'Heilwelle', d:'Alle 20 s heilt er alle Verbündeten im Umkreis um ein Viertel ihrer Lebenspunkte. Nahe Sanitäter warten danach mit ihrer Welle.'},

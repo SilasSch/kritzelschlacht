@@ -116,6 +116,7 @@ export function bindInput(canvas, cam, actions) {
     else if (k === 'e') actions.setCat(1);
     else if (k === 'x') actions.eraser();
     else if (k === 'p') actions.togglePause();
+    else if (k === 'm' && actions.toggleMute) actions.toggleMute();
     else if (/^[1-9]$/.test(e.key)) actions.pickSlot(Number(e.key));
   });
   window.addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });

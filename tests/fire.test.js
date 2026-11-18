@@ -315,7 +315,7 @@ test('Leiche in Lava (terrain ash): Asche-Fleck, Dampfwölkchen und Zischen (Spe
   const core = mkCore();
   core.consume([{ type: 'terrain', kind: 'ash', x: 300, y: 300, gx0: 29, gy0: 29, gx1: 31, gy1: 31 }]);
   assert.ok(kinds(core).wisp >= 2, 'Dampf');
-  assert.equal(eventSound({ type: 'terrain', kind: 'ash' }), 'splash');
+  assert.equal(eventSound({ type: 'terrain', kind: 'ash' }), 'sizzle');
   assert.equal(eventSound({ type: 'terrain', gx0: 0, gy0: 0, gx1: 1, gy1: 1 }), null);
   // echte Leiche: fällt in Lava, settle meldet ash
   const w = createWorld(400, 300, 3); w.teamMode = true;

@@ -1,4 +1,4 @@
-// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted }.
+// Spielstand (rein, kein DOM): Schlüssel wie im alten Spiel, { stars: { levelId: 1..3 }, muted, volume (0..1, optional) }.
 // main.js liest und schreibt localStorage[SAVE_KEY] damit.
 // Kampagne (Spez. #52): Sterne hängen an der festen id des Levels (campaign/). Alte Stände zählen die 9 Missionen der
 // Grundausbildung nach Index 0–8; parseSave übersetzt sie in deren ids (LEGACY_IDS). serializeSave schreibt die Sterne
@@ -37,5 +37,7 @@ export function migrateStars(raw) {
 export function serializeSave(save) {
   const stars = { ...save.stars };
   LEGACY_IDS.forEach((id, i) => { if (stars[id]) stars[i] = stars[id]; });
-  return JSON.stringify({ stars, muted: save.muted });
+  const out = { stars, muted: save.muted };
+  if (typeof save.volume === 'number') out.volume = Math.max(0, Math.min(1, save.volume));
+  return JSON.stringify(out);
 }

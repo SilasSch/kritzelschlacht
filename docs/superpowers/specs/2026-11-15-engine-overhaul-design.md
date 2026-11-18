@@ -185,6 +185,14 @@ Nicht Teil dieses Nachtrags (folgt in einer eigenen Runde): Spezialfähigkeiten 
 
 **Dem Bauenden überlassen:** das genaue Layout der Auswertung und des Graphen, im Stil der bestehenden Oberfläche.
 
+## Nachtrag 7 (2026-11-18, vom Nutzer bestätigt)
+
+| # | Entscheidung |
+|---|---|
+| 47 | **Bomben ausweichen**:<ul><li>Fliegt eine Bombe, Granate, Mörsergranate oder ein Felsbrocken, zeigt ein kleiner Zielkreis am Boden den Einschlagort.</li><li>Jede Einheit im Einschlagbereich bekommt einmal pro Geschoss eine Ausweichchance und hüpft dann sichtbar heraus. Die Chance hängt von der Wendigkeit ab:<ul><li>flink, etwa 60 %: Wolf, Biene, Reiter, Adler, Einhorn, Geist, Vampir;</li><li>normal, etwa 35 %: Infanterie, Magier, Gorilla und alle übrigen;</li><li>schwer, 0–10 %: Ritter, Troll, Zyklop, Elefant, Büffel, Panzer, Römer im Block;</li><li>liegende MG- und Scharfschützen: 0 %.</li></ul></li><li>Danach wird die Balance neu abgestimmt.</li></ul> |
+| 48 | **Schöneres Wasser**:<ul><li>Sanfte, ziehende Wellen und ein pulsierender Schaumrand am Ufer.</li><li>Ringe und Bugwelle, wo Einheiten waten.</li><li>Fontänen statt Staub bei Explosionen im Wasser.</li><li>Leichen treiben langsam mit einer Strömung und schaukeln.</li><li>Sticker-Stil, ohne spürbare Leistungskosten.</li></ul> |
+| 49 | **Das Panzer-MG ist gut sichtbar**: ein deutlich erkennbares MG mit Lafette, Mündungsfeuer beim Schießen und ausgeworfenen Hülsen. Bisher war es nur ein 2 px dünner Strich am Bug. |
+
 ## Angenommen
 
 - Gelände-Raster und -Regeln bleiben: Wasser bremst auf 40 %, Lava verbrennt, Wald gibt Deckung, Mauern blockieren.

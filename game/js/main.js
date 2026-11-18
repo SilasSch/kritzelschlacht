@@ -264,7 +264,16 @@ function finishMission() {
 const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
 
 function enterBattle() {
-  if (game.battle) { ui.hideOverlays(); return; }
+  const cur = game.battle;
+  if (cur) {
+    // schon in der Schlacht (Reiter erneut geklickt, etwa bei offener Missionsliste): nach dem Kampf die Auswertung zeigen
+    ui.hideOverlays();
+    if (cur.phase === 'done' && cur.endT < 0 && cur.result) {
+      ui.showBattleResult(cur.result);
+      if (cur.batch) ui.batchProgress(cur.batch.job.k, cur.batch.job.n);
+    }
+    return;
+  }
   if (!game.mission) saveSandbox();
   game.mission = null; snap = null;
   clearWorld();

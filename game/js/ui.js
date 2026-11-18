@@ -4,6 +4,7 @@ import { UNITS, TERRAIN, PLURAL, CATEGORIES, TEAMS, MISSIONS, MSG_NO_PAINT } fro
 import { iconURL, TEAM_KEYS } from './render/rig.js';
 import { unitCard, cardTypes, RETREAT_NOTE, fmtPts } from './cards.js';
 import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextChange } from './cardhover.js';
+import { armyPoints } from './sim.js';
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -49,7 +50,7 @@ export function createUI(game) {
   const icon = k => icons[k] || (icons[k] = iconURL(k));
   // Porträts der Karten: größer gezeichnet (scharf auf HiDPI) und in der Teamvariante des Atlas, wenn Teamkampf läuft
   const portraits = {};
-  const teamVi = () => (game.world.teamMode && !game.mission ? Math.max(0, TEAM_KEYS.indexOf(game.curTeam)) : 0);
+  const teamVi = () => (game.world.teamMode && !game.mission && !game.battle ? Math.max(0, TEAM_KEYS.indexOf(game.curTeam)) : 0);
   const portrait = k => { const vi = teamVi(), id = k + '|' + vi; return portraits[id] || (portraits[id] = iconURL(k, 176, vi)); };
   const accent = () => TEAMS[game.mission ? 'blau' : game.curTeam].c;
   // Kampfstatistik einer Mission, aus death-Ereignissen abgeleitet
@@ -80,7 +81,7 @@ export function createUI(game) {
       if (!UNITS[k]) b.title = D.n + ' (Taste ' + (idx + 1) + ')';
       b.setAttribute('aria-label', D.n);
       const img = document.createElement('img'); img.src = icon(k); img.alt = ''; b.append(img);
-      if (mis && UNITS[k]) { const s = document.createElement('small'); s.textContent = fmtPts(UNITS[k].cost); b.append(s); }
+      if ((mis || game.battle) && UNITS[k]) { const s = document.createElement('small'); s.textContent = fmtPts(UNITS[k].cost); b.append(s); }
       b.onclick = () => game.select(k);
       box.append(b);
     });
@@ -189,13 +190,13 @@ export function createUI(game) {
   window.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('ovLex').hidden) { e.preventDefault(); closeLexicon(); } });
 
   function updateInfo() {
-    const el = $('info'), sel = game.sel, mis = game.mission;
+    const el = $('info'), sel = game.sel, mis = game.mission || game.battle;
     if (UNITS[sel]) {
       const T = UNITS[sel];
       el.innerHTML = `<b>${T.n}</b> · LP ${T.hp} · ${T.heal ? 'Heilung ' + T.heal : 'Schaden ' + T.dmg}${mis ? ' · Kosten ' + fmtPts(T.cost) : ''} — ${T.d}`;
     } else {
       const T = TERRAIN[sel];
-      el.innerHTML = `<b>${T.n}</b>${mis && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
+      el.innerHTML = `<b>${T.n}</b>${game.mission && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
     }
   }
 
@@ -233,11 +234,12 @@ export function createUI(game) {
 
   /* ---------- Modus, Mission, Steuerung ---------- */
   function updateMode() {
-    const mis = game.mission;
-    $('mMis').classList.toggle('on', !!mis); $('mSand').classList.toggle('on', !mis);
-    $('misBar').hidden = !mis; $('bDice').hidden = !!mis; $('teamBox').hidden = !!mis;
+    const mis = game.mission, bat = game.battle;
+    $('mMis').classList.toggle('on', !!mis); $('mSand').classList.toggle('on', !mis && !bat); $('mBat').classList.toggle('on', !!bat);
+    $('misBar').hidden = !mis; $('batBar').hidden = !bat; $('bDice').hidden = !!mis || !!bat; $('teamBox').hidden = !!mis || !!bat;
     $('teamToggle').checked = game.world.teamMode;
-    $('chips').hidden = !game.world.teamMode || !!mis;
+    $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
+    if (bat) updateBattle();
     if (mis) { $('misName').textContent = `Mission ${mis.idx + 1} · ${mis.def.n}`; $('misHint').textContent = mis.def.hint; }
   }
 
@@ -264,7 +266,7 @@ export function createUI(game) {
   function syncBrush() { $('brush').value = game.brush; }
 
   function refresh() {
-    renderUnits(); buildChips(); updateMode(); updateMission(); updateControls(); syncBrush(); updateCounts();
+    renderUnits(); buildChips(); updateMode(); updateMission(); updateBattle(); updateControls(); syncBrush(); updateCounts();
   }
 
   /* ---------- Meldungen ---------- */
@@ -312,7 +314,7 @@ export function createUI(game) {
     $('ovRes').hidden = false;
   }
 
-  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; closeLexicon(); }
+  function hideOverlays() { $('ovList').hidden = true; $('ovRes').hidden = true; $('ovBat').hidden = true; document.body.classList.remove('bat-res'); closeLexicon(); }
 
   function resetBattle() { stats.lostBlue = 0; stats.lostRed = 0; stats.heroK = 0; stats.heroType = null; }
 
@@ -343,9 +345,133 @@ export function createUI(game) {
   $('resNext').onclick = () => { $('ovRes').hidden = true; game.nextMission(); };
   $('resList').onclick = () => { $('ovRes').hidden = true; openMissionList(); };
   $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
+  $('mBat').onclick = () => game.enterBattle();
+  $('batGo').onclick = () => { const b = game.battle; if (!b) return; if (b.phase === 'plan') game.startBattle(); else if (b.phase === 'fight') game.editBattle(); };
+  $('batClear').onclick = () => game.clear();
+  $('batSwap').onclick = () => game.swapSides();
+  $('batAgain').onclick = () => game.retryBattle();
+  $('batTen').onclick = () => game.runBatch(10);
+  $('batEdit').onclick = () => game.editBattle();
 
-  // Schlacht-Modus: Oberfläche folgt (Task 2)
-  const updateBattle = () => {}, batchProgress = () => {}, batchDone = () => {}, showBattleResult = () => {};
+  /* ---------- Schlacht (Spez. #45, #46) ---------- */
+  // Leiste: Punktepille (laufend), Hinweis bzw. Kampfzeit, Leeren / Seiten tauschen / Los! (im Kampf: Abbrechen).
+  // Auswertung: Titel, Dauer, Überlebende, je Seite eine Tabelle, Verlauf als SVG mit Hover, Held, 10× auswerten.
+  const teamIcons = {};
+  const tIcon = (k, side) => { const id = k + '|' + side; return teamIcons[id] || (teamIcons[id] = iconURL(k, 64, Math.max(0, TEAM_KEYS.indexOf(side)))); };
+  const SIDE_N = { blau: 'Blau', rot: 'Rot' }, SIDE_C = { blau: TEAMS.blau.c, rot: TEAMS.rot.c };
+  const clock = t => { const s = Math.max(0, Math.floor(t)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  const secs = t => `${Math.round(t)} s`;
+  const setText = (id, v) => { const el = $(id); if (el.textContent !== v) el.textContent = v; };
+
+  function updateBattle() {
+    const b = game.battle; if (!b) return;
+    const p = armyPoints(game.world);
+    setText('ptsB', fmtPts(p.blau)); setText('ptsR', fmtPts(p.rot));
+    const plan = b.phase === 'plan';
+    setText('batHint', plan ? 'Blau malt links, Rot rechts · Gelände überall'
+      : b.phase === 'fight' ? `Kampf läuft · ${clock(b.t)}${b.t > 150 ? ' · ab 3:00 entscheidet die Stärke' : ''}` : `Kampf vorbei · ${clock(b.t)}`);
+    $('batClear').hidden = !plan; $('batSwap').hidden = !plan;
+    const g = $('batGo');
+    setText('batGo', plan ? 'Los!' : 'Abbrechen');
+    g.disabled = b.phase === 'done';
+  }
+
+  // Verlauf: zwei Linien (Teamfarben, 2 px) über der Zeit, eine Achse; Namen am Linienende, Hover mit Fadenkreuz und Werten
+  function graphSVG(tl) {
+    const W = 320, H = 150, L = 30, R = 50, T = 10, B = 20, w = W - L - R, h = H - T - B;
+    const tEnd = Math.max(.5, tl[tl.length - 1].t), max = Math.max(1, ...tl.map(p => Math.max(p.blau, p.rot)));
+    const X = t => L + t / tEnd * w, Y = v => T + h - v / max * h;
+    const line = k => tl.map((p, i) => `${i ? 'L' : 'M'}${X(p.t).toFixed(1)},${Y(p[k]).toFixed(1)}`).join('');
+    const last = tl[tl.length - 1];
+    let yb = Y(last.blau), yr = Y(last.rot);
+    if (Math.abs(yb - yr) < 12) { const m = (yb + yr) / 2, s = last.blau >= last.rot ? -1 : 1; yb = m + s * 6; yr = m - s * 6; }
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Armeestärke beider Seiten über die Zeit">
+      <line x1="${L}" y1="${T}" x2="${L + w}" y2="${T}" stroke="#e4e6ee" stroke-dasharray="3 3"/>
+      <line x1="${L}" y1="${T + h}" x2="${L + w}" y2="${T + h}" stroke="#c9ccd6"/>
+      <text x="${L - 5}" y="${T + 4}" text-anchor="end">${fmtPts(max)}</text>
+      <text x="${L - 5}" y="${T + h + 3}" text-anchor="end">0</text>
+      <text x="${L}" y="${H - 4}">0 s</text><text x="${L + w}" y="${H - 4}" text-anchor="end">${secs(tEnd)}</text>
+      <path d="${line('blau')}" fill="none" stroke="${SIDE_C.blau}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="${line('rot')}" fill="none" stroke="${SIDE_C.rot}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <text class="lab" x="${L + w + 5}" y="${yb + 3.5}">Blau ${fmtPts(last.blau)}</text>
+      <text class="lab" x="${L + w + 5}" y="${yr + 3.5}">Rot ${fmtPts(last.rot)}</text>
+      <g class="hov" visibility="hidden"><line y1="${T}" y2="${T + h}" stroke="#2a2a33" stroke-opacity=".35"/>
+        <circle r="4" fill="${SIDE_C.blau}" stroke="#fff" stroke-width="2"/><circle r="4" fill="${SIDE_C.rot}" stroke="#fff" stroke-width="2"/></g>
+      <rect x="${L}" y="0" width="${w}" height="${H}" fill="transparent"/>
+    </svg><div class="gtip" hidden></div>`;
+  }
+  function bindGraph(box, tl) {
+    const svg = box.querySelector('svg'), hov = svg.querySelector('.hov'), tip = box.querySelector('.gtip');
+    const [ln, cb, cr] = hov.children, vb = svg.viewBox.baseVal;
+    const L = 30, w = vb.width - 30 - 50, T = 10, h = vb.height - 10 - 20;
+    const tEnd = Math.max(.5, tl[tl.length - 1].t), max = Math.max(1, ...tl.map(p => Math.max(p.blau, p.rot)));
+    svg.onpointermove = e => {
+      const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width * vb.width;
+      const t = Math.max(0, Math.min(tEnd, (sx - L) / w * tEnd));
+      let p = tl[0]; for (const q of tl) if (Math.abs(q.t - t) < Math.abs(p.t - t)) p = q;
+      const x = L + p.t / tEnd * w, yb = T + h - p.blau / max * h, yr = T + h - p.rot / max * h;
+      ln.setAttribute('x1', x); ln.setAttribute('x2', x);
+      cb.setAttribute('cx', x); cb.setAttribute('cy', yb); cr.setAttribute('cx', x); cr.setAttribute('cy', yr);
+      hov.setAttribute('visibility', 'visible');
+      tip.textContent = `${secs(p.t)} · Blau ${fmtPts(p.blau)} · Rot ${fmtPts(p.rot)}`;
+      const br = box.getBoundingClientRect();
+      tip.style.left = (r.left - br.left + x / vb.width * r.width) + 'px';
+      tip.style.top = (r.top - br.top + Math.min(yb, yr) / vb.height * r.height - 8) + 'px';
+      tip.hidden = false;
+    };
+    svg.onpointerleave = () => { hov.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+  }
+
+  function tableHTML(side, rows) {
+    const pts = rows.reduce((a, r) => a + r.deployed * UNITS[r.type].cost, 0);
+    const sum = k => rows.reduce((a, r) => a + r[k], 0);
+    const num = v => (v ? String(v) : '<span class="z">0</span>');
+    const dmgPt = (d, p) => (p > 0 ? fmt(d / p) : '–');
+    const tr = r => `<tr><td class="ty"><span><img src="${tIcon(r.type, side)}" alt="">${esc(r.deployed === 1 || (!r.deployed && r.survived === 1) ? UNITS[r.type].n : PLURAL[r.type] || UNITS[r.type].n)}${r.deployed ? '' : ' <small>beschworen</small>'}</span></td>
+      <td>${r.deployed || '<span class="z">–</span>'}</td><td>${num(r.survived)}</td><td>${num(Math.round(r.dmg))}</td><td>${num(r.kills)}</td>
+      <td>${r.deployed ? dmgPt(r.dmg, r.deployed * UNITS[r.type].cost) : '<span class="z">–</span>'}</td></tr>`;
+    return `<table class="bt"><caption><i class="tdot ${side}"></i>${SIDE_N[side]} <em>${fmtPts(pts)} Pkt eingesetzt</em></caption>
+      <thead><tr><th>Typ</th><th>Eingesetzt</th><th>Überlebt</th><th>Schaden</th><th>Kills</th><th title="Ausgeteilter Schaden je investiertem Punkt">Schaden/Pkt</th></tr></thead>
+      <tbody>${rows.map(tr).join('')}${rows.length > 1 ? `<tr class="sum"><td>Gesamt</td><td>${sum('deployed')}</td><td>${sum('survived')}</td><td>${Math.round(sum('dmg'))}</td><td>${sum('kills')}</td><td>${dmgPt(sum('dmg'), pts)}</td></tr>` : ''}</tbody></table>`;
+  }
+
+  function showBattleResult(r) {
+    const h = $('batTitle');
+    h.textContent = r.winner === 'draw' ? 'Unentschieden' : `${SIDE_N[r.winner]} gewinnt!`;
+    h.className = r.winner === 'draw' ? '' : r.winner;
+    const timeUp = r.survivors.blau > 0 && r.survivors.rot > 0;
+    $('batSub').textContent = `Dauer ${clock(r.time)}${timeUp ? ' · Zeit abgelaufen, entschieden nach Armeestärke' : ''}`;
+    $('batSurv').innerHTML = ['blau', 'rot'].map(s => `<span><i class="tdot ${s}"></i>${r.survivors[s]} überlebt</span>`).join('');
+    $('batTables').innerHTML = ['blau', 'rot'].map(s => tableHTML(s, r.table.filter(x => x.side === s))).join('');
+    const gb = $('batGraph'); gb.innerHTML = graphSVG(r.timeline); bindGraph(gb.parentElement, r.timeline);
+    const he = r.hero;
+    $('batHero').innerHTML = he
+      ? `<div class="pic"><img src="${tIcon(he.type, he.side)}" alt=""></div><div><div class="k"><span class="crown">♛</span> Held der Schlacht</div>
+         <div class="n">${esc(UNITS[he.type].n)}</div><div class="k">${SIDE_N[he.side]} · ${he.kills} ${he.kills === 1 ? 'Kill' : 'Kills'}</div></div>`
+      : '<div class="k">Kein Held: niemand hat einen Gegner besiegt.</div>';
+    const bb = game.battle;
+    if (bb && bb.batchRes) batchDone(bb.batchRes); else { $('batBatch').hidden = true; $('batTen').disabled = false; }
+    document.body.classList.add('bat-res');
+    $('ovBat').hidden = false;
+  }
+
+  // k < 0: abgebrochen; sonst Fortschritt k von n
+  function batchProgress(k, n) {
+    const box = $('batBatch');
+    if (k < 0) { box.hidden = true; $('batTen').disabled = false; return; }
+    box.innerHTML = `<div class="row"><b>Auswertung</b><span>${k}/${n}</span><div class="prog"><i style="width:${k / n * 100}%"></i></div><button class="mini" id="batCancel">Abbrechen</button></div>
+      <div class="k" style="color:var(--muted);font-size:12.5px">Dieselbe Aufstellung kämpft ${n}-mal mit anderen Zufallswerten.</div>`;
+    $('batCancel').onclick = () => game.cancelBatch();
+    box.hidden = false; $('batTen').disabled = true;
+  }
+  function batchDone(res) {
+    const box = $('batBatch'), w = res.wins, n = w.blau + w.rot + w.draw;
+    const seg = (k, c) => (w[k] ? `<i style="flex:${w[k]};background:${c}" title="${k === 'draw' ? 'Unentschieden' : SIDE_N[k]} ${w[k]}"></i>` : '');
+    box.innerHTML = `<div class="row"><b>${n}× ausgewertet</b></div>
+      <div class="split">${seg('blau', SIDE_C.blau)}${seg('draw', '#c9ccd6')}${seg('rot', SIDE_C.rot)}</div>
+      <div class="res">Blau ${w.blau} · Rot ${w.rot} · Unentschieden ${w.draw}, Ø ${secs(res.avgTime)}</div>`;
+    box.hidden = false; $('batTen').disabled = false;
+  }
 
   return {
     updateBattle, batchProgress, batchDone, showBattleResult,

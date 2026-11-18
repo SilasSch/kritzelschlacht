@@ -77,7 +77,7 @@ export function createRenderer(canvasHost) {
   const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d');
   let terrTex = null;
   const terrSprite = new PIXI.Sprite();
-  L.terrain.addChild(zoneG, zoneText, sideB, sideR, terrSprite);   // Zone liegt wie früher unter dem Gelände
+  L.terrain.addChild(zoneG, zoneText, terrSprite);   // Zone liegt wie früher unter dem Gelände
 
   let rigs = null;           // gebackene Rig-Teile pro Typ (rig.js)
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
@@ -718,7 +718,7 @@ export function createRenderer(canvasHost) {
   /* ---------- Overlay: Pinsel und Missionszone ---------- */
   const overlay = { brushX: 0, brushY: 0, brushR: 0, erase: false, missionZoneX: null, battleMidX: null };
   const overG = new PIXI.Graphics();
-  L.overlay.addChild(crownG, crownT, overG);
+  L.overlay.addChild(sideB, sideR, crownG, crownT, overG);   // Seitennamen der Schlacht über dem Gelände
   function setOverlay(o) { Object.assign(overlay, o); }
 
   function drawOverlay(world) {

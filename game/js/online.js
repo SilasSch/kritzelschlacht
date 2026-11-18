@@ -137,7 +137,7 @@ export function createMatch(role, budget = ONLINE_DEFAULT, rand = Math.random) {
   return {
     role, side: SIDE[role], budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT, rand,
     phase: 'wait', cfg: null, score: { blau: 0, rot: 0 }, mine: null, chunks: null, recv: [], theirs: null,
-    res: null, peerRes: null, want: 0, same: false, counted: 0, error: null, vote: null, peerVote: null,
+    res: null, peerRes: null, want: 0, same: false, counted: 0, error: null, vote: null, peerVote: null, gave: 0, peerGave: false,
   };
 }
 const num = v => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -153,13 +153,14 @@ export function view(m) {
     if (m.chunks) { const i = Math.min(m.sendI || 0, m.chunks.length - 1); o.arm = { r, n: m.chunks.length, i, d: m.chunks[i] }; }
   }
   if (m.res) o.res = m.res;
+  if (m.gave) o.gave = m.gave;
   o.vote = m.vote && m.cfg ? { r, rule: m.vote.rule, map: m.vote.map } : null;
   return o;
 }
 
 function newRound(m, cfg) {
   m.cfg = cfg; m.phase = cfg.cat ? 'paint' : 'vote'; m.vote = null; m.peerVote = null; m.same = false; m.peerWant = null; m.mine = null; m.chunks = null; m.sendI = 0; m.recv = []; m.theirs = null;
-  m.res = null; m.peerRes = null; m.error = null; m.peerReady = false; m.peerVoted = false;
+  m.res = null; m.peerRes = null; m.error = null; m.peerReady = false; m.peerVoted = false; m.gave = 0; m.peerGave = false;
 }
 
 // Gegner ist da (Host): erste Runde würfeln. Liefert Ereignisse.
@@ -195,9 +196,21 @@ export function markReady(m, packed) {
 // Kampf vorbei (lokales Ergebnis): 'blau' | 'rot' | 'draw'
 export function finishFight(m, winner) {
   if (m.phase !== 'fight') return [];
+  endRound(m, winner);
+  return ['result'];
+}
+// Aufgeben (beim Malen, Warten oder im Kampf): die Runde geht an den Gegner
+const GIVE_PHASES = ['paint', 'ready', 'xfer', 'fight'];
+export const canGiveUp = m => !!m && !!m.cfg && GIVE_PHASES.includes(m.phase);
+function endRound(m, winner) {
   m.res = { r: m.cfg.r, w: winner }; m.phase = 'result';
   if (m.role === 'host' && m.counted < m.cfg.r) { m.counted = m.cfg.r; if (winner !== 'draw') m.score[winner]++; }
-  return ['result'];
+}
+export function giveUp(m) {
+  if (!canGiveUp(m)) return [];
+  m.gave = m.cfg.r;
+  endRound(m, m.side === 'blau' ? 'rot' : 'blau');
+  return ['gave', 'result'];
 }
 // same: Revanche (gleiche Regel und Karte) statt neuer Abstimmung; die gibt es nur, wenn beide Revanche wollen
 export function wantNext(m, same = false) {
@@ -215,7 +228,7 @@ export function officialWinner(m) {
 
 // Neues presence-Objekt des Gegners verarbeiten (p darf null sein: niemand da). Liefert Ereignisse:
 // 'round' (neue Runde, malen), 'xfer' (beide fertig), 'fight' ({ units, seed } in m.fight), 'score', 'error',
-// 'peerwant' (Gegner will weiter), 'peervoted' (Gegner hat abgestimmt), 'peerready' (Gegner ist mit Malen fertig).
+// 'peergave' (Gegner gibt auf, Runde an mich), 'peerwant' (Gegner will weiter), 'peervoted' (Gegner hat abgestimmt), 'peerready' (Gegner ist mit Malen fertig).
 export function onPeer(m, p, W, H) {
   const ev = [];
   if (!isObj(p) || p.ks !== PROTO) return ev;
@@ -238,6 +251,8 @@ export function onPeer(m, p, W, H) {
   }
   if (!m.cfg) return ev;
   const r = m.cfg.r;
+  // Gegner gibt auf: Runde an mich
+  if (num(p.gave) === r && GIVE_PHASES.includes(m.phase)) { m.peerGave = true; endRound(m, m.side); ev.push('peergave', 'result'); }
   if (isObj(p.res) && num(p.res.r) === r && ['blau', 'rot', 'draw'].includes(p.res.w)) {
     if (!m.peerRes || m.peerRes.r !== r) { m.peerRes = { r, w: p.res.w }; ev.push('peerres'); }
   }

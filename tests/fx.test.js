@@ -401,3 +401,15 @@ test('Speer: steckt nach dem Fehlwurf als eigener Speer im Boden (nicht als Pfei
   assert.ok(o.r / FRAME_R[F.pilum] > 1.6 * ar.r / FRAME_R[F.arrow], 'länger als der Pfeil');
   assert.equal(FRAME_R.length, Object.keys(F).length);
 });
+
+// Kritzelwörter (render/words.js)
+import { wordFor } from '../game/js/render/words.js';
+test('Kritzelwörter: große Momente bekommen ein Wort, kleine nicht', () => {
+  assert.equal(wordFor({ type: 'blast', R: 60, kind: 'rocket' })[0], 'BUMM!');
+  assert.equal(wordFor({ type: 'blast', R: 60, kind: 'fire' })[0], 'FAUCH!');
+  assert.equal(wordFor({ type: 'blast', R: 20, kind: 'rocket' }), null);
+  assert.equal(wordFor({ type: 'charge' })[0], 'ZACK!');
+  assert.equal(wordFor({ type: 'ability', k: 'pike' })[0], 'KLONG!');
+  assert.equal(wordFor({ type: 'spell', k: 'meteor' })[0], 'WUMMS!');
+  assert.equal(wordFor({ type: 'hit' }), null);
+});

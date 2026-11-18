@@ -296,6 +296,23 @@ const DEF = {
       draw(c, r) { Ln(c, [[r * .78, r * .3], [r * 1.75, -r * .75]], '#e6ebf0', 2.2); Ln(c, [[r * .52, -r * .02], [r * 1.08, r * .5]], '#8a5a2b', 1.8); },
     },
   },
+  // Trommler: Teamfarbe, hoher Tschako mit Feder, Trommel vor dem Bauch, Schlegel wippen beim Gehen
+  trommler: {
+    eyes: eyePair(.28, -.02, .27),
+    body(c, r, k, f) {
+      feet(c, r, k.dk, f); E(c, 0, 0, r, r * 1.05, k.col); whites(c, r, this.eyes);
+      E(c, r * .35, r * .55, r * .62, r * .42, '#f4f1e8', 1.3);
+      Ln(c, [[-r * .2, r * .3], [r * .9, r * .8]], '#c0392b', 1.2, false); Ln(c, [[-r * .2, r * .8], [r * .9, r * .3]], '#c0392b', 1.2, false);
+      const a = f ? -.35 : .35;
+      Ln(c, [[r * .2, r * .05], [r * (.5 + a * .3), -r * (.35 + a * .3)]], '#8a5a2b', 1.6);
+      Ln(c, [[r * .6, r * .05], [r * (.9 - a * .3), -r * (.35 - a * .3)]], '#8a5a2b', 1.6);
+    },
+    headgear(c, r) {
+      RR(c, -r * .55, -r * 1.45, r * 1.1, r * .9, r * .12, '#2f3a5a');
+      Ln(c, [[-r * .58, -r * .6], [r * .58, -r * .6]], '#ffc533', 2);
+      E(c, r * .35, -r * 1.55, r * .14, r * .24, '#e5574f', 1);
+    },
+  },
   // Pikenier: Teamfarbe, Eisenhut mit Krempe, lange gesenkte Pike mit Stahlspitze
   pikenier: {
     eyes: eyePair(.28, -.02, .27),

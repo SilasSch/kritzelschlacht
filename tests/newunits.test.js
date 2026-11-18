@@ -13,7 +13,7 @@ const mkWorld = (seed = 7) => { const w = createWorld(1400, 800, seed); w.teamMo
 const run = (w, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { step(w, DT); if (each) each(w.events); w.events.length = 0; } };
 
 test('Codes: neue Einheiten hinten an PAINT_TYPES, alte Indizes fest', () => {
-  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier']);
+  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier', 'trommler']);
   assert.ok(PAINT_TYPES.length <= 64, 'Typ passt in 6 Bit');
 });
 
@@ -55,4 +55,17 @@ test('Pikenier: gegen Fußvolk kein Abprallen', () => {
   rebuildHash(w);
   let pike = 0; run(w, 3, ev => { pike += ev.filter(e => e.k === 'pike').length; });
   assert.equal(pike, 0);
+});
+
+test('Trommler: Verbündete in der Nähe laufen schneller und fliehen erst bei 15 %', async () => {
+  const { DRUM } = await import('../game/js/abilities.js');
+  const { RV_DRUM } = await import('../game/js/world.js');
+  const w = mkWorld(), d = spawn(w, 'trommler', 400, 400, 'blau'), k = spawn(w, 'krieger', 460, 400, 'blau'), far = spawn(w, 'krieger', 800, 400, 'blau');
+  spawn(w, 'krieger', 1300, 400, 'rot');
+  rebuildHash(w);
+  run(w, .6);
+  assert.ok(k.rv[RV_DRUM] > w.time, 'im Takt');
+  assert.equal(k.spdMul, DRUM.SPEED);
+  assert.ok(!(far.rv[RV_DRUM] > w.time), 'zu weit weg');
+  assert.ok(!(d.rv[RV_DRUM] > w.time), 'nicht er selbst');
 });

@@ -741,6 +741,16 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'kingFall': wave(x, e.y, R, .9, WAVE_COL.kingFall); break;
+      // Trommler (abilities.DRUM): leiser Ring in Takt-Farbe und zwei Noten
+      case 'drum': {
+        wave(x, e.y, R, .8, WAVE_COL.king);
+        const face = e.face < 0 ? -1 : 1;
+        for (let i = 0; i < 2; i++) {
+          const p = add('note', x + face * rnd(2, 8), y - 8 - i * 5, rnd(.6, .8), rnd(4.5, 5.5), OUTLINE); if (!p) break;
+          p.vx = face * rnd(6, 14); p.vy = -rnd(22, 32); p.rot = rand() * TAU;
+        }
+        break;
+      }
       // Pikenier (abilities.PIKE): Funken an der Pikenspitze, wo der Ansturm abprallt
       case 'pike': {
         const nx = e.nx || 0, ny = e.ny || 0, tx = x + nx * R * 2.6, ty = y + ny * R * 2.6 - 4;

@@ -19,6 +19,9 @@ export const UNITS = {
   // Pikenier (18.11., Ideenrunde): lange Pike, stemmt sie gegen Stürme (abilities.PIKE): Reiter, Einhorn, Elefant,
   // Büffel und Triceratops prallen im Ansturm ab. Gegen Fußvolk und Fernkampf eher schwach.
   pikenier:{n:'Pikenier',cat:'armee',col:'#7a9bd1',r:9,hp:85,dmg:10,range:12,speed:42,cd:1.1,cost:3,mass:1.3,d:'Stemmt die lange Pike gegen jeden Ansturm: Reiter, Büffel und Elefanten prallen ab. Gegen Schützen und Fußvolk eher schwach.'},
+  // Trommler (18.11., Ideenrunde): Moral-Einheit (abilities.DRUM). Verbündete in der Nähe fliehen erst bei 15 % statt 25 %
+  // und laufen schneller; er selbst hält sich wie der Sanitäter hinten (support).
+  trommler:{n:'Trommler',cat:'armee',col:'#5b8def',r:9,hp:50,dmg:6,range:3,speed:58,cd:1,cost:3,mass:1,support:1,d:'Trommelt den Takt: Verbündete in der Nähe laufen schneller, schlagen härter und fliehen erst viel später. Kämpft selbst kaum und hält sich hinten.'},
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:12,range:90,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
@@ -454,7 +457,7 @@ export const PLURAL = {krieger:'Krieger',schuetze:'Schützen',ritter:'Ritter',gr
 Object.assign(PLURAL, {troll:'Trolle',zyklop:'Zyklopen',hexe:'Hexen',phoenix:'Phönixe',einhorn:'Einhörner',frosch:'Frösche'});
 // --- Task 5: Tiere ---
 Object.assign(PLURAL, {koenig:'Könige', lama:'Lamas'});
-Object.assign(PLURAL, {flamme:'Flammenwerfer', pikenier:'Pikeniere'});
+Object.assign(PLURAL, {flamme:'Flammenwerfer', pikenier:'Pikeniere', trommler:'Trommler'});
 Object.assign(PLURAL, {jet:'Kampfjets',kampfdrohne:'Kampfdrohnen',bomber:'Bomber'});
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 // --- Schrottplatz und Urzeit ---

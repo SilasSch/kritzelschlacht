@@ -20,7 +20,7 @@ import { SYN, SB, stepSynergy, synFx, ZANGE_A, ZANGE_B, FELD_A, JAGD_A, SCHRECK_
 import { RV_MARK, RV_KLINGE } from './world.js';
 import { aloft, unseen } from './world.js';
 // --- Schrottplatz und Urzeit ---
-import { stepPike, MOUNTED, PIKE } from './abilities.js';
+import { stepPike, stepDrum, MOUNTED, PIKE } from './abilities.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
@@ -238,7 +238,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
-Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headgear', 'weapon'], pikenier: ['headgear', 'weapon'] });
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headgear', 'weapon'], pikenier: ['headgear', 'weapon'], trommler: ['headgear'] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 // --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
 Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],
@@ -928,7 +928,7 @@ function retreat(world, u, dt) {
   // festgenagelt (keine freie Fluchtrichtung): sofort in die Ecke gedrängt, PIN_HOLD s lang (morale.js)
   if (fleeSteer(world, u, dt)) u.cornerT = MORALE.CORNER_T + PIN_HOLD;
   const t = u.tg;
-  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || u.type === 'moerser') return;
+  if (!t || u.cornerT < MORALE.CORNER_T || T.heal || T.support || u.type === 'moerser') return;
   if (u.type === 'sniper') { const dx = t.x - u.x, d = Math.hypot(dx, t.y - u.y); if (knifeReach(u, t, d)) knife(world, u, t, dx); return; }   // #51
   if (outOfMelee(u, t)) return;   // Hubschrauber, Fledermausform
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
@@ -962,7 +962,8 @@ export function think(world, u, dt) {
   if (u.meleeT > 0) u.meleeT -= dt;
   if (u.type === 'sniper') { const r = u.rv; if (r[RV_BCD] > 0) r[RV_BCD] -= dt; if (r[RV_KNIFE] > 0) r[RV_KNIFE] -= dt; }   // #51
   if (T.tier) stepAnimal(world, u, dt);   // Task 5: Zeiten der Tiere, Versteck des Krokodils
-  if (u.type === 'pikenier') stepPike(world, u, dt);   // Pikenier stemmt die Piken gegen Stürme
+  if (u.type === 'pikenier') stepPike(world, u, dt);
+  else if (u.type === 'trommler') stepDrum(world, u, dt);   // Pikenier stemmt die Piken gegen Stürme
   if (T.bot) stepBot(world, u, dt);       // Schrottplatz: Schild, Kurzschluss, Kuppel, Flicken
   if (u.growT > 0) stepGrow(world, u, dt);   // Urzeit: Jungtiere wachsen, das Ei schlüpft
   if (u.fleeT > 0) u.fleeT -= dt;
@@ -1024,7 +1025,7 @@ export function think(world, u, dt) {
   if (u.gt <= 0 && GROUP_USERS.has(u.type)) groupInfo(world, u);
   u.wall = u.type === 'ritter' && u.gn >= 3;
   u.wedge = u.type === 'reiter' && u.gn >= WEDGE.MIN;
-  if (T.heal) { healer(world, u, dt); return; }
+  if (T.heal || T.support) { healer(world, u, dt); return; }
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
   // Adler oben)
   if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || ((u.tg.batT > 0 || aloft(u.tg)) && outOfMelee(u, u.tg)) ||
@@ -1410,16 +1411,17 @@ function healer(world, u, dt) {
   const T = u.T, f = factionOf(world, u);
   if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || u.tg.ashT > 0 || factionOf(world, u.tg) !== f) {
     let best = null, bd = Infinity;
+    // Trommler (T.support): heilt nicht, folgt nur dem nächsten Verbündeten
     // Fliehende und Erschreckte (morale.isFleeing) vor allen anderen, unter ihnen der nächste
     // Untote (Ghule, data.UNDEAD) heilt er nicht, die Asche des Phönix (Task 6) auch nicht: sie steht ohnehin mit halben LP auf
-    query(world, u.x, u.y, 380, v => {
+    if (!T.support) query(world, u.x, u.y, 380, v => {
       if (v === u || factionOf(world, v) !== f || v.hp >= v.T.hp || v.T.heal || v.ashT > 0 || UNDEAD.has(v.type)) return;
       if (T.repair ? !MACHINE.has(v.type) : v.T.bot) return;   // Schrauber-Drohne: nur Maschinen; Roboter heilt nur sie
       const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2 - (isFleeing(v) ? HEAL_FLEE_BONUS : 0); if (d < bd) { bd = d; best = v; }
     });
     if (!best) {
       query(world, u.x, u.y, 420, v => {
-        if (v === u || factionOf(world, v) !== f || v.T.heal || (T.repair && !MACHINE.has(v.type))) return;
+        if (v === u || factionOf(world, v) !== f || v.T.heal || v.T.support || (T.repair && !MACHINE.has(v.type))) return;
         const d = (v.x - u.x) ** 2 + (v.y - u.y) ** 2; if (d < bd) { bd = d; best = v; }
       });
       u.follow = true;

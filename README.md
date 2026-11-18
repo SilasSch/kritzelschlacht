@@ -30,7 +30,8 @@ Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fes
 | Einstieg, Spielfluss | `js/main.js`, `js/ui.js`, `js/ui/*` (Tutorial-Blasen, Editor-Leiste, Teilen-Dialog, Tageschallenge, Hotseat) |
 | Simulation (ohne DOM) | `sim.js`, `world.js`, `combat.js`, `physics.js`, `pathing.js`, `morale.js`, `spells.js`, `abilities.js`, `battle.js` |
 | Inhalte | `data.js` (Einheiten, Gelände, Konter), `campaign/*` (Kapitel, Tutorial), `docs/kampagne.md` |
-| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `save.js` |
+| Features (rein, getestet) | `shapes.js` (Kritzel-Formen), `medals.js`, `hints.js`, `share.js` (Codes `KS1.…`), `daily.js`, `editor.js`, `hotseat.js`, `online.js` (Online 1 gegen 1), `save.js` |
+| Netz | `net.js` (Live-Verbindung des Artefakts, `room`-Capability; `?nettest` simuliert sie über BroadcastChannel in mehreren Tabs) |
 | Darstellung | `render/*`, `camera.js` (Zoom auf feste Welt), `glguard.js` (WebGL-Kontextverlust) |
 | Debug | `debug/scenes.js`, `benchhud.js`, `sandbox.js` |
 
@@ -44,3 +45,7 @@ Wichtig fürs öffentliche Teilen: Die Prüfung lässt nur gängige Bild-, Video
 und das lokale `pixi.min.js` (enthält data:-URIs für AVIF/WebM) lassen sie scheitern, dann ist der Link nur noch privat.
 Für das Artefakt daher den `@font-face`-Block durch den Google-Fonts-Link ersetzen, Pixi von
 `https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.4.2/pixi.min.js` laden und `fonts/` sowie `vendor/` nicht mit hochladen.
+
+**Online 1 gegen 1** braucht beim Veröffentlichen `capabilities: { room: {} }`. Gespielt wird über `presence` (das dürfen
+alle Betrachter), daher keine Themen-Freigaben. Beide Spieler müssen angemeldet sein und Zugriff auf das Artefakt haben;
+über einen öffentlichen Link gibt es keine Live-Verbindung. Lokal testen: zwei Tabs mit `?nettest`.

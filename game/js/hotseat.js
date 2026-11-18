@@ -17,14 +17,16 @@ export function createHot(budget = HOT_DEFAULT) {
 // Die Seite, die gerade malt (oder null)
 export const painter = hot => (hot && (hot.step === 'blau' || hot.step === 'rot') ? hot.step : null);
 // Blaus Einheiten sind versteckt, solange Rot dran ist (auch hinter der Deckkarte davor)
-export const hiddenTeam = hot => (hot && (hot.step === 'coverRot' || hot.step === 'rot') ? 'blau' : null);
+// Online (online.js): hot.online, die Armee des Gegners ist gar nicht in der Welt
+export const hiddenTeam = hot => (hot && !hot.online && (hot.step === 'coverRot' || hot.step === 'rot') ? 'blau' : null);
 // Malzone der Seite in px: Blau links, Rot rechts der Mitte
 export const sideZone = (world, side) => (side === 'blau' ? [0, world.W / 2] : [world.W / 2, world.W]);
 
 // Budget-Objekt für paint.js (spent wird dort fortgeschrieben; danach mit hot.spent abgleichen)
 export function hotMission(world, hot) {
   const side = painter(hot); if (!side) return null;
-  return { budget: hot.budget, spent: hot.spent[side], team: side, zone: sideZone(world, side) };
+  // hot.def (Online, online.roundDef): nur die Kategorie der Runde
+  return { budget: hot.budget, spent: hot.spent[side], team: side, zone: sideZone(world, side), def: hot.def || null };
 }
 
 // Ein Pinseltupfer in der Hotseat-Planung. first: erster Tupfer des Strichs (dann wird geprüft, ob er auf der eigenen

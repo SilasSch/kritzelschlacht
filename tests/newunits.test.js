@@ -13,7 +13,7 @@ const mkWorld = (seed = 7) => { const w = createWorld(1400, 800, seed); w.teamMo
 const run = (w, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { step(w, DT); if (each) each(w.events); w.events.length = 0; } };
 
 test('Codes: neue Einheiten hinten an PAINT_TYPES, alte Indizes fest', () => {
-  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier', 'trommler']);
+  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier', 'trommler', 'stinktier']);
   assert.ok(PAINT_TYPES.length <= 64, 'Typ passt in 6 Bit');
 });
 
@@ -68,4 +68,19 @@ test('Trommler: Verbündete in der Nähe laufen schneller und fliehen erst bei 1
   assert.equal(k.spdMul, DRUM.SPEED);
   assert.ok(!(far.rv[RV_DRUM] > w.time), 'zu weit weg');
   assert.ok(!(d.rv[RV_DRUM] > w.time), 'nicht er selbst');
+});
+
+test('Stinktier: Stinkwolke erschreckt nahe Gegner, Maschinen nicht', async () => {
+  const { STINK } = await import('../game/js/abilities.js');
+  const { isFleeing } = await import('../game/js/morale.js');
+  const w = mkWorld(), s = spawn(w, 'stinktier', 400, 400, 'blau'); s.abCd = 0; s.hp = 1e9;
+  const k = spawn(w, 'krieger', 425, 400, 'rot'), b = spawn(w, 'minibot', 420, 420, 'rot');
+  k.hp = 1e9; b.hp = 1e9;
+  rebuildHash(w);
+  let cloud = 0, feared = false;
+  run(w, 1.5, ev => { cloud += ev.filter(e => e.k === 'stink').length; feared = feared || k.fearT > 0; });
+  assert.ok(cloud >= 1, 'Wolke');
+  assert.ok(feared, 'Krieger erschrickt');
+  assert.ok(!(b.fearT > 0), 'Minibot riecht nichts');
+  assert.ok(STINK.R >= 40);
 });

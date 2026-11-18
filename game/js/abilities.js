@@ -1319,6 +1319,32 @@ export function stepPike(world, u, dt) {
   emit(world, { type: 'ability', k: 'pike', x: u.x, y: u.y, z: 0, R: u.T.r, nx: dx / d, ny: dy / d });
   sound(world, 'thud');
 }
+/* Stinktier (18.11., Ideenrunde): mit einem Feind bis ENGAGE px (Nahkampf droht) bläst es eine Stinkwolke. Sie steht
+   T s lang an der Stelle; alle PULSE s erschrecken Feinde in R px (scare, FEAR s; nicht FEARLESS, keine Ghule, keine
+   Flieger). Das Stinktier steht dabei still. */
+export const STINK = { ENGAGE: 30, R: 60, T: 2.2, PULSE: .5, FEAR: 2.5 };
+let SK_W = null, SK_F = null, SK_X = 0, SK_Y = 0;
+function stinkTest(v) {
+  if (!v.alive || v.T.fly || FEARLESS.has(v.type) || UNDEAD.has(v.type) || factionOf(SK_W, v) === SK_F) return;
+  const dx = v.x - SK_X, dy = v.y - SK_Y, R = STINK.R + v.T.r;
+  if (dx * dx + dy * dy <= R * R) scare(SK_W, v, STINK.FEAR);
+}
+const stinkReady = (world, u) => !!foeInReach(world, u, STINK.ENGAGE, true);
+function stinkStart(world, u) {
+  u.abX = u.x; u.abY = u.y; u.abK = 0;
+  emit(world, { type: 'ability', k: 'stink', x: u.x, y: u.y, z: 0, R: STINK.R, T: STINK.T });
+  sound(world, 'pop');
+}
+function stinkUpdate(world, u) {
+  u.mx = 0; u.my = 0;
+  while (u.abK * STINK.PULSE <= u.abT + 1e-9 && u.abK * STINK.PULSE < STINK.T) {
+    SK_W = world; SK_F = factionOf(world, u); SK_X = u.abX; SK_Y = u.abY;
+    query(world, SK_X, SK_Y, STINK.R + 30, stinkTest);
+    SK_W = null; SK_F = null; u.abK++;
+  }
+  return u.abT >= STINK.T;
+}
+
 /* Trommler (18.11., Ideenrunde): alle DT s bekommen Verbündete bis R px (nicht er selbst, keine Maschinen und Untoten)
    rv[RV_DRUM] = Zeit + HOLD: sie fliehen erst bei MORALE.FLEE_FORM (15 %) statt 25 % (morale.updateMorale). Wer keine
    andere Verstärkung hat (buffT ≤ 0), läuft ×SPEED (buffT = HOLD, wie das Heulen). Alle PULSE s ein Takt-Zeichen. */
@@ -1732,6 +1758,7 @@ export const ABILITY = {
   // --- Task 5: Tiere --- (Büffel: die Herden-Abklingzeit ist u.herdCd, cd hier nur die Pause nach einer Stampede)
   elefant: { cd: 20, ready: trampleReady, start: trampleStart, update: trampleUpdate },
   krokodil: { cd: 8, ready: snapReady, start: snapStart, update: done },
+  stinktier: { cd: 8, ready: stinkReady, start: stinkStart, update: stinkUpdate },
   gorilla: { cd: 12, ready: throwReady, start: throwStart, update: throwUpdate, end: throwEnd },
   adler: { cd: 10, ready: swoopReady, start: swoopStart, update: swoopUpdate, end: swoopEnd },
   bueffel: { cd: 1, ready: herdReady, start: herdStart, update: herdUpdate },

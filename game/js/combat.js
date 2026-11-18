@@ -238,7 +238,7 @@ export const PARTS = {
   troll: ['weapon'], zyklop: ['weapon'], hexe: ['headgear'], phoenix: [], einhorn: [], frosch: [],
 };
 // --- Task 5: Tiere --- (keine wegfliegenden Teile)
-Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headgear', 'weapon'], pikenier: ['headgear', 'weapon'], trommler: ['headgear'] });
+Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headgear', 'weapon'], pikenier: ['headgear', 'weapon'], trommler: ['headgear'], stinktier: [] });
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 // --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
 Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],

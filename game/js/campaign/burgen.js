@@ -20,7 +20,7 @@ export default {
     {
       // Schützen-Spam gewann hier (Pfeile fliegen über die Palisade), darum ohne Schützen; Grenadiere sind unterlegen
       // (Schützen schießen weiter), Krieger werden zerschossen
-      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 67,   // 14 Ritter (190 LP, 18.11.)
+      id: 'burg-1', n: 'Die Palisade', budget: 90, par: 72,   // 15 Ritter (190 LP; Wegfindung 18.11.: 14 → 15)
       units: ['krieger', 'ritter', 'grenadier'], cats: ['armee'],
       hint: 'Hinter der Palisade lauern Bogenschützen im Wald. Krieger, Ritter oder Grenadiere: Wer hält den Pfeilhagel aus, bis er drüben ist?',
       place: [
@@ -30,7 +30,7 @@ export default {
         ['rect', 'krieger', 8, .63, .4, .65, .6],
       ],
       answer: ['ritter'],
-      plan: { smart: [['ritter', 14, ...F]], spam: [['krieger', 45, ...F]] },
+      plan: { smart: [['ritter', 15, ...F]], spam: [['krieger', 45, ...F]] },
     },
     {
       // Ohne Krieger: 45 Krieger gewannen an einzelnen Formen bis 4/8 (sie quellen durchs Tor und binden die Reiter)

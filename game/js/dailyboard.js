@@ -28,7 +28,7 @@ import { WORLD_W, WORLD_H } from './camera.js';
 
 // Werte, die den Kampf der Tageschallenge bestimmen: Einheiten der Auswahl und Bosse, Formen. SIM_REV von Hand erhöhen,
 // wenn sich die Simulation selbst ändert (combat.js, physics.js …), ohne dass sich diese Werte ändern.
-export const SIM_REV = 4;   // 2: Balance-Runde 18.11. (König, Synergien, Keil, Lama, Waldbrand); 3: Bienen 1 Punkt (Kugeln, Blitze); 4: Adler packt zu, Flammenwerfer, Pikenier
+export const SIM_REV = 5;   // 2: Balance-Runde 18.11. (König, Synergien, Keil, Lama, Waldbrand); 3: Bienen 1 Punkt (Kugeln, Blitze); 4: Adler packt zu, Flammenwerfer, Pikenier; 5: Wegfindung überarbeitet
 export function simVersion() {
   const types = [...new Set([...DAILY_POOL, ...DAILY_BOSSES])].sort();
   return 'v' + hashStr(JSON.stringify([SIM_REV, types.map(t => [t, UNITS[t] || null]), SHAPES])).toString(36);
@@ -40,7 +40,8 @@ export const VERSIONS = {
   v1j0sw5m: { until: '2026-11-18' },   // Luftwaffe: Hubschrauber neu, Jet, Kampfdrohne, Bomber (18.11.)
   v3v8ayv: { until: '2026-11-18' },   // Balance-Runde: Magier 8 und langsamer, Ritter, Sani, Vampir, Gorilla, Meteor, König, Lama, Keil, Synergien, Waldbrand (18.11.)
   v1w2hbq9: { until: '2026-11-18' },   // Bienen 1 Punkt, dafür 24 LP, Stich 4, Gift 5/s, Kugeln ×2,5, Blitze ×1,6 (18.11.)
-  vsjyhqn: { until: null },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.)
+  vsjyhqn: { until: '2026-11-18' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.)
+  v1oqxao2: { until: null },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

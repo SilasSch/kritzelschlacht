@@ -139,7 +139,8 @@ for (const [name, mkFoe] of [['verstecktes Krokodil', hiddenCroc], ['Phönix-Asc
         if (foe.type === 'krokodil') { foe.hidden = true; foe.seenT = 0; }
         // Speere fliegen im Bogen auf einen Zielpunkt (x1, y1) mit Vorhalt; das Ziel selbst steht still
         assert.ok(!w.proj.some(p => p.kind === 'pilum' && (p.x1 - foe.x) ** 2 + (p.y1 - foe.y) ** 2 < 20 * 20), `Saat ${seed}: Speer auf ${name}`);
-        assert.ok(!rs.some(u => u.alive && u.tg === foe && (foe.type !== 'krokodil' || (foe.x - u.x) ** 2 + (foe.y - u.y) ** 2 > 60 * 60)), `Saat ${seed}: Ziel ${name}`);
+        // 64 statt 60 (HIDE_R): think prüft vor der Bewegung, ein Schritt Laufen oder Schieben danach darf knapp hinaus
+        assert.ok(!rs.some(u => u.alive && u.tg === foe && (foe.type !== 'krokodil' || (foe.x - u.x) ** 2 + (foe.y - u.y) ** 2 > 64 * 64)), `Saat ${seed}: Ziel ${name}`);
         if (w.formations.some(f => f.state === 'charge')) charged = true;
       }
       assert.ok(charged, `Saat ${seed}: Sturmangriff kam`);

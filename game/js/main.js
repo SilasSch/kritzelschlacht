@@ -30,6 +30,8 @@ import { encode, decode, battleData, applyBattle, levelData } from './share.js';
 import { createShareDialog } from './ui/sharedialog.js';
 import { createEditorBar } from './ui/editorbar.js';
 import { dailyLevel, dateKey, recordDaily } from './daily.js';   // Tageschallenge (Audit 18.11.)
+import { placeDaily, dailySnapshot, fightSeed, armyOf } from './dailyboard.js';   // Bestenliste der Tageschallenge (18.11.)
+import { createBoardUI } from './ui/dailyboard.js';
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
@@ -242,7 +244,8 @@ function loadLevelDef(def, opts = {}) {
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
   leaveBattle(); leaveEditor();
   clearWorld();
-  buildMission(world, def);
+  // Tageschallenge: Gegner mit fester Saat (dailyboard.js), damit der Kampf nachgerechnet werden kann
+  if (def.daily) placeDaily(world, def); else buildMission(world, def);
   game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, def,
     kind: opts.kind || (opts.chapter ? 'campaign' : opts.custom ? 'custom' : 'level'),
     budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
@@ -264,9 +267,21 @@ function startMission() {
     units: world.units.filter(u => u.alive && u.team === PLAYER).map(u => ({ type: u.type, x: u.x, y: u.y, shape: u.shape })),
     terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
   };
+  // Tageschallenge (Bestenliste 18.11.): Armee auf das Raster des Codes, fester Schnappschuss und feste Saat. So ergibt das
+  // Nachrechnen (dailyboard.createCheck) genau diesen Kampf.
+  let daily = null;
+  if (m.def.daily) {
+    try { const army = armyOf(world); daily = { army, ...dailySnapshot(m.def.daily, army) }; }
+    catch (e) { ui.toast(e.message || 'Diese Armee passt nicht zur Tageschallenge.'); return; }
+  }
   m.phase = 'battle'; m.t = 0; m.endT = -1; m.result = null;
   // Replay (Audit 18.11.): Kampf aus festem Zustand starten, damit er sich genau wiederholen lässt
-  m.fight = beginFight();
+  if (daily) {
+    m.army = daily.army; m.spent = daily.spent;
+    m.fight = { snap: daily.snap, seed: fightSeed(m.def.daily) };
+    resetFight(world, m.fight.snap, m.fight.seed);
+    renderer.fx.clear(); markAll();
+  } else m.fight = beginFight();
   undoStack.length = 0; ui.resetBattle(); audio.init(); audio.play('go');
   ui.updateMission(); ui.updateControls();
 }
@@ -294,7 +309,8 @@ function finishMission() {
   const camp = m.kind === 'campaign';
   if (win && camp) save.stars[m.id] = Math.max(save.stars[m.id] || 0, stars);
   // Tageschallenge (Audit 18.11.): keine Kampagnensterne, der Bestwert des Tages kommt in save.daily
-  const daily = m.def.daily ? { date: m.def.daily, best: recordDaily(save.daily, m.def.daily, { win, spent: m.spent, stars }) } : null;
+  const daily = m.def.daily ? { date: m.def.daily, best: recordDaily(save.daily, m.def.daily, { win, spent: m.spent, stars }), army: m.army, time: m.t } : null;
+  if (daily && win && m.army) board.onWin(daily.date, m.army, { win, spent: m.spent, time: Math.round(m.t * 100) / 100, stars });
   // Medaillen (medals.js): nur für Kampagnenlevel gespeichert, angezeigt immer
   const army = snap && snap.id === m.id ? snap.units : [];
   const got = earnedMedals({ win, lost: ui.lostBlue(), deployed: army.length, time: m.t, types: new Set(army.map(u => u.type)).size });
@@ -303,7 +319,7 @@ function finishMission() {
   if (m.kind === 'tutorial' && win) save.tutorial = true;
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
-  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
+  m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, lost: ui.lostBlue(), deployed: army.length, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
     daily, nextLabel: m.chapter || m.custom || daily ? null : 'Zur Kampagne', hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
@@ -619,6 +635,7 @@ function shareBattle() {
 async function loadCode(text) {
   const d = await decode(text);
   if (d.k === 'duel' || d.k === 'duelres') { duel.load(d); return; }   // Code-Duell (18.11.)
+  if (d.k === 'dailyres') { board.addCode(d); return; }   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
   if (d.k === 'battle') {
     if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
     clearWorld(); world.teamMode = true;
@@ -748,8 +765,12 @@ const hotseat = createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
 const online = createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, clearWorld, undoStack, markAll });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || online.covered(); }
 // Code-Duell (18.11.): 1 gegen 1 nur mit Codes, ohne Live-Verbindung (duel.js, ui/duel.js)
+// Bestenliste der Tageschallenge (18.11.): Live über die Datenbank des Artefakts, sonst eigene Siege und Ergebnis-Codes
+const board = createBoardUI({ toast: m => ui.toast(m), decode, encode, shareDlg });
+game.board = board;
 const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle, markAll });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || duel.covered(); }
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || board.covered(); }
 
 /* ---------- Schleife ---------- */
 function drainEvents() {

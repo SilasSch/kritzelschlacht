@@ -6,14 +6,21 @@
 // 70–140 Punkte, dazu manchmal ein Gelände in der gegnerischen Hälfte. Erlaubt sind 5–6 Einheitentypen, darunter immer
 // mindestens zwei Konter (data.js COUNTERS) des Hauptgegners. plan.smart ist ein einfacher Lösungsplan aus diesen
 // Kontern (Tests: tests/daily.test.js prüfen, dass er meist gewinnt).
-import { UNITS, PLURAL, COUNTERS } from './data.js';
+import { UNITS, PLURAL, COUNTERS as ALL_COUNTERS } from './data.js';
+// Feste Auswahl für die Tageschallenge: neue Einheiten (data.js) dürfen alte Tage nicht verändern, sonst passen Bestenliste,
+// geteilte Ergebnisse und „Nochmal“ nicht mehr. Neue Einheiten hier nur gezielt aufnehmen (verändert die künftigen Tage ab dann).
+export const DAILY_POOL = ['krieger', 'schuetze', 'ritter', 'grenadier', 'reiter', 'roemer', 'sani', 'wolf', 'baer', 'biene', 'magier',
+  'geist', 'drache', 'vampir', 'soldat', 'mg', 'sniper', 'panzerfaust', 'moerser', 'panzer', 'heli', 'troll', 'zyklop', 'hexe',
+  'phoenix', 'einhorn', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel'];
+const inPool = t => DAILY_POOL.includes(t);
+const COUNTERS = ALL_COUNTERS.filter(c => inPool(c[0]) && inPool(c[1]));
 import { createRng } from './rng.js';
 import { F, B, Md } from './campaign/areas.js';
 
 // Bosse: höchstens einer je Tag, nie der Hauptgegner und nie Konter im Plan (zu grob für das Budget)
 export const DAILY_BOSSES = ['panzer', 'heli', 'elefant', 'drache'];
 const isBoss = t => DAILY_BOSSES.includes(t);
-const paintable = t => UNITS[t] && UNITS[t].paint !== false;
+const paintable = t => inPool(t) && UNITS[t] && UNITS[t].paint !== false;
 
 // Konter je Gegnertyp: a schlägt b (COUNTERS), nur malbare Nicht-Bosse
 export function countersOf(type) {
@@ -136,7 +143,7 @@ export function dailyLevel(dateStr) {
   // Erlaubte Einheiten: alle Konter des Plans, dazu Ablenkungen bis 5–6 Typen
   const units = [...new Set([...counters, ...(bossC ? [bossC] : [])])];
   const want = Math.max(units.length, rng() < .5 ? 5 : 6);
-  const others = shuffle(Object.keys(UNITS).filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
+  const others = shuffle(DAILY_POOL.filter(t => paintable(t) && !isBoss(t) && !units.includes(t)));
   while (units.length < want) units.push(others.shift());
   const shown = shuffle(units);
 
@@ -154,11 +161,35 @@ export function dailyLevel(dateStr) {
   };
 }
 
-// Text zum Teilen: 'Kritzelschlacht Tageschallenge 18.11.: gewonnen mit 64 Punkten ★★★'
+// Öffentlicher Link des Spiels (Claude-Artefakt) für den Teilen-Text
+export const PUBLIC_URL = 'https://claude.ai/artifact/QtMYbLk6di6csuGhk7YStf';
+// Erste Tageschallenge: Nummer 1
+export const DAILY_EPOCH = '2026-11-18';
+export const dailyNo = dateStr => Math.round((Date.parse(dateStr + 'T00:00:00Z') - Date.parse(DAILY_EPOCH + 'T00:00:00Z')) / 864e5) + 1;
+const MEDAL_ICONS = ['🛡️', '⚡', '🎯'];
+
+// Text zum Teilen (fertig für einen Post, unter 280 Zeichen, ohne die Lösung zu verraten), z. B.
+//   🖍️ Kritzelschlacht · Tageschallenge #1 (18.11.)
+//   ⭐⭐⭐ Sieg mit 64 von 110 Punkten in 0:38
+//   🟦🟦🟦🟦🟦🟦🟦🟥🟥🟥 7 von 10 überlebt
+//   🛡️⚡ Medaillen
+//   Schaffst du's billiger? https://claude.ai/…
+// r: { win, spent, budget, stars, time (s), lost, deployed, medals: { mask } } (alles außer win/spent/stars optional)
 export function shareText(dateStr, r) {
   const pts = String(Math.round(r.spent * 10) / 10).replace('.', ',');
-  const st = '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars);
-  return `Kritzelschlacht Tageschallenge ${shortDate(dateStr)}: ${r.win ? `gewonnen mit ${pts} Punkten ${st}` : 'verloren'}`;
+  const lines = [`🖍️ Kritzelschlacht · Tageschallenge #${dailyNo(dateStr)} (${shortDate(dateStr)})`];
+  if (r.win) {
+    const t = r.time > 0 ? ` in ${Math.floor(r.time / 60)}:${String(Math.floor(r.time % 60)).padStart(2, '0')}` : '';
+    lines.push(`${'⭐'.repeat(r.stars)}${'✩'.repeat(3 - r.stars)} Sieg mit ${pts}${r.budget ? ` von ${r.budget}` : ''} Punkten${t}`);
+  } else lines.push('💥 Niederlage. Morgen gibt es eine neue Schlacht.');
+  if (r.deployed > 0) {
+    const alive = Math.max(0, r.deployed - (r.lost || 0)), blue = Math.round(alive / r.deployed * 10);
+    lines.push(`${'🟦'.repeat(blue)}${'🟥'.repeat(10 - blue)} ${alive} von ${r.deployed} überlebt`);
+  }
+  const mask = r.medals ? r.medals.mask : 0;
+  if (r.win && mask) lines.push(MEDAL_ICONS.filter((_, i) => (mask >> i) & 1).join('') + ' Medaillen');
+  lines.push(`${r.win ? 'Schaffst du\'s billiger?' : 'Schaffst du es?'} ${PUBLIC_URL}`);
+  return lines.join('\n');
 }
 
 // Bestwert eines Tages im Spielstand (save.daily) eintragen: weniger Punkte ist besser, ein Sieg schlägt jede Niederlage.

@@ -992,13 +992,300 @@ DEF.elefant = {
   },
 };
 
+/* ---------- Schrottplatz und Urzeit (5. Kategorie, 18.11.) ----------
+   Normale Sticker wie Wolf und Gorilla (Glubschaugen, Umrisse O), mit einem Akzent in Teamfarbe (k.shield: Streifen
+   der Roboter, Fell, Stirnband, Rückenstreifen der Dinos); darum je Team gebacken (ERA_ACCENT). Bild 0/1 = Schritt
+   (Räder, Beine) bzw. Flügel und Rotoren. Jungtiere und das Ei: pose.js verkleinert die Figur nach u.T.r. */
+export const ERA_ACCENT = new Set(['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega',
+  'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
+const METAL_DK = '#4a4552', SKIN = '#f2c9a0', HAIR = '#5a4334', WOOD = '#8a5a33';
+// Rad mit Speiche (Bild f dreht die Speiche)
+function wheel(c, r, x, y, s, f) {
+  E(c, x * r, y * r, s * r, s * r, METAL_DK, 1.2);
+  const a = f ? .8 : -.2; Ln(c, [[(x - Math.cos(a) * s * .7) * r, (y - Math.sin(a) * s * .7) * r], [(x + Math.cos(a) * s * .7) * r, (y + Math.sin(a) * s * .7) * r]], '#8d929c', 1, false);
+}
+// Bein eines Dinos: Oberschenkel von (x, y) nach unten, Schritt l (r-Einheiten), Fuß mit Krallen
+function dinoLeg(c, r, x, y, l, col, w = 3) {
+  Ln(c, [[x * r, y * r], [(x + l) * r, (y + .45) * r], [(x + l * .5) * r, (y + .75) * r]], col, w);
+}
+// Mensch der Urzeit: Körper, Lendenschurz (Teamfarbe), Haar
+function caveman(c, r, k, f, hair = HAIR) {
+  feet(c, r, '#c99a72', f);
+  E(c, 0, r * .05, r * .82, r * .9, k.col);
+  poly(c, r, [[-.8, .25], [.8, .25], [.7, .75], [.3, .6], [0, .8], [-.35, .6], [-.72, .78]], k.shield, 1.2);
+  c.beginPath(); c.moveTo(-r * .78, -r * .2); c.quadraticCurveTo(-r * .7, -r * 1.05, r * .1, -r * .95);
+  c.quadraticCurveTo(r * .7, -r * .95, r * .78, -r * .45); c.quadraticCurveTo(r * .4, -r * .62, r * .2, -r * .5);
+  c.quadraticCurveTo(-r * .1, -r * .7, -r * .35, -r * .45); c.quadraticCurveTo(-r * .6, -r * .5, -r * .78, -r * .2);
+  c.closePath(); c.fillStyle = hair; c.fill(); c.lineWidth = 1.2; c.strokeStyle = O; c.stroke();
+  E(c, r * .62, r * .02, r * .08, r * .06, '#c99a72', 0);
+}
+Object.assign(DEF, {
+  // Minibot: Kasten auf zwei Rädern, Antenne mit Lämpchen, Streifen in Teamfarbe
+  minibot: {
+    eyes: eyePair(.18, -.22, .23),
+    body(c, r, k, f) {
+      wheel(c, r, -.42, .78, .27, f); wheel(c, r, .42, .78, .27, !f);
+      Ln(c, [[0, -r * .7], [r * .12, -r * 1.2]], METAL_DK, 1.2);
+      E(c, r * .12, -r * 1.27, r * .14, r * .14, k.shield, 1.1);
+      RR(c, -r * .78, -r * .72, r * 1.56, r * 1.3, r * .25, k.col);
+      RR(c, -r * .78, r * .25, r * 1.56, r * .2, r * .06, k.shield);
+      Ln(c, [[-r * .5, r * .05], [-r * .2, r * .05]], shade(k.col, -.35), 1, false);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Laserbot: runder Kopf auf drei Beinen, Laserrohr mit roter Linse
+  laserbot: {
+    eyes: eyePair(-.05, -.25, .2),
+    body(c, r, k, f) {
+      const l = f ? .12 : -.12;
+      for (const [x, d] of [[-.35, -.35], [0, l], [.35, .35]]) Ln(c, [[x * r, r * .4], [(x + d) * r, r * 1.0]], METAL_DK, 1.8);
+      RR(c, r * .5, -r * .32, r * .95, r * .32, r * .1, '#6b7280');
+      E(c, r * 1.48, -r * .16, r * .13, r * .13, '#ff4d4d', 1.1);
+      E(c, 0, -r * .05, r * .82, r * .72, k.col);
+      Ln(c, [[-r * .72, r * .3], [r * .72, r * .3]], k.shield, 3);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Schrauber-Drohne: gelber Rumpf, zwei Rotoren (Bild 0/1: Blätter), Schraubenschlüssel unten
+  drohne: {
+    eyes: eyePair(.25, -.08, .2),
+    body(c, r, k, f) {
+      Ln(c, [[0, r * .5], [0, r * .95]], '#9aa3b5', 1.6);
+      E(c, 0, r * 1.05, r * .16, r * .16, null, 2.2, '#9aa3b5');
+      for (const s of [-1, 1]) {
+        Ln(c, [[s * r * .55, -r * .2], [s * r * .95, -r * .72]], METAL_DK, 1.4);
+        const w = f ? .55 : .3;
+        Ln(c, [[(s * .95 - w) * r, -r * .78], [(s * .95 + w) * r, -r * .78]], '#6b7280', 1.6);
+      }
+      E(c, 0, 0, r * 1.0, r * .6, k.col);
+      Ln(c, [[-r * .85, r * .25], [r * .85, r * .25]], k.shield, 3);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Schildkuppel: Kettenfahrzeug mit Kuppel-Projektor (blaue Halbkugel) obendrauf
+  kuppel: {
+    eyes: eyePair(.12, .2, .18),
+    body(c, r, k, f) {
+      RR(c, -r * .95, r * .55, r * 1.9, r * .42, r * .2, METAL_DK);
+      for (let i = -1; i <= 1; i++) E(c, (i * .55 + (f ? .08 : 0)) * r, r * .76, r * .12, r * .12, '#8d929c', 1);
+      RR(c, -r * .8, -r * .25, r * 1.6, r * .85, r * .2, k.col);
+      RR(c, -r * .8, r * .38, r * 1.6, r * .16, r * .05, k.shield);
+      c.beginPath(); c.arc(0, -r * .25, r * .55, Math.PI, 0); c.closePath(); c.fillStyle = '#9db8ff'; c.fill(); c.lineWidth = 1.3; c.strokeStyle = O; c.stroke();
+      E(c, -r * .18, -r * .52, r * .14, r * .09, '#e4ecff', 0, null, -.5);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Springspinne: dunkler Leib, Kopf vorn, vier Beine je Seite (Bild 0/1: Schritt), rote Sensoren
+  spinne: {
+    eyes: eyePair(.82, -.22, .17),
+    body(c, r, k, f) {
+      const l = f ? .14 : -.14;
+      for (const [x, s, i] of [[-.45, -1, 0], [-.15, -1, 1], [.15, 1, 0], [.45, 1, 1]]) {
+        const d = i ? l : -l;
+        Ln(c, [[x * r, 0], [(x + s * .35) * r, -r * .55], [(x + s * .55 + d) * r, r * .9]], METAL_DK, 1.8);
+      }
+      E(c, -r * .15, r * .05, r * .85, r * .58, '#4a4552');
+      Ln(c, [[-r * .75, -r * .05], [r * .4, -r * .05]], k.shield, 2.6);
+      E(c, r * .78, -r * .1, r * .45, r * .4, '#5d5866');
+      E(c, r * 1.1, r * .12, r * .06, r * .06, '#ff4d4d', 0); E(c, r * .95, r * .2, r * .05, r * .05, '#ff4d4d', 0);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Schweißer: gelber Kasten mit dunklem Visier, Arm mit Brenner und Flämmchen, Räder
+  schweisser: {
+    eyes: eyePair(.05, -.47, .18),
+    body(c, r, k, f) {
+      wheel(c, r, -.42, .82, .22, f); wheel(c, r, .42, .82, .22, !f);
+      Ln(c, [[r * .6, r * .1], [r * 1.25, r * .1]], METAL_DK, 2.4);
+      poly(c, r, [[1.25, .02], [1.62, -.12 + (f ? .05 : 0)], [1.5, .1], [1.66, .26], [1.25, .18]], '#ffb03a', 1);
+      RR(c, -r * .75, -r * .88, r * 1.5, r * 1.6, r * .25, k.col);
+      RR(c, -r * .62, -r * .78, r * 1.24, r * .6, r * .15, '#4a4552');
+      RR(c, -r * .75, r * .32, r * 1.5, r * .18, r * .05, k.shield);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Magnet-Mech: wuchtiger Rumpf auf kurzen Beinen, roter Hufeisenmagnet als Arm
+  magnet: {
+    eyes: eyePair(-.2, -.35, .19),
+    body(c, r, k, f) {
+      const s = f ? .1 : -.1;
+      RR(c, (-.65 + s) * r, r * .45, r * .42, r * .55, r * .1, METAL_DK); RR(c, (.15 - s) * r, r * .45, r * .42, r * .55, r * .1, METAL_DK);
+      RR(c, -r * .95, -r * .82, r * 1.6, r * 1.4, r * .3, k.col);
+      RR(c, -r * .95, r * .2, r * 1.6, r * .18, r * .05, k.shield);
+      c.lineCap = 'butt';
+      c.beginPath(); c.arc(r * .95, -r * .1, r * .42, -Math.PI / 2, Math.PI / 2);
+      c.lineWidth = r * .32 + 2.4; c.strokeStyle = O; c.stroke(); c.lineWidth = r * .32; c.strokeStyle = '#d8433b'; c.stroke();
+      c.lineCap = 'round';
+      RR(c, r * .62, -r * .68, r * .32, r * .3, r * .05, '#e6e9ef'); RR(c, r * .62, r * .2, r * .32, r * .3, r * .05, '#e6e9ef');
+      whites(c, r, this.eyes);
+    },
+  },
+  // Teslaspule: Sockel in Teamfarbe, Spule mit Windungen, Kugel mit Augen, Funken (Bild 0/1)
+  tesla: {
+    eyes: eyePair(0, -1.18, .17),
+    body(c, r, k, f) {
+      RR(c, -r * .75, r * .55, r * 1.5, r * .45, r * .12, k.shield);
+      RR(c, -r * .32, -r * .85, r * .64, r * 1.45, r * .1, '#c9a27a');
+      c.strokeStyle = '#8a5a33'; c.lineWidth = 1.2; c.beginPath();
+      for (let i = 0; i < 5; i++) { const y = (-.7 + i * .27) * r; c.moveTo(-r * .32, y); c.lineTo(r * .32, y + r * .08); }
+      c.stroke();
+      E(c, 0, -r * 1.15, r * .55, r * .5, '#c9ced8');
+      const s = f ? 1 : -1;
+      Ln(c, [[r * .5 * s, -r * 1.45], [r * .85 * s, -r * 1.6], [r * .7 * s, -r * 1.3], [r * 1.05 * s, -r * 1.35]], '#7e9dff', 1.2, false);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Mega-Mech: großer Rumpf mit Cockpitscheibe, Schulterpanzer in Teamfarbe, schwere Beine
+  mega: {
+    eyes: eyePair(.12, -.55, .12),
+    body(c, r, k, f) {
+      const s = f ? .08 : -.08;
+      RR(c, (-.62 + s) * r, r * .25, r * .42, r * .78, r * .1, METAL_DK); RR(c, (.2 - s) * r, r * .25, r * .42, r * .78, r * .1, METAL_DK);
+      RR(c, -r * .95, -r * .95, r * 1.9, r * 1.35, r * .25, k.col);
+      RR(c, -r * 1.35, -r * .88, r * .42, r * .95, r * .15, k.shield); RR(c, r * .93, -r * .88, r * .42, r * .95, r * .15, k.shield);
+      RR(c, -r * .3, -r * .78, r * .85, r * .45, r * .12, '#bfe3f6');
+      c.strokeStyle = shade(k.col, -.35); c.lineWidth = 1.1; c.beginPath();
+      for (let i = 0; i < 4; i++) { c.moveTo((-.45 + i * .3) * r, r * .0); c.lineTo((-.45 + i * .3) * r, r * .25); }
+      c.stroke();
+      whites(c, r, this.eyes);
+    },
+  },
+  // Höhlenmensch: Fellschurz in Teamfarbe, Keule mit Fackelflamme
+  hoehle: {
+    eyes: eyePair(.25, -.22, .19),
+    body(c, r, k, f) {
+      caveman(c, r, k, f);
+      Ln(c, [[r * .55, r * .3], [r * 1.12, -r * .55]], WOOD, 3);
+      E(c, r * 1.18, -r * .66, r * .22, r * .3, WOOD, 1.2, O, .5);
+      poly(c, r, [[1.02, -.88], [1.2, -1.35], [1.27, -1.0], [1.4, -1.22], [1.36, -.84]], '#ff8a3d', 1);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Speerwerfer: Stirnband in Teamfarbe, langer Speer mit Steinspitze
+  speer: {
+    eyes: eyePair(.25, -.22, .19),
+    body(c, r, k, f) {
+      Ln(c, [[-r * .7, r * .8], [r * 1.35, -r * 1.05]], WOOD, 2);
+      poly(c, r, [[1.3, -1.0], [1.62, -1.32], [1.42, -.92]], '#9aa3b5', 1.1);
+      caveman(c, r, k, f);
+      Ln(c, [[-r * .76, -r * .42], [r * .76, -r * .42]], k.shield, 2.4);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Schamanin: Federkrone, Stab mit grüner Kugel, Kräuterrauch
+  schamane: {
+    eyes: eyePair(.25, -.2, .19),
+    body(c, r, k, f) {
+      Ln(c, [[r * .95, -r * 1.0], [r * .95, r * .95]], WOOD, 2);
+      E(c, r * .95, -r * 1.1, r * .2, r * .2, '#4fc07a', 1.2);
+      for (const [x, y, s] of [[-1.25, -.9, .2], [-1.05, -1.2, .16], [-1.4, -1.25, .12]]) E(c, x * r, y * r, s * r, s * r, 'rgba(168,216,106,.7)', 0);
+      caveman(c, r, k, f, '#7a5236');
+      for (const [x, col] of [[-.45, '#d8433b'], [-.15, '#ffd84d'], [.15, '#4fc07a'], [.45, '#d8433b']]) poly(c, r, [[x - .1, -.72], [x, -1.32], [x + .1, -.72]], col, 1);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Raptor: schlanker grüner Körper, langer Schwanz, Kopf mit Zähnen, Rückenstreifen in Teamfarbe
+  raptor: {
+    eyes: eyePair(.95, -.5, .14),
+    body(c, r, k, f) {
+      const l = f ? .2 : -.2;
+      dinoLeg(c, r, -.2, .2, l, k.dk); dinoLeg(c, r, .15, .2, -l, k.col);
+      poly(c, r, [[-.45, -.25], [-1.6, -.55], [-1.75, -.42], [-.45, .25]], k.col);
+      E(c, 0, 0, r * .75, r * .48, k.col);
+      Ln(c, [[-r * .6, -r * .28], [r * .4, -r * .38]], k.shield, 2.6, false);
+      poly(c, r, [[.45, -.3], [.75, -.75], [1.45, -.7], [1.5, -.42], [.9, -.3]], k.col);
+      for (const x of [1.05, 1.22, 1.38]) poly(c, r, [[x, -.42], [x + .05, -.33], [x + .1, -.43]], '#fff', .6);
+      Ln(c, [[r * .55, r * .1], [r * .8, r * .25]], k.dk, 1.6);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Flugsaurier: breite Hautflügel (Bild 0 oben, 1 unten), Kopfkamm, Stein in den Krallen
+  ptera: {
+    eyes: eyePair(.82, -.38, .13),
+    body(c, r, k, f) {
+      const wing = s => {
+        if (!f) poly(c, r, [[-.1, -.1], [s * 1.7 - .1, -1.0], [s * 1.2, -.5], [s * .6, -.35], [.25 * s, .05]], s < 0 ? k.dk : k.col);
+        else poly(c, r, [[-.1, 0], [s * 1.75 - .1, .55], [s * 1.25, .35], [s * .6, .45], [.25 * s, .1]], s < 0 ? k.dk : k.col);
+      };
+      wing(-1);
+      E(c, 0, r * .55, r * .2, r * .17, '#9aa3b5', 1.1);
+      E(c, 0, 0, r * .55, r * .38, k.col);
+      Ln(c, [[-r * .4, -r * .05], [r * .35, -r * .05]], k.shield, 2.4, false);
+      poly(c, r, [[.4, -.25], [.6, -.6], [.95, -.62], [1.6, -.3], [1.0, -.18]], k.col);
+      poly(c, r, [[.6, -.58], [.3, -1.0], [.8, -.62]], k.dk, 1);
+      wing(1);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Ankylosaurus: breiter Panzer mit Stacheln, Keulenschwanz, kleiner Kopf
+  anky: {
+    eyes: eyePair(1.12, -.02, .12),
+    body(c, r, k, f) {
+      const l = f ? .1 : -.1;
+      for (const [x, i] of [[-.55, 0], [-.2, 1], [.3, 0], [.6, 1]]) RR(c, (x + (i ? l : -l)) * r - r * .1, r * .3, r * .2, r * .55, r * .06, k.dk);
+      Ln(c, [[-r * .95, r * .05], [-r * 1.4, -r * .15]], k.col, 2.6);
+      E(c, -r * 1.48, -r * .2, r * .22, r * .18, shade(k.col, -.2), 1.2);
+      E(c, 0, 0, r * 1.05, r * .55, k.col);
+      for (const x of [-.65, -.3, .05, .4]) poly(c, r, [[x - .1, -.42], [x, -.72], [x + .1, -.42]], '#e3d4b2', 1);
+      Ln(c, [[-r * .9, r * .22], [r * .9, r * .22]], k.shield, 2.6, false);
+      E(c, r * 1.1, r * .05, r * .32, r * .26, k.col);
+      E(c, r * 1.35, r * .12, r * .04, r * .03, O, 0);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Triceratops: Körper, Nackenschild, drei Hörner
+  trike: {
+    eyes: eyePair(.92, -.05, .13),
+    body(c, r, k, f) {
+      const l = f ? .12 : -.12;
+      for (const [x, i] of [[-.6, 0], [-.25, 1], [.2, 0], [.5, 1]]) RR(c, (x + (i ? l : -l)) * r - r * .11, r * .3, r * .22, r * .55, r * .06, k.dk);
+      poly(c, r, [[-.8, -.1], [-1.35, .05], [-.8, .25]], k.col);
+      E(c, -r * .15, 0, r * .95, r * .6, k.col);
+      Ln(c, [[-r * .85, -r * .1], [r * .3, -r * .35]], k.shield, 2.6, false);
+      poly(c, r, [[.45, -.8], [.75, -.95], [.95, -.65], [.8, .25], [.45, .1]], '#d97c4f');
+      E(c, r * .95, r * .05, r * .42, r * .36, k.col);
+      Ln(c, [[r * .95, -r * .2], [r * 1.55, -r * .55]], '#f3ead8', 1.8); Ln(c, [[r * 1.1, -r * .12], [r * 1.7, -r * .35]], '#f3ead8', 1.8);
+      Ln(c, [[r * 1.3, r * .12], [r * 1.5, r * .05]], '#f3ead8', 1.4);
+      whites(c, r, this.eyes);
+    },
+  },
+  // T-Rex: großer Kopf mit Zähnen, kleine Ärmchen, kräftige Beine, Schwanz nach hinten
+  rex: {
+    eyes: eyePair(.82, -.88, .11),
+    body(c, r, k, f) {
+      const l = f ? .18 : -.18;
+      dinoLeg(c, r, -.3, .25, l, k.dk, 4.5);
+      poly(c, r, [[-.5, -.35], [-1.6, .15], [-1.7, .3], [-.5, .35]], k.col);
+      E(c, -r * .1, r * .05, r * .72, r * .62, k.col);
+      Ln(c, [[-r * .7, -r * .25], [r * .35, -r * .5]], k.shield, 3.2, false);
+      dinoLeg(c, r, .05, .3, -l, k.col, 4.5);
+      poly(c, r, [[.25, -.45], [.3, -1.0], [.7, -1.15], [1.5, -1.05], [1.55, -.75], [.95, -.62], [1.45, -.55], [1.35, -.38], [.6, -.3]], k.col);
+      for (const x of [.95, 1.1, 1.25, 1.4]) poly(c, r, [[x, -.75], [x + .05, -.65], [x + .1, -.75]], '#fff', .6);
+      Ln(c, [[r * .45, -r * .2], [r * .7, -r * .05]], k.col, 1.6); Ln(c, [[r * .4, -r * .1], [r * .6, r * .05]], k.dk, 1.4);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Dino-Ei: getupftes Ei mit Riss, die Augen schauen schon heraus
+  rexei: {
+    eyes: eyePair(0, -.18, .22),
+    body(c, r, k, f) {
+      E(c, 0, r * .05, r * .82, r * 1.0, k.col);
+      for (const [x, y, s] of [[-.45, .35, .14], [.4, .5, .11], [.35, -.65, .1], [-.3, -.6, .08]]) E(c, x * r, y * r, s * r, s * r, k.shield, 0);
+      Ln(c, [[-r * .78, r * .15], [-r * .45, -r * .02], [-r * .2, r * .2], [r * .1, -r * .02], [r * .4, r * .18], [r * .78, 0]], O, .2, false);
+      c.strokeStyle = O; c.lineWidth = 1.1; c.beginPath(); c.moveTo(-r * .78, r * .15); c.lineTo(-r * .45, -r * .02 + (f ? .03 * r : 0)); c.lineTo(-r * .2, r * .2);
+      c.lineTo(r * .1, -r * .02); c.lineTo(r * .4, r * .18); c.lineTo(r * .78, 0); c.stroke();
+      whites(c, r, this.eyes);
+    },
+  },
+});
+
 // Varianten: 0 = neutral (Sandkasten), 1..4 = Teams. Teamabhängig gezeichnet werden nur Typen,
 // deren Körper die Teamfarbe trägt (TINT), der Ritter (Schild in Teamfarbe) und der Ghul (Lumpen in Teamfarbe, k.shield).
 export const TEAM_KEYS = ['', 'blau', 'rot', 'gruen', 'gelb'];
 export const TEAM_INDEX = { blau: 1, rot: 2, gruen: 3, gelb: 4 };
 // Task 6: Kreaturen mit Akzent in Teamfarbe (k.shield) und ihr neutraler Akzent im Sandkasten
 export const T6_ACCENT = { troll: '#8a6a4a', zyklop: '#8a6a4a', hexe: '#3d8f5a', phoenix: '#ffd84d', einhorn: '#9b6be0' };
-const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined || TEAM_ACCENT.has(t);   // Task 5: Halstuch, Decke
+const teamed = t => TINT.has(t) || t === 'ritter' || t === 'ghul' || T6_ACCENT[t] !== undefined || TEAM_ACCENT.has(t) || ERA_ACCENT.has(t);   // Task 5: Halstuch, Decke
 
 function colors(t, vi) {
   const tc = vi ? TEAMS[TEAM_KEYS[vi]].body : null;

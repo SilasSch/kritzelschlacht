@@ -11,6 +11,7 @@ const CSS = `
 .daily .no .new{font-size:11px;font-weight:800;padding:1px 8px;border-radius:99px;background:var(--go);color:#fff}
 .daily .nm{font-family:var(--f-logo);font-weight:400;font-size:26px;letter-spacing:.5px;line-height:1.05;color:var(--ink)}
 .daily .ds{font-size:12.5px;color:var(--muted);line-height:1.35}
+.daily .btns{display:flex;flex-direction:column;gap:6px}
 .daily .best{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:12.5px;color:var(--muted);white-space:nowrap}
 .daily .best b{font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
 .daily .best .st{color:var(--gold);font-size:17px;letter-spacing:2px;-webkit-text-stroke:.6px var(--ink)}
@@ -18,6 +19,11 @@ const CSS = `
 .resdaily{display:flex;flex-direction:column;gap:8px;border:1.5px dashed var(--line);border-radius:14px;padding:10px 12px}
 .resdaily .row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:14.5px}
 .resdaily .row span{color:var(--muted)}
+.resdaily .share{margin:0;white-space:pre-wrap;word-break:break-word;font:700 13.5px/1.5 var(--f-ui);color:var(--ink);background:var(--soft);
+  border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;user-select:all}
+.resdaily .copyrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.resdaily .copyrow small{color:var(--muted);font-size:12px}
+.resdaily .btn.ok{background:#2a9d5c;border-color:#2a9d5c;color:#fff}
 .resdaily textarea{width:100%;box-sizing:border-box;font:700 13px var(--f-ui);border:1.5px solid var(--line);border-radius:10px;padding:6px 8px;resize:none}
 `;
 let styled = false;
@@ -40,13 +46,14 @@ export function dailyCard(grid, game) {
       <span class="nm">Tageschallenge</span>
       <span class="ds">${esc(L.hint)} Budget ${L.budget}, drei Sterne bis ${L.par} Punkte.</span></div>
     <div class="best">${best ? `Bestwert heute<b>${fmtPts(best.spent)} Punkte</b><span class="st">${stars(best.stars)}</span>` : 'Heute noch nicht geschafft'}</div>
-    <button class="go" id="dailyPlay">${best ? 'Nochmal' : 'Spielen'}</button>`;
+    <div class="btns"><button class="go" id="dailyPlay">${best ? 'Nochmal' : 'Spielen'}</button>${game.board ? '<button class="btn" id="dailyBoard">🏆 Bestenliste</button>' : ''}</div>`;
   el.querySelector('#dailyPlay').onclick = () => { document.getElementById('ovList').hidden = true; game.playDaily(); };
+  if (game.board) el.querySelector('#dailyBoard').onclick = () => game.board.open(day);
   grid.prepend(el);
 }
 
 // Ergebnis: r.daily = { date, best } in der Tageschallenge, sonst nichts (dann wird der Zusatz entfernt)
-export function dailyResult(r, toast) {
+export function dailyResult(r, toast, game) {
   addStyle();
   const old = document.getElementById('resDaily'); if (old) old.remove();
   if (!r.daily) return;
@@ -55,12 +62,20 @@ export function dailyResult(r, toast) {
   const box = document.createElement('div');
   box.className = 'resdaily'; box.id = 'resDaily';
   box.innerHTML = `<div class="row"><span>Bestwert heute</span><b>${best ? `${fmtPts(best.spent)} Punkte ${'★'.repeat(best.stars)}` : '–'}</b></div>
-    <div class="row"><span>${esc(text)}</span><button class="btn" id="resCopy">Ergebnis kopieren</button></div>
-    <textarea id="resShare" rows="2" readonly hidden></textarea>`;
+    <pre class="share" id="resShareTxt">${esc(text)}</pre>
+    <div class="copyrow"><button class="btn" id="resCopy">📋 Ergebnis kopieren</button><small>Fertig zum Posten, ohne deine Lösung zu verraten.</small></div>
+    ${game && game.board ? `<div class="row"><span>${r.win ? (game.board.live() ? 'Steht in der Live-Bestenliste.' : 'Als Code teilen: Freunde fügen ihn in ihre Bestenliste ein.') : 'Wer liegt heute vorn?'}</span><button class="btn" id="resBoard">🏆 Bestenliste</button></div>` : ''}
+    <textarea id="resShare" rows="5" readonly hidden></textarea>`;
   document.getElementById('resStats').after(box);
+  if (game && game.board) box.querySelector('#resBoard').onclick = () => game.board.open(date);
   // Rückmeldung auch am Knopf: der Toast liegt unter der Ergebniskarte
   const btn = box.querySelector('#resCopy');
-  btn.onclick = () => copyText(text, box.querySelector('#resShare'), msg => { btn.textContent = msg === MSG_COPIED ? 'Kopiert ✓' : 'Text markiert'; toast(msg); });
+  let t = 0;
+  btn.onclick = () => copyText(text, box.querySelector('#resShare'), msg => {
+    const ok = msg === MSG_COPIED;
+    btn.textContent = ok ? '✓ Kopiert' : 'Text markiert: Strg+C'; btn.classList.toggle('ok', ok); toast(msg);
+    clearTimeout(t); t = setTimeout(() => { btn.textContent = '📋 Ergebnis kopieren'; btn.classList.remove('ok'); }, 2500);
+  });
 }
 
 // In die Zwischenablage; im abgeschotteten iframe (Artefakt) gibt es sie oft nicht: dann den Text markiert zeigen

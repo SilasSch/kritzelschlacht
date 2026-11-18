@@ -1,6 +1,7 @@
 // Prüfszenen für ?debug (__kritzel.scene(name)): jede baut im Sandkasten eine kleine Lage auf, um eine Mechanik
 // anzusehen. Aus main.js ausgelagert; rein bis auf die Welt, die sie bekommen.
 import { spawn } from '../world.js';
+import { UNITS } from '../data.js';
 import { placeRect, placeCircle, tRect, tCircle } from '../sim.js';
 import { FORM } from '../formation.js';
 
@@ -172,5 +173,27 @@ export const SCENES = {
       placeRect(world, 'soldat', 8, Math.min(a, b), .42, Math.max(a, b), .58, team);
       placeRect(world, 'panzerfaust', 3, Math.min(c, d), .45, Math.max(c, d), .55, team);
     }
+  },
+  // --- Schrottplatz und Urzeit (18.11.) --- schrott: Roboter (links) gegen Urzeit (rechts), je eine Reihe pro Einheit, dazu
+  // Wasser in der Mitte (Kurzschluss); urzeit: alle Dinos erwachsen und alle Roboter nebeneinander zum Anschauen (keine Gegner
+  // im Feld, damit sie stehen bleiben; unten ein junger Raptor und ein T-Rex-Ei).
+  schrott(world) {
+    world.teamMode = true;
+    const W = world.W, H = world.H;
+    tRect(world, 'wasser', .47, .3, .53, .7);
+    const S = ['minibot', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega'];
+    const U = ['hoehle', 'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex'];
+    S.forEach((t, i) => spawn(world, t, W * (.12 + (i % 2) * .05), H * (.08 + i * .088), 'blau'));
+    U.forEach((t, i) => spawn(world, t, W * (.88 - (i % 2) * .05), H * (.08 + i * .1), 'rot'));
+  },
+  urzeit(world) {
+    world.teamMode = true;
+    const W = world.W, H = world.H;
+    const S = ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega'];
+    const U = ['hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex'];
+    S.forEach((t, i) => { const u = spawn(world, t, W * (.32 + i * .045), H * .4, 'blau'); u.cd = 1e9; u.abCd = 1e9; });
+    U.forEach((t, i) => { const u = spawn(world, t, W * (.33 + i * .048), H * .52, 'rot'); u.cd = 1e9; u.abCd = 1e9; if (u.growT > 0) { u.growT = 0; u.T = UNITS[t]; u.hp = u.T.hp; } });
+    const y = spawn(world, 'raptor', W * .45, H * .62, 'rot'), e = spawn(world, 'rex', W * .55, H * .62, 'rot');
+    y.cd = e.cd = 1e9;
   },
 };

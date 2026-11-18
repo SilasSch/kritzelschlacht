@@ -1,4 +1,4 @@
-// Regeln und Karten für 1 gegen 1 (Online und Code-Duell, 18.11.). Rein: kein DOM, Zufall nur über rand().
+// Regeln und Karten für 1 gegen 1 (Online und Code-Duell, 18.11.; Schrottplatz und Urzeit dazu). Rein: kein DOM, Zufall nur über rand().
 // Regel = welche Einheiten in der Runde erlaubt sind: eine Kategorie, zwei gemischt oder eine Auswahl nach Eigenschaft
 // (Fernkampf, Flieger, billig …). def ist ein Level-artiges Objekt für campaign/index.js unitAllowed/catAllowed.
 // Karte = festes Gelände, spiegelgleich für beide Seiten. Kartengelände gehört niemandem (towner 0) und lässt sich in der
@@ -15,10 +15,14 @@ export const RULES = [
   { id: 'tiere', n: 'Tiere', d: 'Wölfe, Bären, Bienen, Elefanten …', cats: ['tiere'] },
   { id: 'mythisch', n: 'Mythisch', d: 'Magier, Drachen, Vampire, Trolle …', cats: ['mythisch'] },
   { id: 'modern', n: 'Modern', d: 'Soldaten, MGs, Panzer, Hubschrauber …', cats: ['modern'] },
+  { id: 'schrott', n: 'Schrottplatz', d: 'Minibots, Laser, Tesla-Spulen, Mega-Roboter …', cats: ['schrott'] },
+  { id: 'urzeit', n: 'Urzeit', d: 'Höhlenmenschen, Raptoren, Triceratops, T-Rex …', cats: ['urzeit'] },
   { id: 'wildnis', n: 'Armee + Tiere', d: 'Ritter reiten mit Wölfen und Bären', cats: ['armee', 'tiere'] },
   { id: 'maerchen', n: 'Märchenwald', d: 'Mythisch + Tiere', cats: ['mythisch', 'tiere'] },
   { id: 'zeitreise', n: 'Zeitreise', d: 'Armee + Modern: Ritter neben Panzern', cats: ['armee', 'modern'] },
   { id: 'sagen', n: 'Sagen und Stahl', d: 'Mythisch + Modern', cats: ['mythisch', 'modern'] },
+  { id: 'maschinen', n: 'Mensch gegen Maschine', d: 'Schrottplatz + Modern: Roboter neben Panzern', cats: ['schrott', 'modern'] },
+  { id: 'jura', n: 'Jurassic', d: 'Urzeit + Tiere: Dinos neben Wölfen und Bären', cats: ['urzeit', 'tiere'] },
   { id: 'fern', n: 'Nur Fernkampf', d: 'Alles, was schießt, wirft oder zaubert', units: sel(T => T.range >= 20 && !T.heal) },
   { id: 'nah', n: 'Nur Nahkampf', d: 'Schwerter, Zähne, Hörner', units: sel(T => T.range < 20) },
   { id: 'luft', n: 'Luftkampf', d: 'Nur was fliegt', units: sel(T => T.fly) },
@@ -38,11 +42,11 @@ export const RULES = [
   { id: 'spar', n: 'Sparrunde', d: 'Halbes Budget, alles erlaubt: jeder Punkt zählt', cats: null, bm: .5 },
   { id: 'horde', n: 'Horde', d: 'Doppeltes Budget, aber nur Einheiten bis 3 Punkte', units: sel(T => T.cost <= 3), bm: 2 },
   { id: 'titanen', n: 'Titanen', d: 'Doppeltes Budget, nur Riesen ab 10 Punkten', units: sel(T => T.cost >= 10), bm: 2 },
-  // für kommende Kategorien: erscheinen von selbst, sobald es genug Einheiten dafür gibt
-  { id: 'schrott', n: 'Schrottplatz', d: 'Nur Schrottplatz-Einheiten', cats: ['schrott'] },
-  { id: 'urzeit', n: 'Urzeit', d: 'Nur Urzeit-Einheiten', cats: ['urzeit'] },
-  { id: 'urwelt', n: 'Urwelt', d: 'Urzeit + Tiere', cats: ['urzeit', 'tiere'] },
-  { id: 'schrottkrieg', n: 'Schrott und Stahl', d: 'Schrottplatz + Modern', cats: ['schrott', 'modern'] },
+  // mit Schrottplatz und Urzeit
+  { id: 'robodino', n: 'Robo-Dinos', d: 'Urzeit + Schrottplatz: T-Rex gegen Mega-Roboter', cats: ['urzeit', 'schrott'] },
+  { id: 'steinzeit', n: 'Steinzeit trifft Ritter', d: 'Urzeit + Armee', cats: ['urzeit', 'armee'] },
+  { id: 'spuk', n: 'Spukfabrik', d: 'Schrottplatz + Mythisch: Geister in der Maschine', cats: ['schrott', 'mythisch'] },
+  // neue Kategorien bekommen hier ihre Regeln; Regeln, für die es (noch) keine 3 Einheiten gibt, fallen von selbst weg
 ].filter(r => PAINT.filter(t => (!r.cats || r.cats.includes(UNITS[t].cat)) && (!r.units || r.units.includes(t))).length >= 3
   && (!r.cats || r.cats.every(c => PAINT.some(t => UNITS[t].cat === c))));
 export const RULE = Object.fromEntries(RULES.map(r => [r.id, r]));

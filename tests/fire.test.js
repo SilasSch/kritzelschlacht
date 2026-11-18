@@ -60,6 +60,27 @@ test('Drachenatem zündet Getroffene mit Generation 0 an, Verursacher ist der Dr
   assert.ok(shot && Number.isFinite(shot.tx) && Number.isFinite(shot.ty), 'Zielpunkt für den Flammenstrahl');
 });
 
+// Fehler: think greift an bis range + r(Drache) + r(Ziel) (145 px gegen eine Hexe), der Kegel traf aber nur bis range + r(Ziel)
+// (119 px). Fernkämpfer, die auf Abstand bleiben (Hexe, Schütze, Magier, Hubschrauber), bekamen nie Schaden.
+test('Drachenatem trifft bis zur Angriffsreichweite range + r + r (Hexe auf Abstand bekommt Schaden)', () => {
+  const T = UNITS.drache;
+  for (const ty of ['hexe', 'schuetze', 'magier', 'heli']) {
+    const w = mkWorld(), d = spawn(w, 'drache', 300, 300, 'rot');
+    const reach = T.range + T.r + UNITS[ty].r, v = spawn(w, ty, 300 + reach - 1, 300, 'blau');
+    const out = spawn(w, ty, 300, 300 - reach - 2, 'blau');   // außerhalb der Reichweite (anderer Kegel nicht nötig)
+    rebuildHash(w);
+    d.cd = 0; attack(w, d, v, reach - 1, reach - 1, 0);
+    assert.ok(v.hp < v.T.hp, `${ty} am Rand der Angriffsreichweite nimmt Schaden`);
+    assert.equal(out.hp, out.T.hp);
+  }
+  // im Kampf: Drache gegen eine Hexe über mehrere Seeds, die Hexe nimmt Schaden
+  for (let seed = 1; seed <= 4; seed++) {
+    const w = mkWorld(seed), d = spawn(w, 'drache', 500, 400, 'rot'), h = spawn(w, 'hexe', 800, 400, 'blau');
+    run(w, 6, () => { d.hp = d.T.hp; });
+    assert.ok(d.dmgOut > 0, `seed ${seed}: Drache macht der Hexe Schaden`);
+  }
+});
+
 /* ---------- Brand ---------- */
 test('Brand: 8 Schaden/s über 3 s (24), danach aus; kein Dauer-Quetschen, auch mit Verursacher', () => {
   const w = mkWorld(), k = spawn(w, 'krieger', 300, 300, 'blau'), d = spawn(w, 'drache', 1200, 700, 'rot');

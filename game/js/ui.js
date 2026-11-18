@@ -129,7 +129,11 @@ export function createUI(game) {
     const b = btn.getBoundingClientRect(), w = ucard.offsetWidth, cx = b.left + b.width / 2 - app.left;
     const left = Math.max(8, Math.min(app.width - w - 8, cx - w / 2));
     ucard.style.left = left + 'px';
-    ucard.style.bottom = (app.bottom - pal.top + 12) + 'px';
+    // Über der Leiste; ist darüber kein Platz (Leiste nach oben verschoben, ui/dragbar.js), darunter
+    const below = pal.top - app.top < ucard.offsetHeight + 20 && app.bottom - pal.bottom > pal.top - app.top;
+    ucard.classList.toggle('below', below);
+    ucard.style.bottom = below ? '' : (app.bottom - pal.top + 12) + 'px';
+    ucard.style.top = below ? (pal.bottom - app.top + 12) + 'px' : '';
     ucard.style.setProperty('--ax', Math.max(18, Math.min(w - 18, cx - left)) + 'px');
   }
   // Knopf unter dem Zeiger (oder null: Lücke, kein Knopf)
@@ -209,6 +213,7 @@ export function createUI(game) {
       const T = TERRAIN[sel];
       el.innerHTML = `<b>${T.n}</b>${game.mission && T.cost ? ' · Kosten ' + fmtPts(T.cost) + ' je Feld' : ''} — ${T.d}${sel !== 'radierer' ? '' : ' Rechtsklick radiert auch.'}`;
     }
+    el.title = el.textContent;   // volle Beschreibung, die Zeile kürzt mit …
   }
 
   /* ---------- Zähler mit Stärkebalken ---------- */
@@ -377,7 +382,7 @@ export function createUI(game) {
     $('resList').textContent = r.custom === 'editor' ? 'Zum Editor' : r.custom ? 'Eigene Level' : 'Übersicht';
     $('resNext').textContent = r.nextLabel || (r.hasNext ? 'Nächste Mission' : 'Zu den Kapiteln');
     $('resRetry').textContent = r.win ? 'Besser planen' : 'Nochmal planen';
-    dailyResult(r, toast);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
+    dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
 

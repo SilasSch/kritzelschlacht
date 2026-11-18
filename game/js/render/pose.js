@@ -100,7 +100,8 @@ export const TANK_RECOIL = 7, TANK_RECOIL_T = .35, TANK_ROCK = .05;   // px Rohr
 export const KICK = .12;                // Anteil von RECOIL_T bis zum vollen Rückstoß (Stoß nach dem Schuss)
 export const TRACK_PITCH = 5, TRACK_FRAMES = 4;
 export const ROTOR_SPEED = 28, TAIL_ROTOR_SPEED = 42;                 // rad/s
-export const HELI_LEAN = .25, LEAN_RATE = 4;                          // rad, 1/s
+export const HELI_LEAN = .25, LEAN_RATE = 4;
+export const HELI_BOB = 1.6, HELI_BOB_HZ = .55;                     // px, Hz: Schweben                          // rad, 1/s
 export const WING_HZ = 1.6, WING_HZ_MOVE = 1.1;
 export const TAIL_AMP = .16, TAIL_LAG = 1.1, TAIL_TRAIL = .3, TAIL_RATE = 2.5;
 export const HEAD_RATE = 8, DRAGON_BOB = 2, BREATH_HOLD = .3;
@@ -173,7 +174,8 @@ function bossPose(u, t, out, mem, mx, my) {
     const lean = clamp(mx / T.speed, -1, 1) * HELI_LEAN;
     if (mem) { mem.lean = first ? lean : mem.lean + (lean - mem.lean) * (1 - Math.exp(-LEAN_RATE * dt)); out.tilt = mem.lean; }
     else out.tilt = lean;
-    out.bob = 0; out.frame = 0;
+    // Schweben (Overhaul 18.11.): sanftes Auf und Ab, je Heli versetzt
+    out.bob = HELI_BOB * Math.sin(TAU * (HELI_BOB_HZ * t + u.seed)); out.frame = 0;
     out.recoil = RECOIL * kick(u.fireT / RECOIL_T);
   } else {
     const hz = WING_HZ + WING_HZ_MOVE * q;

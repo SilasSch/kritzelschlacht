@@ -144,6 +144,11 @@ const BOSS_DEF = {
           c.lineWidth = 3.8; c.strokeStyle = O; c.stroke(); c.lineWidth = 1.6; c.strokeStyle = '#6b707a'; c.stroke();
           E(c, 0, 0, r, r * .64, k.col);
           E(c, -r * .28, -r * .38, r * .4, r * .09, 'rgba(255,255,255,.3)', 0);
+          // Stummelflügel mit Raketenbehälter (Raketensalve), vorn Rot an der Spitze
+          poly(c, r, [[-.42, .2], [-.05, .22], [-.1, .34], [-.46, .32]], k.dk, 1.2);
+          RR(c, -r * .62, r * .3, r * .64, r * .2, r * .09, '#4a4e57');
+          for (const x of [-.48, -.3, -.12]) E(c, r * x, r * .4, r * .035, r * .035, '#1f2126', 0);
+          E(c, r * .02, r * .4, r * .07, r * .08, '#e5574f', 1);
           Ln(c, [[-r * .18, -r * .52], [-r * .2, r * .46]], k.dk, 1, false);
           RR(c, -r * .5, -r * .8, r * .8, r * .22, r * .08, k.dk);
           Ln(c, [[0, -r * .8], [0, -r * .96]], '#2f3340', 2, false);
@@ -168,6 +173,8 @@ const BOSS_DEF = {
       },
       rotorBlades: {
         draw(c, r) {
+          // vier Blätter (zwei gekreuzte Paare), Spitzen rot
+          Ln(c, [[0, -r * 1.9], [0, r * 1.9]], '#3a3f4a', 2);
           Ln(c, [[-r * 1.9, 0], [r * 1.9, 0]], '#3a3f4a', 2.4);
           E(c, -r * 1.86, 0, r * .05, r * .05, '#e5574f', 0); E(c, r * 1.86, 0, r * .05, r * .05, '#e5574f', 0);
           E(c, 0, 0, r * .13, r * .13, '#5b5f69', 1.1);

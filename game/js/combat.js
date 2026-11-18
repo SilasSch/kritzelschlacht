@@ -19,7 +19,7 @@ import { aloft, unseen } from './world.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
-import { AIR, stepAir } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
+import { AIR, stepAir, stepMissile } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -1380,6 +1380,7 @@ export function stepProjectiles(world, dt) {
   if (world.domeN > 0 && proj.length) for (const u of world.units) if (u.alive && u.domeHp > 0) DOMES.push(u);
   for (let i = proj.length - 1; i >= 0; i--) {
     const p = proj[i]; p.t += dt;
+    if (p.homing) { if (stepMissile(world, p, dt)) proj.splice(i, 1); continue; }   // Luft-Luft-Rakete des Jets (air.js)
     if (DOMES.length && domeCatch(world, p, DOMES)) { proj.splice(i, 1); continue; }
     if (p.arc) {
       const q = p.t < p.dur ? p.t / p.dur : 1;

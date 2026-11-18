@@ -800,6 +800,13 @@ void main() {
         projQ.line(x + ca * 1.5, y + sa * 1.5, x + ca * 7, y + sa * 7, 1, 0x9aa3ae);
         projQ.line(x + ca * 6.6, y + sa * 6.6, x + ca * 9.2, y + sa * 9.2, 1.7, 0xe6ebf0);
       }
+      else if (p.kind === 'aam') {
+        // Luft-Luft-Rakete: weißer Körper mit Umriss, rote Spitze, Flamme hinten
+        disc(x - ca * 7, y - sa * 7, 2.6, 0xffb03a);
+        projQ.line(x - ca * 6, y - sa * 6, x + ca * 6, y + sa * 6, 4.4, OC);
+        projQ.line(x - ca * 5.2, y - sa * 5.2, x + ca * 4.6, y + sa * 4.6, 2.6, 0xf2f4f7);
+        disc(x + ca * 5.2, y + sa * 5.2, 1.5, 0xe5574f);
+      }
       else if (p.kind === 'airbomb') {
         // Fliegerbombe: dunkler Körper mit Umriss, Leitwerk hinten, rote Spitze
         projQ.line(x - ca * 6, y - sa * 6, x + ca * 5, y + sa * 5, 6.4, OC);

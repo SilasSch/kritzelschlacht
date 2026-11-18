@@ -1,4 +1,5 @@
 // Reine Welt: Einheiten, Gelände-Gitter, Spatial Hash, Zielsuche. Zufall nur über world.rng().
+import { YOUNG, BOT, DOME } from './data.js';
 import { UNITS, CELL, HASH_CELL, RANGED, PATH_RECHECK } from './data.js';
 import { createRng } from './rng.js';
 import { isFleeing } from './morale.js';
@@ -53,7 +54,8 @@ export const outOfMelee = (u, v) => (v.type === 'heli' || isBat(v) || aloft(v)) 
 // (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
 // combat.think) wie den Hubschrauber; Fernkämpfer schon.
 export const EAGLE_REACH_Z = 14;
-export const aloft = v => v.type === 'adler' && v.z > EAGLE_REACH_Z;
+export const aloft = v => (v.type === 'adler' && v.z > EAGLE_REACH_Z) || v.type === 'ptera';
+// Urzeit: der Flugsaurier fliegt immer hoch (wirft Steine von oben), Nahkämpfer am Boden erreichen ihn nie (aloft)
 // Krokodil (Festlegung 8): versteckt im Wasser (u.hidden, abilities.stepAnimal) sehen es Feinde erst ab HIDE_R px oder
 // bis seenT s nach seinem Biss. Gilt für jede Zielwahl (nearestEnemy, Neuwahl in combat.think, Ausweichziel, Salve, Speer).
 export const HIDE_R = 60;
@@ -158,6 +160,13 @@ export function spawn(world, type, x, y, team) {
     dmgOut: .5, orig: null,
     // Bomben ausweichen (dodge.js, Nachtrag 7, #47): Restzeit des Hüpfers (s; Wunschbewegung ruht, physics.integrate)
     hopT: .5,
+    // --- Schrottplatz (abilities.js, Block "Schrottplatz") --- Schild der Roboter (LP), Zeit seit dem letzten Treffer (s),
+    // Aufblitzen des Schilds (s, Darstellung), Sperre des Kurzschlusses im Wasser (s); Schildkuppel: Kuppel-LP und Pause
+    // (s); Springspinne und Raptor: nächster Biss nach dem Sprung macht doppelten Schaden; Treffer-Zähler (Fackel,
+    // Schweißbrenner); Takt des Flickens und des Kräuterrauchs (s).
+    shd: .5, shdT: .5, shdHit: .5, shortCd: .5, domeHp: .5, domeT: .5, pounce: false, hits: 0, tickT: .5,
+    // --- Urzeit --- Restzeit bis zum Erwachsensein (s, 0 = erwachsen; abilities.stepGrow)
+    growT: .5,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -168,6 +177,11 @@ export function spawn(world, type, x, y, team) {
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
+  // Schrottplatz: voller Schild, Kuppel bereit; Urzeit: Jungtier bzw. Ei (data.YOUNG, UNITS.rexei)
+  u.shd = T.bot ? T.hp * BOT.SHIELD : 0; u.shdT = 0; u.shdHit = 0; u.shortCd = 0; u.tickT = (u.id % 5) * .1;
+  u.domeHp = type === 'kuppel' ? DOME.HP : 0; u.domeT = 0; u.growT = 0;
+  if (type === 'kuppel') world.domeN = (world.domeN | 0) + 1;   // combat.stepProjectiles sucht nur dann Kuppeln
+  if (T.grow) { u.growT = T.grow; u.T = type === 'rex' ? UNITS.rexei : YOUNG[type]; u.hp = u.T.hp; }
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
   const A = ABILITY[type];
   if (A) { const q = u.id * .6180339887; u.abCd = A.cd * (.3 + .7 * (q - Math.floor(q))); }
@@ -267,7 +281,7 @@ export function resizeWorld(world, W, H) {
 // Gelände und Einstellungen bleiben.
 export function clearBattle(world) {
   world.units = []; world.proj = []; world.corpses = []; world.debris = [];
-  world.events.length = 0; world.dead = 0;
+  world.events.length = 0; world.dead = 0; world.domeN = 0;
   world.formations = []; world.formT = 0;
   world.cent.clear(); world.centT = 0;
   // Steinwände gehören zur Schlacht (spells.js): ihre Zellen werden wieder frei, Meteor-Kanäle enden

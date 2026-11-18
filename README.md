@@ -18,6 +18,9 @@ Alles liegt lokal in `game/`: Pixi in `game/vendor/`, Schriften in `game/fonts/`
 npm test                                         # node --test tests/*.test.js (läuft auch in CI, Node 22)
 node tools/balance.mjs missions 8                # jedes Level: kluger Plan muss ≥6/8 gewinnen, Spam ≥6/8 verlieren
 node tools/balance.mjs missions 8 --chapter=rom  # nur ein Kapitel
+node tools/balance.mjs duels 4                   # COUNTERS-Duelle (data.js): jedes ≥3/4 auf allen Bildformaten
+node tools/eramatrix.mjs 2 60                    # Schrottplatz/Urzeit: jede neue Einheit gegen 16 Bezugseinheiten
+node tools/catbattle.mjs 10 80                   # Kategorie gegen Kategorie mit gemischten Armeen
 node tools/bench.mjs                             # Simulations-Benchmark
 ```
 

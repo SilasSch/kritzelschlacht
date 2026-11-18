@@ -65,6 +65,10 @@ Kampf mit fester Saat (Test: `tests/dailyboard.test.js`).
 - Live-Artefakt: gemeinsame Liste in der Datenbank des Artefakts, `scores/<Spieler-id>`. Veröffentlichen mit
   `capabilities: { room: {}, db: { rules: [{ path: 'scores', read: 'view', write: 'owner' }, { path: 'scores/{self}', write: 'interact' }] }, user: { scopes: ['profile'] } }`
   (die Regeln stehen auch in `dailyboard.DB_RULES`). Eintragen dürfen nur Eingeladene mit Recht „Mitwirkende“ oder höher.
+- Balance-Updates: Jeder Eintrag trägt die Spielversion (`dailyboard.SIM_VERSION`, Prüfsumme der Einheitenwerte der
+  Tageschallenge plus `SIM_REV`). Ändern sich Werte, schlägt `tests/dailyboard.test.js` fehl: neue Version in `VERSIONS`
+  eintragen und bei der alten `until` = Tag des Updates setzen. Einträge der alten Version zählen dann bis zu diesem Tag
+  wie eingetragen (markiert „alte Spielversion“), neue werden nachgerechnet.
 
 **Regeln, Karten, Revanche** (`rules.js`): 14 Regeln (einzelne Kategorien, Mischungen wie Armee + Tiere, Auswahl nach
 Eigenschaft wie Nur Fernkampf, Luftkampf, Kleinvieh) und 6 spiegelgleiche Karten (Feld, Fluss, Furten, Wäldchen, Bollwerk,

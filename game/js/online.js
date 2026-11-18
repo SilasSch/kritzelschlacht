@@ -88,7 +88,7 @@ function unb64(str) {
 
 // Eigene Armee (lebende, malbare Einheiten der Seite) → Text
 export function packArmy(world, side) {
-  const us = world.units.filter(u => u.alive && u.team === side && u.T.paint !== false);
+  const us = world.units.filter(u => u.alive && u.team === side && UNITS[u.type].paint !== false);
   const bytes = new Uint8Array(us.length * 5);
   us.forEach((u, k) => {
     const ti = PAINT_TYPES.indexOf(u.type), si = Math.max(0, SHAPE_KEYS.indexOf(u.shape || null));

@@ -114,7 +114,7 @@ export function applyRuns(world, runs, owner = 0) {
 export function battleData(world) {
   const units = [];
   for (const u of world.units) {
-    if (!u.alive || !isSide(u.team) || u.T.paint === false) continue;
+    if (!u.alive || !isSide(u.team) || UNITS[u.type].paint === false) continue;
     const e = [u.type, u.team, q(u.x / world.W), q(u.y / world.H)];
     if (u.shape) e.push(u.shape);
     units.push(e);

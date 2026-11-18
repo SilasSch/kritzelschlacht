@@ -200,7 +200,7 @@ function saveSandbox() {
     // Ghule (nicht malbar) gehören zur Schlacht ihres Vampirs, sie kommen nicht mit zurück
     // Task 6: ein verfluchter Frosch kommt als er selbst zurück (u.frogFrom), die Asche des Phönix mit halben LP; reborn
     // geht mit (ein schon wiedergeborener Phönix steht nicht noch einmal auf)
-    units: world.units.filter(u => u.alive && (u.T.paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn, shape: u.shape })),
+    units: world.units.filter(u => u.alive && (UNITS[u.type].paint !== false || u.frogFrom !== null)).map(u => ({ type: u.frogFrom || u.type, team: u.team, x: u.x, y: u.y, hp: u.ashT > 0 ? u.T.hp / 2 : u.hp, reborn: u.reborn, shape: u.shape })),
     GW: world.GW, GH: world.GH, terr: world.terr.slice(), towner: world.towner.slice(), whp: world.whp.slice(),
     teamMode: world.teamMode,
   };
@@ -221,7 +221,7 @@ function enterSandbox() {
       if (s.towner[a] === 2) continue;   // Steinwände der Magier (spells.js) gehörten zur Schlacht
       world.terr[b] = s.terr[a]; world.towner[b] = s.towner[a]; world.whp[b] = s.whp[a];
     }
-    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = u.hp; n.reborn = u.reborn; if (u.shape) applyShape(n, u.shape, false); }
+    for (const u of s.units) { const n = spawn(world, u.type, clamp(u.x, 6, world.W - 6), clamp(u.y, 6, world.H - 6), u.team); n.hp = n.growT > 0 ? Math.min(u.hp, n.T.hp) : u.hp; n.reborn = u.reborn; if (u.shape) applyShape(n, u.shape, false); }
     markAll(); rebuildHash(world);
   } else { world.teamMode = false; seedDemo(); }
   ui.closeBanner(); ui.refresh();

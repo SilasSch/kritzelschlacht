@@ -201,3 +201,32 @@ test('Gemischte Schlacht Schrottplatz gegen Urzeit läuft 90 s ohne Fehler und o
   for (let i = 0; i < 27; i++) { spawn(w, SCHROTT[i % 9], 150 + (i % 5) * 30, 100 + ((i / 5) | 0) * 110, 'blau'); spawn(w, URZEIT[i % 8], 1250 - (i % 5) * 30, 100 + ((i / 5) | 0) * 110, 'rot'); }
   run(w, 90, () => { for (const u of w.units) assert.ok(Number.isFinite(u.x) && Number.isFinite(u.y) && Number.isFinite(u.hp), u.type); });
 });
+
+/* ---------- Regression 18.11.: T-Rex fehlte beim Kampfstart ----------
+   Aufstellung, Teilen, Online/Code-Duell und Sandkasten-Speicher fragten u.T.paint ab; das Ei trägt UNITS.rexei
+   (nicht malbar), also fiel jeder gemalte T-Rex beim Start der Schlacht weg. */
+test('T-Rex-Ei: bleibt in Aufstellung, Wiederherstellung, Teilen und Online-Armee erhalten', async () => {
+  const { snapshotBattle, restoreBattle } = await import('../game/js/battle.js');
+  const { battleData } = await import('../game/js/share.js');
+  const { packArmy, unpackArmy } = await import('../game/js/online.js');
+  const w = mkWorld();
+  const r = spawn(w, 'rex', 300, 300, 'blau'), y = spawn(w, 'raptor', 330, 330, 'blau');
+  spawn(w, 'krieger', 1000, 300, 'rot');
+  assert.equal(r.T, UNITS.rexei); assert.equal(y.T, YOUNG.raptor);
+  const snap = snapshotBattle(w);
+  assert.deepEqual(snap.units.map(u => u.type), ['rex', 'raptor', 'krieger']);
+  restoreBattle(w, snap);
+  const back = w.units.filter(u => u.alive).map(u => u.type);
+  assert.deepEqual(back, ['rex', 'raptor', 'krieger']);
+  const r2 = w.units.find(u => u.type === 'rex');
+  assert.equal(r2.T, UNITS.rexei); assert.equal(r2.hp, UNITS.rexei.hp);
+  assert.ok(battleData(w).units.some(e => e[0] === 'rex'), 'Teilen');
+  const txt = packArmy(w, 'blau');
+  assert.deepEqual(unpackArmy(txt, 'blau', w.W, w.H, { cat: 'urzeit', budget: 100 }).map(u => u.type).sort(), ['raptor', 'rex']);
+  // ausgewachsen gespeichert, klein wiederhergestellt: LP nicht über dem Höchstwert des Jungtiers
+  const w2 = mkWorld(), g = spawn(w2, 'raptor', 300, 300, 'blau'); spawn(w2, 'krieger', 1000, 300, 'rot');
+  g.T = UNITS.raptor; g.hp = UNITS.raptor.hp; g.growT = 0;
+  restoreBattle(w2, snapshotBattle(w2));
+  const g2 = w2.units.find(u => u.type === 'raptor');
+  assert.ok(g2.hp <= g2.T.hp);
+});

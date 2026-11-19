@@ -866,6 +866,17 @@ export function createFxCore(hooks = {}, opt = {}) {
         }
         break;
       }
+      // Schildstoß der Römer (combat.SHOVE): kleiner Staubring und Funken am Schild
+      case 'shove': {
+        wave(x, e.y, R * 2.2, .3, WAVE_COL.roar);
+        const nx = e.nx || 0, ny = e.ny || 0;
+        for (let i = 0; i < 5; i++) {
+          const a = Math.atan2(ny, nx) + Math.PI + rnd(-1, 1), s = rnd(60, 110);
+          const p = add('spark', x - nx * R, y - ny * R - 4, rnd(.2, .35), rnd(1, 1.4)); if (!p) break;
+          p.vx = Math.cos(a) * s; p.vy = Math.sin(a) * s - 20; p.ay = 160; p.drag = 2;
+        }
+        break;
+      }
       // Pikenier (abilities.PIKE): Funken an der Pikenspitze, wo der Ansturm abprallt
       case 'pike': {
         const nx = e.nx || 0, ny = e.ny || 0, tx = x + nx * R * 2.6, ty = y + ny * R * 2.6 - 4;

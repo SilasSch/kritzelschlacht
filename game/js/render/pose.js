@@ -250,7 +250,7 @@ export function poseUnit(u, t, out = {}, mem) {
   }
   if (u.hitT > 0) { sx = HIT_SX; sy = HIT_SY; }
   out.sx = sx; out.sy = sy;
-  out.tilt = clamp(mx / T.speed, -1, 1) * TILT_MAX;
+  out.tilt = T.speed > 0 ? clamp(mx / T.speed, -1, 1) * TILT_MAX : 0;
   out.bob = bob;
   out.weaponRot = u.swingT > 0 ? SWING_ROT * Math.min(1, u.swingT / SWING_T) : 0;
   out.recoil = u.fireT < RECOIL_T ? RECOIL * (1 - u.fireT / RECOIL_T) : 0;

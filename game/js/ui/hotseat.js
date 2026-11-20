@@ -2,11 +2,12 @@
 // Budget und Seite. Die Regeln stehen in hotseat.js (rein); main.js ruft paintAt, clear, onUndo, spent und frame auf.
 // Zustand: game.battle.hot (createHot) oder nichts (freie Schlacht wie bisher).
 import { createHot, painter, hiddenTeam, hotPaint, finishSide, clearSide, HOT_BUDGETS, HOT_DEFAULT, SIDE_NAME } from '../hotseat.js';
+import { TERRAIN } from '../data.js';
 import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
 const CSS = `
-.ov.hot-cover{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;z-index:7}
+.ov.hot-cover{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
 .card.hot{max-width:520px;align-items:flex-start}
 .card.hot h2.blau{color:#3f7cff}.card.hot h2.rot{color:#ff4d4d}
 .hotbud{display:flex;gap:8px;flex-wrap:wrap}
@@ -84,10 +85,10 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     clearUndo(); hideCard(); sync();
     ui.toast(tr('Blau malt links: {n} Punkte.', { n: b.hot.budget }));
   }
-  function stop() {
+  function stop(silent = false) {
     const b = game.battle; if (!b) return;
     b.hot = null; hideCard(); sync();
-    ui.toast(tr('Hotseat beendet: freie Schlacht.'));
+    if (!silent) ui.toast(tr('Hotseat beendet: freie Schlacht.'));
   }
   function done() {
     const h = hot(); if (!h) return;
@@ -116,6 +117,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     if (!b) return;
     if (hh && plan) {
       $('batSwap').hidden = true;
+      $('batShare').hidden = true;
       $('batClear').hidden = !side;
       setText(go, side ? tr('Fertig') : tr('Los!'));
       setText($('batHint'), side ? `${tr('Hotseat')} · ${tr(side === 'blau' ? 'Blau malt links' : 'Rot malt rechts')} · ${tr('{a} / {b} Punkte', { a: fmtPts(hh.spent[side]), b: hh.budget })}` : `${tr('Hotseat')} · ${tr('gleich geht es los')}`);
@@ -149,6 +151,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     const sel = erase ? 'radierer' : game.sel;
     const r = hotPaint(world, h, stroke, wx, wy, game.brush, sel, first);
     if (r.blocked) { stroke.blocked = true; if (r.warning) ui.toast(r.warning); return true; }
+    if (!TERRAIN[sel] && stroke.path) stroke.path.push([wx, wy]);
     if (r.changed && r.cells) renderer.markTerrainDirty(r.cells.gx0, r.cells.gy0, r.cells.gx1, r.cells.gy1);
     if (r.placed) audio.play('pop');
     if (r.placed || r.changed) ui.updateBattle();

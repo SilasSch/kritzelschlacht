@@ -5,9 +5,9 @@
 // Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
-import { TEAMS, CELL, UNITS, DOME } from '../data.js';
+import { TEAMS, CELL, UNITS, DOME, TERRAIN } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
-import { query, factionOf, RV_MARK } from '../world.js';
+import { query, factionOf, RV_MARK, cellIndex } from '../world.js';
 import { SYN_COL, BIT_KEY } from '../synergy.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
@@ -89,7 +89,7 @@ export function createRenderer(canvasHost) {
   const tcv = document.createElement('canvas'), tctx = tcv.getContext('2d');
   let terrTex = null;
   const terrSprite = new PIXI.Sprite();
-  L.terrain.addChild(zoneG, zoneText, terrSprite);   // Zone liegt wie früher unter dem Gelände
+  L.terrain.addChild(terrSprite, zoneG, zoneText);   // Malgrenze und Reichweiten liegen über Gelände und Wasser
 
   /* ---------- Wasser (Nachtrag 7, #48) ----------
      Wellen und Schaumrand als eine Fläche über dem Gelände (ein Draw-Call, nur wenn die Karte Wasser hat): ein
@@ -146,7 +146,7 @@ void main() {
     const geo = new PIXI.Geometry().addAttribute('aVertexPosition', [0, 0, W, 0, W, H, 0, H], 2).addIndex([0, 1, 2, 0, 2, 3]);
     const sh = PIXI.Shader.from(WATER_VERT, WATER_FRAG, { uMask: waterTex, uGrid: new Float32Array([W, H]), uTime: 0 });
     waterMesh = new PIXI.Mesh(geo, sh); waterMesh.name = 'water'; waterMesh.visible = false;
-    L.terrain.addChild(waterMesh);
+    L.terrain.addChildAt(waterMesh, L.terrain.getChildIndex(terrSprite) + 1);
   }
   // Maske im Gitterbereich neu (aus drawTerrain)
   function waterCells(terr, x0, y0, x1, y1) {
@@ -157,14 +157,14 @@ void main() {
     waterDirty = true;
   }
 
-  let rigs = null;           // gebackene Rig-Teile pro Typ (rig.js)
+  let rigs = null, rigBakeT = 0, wantRigUr = 0;   // gebackene Rig-Teile pro Typ (rig.js), Resize-Rebake entprellt
   let res = 0, worldW = 0, worldH = 0, GW = 0, GH = 0;
   // Neu zu zeichnende Gitterbereiche, einzeln (zwei Treffer weit auseinander ergeben kein Riesenrechteck).
-  // CPU-Neuzeichnen sofort; GPU-Upload für Kampf-Änderungen höchstens alle TERR_UPLOAD s,
-  // für Malen / komplettes Neuzeichnen sofort.
-  const TERR_UPLOAD = .1, MAX_RECTS = 48;
+  // CPU-Neuzeichnen sofort; GPU-Upload im Kampf höchstens alle TERR_UPLOAD s, beim Malen gedrosselt (TERR_PAINT_UPLOAD),
+  // nur beim kompletten Neuaufbau sofort.
+  const TERR_UPLOAD = .1, TERR_PAINT_UPLOAD = .05, MAX_RECTS = 48;
   const dirtyRects = [];
-  let terrChanged = false, terrForce = false, terrUpT = -1;
+  let terrChanged = false, terrForce = false, terrPaint = false, terrUpT = -1;
 
   function drawTerrain(world, x0, y0, x1, y1) {
     const { terr, whp } = world;
@@ -201,9 +201,13 @@ void main() {
     terrChanged = true;
   }
 
-  // immediate=false: Änderung aus dem Kampf (world.events), Upload darf gedrosselt werden
+  // immediate=false: Änderung aus dem Kampf (world.events), Upload gedrosselt (TERR_UPLOAD);
+  // immediate=true: Malen (gedrosselt auf TERR_PAINT_UPLOAD, volle Karte sofort)
   function markTerrainDirty(gx0, gy0, gx1, gy1, immediate = true) {
-    if (immediate) terrForce = true;
+    if (immediate) {
+      if (gx0 <= 0 && gy0 <= 0 && gx1 >= GW - 1 && gy1 >= GH - 1) terrForce = true;
+      else terrPaint = true;
+    }
     for (const r of dirtyRects) if (r.x0 <= gx0 && r.y0 <= gy0 && r.x1 >= gx1 && r.y1 >= gy1) return;
     if (dirtyRects.length >= MAX_RECTS) {
       const b = { x0: gx0, y0: gy0, x1: gx1, y1: gy1 };
@@ -212,9 +216,21 @@ void main() {
     } else dirtyRects.push({ x0: gx0, y0: gy0, x1: gx1, y1: gy1 });
   }
 
-  // Größe von Welt oder Auflösung geändert: Gelände-Canvas und Decals neu anlegen
+  // Größe von Welt oder Auflösung geändert: Gelände-Canvas und Decals neu anlegen; Rig-Rebake beim Resize entprellt
   function ensureWorld(world, cam) {
-    const want = Math.min(2.5, Math.max(1, cam.fit * dpr * 2), MAX_TEX / world.W, MAX_TEX / world.H);
+    const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
+    if (!rigs) { rigs = bakeRigTextures(app.renderer, ur); wantRigUr = ur; }
+    else if (wantRigUr !== ur) {
+      wantRigUr = ur;
+      clearTimeout(rigBakeT); rigBakeT = 0;
+      if (rigs.resolution !== ur) {
+        rigBakeT = setTimeout(() => {
+          rigBakeT = 0;
+          if (rigs && rigs.resolution !== wantRigUr) { rigs.destroy(); rigs = bakeRigTextures(app.renderer, wantRigUr); resetCorpseQuads(); }
+        }, 250);
+      }
+    }
+    const want = Math.min(2, Math.max(1, cam.fit * dpr * 2), MAX_TEX / world.W, MAX_TEX / world.H);
     // abrunden (nicht runden): W·res und H·res bleiben ≤ MAX_TEX, auch auf HiDPI-Bildschirmen
     const r = Math.max(.25, Math.floor(want * 4) / 4);
     if (world.W === worldW && world.H === worldH && world.GW === GW && world.GH === GH && r === res) return;
@@ -224,10 +240,8 @@ void main() {
     terrTex = PIXI.Texture.from(tcv);
     terrSprite.texture = terrTex; terrSprite.scale.set(1 / res);
     makeWater();
-    fx.resize(worldW, worldH, res);   // leert die Decals
+    fx.resize(worldW, worldH, res);
     dirtyRects.length = 0; dirtyRects.push({ x0: 0, y0: 0, x1: GW - 1, y1: GH - 1 }); terrForce = true;
-    const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
-    if (!rigs || rigs.resolution !== ur) { if (rigs) rigs.destroy(); rigs = bakeRigTextures(app.renderer, ur); resetCorpseQuads(); }
   }
 
   /* ---------- Einheiten ----------
@@ -240,6 +254,8 @@ void main() {
   // Zeichenreihenfolge wie vorher (Einheiten nach y, je Einheit die Teile in Rig-Reihenfolge).
   const shadowQ = createQuadBatch('shadowQuads'), links = createQuadBatch('shieldLinks');
   L.shadows.addChild(shadowQ, links);
+  const marksQ = createQuadBatch('unitMarks');
+  L.fx.addChild(marksQ);
   const groundQ = createQuadBatch('groundQuads'), groundBars = createQuadBatch('groundBars');
   L.ground.addChild(groundQ, groundBars);
   const airQ = createQuadBatch('airQuads'), airBars = createQuadBatch('airBars');
@@ -297,6 +313,26 @@ void main() {
     ring(3, O); ring(1.3, '#fff');
   });
   const TARGET_TINT = 0xff8a7a;
+  // Deckung im Wald (Terrain-Update Stufe 1a, Wunsch Silas 20.11.): Blätterbüschel vor den Füßen jeder Bodeneinheit auf
+  // einer Waldzelle, im Stil der Waldkleckse (drawTerrain). Zeigt nur, was combat.hurt schon rechnet (halber Schaden
+  // durch Fernkampf und Explosionen); gezeichnet für r = BUSH_R, BUSH_RES-fach aufgelöst, vor dem Körper (bodies)
+  const BUSH_RES = 4, BUSH_R = 10, BUSH_W = 34, BUSH_H = 18, BUSH_MAXR = 14, WALD = TERRAIN.wald.id;
+  const bushTex = canvasTex(BUSH_W * BUSH_RES, BUSH_H * BUSH_RES, c => {
+    c.setTransform(BUSH_RES, 0, 0, BUSH_RES, BUSH_W / 2 * BUSH_RES, BUSH_H / 2 * BUSH_RES);
+    c.lineWidth = 1.6; c.strokeStyle = '#2f6b3b';
+    for (const [x, y, r] of [[-8.5, 1.5, 6.5], [8.5, 1.5, 6.5], [0, 2.5, 7.5]]) {
+      c.fillStyle = '#4e9f5d'; c.beginPath(); c.ellipse(x, y, r * 1.2, r * .95, 0, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = '#6dbd78'; c.beginPath(); c.ellipse(x - r * .35, y - r * .3, r * .38, r * .3, 0, 0, TAU); c.fill();
+    }
+  });
+  // Bodeneinheit steht im Wald (Deckung wie combat.hurt: nicht fliegend, am Boden)
+  const inCover = (w, u) => !u.T.fly && u.z < 3 && !(u.batT > 0) && w.terr[cellIndex(w, u.x, u.y)] === WALD;
+  let coverWorld = null;
+  function bush(Q, u, r) {
+    const k = Math.min(r, BUSH_MAXR) / BUSH_R / BUSH_RES;
+    Q.addPart(bushTex, null, u.x, u.y + r * .6, 0, k, k, .5, .5, 0xffffff, 1);
+    stats.covered++;
+  }
   // Mauerbrocken: 3 kleine graue Steine (Radius 2.6–3.6 Welt-px)
   const STONE_RES = 4;
   const stoneTex = [2.6, 3.1, 3.6].map((r, k) => canvasTex(Math.ceil((r * 2 + 3) * STONE_RES), Math.ceil((r * 2 + 3) * STONE_RES), c => {
@@ -395,7 +431,7 @@ void main() {
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
-  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
+  const stats = { drawn: 0, covered: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
     debris: 0, debrisFlying: 0, projShadows: 0, targets: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
@@ -438,7 +474,7 @@ void main() {
     shadows(groundList, tm, inv); shadows(airList, tm, inv);
     // Schildwall: verbundene Schilde sichtbar machen (nur stehende Ritter; geschleuderte und betäubte nicht)
     // (Striche als Vierecke mit geraden Enden, Breite 3, Deckkraft 0,5; vorher Graphics mit runden Enden)
-    links.clear();
+    links.clear(); marksQ.clear();
     for (const u of groundList) {
       if (!u.wall || u.state !== 'ok') continue;
       LK_W = world; LK_U = u; LK_F = factionOf(world, u); LK_B = null; LK_D = 42 * 42;
@@ -454,7 +490,7 @@ void main() {
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
       if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + b.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
     }
-    // Synergien (synergy.js): dünne Linie zum Partner in der Farbe der Synergie; vom Adler Markierte mit Fadenkreuz
+    // Synergien (synergy.js): dünne Linie zum Partner in der Farbe der Synergie; vom Adler Markierte mit Fadenkreuz (über Körpern)
     const wt = world.time;
     for (const list of [groundList, airList]) for (const u of list) {
       if (u.syn && u.state === 'ok') {
@@ -466,12 +502,12 @@ void main() {
       }
       if (u.rv[RV_MARK] > wt) {
         const r = u.T.r + 4, y = u.y - u.z - u.T.r * .6, c = SYN_COL.jagd;
-        links.line(u.x - r - 4, y, u.x - r + 2, y, 2, c, .7); links.line(u.x + r - 2, y, u.x + r + 4, y, 2, c, .7);
-        links.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); links.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
+        marksQ.line(u.x - r - 4, y, u.x - r + 2, y, 2, c, .7); marksQ.line(u.x + r - 2, y, u.x + r + 4, y, 2, c, .7);
+        marksQ.line(u.x, y - r - 4, u.x, y - r + 2, 2, c, .7); marksQ.line(u.x, y + r - 2, u.x, y + r + 4, 2, c, .7);
       }
     }
     // Sniper-Laser (Ideenrunde 18.11.): liegender Scharfschütze mit Ziel zeigt in den letzten LASER_T s vor dem Schuss eine
-    // gestrichelte rote Ziellinie und einen Punkt auf dem Ziel, immer kräftiger, je näher der Schuss ist
+    // gestrichelte rote Ziellinie und einen Punkt auf dem Ziel, über den Einheitenkörpern
     for (const u of groundList) {
       if (u.type !== 'sniper' || u.state !== 'ok' || u.stance !== 'prone' || !(u.cd < LASER_T)) continue;
       const g = u.tg;
@@ -479,15 +515,15 @@ void main() {
       const k = 1 - Math.max(0, u.cd) / LASER_T, a = .15 + .5 * k;
       const x0 = u.x + u.face * u.T.r * 2, y0 = u.y - u.z + 3, x1 = g.x, y1 = g.y - g.z - g.T.r * .3;
       const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
-      for (let d = 0; d < L - 4; d += 14) { const e = Math.min(L - 4, d + 8); links.line(x0 + ux * d, y0 + uy * d, x0 + ux * e, y0 + uy * e, 1.5, 0xff3b3b, a); }
-      ring(x1, y1, 2.5 + 1.5 * k, 8, 2, 0xff3b3b, .4 + .5 * k);
+      for (let d = 0; d < L - 4; d += 14) { const e = Math.min(L - 4, d + 8); marksQ.line(x0 + ux * d, y0 + uy * d, x0 + ux * e, y0 + uy * e, 1.5, 0xff3b3b, a); }
+      ring(marksQ, x1, y1, 2.5 + 1.5 * k, 8, 2, 0xff3b3b, .4 + .5 * k);
     }
-    // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit, blinkt bei Treffern) und Bot-Schild beim Treffer
+    // Schrottplatz: Schildkuppel (Ring um die Kuppel-Einheit) und Bot-Schild beim Treffer (über Körpern)
     for (const u of groundList) {
-      if (u.domeHp > 0) ring(u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
-      if (u.shdHit > 0 && u.shd > 0) ring(u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
+      if (u.domeHp > 0) ring(links, u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
+      if (u.shdHit > 0 && u.shd > 0) ring(marksQ, u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
     }
-    nBoss = 0;
+    nBoss = 0; stats.covered = 0; coverWorld = world;
     bodies(groundList, groundQ, groundBars, t, tm, inv);
     bodies(airList, airQ, airBars, t, tm, inv);
     starPool.finish();
@@ -495,11 +531,11 @@ void main() {
   }
 
   // Stufe 0 (am Boden): Rig-Schatten mit Teamring; höher: weicher Fleck plus Teamring in Teamfarbe
-  function ring(x, y, R, n, w, tint, a) {
+  function ring(q, x, y, R, n, w, tint, a) {
     let px = x + R, py = y;
     for (let i = 1; i <= n; i++) {
-      const q = i / n * Math.PI * 2, nx = x + Math.cos(q) * R, ny = y + Math.sin(q) * R * .55;
-      links.line(px, py, nx, ny, w, tint, a); px = nx; py = ny;
+      const th = i / n * Math.PI * 2, nx = x + Math.cos(th) * R, ny = y + Math.sin(th) * R * .55;
+      q.line(px, py, nx, ny, w, tint, a); px = nx; py = ny;
     }
   }
   // Urzeit: das T.-Rex-Ei hat ein eigenes Rig (u.type bleibt 'rex')
@@ -569,6 +605,7 @@ void main() {
       if (rig.boss) {
         // Boss-Sticker: eigene Teile statt der normalen Rig-Teile
         drawBoss(Q, u, p, rig, vi, tm ? TEAM_INDEX[u.team] || 0 : 0, face, inv);
+        if (Q === groundQ && inCover(coverWorld, u)) bush(Q, u, rig.r);
         bar(bars, u, T, rig, sy, 0);
         continue;
       }
@@ -593,6 +630,7 @@ void main() {
       if (rig.weapon && !back) weaponPart(Q, rig, p, vi, pr, inv);
       // Römer im Block: Schild vor dem Körper, über der Waffe
       if (rig.shield && p.shieldFront) shieldPart(Q, rig, p, vi, inv);
+      if (Q === groundQ && inCover(coverWorld, u)) bush(Q, u, rig.r);
       bar(bars, u, T, rig, sy, pr);
     }
   }
@@ -946,30 +984,34 @@ void main() {
   L.overlay.addChild(sideB, sideR, crownG, crownT, overG);   // Seitennamen der Schlacht über dem Gelände
   function setOverlay(o) { Object.assign(overlay, o); }
 
+  let zoneKey = '';
   function drawOverlay(world) {
-    zoneG.clear();
-    const zx = overlay.missionZoneX;
-    zoneText.visible = zx != null;
-    if (zx != null) {
-      zoneG.lineStyle(0).beginFill(0x4d82f0, .05).drawRect(0, 0, zx, world.H).endFill();
-      zoneG.lineStyle(2, 0x4d82f0, .55);
-      for (let y = 0; y < world.H; y += 20) zoneG.moveTo(zx, y).lineTo(zx, Math.min(world.H, y + 10));
-      zoneText.position.set(zx - 10, world.H * .5 + 5);
-    }
-    const mx = overlay.battleMidX;
-    sideB.visible = sideR.visible = mx != null;
-    if (mx != null) {
-      zoneG.lineStyle(0).beginFill(0x3f7cff, .04).drawRect(0, 0, mx, world.H).endFill();
-      zoneG.beginFill(0xff4d4d, .04).drawRect(mx, 0, world.W - mx, world.H).endFill();
-      zoneG.lineStyle(2, 0x2a2a33, .4);
-      for (let y = 0; y < world.H; y += 20) zoneG.moveTo(mx, y).lineTo(mx, Math.min(world.H, y + 10));
-      sideB.position.set(mx - 10, world.H * .5 + 5); sideR.position.set(mx + 10, world.H * .5 + 5);
-    }
-    // Reichweiten der Gegner in der Planung (Audit 18.11.): { x, y, r } je Fernkämpfer, blass rot
-    const rg = overlay.ranges;
-    if (rg && rg.length) {
-      zoneG.lineStyle(1.2, 0xe5574f, .28);
-      for (const c of rg) zoneG.beginFill(0xff4d4d, .025).drawCircle(c.x, c.y, c.r).endFill();
+    const zx = overlay.missionZoneX, mx = overlay.battleMidX, rg = overlay.ranges;
+    let zk = `${world.W}|${world.H}|${zx}|${mx}|${rg ? rg.length : 0}`;
+    if (rg && rg.length) for (let i = 0; i < rg.length; i++) zk += `|${rg[i].x | 0},${rg[i].y | 0},${rg[i].r | 0}`;
+    if (zk !== zoneKey) {
+      zoneKey = zk;
+      zoneG.clear();
+      zoneText.visible = zx != null;
+      if (zx != null) {
+        zoneG.lineStyle(0).beginFill(0x4d82f0, .05).drawRect(0, 0, zx, world.H).endFill();
+        zoneG.lineStyle(2, 0x4d82f0, .55);
+        for (let y = 0; y < world.H; y += 20) zoneG.moveTo(zx, y).lineTo(zx, Math.min(world.H, y + 10));
+        zoneText.position.set(zx - 10, world.H * .5 + 5);
+      }
+      sideB.visible = sideR.visible = mx != null;
+      if (mx != null) {
+        zoneG.lineStyle(0).beginFill(0x3f7cff, .04).drawRect(0, 0, mx, world.H).endFill();
+        zoneG.beginFill(0xff4d4d, .04).drawRect(mx, 0, world.W - mx, world.H).endFill();
+        zoneG.lineStyle(2, 0x2a2a33, .4);
+        for (let y = 0; y < world.H; y += 20) zoneG.moveTo(mx, y).lineTo(mx, Math.min(world.H, y + 10));
+        sideB.position.set(mx - 10, world.H * .5 + 5); sideR.position.set(mx + 10, world.H * .5 + 5);
+      }
+      // Reichweiten der Gegner in der Planung (Audit 18.11.): { x, y, r } je Fernkämpfer, blass rot
+      if (rg && rg.length) {
+        zoneG.lineStyle(1.2, 0xe5574f, .28);
+        for (const c of rg) zoneG.beginFill(0xff4d4d, .025).drawCircle(c.x, c.y, c.r).endFill();
+      }
     }
     overG.clear();
     if (overlay.brushR > 0) {
@@ -1004,8 +1046,9 @@ void main() {
     ensureWorld(world, cam);
     for (const r of dirtyRects) drawTerrain(world, r.x0, r.y0, r.x1, r.y1);
     dirtyRects.length = 0;
-    if (terrChanged && (terrForce || t - terrUpT >= TERR_UPLOAD || t < terrUpT)) {
-      terrTex.update(); terrUpT = t; terrChanged = false; terrForce = false;
+    const upGap = terrPaint ? TERR_PAINT_UPLOAD : TERR_UPLOAD;
+    if (terrChanged && (terrForce || t - terrUpT >= upGap || t < terrUpT)) {
+      terrTex.update(); terrUpT = t; terrChanged = false; terrForce = false; terrPaint = false;
       if (waterDirty) { waterTex.baseTexture.update(); waterDirty = false; waterAny = world.terr.indexOf(1) >= 0; }
     }
     waterMesh.visible = waterAny;
@@ -1059,13 +1102,13 @@ void main() {
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen
-  // (liegend in corpseQ / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
+  // (liegend in corpseQ / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe, Einheiten in Walddeckung (covered),
   // Haltung der lebenden MG-Schützen und Scharfschützen (stances: stand/down/prone/up, Spez. #22)
   function debugPhysics() {
     const pcUsed = corpseQ.count;
     return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
       debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
-      stances: { ...stats.stances },
+      stances: { ...stats.stances }, covered: stats.covered,
       projShadows: stats.projShadows, targets: stats.targets, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
   }
 

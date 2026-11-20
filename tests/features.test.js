@@ -73,3 +73,19 @@ test('Teilen: Schlacht als Code und zurück, auf anderer Weltgröße', async () 
   await assert.rejects(decode('hallo'), /kein Kritzelschlacht-Code/);
   await assert.rejects(decode(code.slice(0, 20)), /beschädigt|passt nicht/);
 });
+
+test('Teilen: manipulierte Codes werden abgelehnt (Zip-Bombe, Prototyp-Schlüssel, NaN, Obergrenze)', async () => {
+  // Prototyp-Schlüssel
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [['toString', 'blau', 100, 100]], terr: [] })), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [['krieger', 'blau', 100, 100, 'constructor']], terr: [] })), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [], terr: [['toString', 0, 0, 100, 100]] })), /passt nicht/);
+  // Fehlende / ungültige Koordinaten
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [['krieger', 'blau']], terr: [] })), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [['krieger', 'blau', -1, 100]], terr: [] })), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [['krieger', 'blau', 'x', 100]], terr: [] })), /passt nicht/);
+  await assert.rejects(decode(await encode({ v: 1, k: 'battle', units: [], terr: [['wasser', 0, 0, 20000, 100]] })), /passt nicht/);
+  // Zip-Bombe (> 256 KiB nach Entpacken)
+  const huge = await encode({ v: 1, k: 'battle', units: [], terr: [], pad: 'A'.repeat(300 * 1024) });
+  await assert.rejects(decode(huge), /beschädigt/);
+});
+

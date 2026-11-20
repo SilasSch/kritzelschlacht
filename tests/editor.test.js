@@ -128,9 +128,16 @@ test('Code: eigenes Level übersteht encode/decode', async () => {
 test('isLevel lehnt kaputte Formen ab', () => {
   const ok = levelFromWorld(editorWorld(1400, 875), {});
   const bads = [null, 1, [], {}, { ...ok, id: '' }, { ...ok, budget: 0 }, { ...ok, place: [] }, { ...ok, place: [['unit', 'gibtsnicht', .5, .5]] },
-    { ...ok, place: [['unit', 'krieger', 'a', .5]] }, { ...ok, place: [['tRect', 'radierer', 0, 0, 1, 1]] }, { ...ok, cats: 'armee' }, { ...ok, n: 5 }];
+    { ...ok, place: [['unit', 'krieger', 'a', .5]] }, { ...ok, place: [['tRect', 'radierer', 0, 0, 1, 1]] }, { ...ok, cats: 'armee' }, { ...ok, n: 5 },
+    { ...ok, place: [['unit', 'toString', .5, .5]] }, { ...ok, place: [['tRect', 'constructor', 0, 0, 1, 1]] },
+    { ...ok, place: [['rect', 'krieger', 99999, .1, .1, .9, .9]] }, { ...ok, place: [['unit', 'krieger', 99, .5]] },
+    { ...ok, place: [['tRect', 'wasser', 0, 0, 1]] }, { ...ok, units: ['toString'] }];
   bads.forEach((bad, i) => assert.equal(isLevel(bad), false, `Fall ${i}`));
   assert.equal(isLevel(ok), true);
+  // tRect klemmt extreme Koordinaten ohne Hänger
+  const w = createWorld(1400, 875, 1);
+  tRect(w, 'wasser', -1e9, -1e9, 1e9, 1e9);
+  assert.ok(w.terr.every(id => id === TERRAIN.wasser.id));
 });
 
 test('upsertCustom: neueste zuerst, ersetzt das bearbeitete, Obergrenze', () => {

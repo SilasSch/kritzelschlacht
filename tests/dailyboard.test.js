@@ -10,7 +10,7 @@ import { packArmy } from '../game/js/online.js';
 import { encode, decode } from '../game/js/share.js';
 import { placePlan } from '../tools/plans.mjs';
 import { placeDaily, dailySnapshot, fightSeed, armyOf, checkNow, createCheck, rankEntries, resultCode, validResult,
-  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP, SIM_VERSION, VERSIONS, acceptOld, stampOf } from '../game/js/dailyboard.js';
+  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP, SIM_VERSION, VERSIONS, acceptOld, stampOf, dailyArmy } from '../game/js/dailyboard.js';
 import { PAINT_TYPES } from '../game/js/online.js';
 
 const D = '2026-11-18';
@@ -90,7 +90,8 @@ test('Ablage: lokale Liste und Live-Dokument behalten nur die letzten Tage, ein 
   let b = {};
   addLocal(b, D, { n: 'Ann', a: 'x1' }); addLocal(b, D, { n: 'Ann', a: 'x2' }); addLocal(b, D, { n: 'Bo', a: 'x3' });
   addLocal(b, D, { n: 'Ich', a: 'm1', me: true }); addLocal(b, D, { n: 'Ich', a: 'm2', me: true });
-  assert.deepEqual(b[D].map(e => e.a).sort(), ['m2', 'x2', 'x3']);
+  addLocal(b, D, { n: 'Freund', a: 'm2' });   // gleiche Armee wie eigener Eintrag darf eigenen nicht löschen (#60)
+  assert.deepEqual(b[D].map(e => `${e.n}:${e.a}`).sort(), ['Ann:x2', 'Bo:x3', 'Freund:m2', 'Ich:m2']);
   for (let i = 1; i <= 10; i++) addLocal(b, `2026-11-0${i}`.replace('0' + 10, '10'), { n: 'A', a: 'y' + i });
   assert.equal(Object.keys(cleanBoard(b)).length, BOARD_KEEP);
   assert.ok(cleanBoard(b)[D]);
@@ -122,6 +123,24 @@ test('Spielversion: alte Einträge zählen wie eingetragen, aber nur bis zum let
     assert.ok(checkNow(D, a, { v: 'vgibtsnicht', r: old.r }).error);
     assert.equal(acceptOld(D, 'valt', { win: true, spent: -5, time: 3, stars: 3 }), null);
     assert.equal(acceptOld(D, 'valt', null), null);
+    // Anti-Cheat: leere Armee oder unplausibel niedrige Kosten in Alt-Version abgelehnt
+    assert.ok(checkNow(D, '', { v: 'valt', r: { win: true, spent: 0.001, time: 0.001, stars: 3 } }).error);
+    assert.equal(validResult({ v: 1, k: 'dailyres', d: D, a: '', n: 'Fake', sv: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }), false);
+    assert.ok(checkNow(D, a, { v: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }).error);
+    // Alte Einträge behalten ihre Zahlen, auch wenn die Armee mit heutigen Kosten übers Budget käme (Silas 20.11.)
+    const cost0 = {};
+    for (const t of Object.keys(UNITS)) { cost0[t] = UNITS[t].cost; UNITS[t].cost *= 1.8; }
+    try {
+      assert.throws(() => dailyArmy(D, a), /Budget/);
+      const honest = { v: 'valt', r: { win: true, spent: res.spent, time: 12.5, stars: 3 } };
+      assert.deepEqual(checkNow(D, a, honest).result, { win: true, spent: res.spent, time: 12.5, stars: 3, old: true });
+    } finally { for (const t in cost0) UNITS[t].cost = cost0[t]; }
+    // Sortierung gemischt wie bisher: alte Version mit weniger Punkten steht vorn, markiert mit old
+    const ranked = rankEntries([
+      { res: { win: true, spent: 80, time: 20 }, at: 2 },
+      { res: { win: true, spent: 40, time: 5, old: true }, at: 1 },
+    ]);
+    assert.equal(ranked[0].at, 1);
   } finally { delete VERSIONS.valt; }
   // Stempel gehen in die Ablage mit
   const b = addLocal({}, D, { n: 'A', a, ...stampOf(res) });
@@ -134,4 +153,18 @@ test('Armee-Codes: neue Einheiten nur hinten anhängen (Typ = Index in PAINT_TYP
   const fixed = 'krieger,schuetze,ritter,grenadier,reiter,roemer,sani,wolf,baer,biene,magier,geist,drache,vampir,soldat,mg,sniper,panzerfaust,moerser,panzer,heli,troll,zyklop,hexe,phoenix,einhorn,elefant,krokodil,gorilla,adler,bueffel'.split(',');
   assert.deepEqual(PAINT_TYPES.slice(0, fixed.length), fixed);
   assert.ok(PAINT_TYPES.length <= 64);
+});
+
+test('Bestenliste: ungültige Kalenderdaten und Zukunftsdaten werden abgelehnt (#86)', () => {
+  const a = smartArmy('2026-06-15');
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-02-30', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-13-01', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2099-01-01', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-06-15', a, n: 'X' }), true);
+  const cleaned = cleanBoard({
+    '2026-02-30': [{ n: 'Fake', a, at: 1 }],
+    '2099-01-01': [{ n: 'Future', a, at: 1 }],
+    '2026-06-15': [{ n: 'Ok', a, at: 1 }],
+  });
+  assert.deepEqual(Object.keys(cleaned), ['2026-06-15']);
 });

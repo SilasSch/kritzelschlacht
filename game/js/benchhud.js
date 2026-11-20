@@ -5,10 +5,10 @@ import { SIM_PHASES, SIM_TIME } from './sim.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-// ctx: { params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents }
+// ctx: { params, host, world, cam, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents }
 // Liefert { n (0 = aus), start(n, scenario), tick() (je Simulationsschritt), frame(rawMs, simMs, renderMs, steps, dt) }.
 export function createBenchHud(ctx) {
-  const { params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents } = ctx;
+  const { params, host, world, cam, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents } = ctx;
   /* Leistungsprobe ?bench=N (Task 13), aus main.js ausgelagert.
      Baut die Szene aus bench.js (mixed mit N Einheiten; &scenario=blastcrowd: Bienenschwarm mit Salven) im
      Sandkasten und zeigt oben links fps, Sim-ms und Render-ms je Bild, die Bilddauer (Mittel und Spitze), die
@@ -46,29 +46,33 @@ export function createBenchHud(ctx) {
   function benchMeasure(frames = 60, opt = {}) {
     const warm = opt.warm ?? 30, wasPaused = game.paused;
     game.paused = true;
-    let t = performance.now() / 1000;
-    // simFx = Schritt (sim, je Teil aus sim.SIM_TIME) + Ereignisse (events) + fx.update (fxUpdate)
     const SF = { sim: 0, events: 0, fxUpdate: 0 };
-    const one = () => {
-      const a = performance.now(); simStep();
-      const b = performance.now(); drainEvents();
-      const c = performance.now(); renderer.fx.update(STEP, world);
-      SF.sim += b - a; SF.events += c - b; SF.fxUpdate += performance.now() - c;
-    };
-    for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
-    SF.sim = SF.events = SF.fxUpdate = 0;
-    const ms0 = Float64Array.from(SIM_TIME.ms);
     const S = { simFx: [], draw: [], render: [], gpuWait: [], total: [] }, parts = {};
-    for (let i = 0; i < frames; i++) {
-      const a = performance.now(); one();
-      const b = performance.now(); renderer.prepare(world, cam, t += STEP);
-      const c = performance.now(); renderer.present();
-      const d = performance.now(); renderer.gpuFinish();
-      const e = performance.now();
-      S.simFx.push(b - a); S.draw.push(c - b); S.render.push(d - c); S.gpuWait.push(e - d); S.total.push(e - a);
-      for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
+    let ms0;
+    try {
+      let t = performance.now() / 1000;
+      // simFx = Schritt (sim, je Teil aus sim.SIM_TIME) + Ereignisse (events) + fx.update (fxUpdate)
+      const one = () => {
+        const a = performance.now(); simStep();
+        const b = performance.now(); drainEvents();
+        const c = performance.now(); renderer.fx.update(STEP, world);
+        SF.sim += b - a; SF.events += c - b; SF.fxUpdate += performance.now() - c;
+      };
+      for (let i = 0; i < warm; i++) { one(); renderer.draw(world, cam, t += STEP); }
+      SF.sim = SF.events = SF.fxUpdate = 0;
+      ms0 = Float64Array.from(SIM_TIME.ms);
+      for (let i = 0; i < frames; i++) {
+        const a = performance.now(); one();
+        const b = performance.now(); renderer.prepare(world, cam, t += STEP);
+        const c = performance.now(); renderer.present();
+        const d = performance.now(); renderer.gpuFinish();
+        const e = performance.now();
+        S.simFx.push(b - a); S.draw.push(c - b); S.render.push(d - c); S.gpuWait.push(e - d); S.total.push(e - a);
+        for (const k in renderer.prepMs) parts[k] = (parts[k] || 0) + renderer.prepMs[k] / frames;
+      }
+    } finally {
+      game.paused = wasPaused;
     }
-    game.paused = wasPaused;
     const simParts = {};
     for (const k in SF) simParts[k] = r2(SF[k] / frames);
     SIM_PHASES.forEach((k, i) => { simParts['sim.' + k] = r2((SIM_TIME.ms[i] - ms0[i]) / frames); });

@@ -70,7 +70,7 @@ export default {
       hint: 'Phönixe, Einhörner und Trolle. Über die Lava kommt nur, wer fliegt, und Pfeile holen Phönixe vom Himmel. Wer räumt vorher die Schützen ab?',
       place: [
         ['tCircle', 'lava', .84, .5, .3, .22], ['circle', 'zyklop', 5, .84, .5, .1],
-        ['rect', 'schuetze', 28, .6, .25, .66, .75],
+        ['rect', 'schuetze', 28, .58, .25, .64, .75],
       ],
       plan: { smart: [['phoenix', 6, ...Md], ['einhorn', 9, ...F]], spam: [['einhorn', 24, ...F]] },
     },

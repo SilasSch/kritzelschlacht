@@ -100,7 +100,7 @@ test('Zerstörte Mauerzelle erzeugt 3 Brocken, die niemanden verletzen und nach 
   hitWall(w, i, 100, cx - 30, cy);
   assert.equal(w.debris.length, 0, 'nur beim Zerbrechen');
   hitWall(w, i, 100, cx - 30, cy);
-  assert.equal(w.terr[i], 0);
+  assert.equal(w.terr[i], 7);   // Geröll bleibt (20.11.)
   assert.equal(w.debris.length, 3);
   for (const d of w.debris) {
     for (const k of ['x', 'y', 'z', 'vx', 'vy', 'vz', 'rot', 'vrot', 't']) assert.equal(typeof d[k], 'number', k);

@@ -28,7 +28,7 @@ import { WORLD_W, WORLD_H } from './camera.js';
 
 // Werte, die den Kampf der Tageschallenge bestimmen: Einheiten der Auswahl und Bosse, Formen. SIM_REV von Hand erhöhen,
 // wenn sich die Simulation selbst ändert (combat.js, physics.js …), ohne dass sich diese Werte ändern.
-export const SIM_REV = 6;   // 2: Balance-Runde 18.11. (König, Synergien, Keil, Lama, Waldbrand); 3: Bienen 1 Punkt (Kugeln, Blitze); 4: Adler packt zu, Flammenwerfer, Pikenier; 5: Wegfindung überarbeitet; 6: Römer im Block (Schildstoß, Scutum)
+export const SIM_REV = 9;   // 2: Balance-Runde 18.11. (König, Synergien, Keil, Lama, Waldbrand); 3: Bienen 1 Punkt (Kugeln, Blitze); 4: Adler packt zu, Flammenwerfer, Pikenier; 5: Wegfindung überarbeitet; 6: Römer im Block (Schildstoß, Scutum); 7 und 8 für die Audit-PR #91 und Luft gegen Nahkampf #94 reserviert; 9: Geröll und Krater (Deckung)
 export function simVersion() {
   const types = [...new Set([...DAILY_POOL, ...DAILY_BOSSES])].sort();
   return 'v' + hashStr(JSON.stringify([SIM_REV, types.map(t => [t, UNITS[t] || null]), SHAPES])).toString(36);
@@ -43,7 +43,8 @@ export const VERSIONS = {
   vsjyhqn: { until: '2026-11-19' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.); bis 19.11., weil das Update kurz vor Mitternacht kam (offene Tabs spielen den 19. noch mit dieser Version)
   v1oqxao2: { until: '2026-11-19' },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
   vh9f0ah: { until: '2026-11-20' },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
-  v1qwrxow: { until: null },   // Bienen 18 LP statt 24 (20.11.)
+  v1qwrxow: { until: '2026-11-20' },   // Bienen 18 LP statt 24 (20.11.)
+  v1mcxyvf: { until: null },   // Geröll aus zerschlagenen Mauern, Krater aus Explosionen, beide mit Deckung (20.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

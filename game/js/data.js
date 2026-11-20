@@ -455,6 +455,10 @@ export const TERRAIN = {
   asche:{n:'Asche',id:5,cost:0,paint:false,d:'Verbrannter Wald: keine Deckung mehr.'},
   // Dornenhecke (Ideenrunde 18.11.): durchlaufbar, aber stachelig (physics.THORN); nur im Sandkasten malbar wie alles Gelände
   dornen:{n:'Dornen',id:6,cost:.05,sp:.75,d:'Durchlaufbar, aber stachelig: Bodentruppen nehmen 6 Schaden pro Sekunde. Flieger und schwere Brocken wie Panzer merken nichts.'},
+  // Geröll und Krater (Terrain-Update Stufe 2, Wunsch Silas 20.11.): entstehen nur im Kampf, nicht malbar.
+  // Geröll bleibt von zerschlagenen Mauern (combat.hitWall), Krater reißen Explosionen in freien Boden (combat.blast).
+  geroell:{n:'Geröll',id:7,cost:0,sp:.7,paint:false,d:'Zerschlagene Mauer: Tempo 70 %, Deckung: ¾ Schaden durch Pfeile, Kugeln und Explosionen.'},
+  krater:{n:'Krater',id:8,cost:0,paint:false,d:'Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln und Explosionen.'},
   radierer:{n:'Radierer',id:0,cost:0,d:'Entfernt Einheiten und Gelände unter dem Pinsel.'},
 };
 // Nach Gelände-id (0 = frei): Tempofaktor (physics.integrate, formation.march) und Gefahr (formation.hazardAt).

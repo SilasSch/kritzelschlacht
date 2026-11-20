@@ -82,10 +82,10 @@ test('blast: Abfall auf 50 % am Rand, Friendly Fire trifft auch die eigene Frakt
   assert.ok(w.events.some(ev => ev.type === 'blast' && ev.R === 40 && ev.shake > 0));
 });
 
-test('hitWall: zerstörte Mauer wird leer und meldet terrain', () => {
+test('hitWall: zerstörte Mauer wird Geröll und meldet terrain', () => {
   const w = createWorld(1400, 800, 5); const i = cellIndex(w, 205, 205); setCell(w, i, 4);
   hitWall(w, i, 100, 190, 205); assert.equal(w.terr[i], 4);
-  hitWall(w, i, 100, 190, 205); assert.equal(w.terr[i], 0);
+  hitWall(w, i, 100, 190, 205); assert.equal(w.terr[i], 7);   // Geröll (20.11.)
   assert.ok(w.events.some(e => e.type === 'terrain'));
 });
 
@@ -117,7 +117,7 @@ test('hitWall: terrain-Ereignis nur beim Unterschreiten von 70 LP oder beim Zerb
   hitWall(w, i, 30, 190, 205); assert.equal(terr(), 1, '80 -> 50: Risse sichtbar');
   hitWall(w, i, 30, 190, 205); assert.equal(terr(), 1, '50 -> 20');
   hitWall(w, i, 30, 190, 205); assert.equal(terr(), 2, 'zerbrochen');
-  assert.equal(w.terr[i], 0);
+  assert.equal(w.terr[i], 7);   // Geröll
   // blast meldet terrain nur, wenn eine Mauer sichtbar wechselt
   const w2 = createWorld(1400, 800, 5); const j = cellIndex(w2, 405, 405); setCell(w2, j, 4); rebuildHash(w2);
   blast(w2, 405, 405, 20, 5, 'x', null, 'blast', 1); // 5 Schaden

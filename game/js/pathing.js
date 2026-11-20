@@ -16,7 +16,7 @@ import { CELL } from './data.js';
 import { factionOf } from './world.js';
 
 export const PATH_CELL = 20;
-export const PATH_COST = { free: 10, forest: 13, water: 25, thorns: 40, lava: 120 };   // ×10 (1 / 1,3 / 2,5 / 4 / 12; Dornen: langsamer und tun weh)
+export const PATH_COST = { free: 10, forest: 13, rubble: 14, water: 25, thorns: 40, lava: 120 };   // ×10 (1 / 1,3 / 1,4 / 2,5 / 4 / 12; Dornen: langsamer und tun weh)
 export const PATH_EDGE = 16;             // Kosten eines freien Felds an einer Kante (×10, 1,6)
 export const PATH_REFRESH = .8;          // s je Fraktion (Task 13: .5 → .8)
 export const PATH_MAX_PER_STEP = 2;      // Felder je Schritt höchstens
@@ -28,7 +28,7 @@ export const PATH_LINE = { walls: 0, lava: 0, extra: 0, len: 0 };
 export const PATH_TARGET_KEEP = 2;       // s: so lange bleibt ein Feld je Luftziel (flowDirTo) ohne Nachfrage erhalten
 
 const WALL = 4, LAVA = 2, WATER = 1, THORNS = 6;
-const TCOST = [PATH_COST.free, PATH_COST.water, PATH_COST.lava, PATH_COST.forest, 0, 0, PATH_COST.thorns];   // nach Gelände-id
+const TCOST = [PATH_COST.free, PATH_COST.water, PATH_COST.lava, PATH_COST.forest, 0, 0, PATH_COST.thorns, PATH_COST.rubble];   // nach Gelände-id (Krater 8: frei)
 const INF = 0x3fffffff;
 const NB = 256, MASK = NB - 1;           // Ring der Bucket-Queue; größter Schritt (120+120)·181>>8 = 169 < 256
 const DX = [1, -1, 0, 0, 1, 1, -1, -1], DY = [0, 0, 1, -1, 1, -1, 1, -1];

@@ -376,7 +376,7 @@ export function createUI(game) {
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
   // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
   const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
-    : game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+    : game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
   const openCustomList = () => openCustomListView(game, openChapters);
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }

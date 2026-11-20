@@ -6,7 +6,7 @@ import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
 const CSS = `
-.ov.hot-cover{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none;z-index:7}
+.ov.hot-cover{background:#fff;backdrop-filter:none;-webkit-backdrop-filter:none}
 .card.hot{max-width:520px;align-items:flex-start}
 .card.hot h2.blau{color:#3f7cff}.card.hot h2.rot{color:#ff4d4d}
 .hotbud{display:flex;gap:8px;flex-wrap:wrap}
@@ -84,10 +84,10 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     clearUndo(); hideCard(); sync();
     ui.toast(tr('Blau malt links: {n} Punkte.', { n: b.hot.budget }));
   }
-  function stop() {
+  function stop(silent = false) {
     const b = game.battle; if (!b) return;
     b.hot = null; hideCard(); sync();
-    ui.toast(tr('Hotseat beendet: freie Schlacht.'));
+    if (!silent) ui.toast(tr('Hotseat beendet: freie Schlacht.'));
   }
   function done() {
     const h = hot(); if (!h) return;

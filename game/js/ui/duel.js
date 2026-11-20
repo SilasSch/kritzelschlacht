@@ -41,7 +41,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
 
   /* ---------- Karte ---------- */
   const ov = document.createElement('div');
-  ov.className = 'ov'; ov.id = 'ovDuel'; ov.hidden = true; ov.style.zIndex = 7;
+  ov.className = 'ov'; ov.id = 'ovDuel'; ov.hidden = true;
   ov.innerHTML = '<div class="card onl shadow" role="dialog" aria-modal="true" aria-labelledby="duelTitle"></div>';
   $('app').append(ov);
   const card = ov.firstChild;
@@ -139,7 +139,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     ui.toast(tr('Antwort geladen: euer Kampf läuft.'));
     sync();
   }
-  function stop() {
+  function stop(silent = false) {
     const b = battleRef; st = null; battleRef = null; hideCard();
     if (b && game.battle === b) {
       b.hot = null;
@@ -148,7 +148,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
       clearWorld(); world.teamMode = true;
       ui.renderUnits(); ui.updateBattle(); ui.updateCounts(); ui.updateControls();
     }
-    ui.toast(tr('Code-Duell beendet.'));
+    if (!silent) ui.toast(tr('Code-Duell beendet.'));
     sync();
   }
 
@@ -169,7 +169,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
       <div class="btnrow">${st.role === 'b' ? `<button class="go" id="duelAnswer">${tr('Antwort-Code')}</button>` : ''}<button class="go" id="duelRematch">${tr('Revanche')}</button><button class="btn" id="duelEnd">${tr('Duell beenden')}</button></div>`;
     if ($('duelAnswer')) $('duelAnswer').onclick = showAnswer;
     $('duelRematch').onclick = () => { const c = st.cfg; startA({ cat: c.cat, map: c.map || 'feld', budget: c.budget }); };
-    $('duelEnd').onclick = stop;
+    $('duelEnd').onclick = () => stop();
   }
 
   /* ---------- Anzeige ---------- */
@@ -205,5 +205,5 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
   function frame() {
     if (st && game.battle !== battleRef) { st = null; battleRef = null; hideCard(); }
   }
-  return { load, frame, covered: () => !ov.hidden, active: () => !!st };
+  return { load, stop, frame, covered: () => !ov.hidden, active: () => !!st };
 }

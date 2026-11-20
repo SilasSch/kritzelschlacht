@@ -143,11 +143,10 @@ export function placeCircle(world, type, n, cx, cy, rr, team) {
 
 export function tRect(world, key, x0, y0, x1, y1) {
   const id = TERRAIN[key].id, { W, H, GW, GH } = world;
-  for (let gy = Math.floor(y0 * H / CELL); gy <= Math.floor(y1 * H / CELL); gy++)
-    for (let gx = Math.floor(x0 * W / CELL); gx <= Math.floor(x1 * W / CELL); gx++) {
-      if (gx < 0 || gy < 0 || gx >= GW || gy >= GH) continue;
-      setCell(world, gy * GW + gx, id, 0);
-    }
+  const gy0 = Math.max(0, Math.floor(y0 * H / CELL)), gy1 = Math.min(GH - 1, Math.floor(y1 * H / CELL));
+  const gx0 = Math.max(0, Math.floor(x0 * W / CELL)), gx1 = Math.min(GW - 1, Math.floor(x1 * W / CELL));
+  for (let gy = gy0; gy <= gy1; gy++)
+    for (let gx = gx0; gx <= gx1; gx++) setCell(world, gy * GW + gx, id, 0);
 }
 
 export function tCircle(world, key, cx, cy, rr, inner = 0) {

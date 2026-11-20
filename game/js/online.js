@@ -291,7 +291,9 @@ export function onPeer(m, p, W, H) {
       }
     }
     if (m.phase === 'xfer' && m.theirs !== null && m.chunks && got >= m.chunks.length) {
-      const mine = unpackArmy(m.mine, m.side, W, H, null);
+      let mine;
+      try { mine = unpackArmy(m.mine, m.side, W, H, m.cfg); }
+      catch (e) { m.error = e.message; mine = []; ev.push('error'); }
       m.fight = { units: m.side === 'blau' ? battleList(mine, m.theirs) : battleList(m.theirs, mine), seed: m.cfg.seed, map: m.cfg.map };
       m.phase = 'fight'; ev.push('fight');
     }

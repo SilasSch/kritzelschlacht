@@ -647,6 +647,10 @@ async function loadCode(text) {
   if (d.k === 'duel' || d.k === 'duelres') { duel.load(d); return; }   // Code-Duell (18.11.)
   if (d.k === 'dailyres') { board.addCode(d); return; }   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
   if (d.k === 'battle') {
+    game.endReplay(true);
+    if (online.active()) online.leave(null);
+    if (duel.active()) duel.stop(true);
+    if (game.battle && game.battle.hot) hotseat.stop(true);
     if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
     clearWorld(); world.teamMode = true;
     applyBattle(world, d);
@@ -830,7 +834,7 @@ let acc = 0, last = performance.now(), uiT = 0;
 const params = new URLSearchParams(location.search);
 
 
-const bench = createBenchHud({ params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
+const bench = createBenchHud({ params, host, world, cam, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
 
 const fpsBox = params.has('fps') && !bench.n ? document.createElement('div') : null;
 let fpsN = 0, fpsT = 0;

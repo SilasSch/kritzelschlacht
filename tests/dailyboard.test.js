@@ -122,6 +122,16 @@ test('Spielversion: alte Einträge zählen wie eingetragen, aber nur bis zum let
     assert.ok(checkNow(D, a, { v: 'vgibtsnicht', r: old.r }).error);
     assert.equal(acceptOld(D, 'valt', { win: true, spent: -5, time: 3, stars: 3 }), null);
     assert.equal(acceptOld(D, 'valt', null), null);
+    // Anti-Cheat: leere Armee oder unplausibel niedrige Kosten in Alt-Version abgelehnt
+    assert.ok(checkNow(D, '', { v: 'valt', r: { win: true, spent: 0.001, time: 0.001, stars: 3 } }).error);
+    assert.equal(validResult({ v: 1, k: 'dailyres', d: D, a: '', n: 'Fake', sv: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }), false);
+    assert.ok(checkNow(D, a, { v: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }).error);
+    // Verifizierte Siege der aktuellen Version stehen immer vor Alt-Versionen
+    const ranked = rankEntries([
+      { res: { win: true, spent: 40, time: 5, old: true }, at: 1 },
+      { res: { win: true, spent: 80, time: 20 }, at: 2 },
+    ]);
+    assert.equal(ranked[0].at, 2);
   } finally { delete VERSIONS.valt; }
   // Stempel gehen in die Ablage mit
   const b = addLocal({}, D, { n: 'A', a, ...stampOf(res) });

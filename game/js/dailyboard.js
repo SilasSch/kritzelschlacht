@@ -47,11 +47,19 @@ export const VERSIONS = {
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null
-export function acceptOld(date, v, r) {
-  const k = VERSIONS[v];
-  if (!k || !k.until || date > k.until || !r || typeof r !== 'object') return null;
+export function acceptOld(date, v, r, army) {
+  const k = typeof v === 'string' && Object.prototype.hasOwnProperty.call(VERSIONS, v) ? VERSIONS[v] : null;
+  if (!k || !k.until || !DATE_RE.test(date || '') || date > k.until || !r || typeof r !== 'object') return null;
+  const L = dailyLevel(date);
+  let minSpent = 1;
+  if (army !== undefined) {
+    try {
+      const a = dailyArmy(date, army);
+      minSpent = Math.max(1, a.spent * 0.5);
+    } catch (e) { return null; }
+  }
   const win = r.win === true, spent = +r.spent, time = +r.time, stars = +r.stars;
-  if (!(spent > 0 && spent <= dailyLevel(date).budget * 2 && time > 0 && time <= 181 && stars >= 0 && stars <= 3)) return null;
+  if (!(spent >= minSpent && spent <= L.budget + EPS && time > 0 && time <= 181 && stars >= 0 && stars <= 3)) return null;
   return { win, spent, time, stars: win ? Math.max(1, Math.round(stars)) : 0, old: true };
 }
 
@@ -108,7 +116,7 @@ export function createCheck(date, army, now = () => globalThis.performance.now()
   const c = { done: false, result: null, error: null };
   if (stamp && stamp.v && stamp.v !== SIM_VERSION) {
     c.done = true; c.pump = () => true;
-    c.result = acceptOld(date, stamp.v, stamp.r);
+    c.result = acceptOld(date, stamp.v, stamp.r, army);
     if (!c.result) c.error = 'Spielversion passt nicht';
     return c;
   }
@@ -143,12 +151,14 @@ export function checkNow(date, army, stamp = null) { const c = createCheck(date,
 export const stampOf = res => ({ v: SIM_VERSION, r: { win: !!res.win, spent: res.spent, time: res.time, stars: res.stars } });
 const cleanStamp = e => (e && VER_RE.test(e.v || '') && e.r && typeof e.r === 'object' ? { v: e.v, r: { win: e.r.win === true, spent: +e.r.spent || 0, time: +e.r.time || 0, stars: +e.r.stars || 0 } } : {});
 
-// Sortierung: geprüfte Siege vorn (weniger Punkte, dann kürzere Zeit, dann früher eingetragen)
+// Sortierung: geprüfte Siege der aktuellen Version vorn, dann Alt-Versionen (weniger Punkte, kürzere Zeit, früher eingetragen)
 export function rankEntries(list) {
   return list.slice().sort((a, b) => {
     const wa = a.res && a.res.win ? 0 : 1, wb = b.res && b.res.win ? 0 : 1;
     if (wa !== wb) return wa - wb;
     if (!wa) {
+      const oa = a.res.old ? 1 : 0, ob = b.res.old ? 1 : 0;
+      if (oa !== ob) return oa - ob;
       if (Math.abs(a.res.spent - b.res.spent) > EPS) return a.res.spent - b.res.spent;
       if (Math.abs(a.res.time - b.res.time) > EPS) return a.res.time - b.res.time;
     }
@@ -161,7 +171,7 @@ export function rankEntries(list) {
 export const resultCode = (date, army, name, res, sv = SIM_VERSION) => ({ v: 1, k: 'dailyres', d: date, a: army, n: cleanName(name), ...(res ? { sv, r: stampOf(res).r } : {}) });
 export function validResult(d) {
   if (!d || !DATE_RE.test(d.d || '') || typeof d.a !== 'string' || typeof d.n !== 'string') return false;
-  if (d.sv !== undefined && d.sv !== SIM_VERSION) return !!acceptOld(d.d, d.sv, d.r);   // ältere Version: nicht nachrechenbar
+  if (d.sv !== undefined && d.sv !== SIM_VERSION) return !!acceptOld(d.d, d.sv, d.r, d.a);   // ältere Version: Armee und Plausibilität prüfen
   try { dailyArmy(d.d, d.a); } catch (e) { return false; }
   return true;
 }

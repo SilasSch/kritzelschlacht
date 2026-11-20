@@ -279,6 +279,17 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   assert.ok(evA.includes('error'));
   assert.ok(A.error);
   assert.ok(A.fight.units.every(u => u.team === 'blau'), 'die abgelehnte Armee kämpft nicht');
+  // Auch die eigene Armee (m.mine) wird lokal gegen m.cfg geprüft (Defense-in-Depth)
+  const A2 = createMatch('host', 100, createRng(2)), B2 = createMatch('guest');
+  hostStart(A2); voteBoth(A2, B2);
+  const wCheat = createWorld(W, H, 8); wCheat.teamMode = true;
+  for (let i = 0; i < 60; i++) spawn(wCheat, 'panzer', 100 + (i % 6) * 80, 60 + Math.floor(i / 6) * 80, 'blau');
+  const wOk = createWorld(W, H, 9); wOk.teamMode = true;
+  spawn(wOk, allowed(A2.cfg.cat)[0], 1300, 300, 'rot');
+  markReady(A2, packArmy(wCheat, 'blau')); markReady(B2, packArmy(wOk, 'rot'));
+  const lCheat = link(A2, B2);
+  assert.ok(lCheat.evA.includes('error'));
+  assert.ok(A2.fight.units.every(u => u.team === 'rot'), 'eigene geschummelte Armee kämpft auch lokal nicht mit');
   // Müll in presence
   const C = createMatch('guest');
   for (const junk of [null, 5, 'x', [], { ks: 2, cfg: {} }, { ks: 1, cfg: { r: 'a' } }, { ks: 1, cfg: { r: 1, cat: 'gelaende', budget: 100 } }]) onPeer(C, junk, W, H);

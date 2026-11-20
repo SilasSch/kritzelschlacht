@@ -14,7 +14,6 @@ import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
 const CSS = `
-#ovOnl{z-index:7}
 .card.vote{max-width:680px}
 .vopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
 .vopts .btn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px 12px}
@@ -70,7 +69,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   const style = document.createElement('style'); style.textContent = CSS; document.head.append(style);
 
   let room = null, lobby = null, net = null, m = null, battleRef = null, unsubs = [], lastPub = '', peerSeen = 0, joinT = 0;
-  let lobbyUnsub = null, roundT = 0, peerRef = null;
+  let lobbyUnsub = null, roundT = 0, peerRef = null, goneAck = false;
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
@@ -257,7 +256,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     chime(true);
     showCard('gone', `<h2 id="onlTitle">${tr('Gegner ist weg')}</h2><p>${tr('Die Verbindung zum Gegner ist abgerissen. Kommt er zurück, geht es weiter.')}</p>
       <div class="btnrow"><button class="btn" id="onlStay">${tr('Warten')}</button><button class="go" id="onlCancel">${tr('Spiel verlassen')}</button></div>`);
-    $('onlStay').onclick = hideCard;
+    $('onlStay').onclick = () => { goneAck = true; hideCard(); };
     $('onlCancel').onclick = () => leave(tr('Online-Spiel beendet.'));
   }
   function giveCard() {
@@ -309,7 +308,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       ui.toast(role === 'host' ? tr('Code schon vergeben, bitte noch einmal.') : tr('Der Raum ist schon voll.'));
       return;
     }
-    m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; joinT = Date.now(); lastPub = '';
+    m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
     game.clear(); undoStack.length = 0;
     b.hot = { online: true, budget: m.budget, step: 'online', spent: { blau: 0, rot: 0 }, def: null };
     unsubs.push(room.onPeers(onPeers, () => {}));
@@ -321,7 +320,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     unsubs = [];
     if (room) try { room.leave(); } catch (e) { /* weg */ }
     if (net) try { net.presence({ open: null }); } catch (e) { /* weg */ }
-    room = null; m = null;
+    room = null; m = null; goneAck = false;
     hideCard(); clearNotes();
     const b = battleRef; battleRef = null;
     if (b && game.battle === b) {
@@ -347,7 +346,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const okRole = p && p.presence.role === (m.role === 'host' ? 'guest' : 'host');
     if (okRole) {
       if (peerRef && peerRef !== p.peer && m.cfg) { /* neuer Tab des Gegners: läuft mit der Runde weiter */ }
-      peerRef = p.peer; peerSeen = Date.now();
+      peerRef = p.peer; peerSeen = Date.now(); goneAck = false;
       if (shown === 'gone') hideCard();
       if (m.role === 'host' && !m.cfg) { try { net.presence({ open: null }); } catch (e) { /* egal */ } act(hostStart(m)); }
       act(onPeer(m, p.presence, world.W, world.H));
@@ -474,7 +473,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (m.phase === 'fight' && b.phase === 'done' && b.result) act(finishFight(m, b.result.winner));
     const now = Date.now();
     if (m.phase === 'wait' && m.role === 'guest' && shown === 'wait' && now - joinT > JOIN_MS && !card.querySelector('.warn')) waitCard();
-    if (peerSeen && now - peerSeen > GONE_MS && shown !== 'gone' && shown !== 'leave') {
+    if (peerSeen && !goneAck && now - peerSeen > GONE_MS && shown !== 'gone' && shown !== 'leave') {
       const p = room && pickPeer(room.peers());
       if (p) peerSeen = now; else goneCard();
     }

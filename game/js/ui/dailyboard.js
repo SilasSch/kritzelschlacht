@@ -134,7 +134,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
 
   /* ---------- Karte ---------- */
   const ov = document.createElement('div');
-  ov.className = 'ov'; ov.id = 'ovBoard'; ov.hidden = true; ov.style.zIndex = 8;
+  ov.className = 'ov'; ov.id = 'ovBoard'; ov.hidden = true;
   ov.innerHTML = '<div class="card board shadow" role="dialog" aria-modal="true" aria-labelledby="boardTitle"></div>';
   $('app').append(ov);
   const card = ov.firstChild;

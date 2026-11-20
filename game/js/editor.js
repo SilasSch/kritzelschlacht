@@ -105,21 +105,37 @@ export function levelProblem(level) {
   return null;
 }
 
+const has = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+const PLACE_MAX = 5000, LEVEL_UNIT_CAP = 2600;
+
 // Form eines eigenen Levels (Spielstand, Code): true, wenn buildMission und die Mission damit umgehen können
 export function isLevel(l) {
   if (!l || typeof l !== 'object' || Array.isArray(l)) return false;
-  if (typeof l.id !== 'string' || !l.id || typeof l.n !== 'string' || (l.hint != null && typeof l.hint !== 'string')) return false;
-  if (!(l.budget > 0) || !(l.par > 0) || !Array.isArray(l.place) || !l.place.length) return false;
-  if (l.cats != null && (!Array.isArray(l.cats) || !l.cats.every(k => UNIT_CATS.includes(k) || k === 'gelaende'))) return false;
-  if (l.units != null && (!Array.isArray(l.units) || !l.units.every(t => UNITS[t] && UNITS[t].paint !== false))) return false;
+  if (typeof l.id !== 'string' || !l.id || l.id.length > 64 || typeof l.n !== 'string' || l.n.length > NAME_MAX * 2 || (l.hint != null && (typeof l.hint !== 'string' || l.hint.length > HINT_MAX * 4))) return false;
   const num = v => typeof v === 'number' && Number.isFinite(v);
+  const coord = v => num(v) && v >= -0.5 && v <= 1.5;
+  if (!num(l.budget) || !(l.budget > 0) || l.budget > 99999 || !num(l.par) || !(l.par > 0) || l.par > 99999) return false;
+  if (!Array.isArray(l.place) || !l.place.length || l.place.length > PLACE_MAX) return false;
+  if (l.cats != null && (!Array.isArray(l.cats) || !l.cats.every(k => UNIT_CATS.includes(k) || k === 'gelaende'))) return false;
+  if (l.units != null && (!Array.isArray(l.units) || !l.units.every(t => has(UNITS, t) && UNITS[t].paint !== false))) return false;
+  let units = 0;
   for (const p of l.place) {
     if (!Array.isArray(p)) return false;
-    if (p[0] === 'unit') { if (!UNITS[p[1]] || !num(p[2]) || !num(p[3])) return false; }
-    else if (p[0] === 'tRect') { if (!TERRAIN[p[1]] || p[1] === 'radierer' || ![2, 3, 4, 5].every(k => num(p[k]))) return false; }
-    else if (p[0] === 'rect' || p[0] === 'circle') { if (!UNITS[p[1]] || !p.slice(2).every(num)) return false; }
-    else if (p[0] === 'tCircle') { if (!TERRAIN[p[1]] || p[1] === 'radierer' || !p.slice(2).every(num)) return false; }
-    else return false;
+    if (p[0] === 'unit') {
+      if (p.length !== 4 || !has(UNITS, p[1]) || !coord(p[2]) || !coord(p[3])) return false;
+      units++;
+    } else if (p[0] === 'tRect') {
+      if (p.length !== 6 || !has(TERRAIN, p[1]) || p[1] === 'radierer' || ![2, 3, 4, 5].every(k => coord(p[k]))) return false;
+    } else if (p[0] === 'rect') {
+      if (p.length !== 7 || !has(UNITS, p[1]) || !Number.isInteger(p[2]) || p[2] < 1 || p[2] > LEVEL_UNIT_CAP || ![3, 4, 5, 6].every(k => coord(p[k]))) return false;
+      units += p[2];
+    } else if (p[0] === 'circle') {
+      if (p.length !== 6 || !has(UNITS, p[1]) || !Number.isInteger(p[2]) || p[2] < 1 || p[2] > LEVEL_UNIT_CAP || !coord(p[3]) || !coord(p[4]) || !num(p[5]) || p[5] < 0 || p[5] > 2) return false;
+      units += p[2];
+    } else if (p[0] === 'tCircle') {
+      if ((p.length !== 5 && p.length !== 6) || !has(TERRAIN, p[1]) || p[1] === 'radierer' || !coord(p[2]) || !coord(p[3]) || !num(p[4]) || p[4] < 0 || p[4] > 2 || (p.length === 6 && (!num(p[5]) || p[5] < 0 || p[5] > 2))) return false;
+    } else return false;
+    if (units > LEVEL_UNIT_CAP) return false;
   }
   return true;
 }

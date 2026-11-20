@@ -25,7 +25,7 @@ export const UNITS = {
   sani:{n:'Sanitäter',cat:'armee',col:'#f4f4f6',r:9,hp:40,heal:12,range:90,speed:50,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete und hält sich aus dem Getümmel heraus.'},
   wolf:{n:'Wolf',cat:'tiere',col:'#8d939e',r:8,hp:40,dmg:7,range:3,speed:100,cd:.55,cost:1.5,mass:.8,d:'Jagt im Rudel: kreist die Beute ein und beißt von der Seite.'},
   baer:{n:'Bär',cat:'tiere',col:'#8b5a3c',r:16,hp:280,dmg:24,range:4,splash:26,speed:46,cd:1.4,cost:10,mass:6,d:'Sehr zäh. Prankenhiebe treffen mehrere.'},
-  biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:24,dmg:4,range:2,speed:135,cd:.45,cost:1,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
+  biene:{n:'Bienen',cat:'tiere',col:'#f5c518',r:4,hp:18,dmg:4,range:2,speed:135,cd:.45,cost:1,fly:1,flyZ:14,mass:.1,d:'Schwirrender Schwarm, der sein Ziel umkreist. Der erste Stich vergiftet. Billig und lästig.'},
   magier:{n:'Magier',cat:'mythisch',col:'#9b6be0',r:9,hp:50,dmg:20,range:230,splash:38,speed:40,cd:3.2,cost:8,mass:1,d:'Zauberbuch: Feuerball, Blitz, Windstoß oder Steinwand, je nach Lage. Drei zusammen rufen einen Meteor.'},
   geist:{n:'Geist',cat:'mythisch',col:'#eef3fa',r:10,hp:55,dmg:7,range:3,speed:62,cd:.7,cost:3,fly:1,flyZ:18,mass:.6,d:'Schwebt über alles und jagt Schützen, Magier und Sanitäter. Nur Feuer trifft voll.'},
   drache:{n:'Drache',cat:'mythisch',col:'#2fae8f',r:26,hp:900,dmg:6,range:110,speed:48,cd:.2,cost:40,fly:1,flyZ:60,mass:30,d:'Kreist über dem Ziel und speit Feuer in einem Kegel.'},

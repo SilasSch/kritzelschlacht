@@ -9,7 +9,7 @@ import { bossMuzzle, hasMuzzle, tankMgMuzzle } from './muzzle.js';
 import { FORM, FORM_GAIN, FORM_CATCHUP, hazardAt, shieldBlocks, SHIELD_MUL } from './formation.js';
 import { MORALE, PIN_HOLD, updateMorale, fleeSteer, isFleeing } from './morale.js';
 import { stepAbility, cancelAbility, isFire, stepBat, stepGhoul, riseGhoul, releaseUnit, VAMPIRE, BAT_NONE, BAT_FLY } from './abilities.js';
-import { castSpell, spellReact, FIREBALL } from './spells.js';
+import { castSpell, spellReact, FIREBALL, STONE_WALL } from './spells.js';
 // --- Task 6: Kreaturen ---
 import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepFrog, stepFrogCurse, phoenixAsh } from './abilities.js';
 // --- Task 5: Tiere ---
@@ -158,7 +158,11 @@ export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'solda
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
 GROUP_USERS.add('reiter');    // Keil (WEDGE): Reiter, die zusammen reiten
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
-const HC = HASH_CELL, WALL = 4, WATER_ID = 1;
+const HC = HASH_CELL, WALL = 4, WATER_ID = 1, RUBBLE = 7, CRATER_ID = 8;
+// Terrain-Update Stufe 2 (20.11.): Geröll (zerschlagene Mauer) und Krater (Explosionen, nur gegen Kugeln) geben Deckung ×¾.
+// Krater: Explosion der Art 'blast' oder 'rocket' ab MIN_R px reißt freien Boden bis R · K px auf.
+export const CRATER = { MIN_R: 30, K: .35, COVER: .75 };
+export const RUBBLE_COVER = .75;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
 const PATH_STUCK_T = 3;      // s Festsitzen an einer dünnen Mauer, nach denen trotz Weg eingeschlagen wird
 const WALL_CELL_HP = 140;    // world.setCell: Leben einer Mauerzelle
@@ -197,10 +201,16 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen (×FOREST.COVER); gegen Angriffe von oben (Verursacher
   // fliegt über den Baumkronen, T.flyZ ≥ FOREST.TOP, kein Schaden über Zeit) schützt das Blätterdach mehr: ×FOREST.AIR für
   // jede Art (Luft gegen Nahkampf, 20.11.: Nahkämpfer können sich vor Fliegern in den Wald retten). Wer tief zwischen den
-  // Bäumen fliegt (Bienen, Geist, Hexe, Phönix), bekommt nur die normale Deckung.
-  if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3) {
-    if (src && src.T.fly && src.T.flyZ >= FOREST.TOP && !dot) m *= FOREST.AIR;
-    else if (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket') m *= FOREST.COVER;
+  // Bäumen fliegt (Bienen, Geist, Hexe, Phönix), bekommt nur die normale Deckung. Geröll deckt wie Wald (×RUBBLE_COVER),
+  // Krater nur gegen Kugeln (×CRATER.COVER).
+  if (!v.T.fly) {
+    const tc = world.terr[cellIndex(world, v.x, v.y)];
+    if (tc === 3) {
+      if (src && src.T.fly && src.T.flyZ >= FOREST.TOP && !dot) m *= FOREST.AIR;
+      else if (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket') m *= FOREST.COVER;
+    }
+    else if (tc === RUBBLE && (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= RUBBLE_COVER;
+    else if (tc === CRATER_ID && kind === 'bullet') m *= CRATER.COVER;
   }
   // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
   if (v.syn) {
@@ -380,9 +390,25 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
     }
     if (any) emit(world, { type: 'terrain', gx0: Math.max(0, g0x - 1), gy0: Math.max(0, g0y - 1), gx1: Math.min(GW - 1, g1x + 1), gy1: Math.min(GH - 1, g1y + 1) });
   }
+  if ((kind === 'blast' || kind === 'rocket') && R >= CRATER.MIN_R) crater(world, x, y, R * CRATER.K);
   // water: Einschlag im Wasser (Nachtrag 7, #48), die Effekte zeigen dann eine Fontäne statt Staub und Krater
   emit(world, { type: 'blast', x, y, R, kind, shake: kind === 'fire' ? 3 : 5, water: world.terr[cellIndex(world, x, y)] === WATER_ID });
   sound(world, kind === 'fire' ? 'fire' : 'boom');
+}
+
+// Krater (Terrain-Update 20.11.): freier Boden bis r px um (x, y) wird Krater. Bewegung und Wege ändern sich nicht
+// (Tempo 1, Wegkosten frei), daher kein touchTerrain; das terrain-Ereignis zeichnet die Zellen neu.
+function crater(world, x, y, r) {
+  const { GW, GH, terr } = world;
+  const g0x = Math.max(0, (x - r) / CELL | 0), g1x = Math.min(GW - 1, (x + r) / CELL | 0);
+  const g0y = Math.max(0, (y - r) / CELL | 0), g1y = Math.min(GH - 1, (y + r) / CELL | 0);
+  let any = false;
+  for (let gy = g0y; gy <= g1y; gy++) for (let gx = g0x; gx <= g1x; gx++) {
+    const i = gy * GW + gx; if (terr[i] !== 0) continue;
+    if ((gx * CELL + 5 - x) ** 2 + (gy * CELL + 5 - y) ** 2 > r * r) continue;
+    terr[i] = CRATER_ID; any = true;
+  }
+  if (any) emit(world, { type: 'terrain', gx0: Math.max(0, g0x - 1), gy0: Math.max(0, g0y - 1), gx1: Math.min(GW - 1, g1x + 1), gy1: Math.min(GH - 1, g1y + 1) });
 }
 
 // Absturz eines abgeschossenen Fliegers beim ersten Bodenkontakt seiner Leiche (aus stepCorpses).
@@ -422,7 +448,7 @@ function spawnDebris(world, x, y, fromX, fromY) {
 
 // fromX/fromY: Herkunft des Treffers (Flugrichtung der Trümmer).
 // Liefert true, wenn sich das Aussehen geändert hat (Risse ab WALL_CRACK_HP oder zerbrochen);
-// nur dann gibt es ein terrain-Ereignis. Zerbricht die Zelle, fliegen Brocken (world.debris).
+// nur dann gibt es ein terrain-Ereignis. Zerbricht die Zelle, fliegen Brocken (world.debris) und Geröll bleibt liegen.
 export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   const { GW, GH } = world;
   const before = world.whp[i];
@@ -430,7 +456,8 @@ export function hitWall(world, i, d, fromX, fromY, emitTerrain = true) {
   const gx = i % GW, gy = i / GW | 0;
   let broken = false;
   if (world.whp[i] <= 0) {
-    world.terr[i] = 0; world.towner[i] = 0; broken = true; touchTerrain(world);
+    // Geröll bleibt liegen (20.11.), außer bei der gezauberten Steinwand (spells.STONE_WALL), die spurlos zerfällt
+    world.terr[i] = world.towner[i] === STONE_WALL.OWNER ? 0 : RUBBLE; world.towner[i] = 0; broken = true; touchTerrain(world);
     if (before > 0) spawnDebris(world, gx * CELL + 5, gy * CELL + 5, fromX, fromY);
   }
   emit(world, { type: 'wallHit', i, x: gx * CELL + 5, y: gy * CELL + 5, fromX, fromY, broken });

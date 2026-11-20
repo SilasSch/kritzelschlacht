@@ -260,7 +260,7 @@ export function stoneWall(world, u, nx, ny) {
     if (!dup) WALL_CELLS[n++] = i;
   }
   let m = 0;
-  for (let j = 0; j < n; j++) { const i = WALL_CELLS[j]; if (terr[i] === 0 && !occupied(world, i)) WALL_CELLS[m++] = i; }
+  for (let j = 0; j < n; j++) { const i = WALL_CELLS[j]; if ((terr[i] === 0 || terr[i] === 7 || terr[i] === 8) && !occupied(world, i)) WALL_CELLS[m++] = i; }
   if (m < S.MIN) return 0;
   let gx0 = GW, gy0 = GH, gx1 = 0, gy1 = 0;
   for (let j = 0; j < m; j++) {

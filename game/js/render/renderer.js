@@ -173,7 +173,7 @@ void main() {
     const px0 = x0 * CELL, py0 = y0 * CELL, pw = (x1 - x0 + 1) * CELL, ph = (y1 - y0 + 1) * CELL;
     c.beginPath(); c.rect(px0, py0, pw, ph); c.clip(); c.clearRect(px0, py0, pw, ph);
     const ax0 = Math.max(0, x0 - 2), ax1 = Math.min(GW - 1, x1 + 2), ay0 = Math.max(0, y0 - 2), ay1 = Math.min(GH - 1, y1 + 2);
-    const layers = [[1, 9.5, '#a8e6f0'], [1, 7, '#62b9ea'], [2, 9.5, '#ffb54d'], [2, 7, '#f2652f'], [3, 9, '#b5dfae'], [4, 8.6, '#5b5f69'], [4, 7.3, '#a3a8b2'], [5, 8.6, '#b9b2aa'], [5, 6.4, '#8f8780'], [6, 9, '#c9d3a4'], [6, 6.5, '#9fb06a']];
+    const layers = [[1, 9.5, '#a8e6f0'], [1, 7, '#62b9ea'], [2, 9.5, '#ffb54d'], [2, 7, '#f2652f'], [3, 9, '#b5dfae'], [4, 8.6, '#5b5f69'], [4, 7.3, '#a3a8b2'], [5, 8.6, '#b9b2aa'], [5, 6.4, '#8f8780'], [6, 9, '#c9d3a4'], [6, 6.5, '#9fb06a'], [7, 9, '#9a958e'], [7, 6.6, '#c4c0b8'], [8, 9.2, '#c9bdad'], [8, 6.8, '#9c9083']];
     for (const [id, rad, col] of layers) {
       c.fillStyle = col; c.beginPath(); let any = false;
       for (let gy = ay0; gy <= ay1; gy++) for (let gx = ax0; gx <= ax1; gx++) {
@@ -193,6 +193,9 @@ void main() {
         c.strokeStyle = '#4f5e2c'; c.lineWidth = 1.3; c.beginPath(); c.moveTo(cx - 5, cy + 2); c.lineTo(cx - 2, cy - 2); c.lineTo(cx + 1, cy + 2); c.lineTo(cx + 4, cy - 2); c.stroke();
         c.beginPath(); c.moveTo(cx - 2, cy - 2); c.lineTo(cx - 3, cy - 5); c.moveTo(cx + 1, cy + 2); c.lineTo(cx + 2, cy + 5); c.stroke();
       }
+      // Geröll (zerschlagene Mauer): verstreute Steinchen; Krater: dunkle Mulde in der Mitte (Ränder bilden die Kleckse)
+      if (t === 7 && h < .35) { c.fillStyle = h < .15 ? '#77736c' : '#b0aca4'; c.strokeStyle = '#5b5852'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx + (h - .17) * 20, cy + (h - .2) * 10, 3.2, 2.4, h * 6, 0, 7); c.fill(); c.stroke(); }
+      if (t === 8 && h < .25) { c.fillStyle = '#6f665c'; c.beginPath(); c.ellipse(cx + (h - .12) * 16, cy, 2.6, 1.8, 0, 0, 7); c.fill(); }
       if (t === 5 && h < .12) { c.fillStyle = '#4a4440'; c.beginPath(); c.arc(cx + (h - .06) * 30, cy, 1.6, 0, 7); c.fill(); }   // Asche: Holzkohle
       if (t === 4 && whp[i] < 70) { c.strokeStyle = '#3a3d45'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(cx - 4, cy - 3); c.lineTo(cx, cy + 1); c.lineTo(cx + 4, cy - 2); c.stroke(); }
     }

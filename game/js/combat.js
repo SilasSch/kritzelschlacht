@@ -13,12 +13,12 @@ import { castSpell, spellReact, FIREBALL } from './spells.js';
 // --- Task 6: Kreaturen ---
 import { TROLL, CYCLOPS, UNICORN, stepTroll, stepTrail, stepAura, stepAsh, stepFrog, stepFrogCurse, phoenixAsh } from './abilities.js';
 // --- Task 5: Tiere ---
-import { stepAnimal, animalPassive, eagleStep, CROC } from './abilities.js';
+import { stepAnimal, animalPassive, eagleStep, pteraStep, PTERA, CROC } from './abilities.js';
 import { stepKingAura, kingFall, KING } from './abilities.js';
 import { igniteArea, igniteUnder } from './wildfire.js';
 import { SYN, SB, stepSynergy, synFx, ZANGE_A, ZANGE_B, FELD_A, JAGD_A, SCHRECK_A, KLEBRIG_A } from './synergy.js';
 import { RV_MARK, RV_KLINGE } from './world.js';
-import { aloft, unseen } from './world.js';
+import { aloft, unseen, chaseAir, groundMelee } from './world.js';
 // --- Schrottplatz und Urzeit ---
 import { stepPike, stepDrum, MOUNTED, PIKE } from './abilities.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
@@ -101,9 +101,11 @@ export const PROJECTILES = {
   // --- Task 6: Kreaturen --- boulder: Felsbrocken des Zyklopen (Bogen, landBoulder); hex: Zauber der Hexe (gerade, hexImpact)
   boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
   spit: { arc: false, speed: 380 },
+  // rock: Steinwurf der Nahkämpfer auf Flieger (Luft gegen Nahkampf, 20.11.), landet wie ein Pfeil
+  rock: { arc: true, speed: 400 },
 };
 // Bögen, die wie ein Pfeil den nächsten Körper am Landepunkt treffen (alle anderen Bögen explodieren)
-export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow']);
+export const ARROW_LIKE = new Set(['arrow', 'pilum', 'firearrow', 'rock']);
 // Je Art: [Grundflugzeit (nur Bögen), Bogenhöhe je Distanz, Streuung, Ton]
 const SHOT = {
   arrow: [.25, .16, 8, 'twang'],
@@ -119,6 +121,7 @@ const SHOT = {
   boulder: [.6, .42, 16, 'throw'],
   hex: [0, 0, 6, 'whoosh'],
   spit: [0, 0, 7, 'thwip'],
+  rock: [.2, .22, 9, 'throw'],
 };
 
 // Höhen der geraden Schüsse: am Boden in Laufhöhe (unter WALL_CLEAR_Z, Mauern blocken),
@@ -191,9 +194,13 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7), auch beim Troll, der gerade ein Frosch ist
   if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
-  // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen
-  if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3 &&
-      (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
+  // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen (×FOREST.COVER); gegen Angriffe aus der Luft
+  // (Verursacher fliegt, kein Schaden über Zeit) schützt das Blätterdach mehr: ×FOREST.AIR für jede Art (Luft gegen
+  // Nahkampf, 20.11.: Nahkämpfer können sich vor Fliegern in den Wald retten)
+  if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3) {
+    if (src && src.T.fly && !dot) m *= FOREST.AIR;
+    else if (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket') m *= FOREST.COVER;
+  }
   // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
   if (v.syn) {
     if ((v.syn & SB.schild) && (kind === 'arrow' || kind === 'bullet')) m *= SYN.SCHILD;
@@ -1067,7 +1074,7 @@ export function think(world, u, dt) {
   if (T.heal || T.support) { healer(world, u, dt); return; }
   // Ziel neu: Takt, kein oder totes Ziel, Seitenwechsel, oder es wurde für einen Nahkämpfer unerreichbar (Fledermausform,
   // Adler oben)
-  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || ((u.tg.batT > 0 || aloft(u.tg)) && outOfMelee(u, u.tg)) ||
+  if (u.rt <= 0 || !u.tg || !u.tg.alive || factionOf(world, u.tg) === factionOf(world, u) || ((u.tg.batT > 0 || (aloft(u.tg) && !chaseAir(u.tg))) && outOfMelee(u, u.tg)) ||
       (u.tg.hidden && unseen(u, u.tg))) {   // Task 5: Krokodil taucht ab
     let nt = nearestEnemy(world, u); u.rt = RETARGET_T[0] + world.rng() * RETARGET_T[1];
     if (nt && !T.fly && !nt.T.fly && world.flow) nt = pathTarget(world, u, nt);
@@ -1081,6 +1088,8 @@ export function think(world, u, dt) {
   // Hinlegen und Aufstehen laufen auch ohne Ziel zu Ende (und ohne Umdrehen mitten in der Bewegung)
   if (PRONE.has(u.type) && transit(world, u, dt)) return;
   // ohne Ziel zurück zum Vampir, aber nie über Lava oder Mauer (wie mit Ziel, unten)
+  // Luft gegen Nahkampf (20.11.): ohne erreichbares Ziel werfen Nahkämpfer Steine auf Flieger in der Nähe
+  if (!t && u.type !== 'vampir' && groundMelee(u)) { stoneUp(world, u, dt); return; }
   if (!t) { if (u.type === 'vampir') stepBat(world, u, dt, u.batOn && hazardAt(world, u.x, u.y)); return; }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
@@ -1095,7 +1104,13 @@ export function think(world, u, dt) {
   const reach = T.range + T.r + t.T.r;
   // Task 5: Adler pickt nur unten (abilities.eagleStep); Nahkämpfer am Boden erreichen ihn oben nicht (world.aloft)
   if (u.type === 'adler' && eagleStep(world, u, t, d, reach)) return;
-  if (d <= reach && aloft(t) && outOfMelee(u, t)) return;
+  if (u.type === 'ptera' && pteraStep(u, d, reach, dt)) return;
+  // Flugsaurier oben (chaseAir): darunter bleiben und Steine werfen, bis er zum Abwurf herabstößt
+  if (aloft(t) && outOfMelee(u, t)) {
+    u.stoneCd -= dt;
+    if (d <= STONE.R && u.stoneCd <= 0) throwStone(world, u, t);
+    if (d <= reach) { u.mx = 0; u.my = 0; return; }
+  }
   // Magier: Windstoß und Steinwand auch zwischen den Würfen (spells.spellReact, gedrosselt)
   if (u.type === 'magier' && u.cd > 0 && spellReact(world, u)) return;
   // Reiter reiten nach dem Sturmangriff durch die Reihen und wenden dann
@@ -1352,7 +1367,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     case 'laserbot': laserShot(world, u, t); break;
     case 'tesla': teslaArc(world, u, t); break;
     case 'speer': fire(world, u, t, 'pilum', undefined, undefined, T.dmg); u.swingT = .25; break;
-    case 'ptera': fire(world, u, t, 'bomb'); world.proj[world.proj.length - 1].stone = true; break;
+    case 'ptera': fire(world, u, t, 'bomb'); world.proj[world.proj.length - 1].stone = true; u.diveT = PTERA.LOW_T; break;
     case 'baer': case 'mega': case 'rex': {
       // Prankenhieb trifft mehrere
       const f = factionOf(world, u);
@@ -1659,4 +1674,32 @@ function cyclopsHit(world, u, t) {
   hurt(world, t, u.T.dmg * CYCLOPS.MELEE_DMG * (.85 + world.rng() * .3), 'melee', u);
   emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
   sound(world, 'thud');
+}
+
+/* ---------- Luft gegen Nahkampf (20.11., Wunsch Silas): Steinwurf ---------- */
+// Nahkämpfer am Boden (world.groundMelee) ohne erreichbares Ziel (nur noch Flieger übrig, die sie nicht erreichen:
+// Hubschrauber, Jet, Bomber, Kampfdrohne, Flugsaurier und Adler oben) gehen auf den nächsten feindlichen Flieger bis
+// SEEK px zu, bis er höchstens R·NEAR px weg ist, und werfen alle CD s (±20 %) einen Stein (Bogen wie ein Pfeil, Art
+// 'rock', Schaden DMG als 'arrow': Rüstung und Deckung wie beim Pfeil). Lava und Mauern meiden sie (hazardAt).
+// Luft behält den Vorteil (Duelle ~70 % für den Flieger), aber kein Nahkämpfer steht mehr tatenlos herum.
+export const FOREST = { COVER: .5, AIR: .35 };
+export const STONE = { R: 170, NEAR: .75, SEEK: 700, CD: 2, DMG: 3 };
+export function throwStone(world, u, t) {
+  u.stoneCd = STONE.CD * (.8 + world.rng() * .4); u.swingT = .25;
+  fire(world, u, t, 'rock', undefined, undefined, STONE.DMG);
+}
+function stoneUp(world, u, dt) {
+  const f = factionOf(world, u);
+  let best = null, bd = STONE.SEEK * STONE.SEEK;
+  for (const v of world.units) {
+    if (!v.alive || !v.T.fly || factionOf(world, v) === f || v.ashT > 0) continue;
+    const d2 = (v.x - u.x) ** 2 + (v.y - u.y) ** 2;
+    if (d2 < bd) { bd = d2; best = v; }
+  }
+  u.stoneCd -= dt;
+  if (!best) return;
+  const d = Math.sqrt(bd) || 1, nx = (best.x - u.x) / d, ny = (best.y - u.y) / d;
+  u.face = nx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
+  if (d > STONE.R * STONE.NEAR && !hazardAt(world, u.x + nx * 14, u.y + ny * 14)) { u.mx = nx * u.T.speed; u.my = ny * u.T.speed; u.run += dt; }
+  if (d <= STONE.R && u.stoneCd <= 0) throwStone(world, u, best);
 }

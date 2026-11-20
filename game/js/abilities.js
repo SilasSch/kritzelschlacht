@@ -1127,6 +1127,17 @@ export function eagleStep(world, u, t, d, reach) {
   if (d <= reach && u.z > EAGLE_REACH_Z) { u.mx = 0; u.my = 0; return true; }
   return false;
 }
+/* Flugsaurier (Luft gegen Nahkampf, 20.11.): kreist auf T.flyZ und stößt zum Steinwurf herab wie der Adler zum Picken.
+   Ist das Ziel in Reichweite + NEAR px und der nächste Wurf höchstens LEAD s entfernt, sinkt er auf LOW; erst unten
+   wirft er (oben wartet er über dem Ziel) und bleibt nach dem Wurf noch LOW_T s unten (u.diveT, combat.attack), dann
+   steigt er wieder. Unten (z ≤ EAGLE_REACH_Z) erreichen ihn Nahkämpfer (world.aloft). Liefert true, wenn er wartet. */
+export const PTERA = { LOW: 9, NEAR: 30, LEAD: .15, LOW_T: .1 };
+export function pteraStep(u, d, reach, dt) {
+  if (u.diveT > 0) u.diveT -= dt;
+  u.fz = u.diveT > 0 || (d <= reach + PTERA.NEAR && u.cd <= PTERA.LEAD) ? PTERA.LOW : u.T.flyZ;
+  if (d <= reach && u.cd <= 0 && u.z > EAGLE_REACH_Z) { u.mx = 0; u.my = 0; return true; }
+  return false;
+}
 /* Sturzflug: aus der Flughöhe auf einen Bodenfeind bis RANGE px, Fernkämpfer (data.RANGED) vor allen anderen (jeder
    Fernkämpfer in RANGE schlägt jeden Nahkämpfer), unter ihnen der nächste (Fliehende zählen doppelt so weit; versteckte
    Krokodile nicht). Fliegt mit SPEED-fachem Tempo hin, sinkt rechtzeitig auf LOW; der erste Treffer

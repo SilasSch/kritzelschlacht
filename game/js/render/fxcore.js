@@ -1229,9 +1229,9 @@ export function createFxCore(hooks = {}, opt = {}) {
       }
       case 'hit':
         if (e.kind === 'bullet' && take('impact')) bulletHit(e);
-        else if ((e.kind === 'arrow' || e.kind === 'pilum' || e.kind === 'firearrow') && take('impact')) {
+        else if ((e.kind === 'arrow' || e.kind === 'pilum' || e.kind === 'firearrow' || e.kind === 'rock') && take('impact')) {
           // Pfeil im Ziel: zwei Holzsplitter
-          for (let i = 0; i < 2; i++) { const p = add('dot', e.x + rnd(-2, 2), e.y - 6, rnd(.25, .4), rnd(.8, 1.2), 0xa5692f); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(30, 70); p.ay = 260; }
+          for (let i = 0; i < 2; i++) { const p = add('dot', e.x + rnd(-2, 2), e.y - 6, rnd(.25, .4), rnd(.8, 1.2), e.kind === 'rock' ? 0x9a9488 : 0xa5692f); if (!p) break; p.vx = rnd(-40, 40); p.vy = -rnd(30, 70); p.ay = 260; }
         }
         if (e.flank && take('misc')) { const p = add('dot', e.x, e.y - 10, .35, 2.6, 0xffb800); if (p) { p.vx = rnd(-20, 20); p.vy = -40; p.drag = DRAG; } }
         break;

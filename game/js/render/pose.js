@@ -379,7 +379,7 @@ export function projScreen(p, out = {}) {
     out.x = p.x0 + (p.x1 - p.x0) * q; out.y = p.y0 + (p.y1 - p.y0) * q - p.drop * (1 - q * q);
     out.a = Math.atan2(p.y1 - p.y0 + 2 * q * p.drop, p.x1 - p.x0);
   } else if (p.arc) {
-    const q = p.t < p.dur ? p.t / p.dur : 1, tz = p.kind === 'arrow' || p.kind === 'pilum' || p.kind === 'firearrow' ? p.tz || 0 : 0;
+    const q = p.t < p.dur ? p.t / p.dur : 1, tz = p.kind === 'arrow' || p.kind === 'pilum' || p.kind === 'firearrow' || p.kind === 'rock' ? p.tz || 0 : 0;
     const x = p.x0 + (p.x1 - p.x0) * q, y = p.y0 + (p.y1 - p.y0) * q;
     out.x = x; out.y = y - Math.sin(q * Math.PI) * p.h - q * tz;
     out.a = Math.atan2(p.y1 - p.y0 - Math.PI * Math.cos(q * Math.PI) * p.h - tz, p.x1 - p.x0);

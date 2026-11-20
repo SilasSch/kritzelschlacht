@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createCamera, screenToWorld, worldToScreen, zoomAt, pan, clampCamera, resizeCamera } from '../game/js/camera.js';
+import { createCamera, screenToWorld, worldToScreen, zoomAt, pan, clampCamera, resizeCamera, setPadding } from '../game/js/camera.js';
 
 const near = (a, b, e = 1e-6) => Math.abs(a - b) < e;
 
@@ -75,3 +75,14 @@ test('resizeCamera passt fit an und behält Zoom-Verhältnis', () => {
   assert.equal(c.viewW, 800);
   assert.ok(c.zoom >= c.fit - 1e-9 && c.zoom <= c.fit * 4 + 1e-9);
 });
+
+test('clampCamera: gezoomt berücksichtigt HUD-Padding für oberen und unteren Rand', () => {
+  const c = createCamera(1200, 750, 1400, 820);
+  setPadding(c, 70, 160);
+  zoomAt(c, 600, 375, 2.5);
+  pan(c, 0, 1e6);
+  assert.ok(near(worldToScreen(c, 0, 0).y, 70), `oberer Rand bei y=70 statt ${worldToScreen(c, 0, 0).y}`);
+  pan(c, 0, -1e6);
+  assert.ok(near(worldToScreen(c, 0, 820).y, 750 - 160), `unterer Rand bei y=${750 - 160} statt ${worldToScreen(c, 0, 820).y}`);
+});
+

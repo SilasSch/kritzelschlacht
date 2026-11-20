@@ -2,7 +2,7 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
-import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain } from './world.js';
+import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain, cellIndex } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect } from './sim.js';
 import { createCamera, resizeCamera, setPadding, WORLD_W, WORLD_H } from './camera.js';
 import { bindInput } from './input.js';
@@ -218,6 +218,7 @@ function saveSandbox() {
 
 function enterSandbox() {
   endReplay(true);
+  coach.stop();
   ui.hideOverlays();
   if (!game.mission && !game.battle && !game.editor) return;
   leaveBattle(); leaveEditor();
@@ -251,6 +252,7 @@ function loadMission(x, custom = null) {
 // Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
 function loadLevelDef(def, opts = {}) {
   endReplay(true);
+  if (opts.kind !== 'tutorial') coach.stop();
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
   leaveBattle(); leaveEditor();
   clearWorld();
@@ -416,6 +418,7 @@ const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, 
 
 function enterBattle() {
   endReplay(true);
+  coach.stop();
   const cur = game.battle;
   if (cur) {
     // schon in der Schlacht (Reiter erneut geklickt, etwa bei offener Missionsliste): nach dem Kampf die Auswertung zeigen
@@ -485,7 +488,11 @@ function onlineFight(list, seed, map = 'feld') {
   cancelBatch(); endReplay(true);
   clearWorld(); world.teamMode = true;
   applyMap(world, map); markAll();   // Karte der Runde (rules.js), auf beiden Geräten gleich
-  for (const u of list) { const n = spawn(world, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
+  for (const u of list) {
+    if (!UNITS[u.type].fly && world.terr[cellIndex(world, u.x, u.y)] === 4) continue;
+    const n = spawn(world, u.type, u.x, u.y, u.team);
+    if (u.shape) applyShape(n, u.shape, true);
+  }
   rebuildHash(world);
   b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
   fight(b, seed);
@@ -573,6 +580,8 @@ game.editorUI = editorUI;
 
 // level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
 function enterEditor(level = null) {
+  endReplay(true);
+  coach.stop();
   ui.hideOverlays();
   if (game.editor && !level) return;
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
@@ -647,6 +656,10 @@ async function loadCode(text) {
   if (d.k === 'duel' || d.k === 'duelres') { duel.load(d); return; }   // Code-Duell (18.11.)
   if (d.k === 'dailyres') { board.addCode(d); return; }   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
   if (d.k === 'battle') {
+    game.endReplay(true);
+    if (online.active()) online.leave(null);
+    if (duel.active()) duel.stop(true);
+    if (game.battle && game.battle.hot) hotseat.stop(true);
     if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
     clearWorld(); world.teamMode = true;
     applyBattle(world, d);
@@ -728,9 +741,12 @@ const actions = {
   undo: () => game.undo(),
   togglePause: () => game.togglePause(),
   toggleMute: () => game.toggleMute(),
+  toggleRanges: () => { if (game.mission && game.mission.phase === 'plan') game.toggleRanges(); },
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
-  // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
-  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen(),
+  // offenes Modal (.ov oder Online-Abfrage): keine Tastenkürzel (input.js)
+  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen()
+    || !!document.querySelector('.ov:not([hidden])')
+    || !!(document.getElementById('onlAsk') && !document.getElementById('onlAsk').hidden),
 };
 
 // Kritzel-Formen (Audit 18.11.): Form des Strichs erkennen und seinen Einheiten den Bonus geben. Der Gegner steht in
@@ -830,7 +846,7 @@ let acc = 0, last = performance.now(), uiT = 0;
 const params = new URLSearchParams(location.search);
 
 
-const bench = createBenchHud({ params, host, world, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
+const bench = createBenchHud({ params, host, world, cam, game, ui, renderer, STEP, clearWorld, markAll, simStep, drainEvents });
 
 const fpsBox = params.has('fps') && !bench.n ? document.createElement('div') : null;
 let fpsN = 0, fpsT = 0;
@@ -961,4 +977,5 @@ else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
 const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || gl.lost; }
 requestAnimationFrame(t => { last = t; frame(t); });

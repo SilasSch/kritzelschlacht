@@ -341,8 +341,8 @@ export const FLOAT_T = 2, SINK_T = 3, ASH_T = 2;   // s
 // solange der nächste Punkt auch Wasser ist: am Ufer bleibt sie hängen. Deterministisch, ohne Zufall.
 export const CURRENT = { x: 7, y: 2.5, SWAY: 2.5, HZ: .35 };
 
-export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null) {
-  return { kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y, crash };
+export function makeCorpse(kind, part, type, team, face, x, y, z, vx, vy, vz, rot, vrot, crash = null, kin = type) {
+  return { kind, part, type, team, kin, face, x, y, z, vx, vy, vz, rot, vrot, state: 'fly', t: 0, fade: 0, px: x, py: y, crash };
 }
 
 const liquid = tt => tt === WATER || tt === LAVA;

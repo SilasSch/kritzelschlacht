@@ -41,13 +41,15 @@ export function createFlow(world) {
     cost: new Uint8Array(0), hazards: 0,          // hazards: Mauer-, Lava-, Wasser- und Dornenzellen im Geländeraster
     head: new Int32Array(NB), next: new Int32Array(0), prev: new Int32Array(0),
     fields: new Map(), list: [], gen: 0,
-    tfields: new Map(), tlist: [],                // Felder je Luftziel (flowDirTo): Schlüssel Einheit          // list: dieselben Felder in Reihenfolge (Schleifen ohne Iteratoren)
+    tfields: new Map(), tlist: [], tbudget: PATH_MAX_PER_STEP,  // Felder je Luftziel (flowDirTo): Schlüssel Einheit, höchstens PATH_TARGET_MAX
     // Zähler für ?debug (__kritzel.flow()): Neuberechnungen gesamt, ms gesamt/letzte/max, je s
     stats: { recomputes: 0, ms: 0, lastMs: 0, maxMs: 0, rate: 0, msRate: 0, winN: 0, winMs: 0, winT: 0 },
   };
   rebuildCost(world, flow);
   return flow;
 }
+
+const PATH_TARGET_MAX = 32;
 
 function makeField(flow, f) {
   return { f, dist: new Int32Array(flow.N).fill(INF), age: 0, dirty: true, ready: false, gen: 0, tg: null, idle: 0 };
@@ -60,7 +62,7 @@ function rebuildCost(world, flow) {
   if (N !== flow.N) {
     flow.cost = new Uint8Array(N); flow.next = new Int32Array(N); flow.prev = new Int32Array(N);
     for (let k = 0; k < flow.list.length; k++) flow.list[k].dist = new Int32Array(N).fill(INF);
-    for (let k = 0; k < flow.tlist.length; k++) flow.tlist[k].dist = new Int32Array(N).fill(INF);
+    flow.tfields.clear(); flow.tlist.length = 0;
   }
   flow.PW = PW; flow.PH = PH; flow.N = N; flow.GW = GW; flow.GH = GH;
   flow.terrRef = terr; flow.ver = world.terrainVersion | 0;
@@ -173,12 +175,13 @@ function timed(world, flow, field) {
 // Ein Schritt: Raster bei Geländeänderung neu, Fraktionen abgleichen, gestaffelt neu berechnen.
 export function updateFlow(world, flow, dt) {
   const fields = flow.fields, list = flow.list;
+  flow.tbudget = PATH_MAX_PER_STEP;
   if (flow.ver !== (world.terrainVersion | 0) || flow.terrRef !== world.terr || flow.GW !== world.GW || flow.GH !== world.GH) {
     rebuildCost(world, flow);
     for (let k = 0; k < list.length; k++) list[k].dirty = true;
     for (let k = 0; k < flow.tlist.length; k++) flow.tlist[k].dirty = true;
   }
-  // Felder je Luftziel: altern; tot oder PATH_TARGET_KEEP s ohne Nachfrage fallen sie weg
+  // Felder je Luftziel-Zelle: altern; PATH_TARGET_KEEP s ohne Nachfrage fallen sie weg
   { const tl = flow.tlist; let m = 0;
     for (let k = 0; k < tl.length; k++) { const fl = tl[k]; fl.age += dt; fl.idle += dt; if (fl.tg.alive && fl.idle < PATH_TARGET_KEEP) tl[m++] = fl; else flow.tfields.delete(fl.tg); }
     tl.length = m; }
@@ -232,14 +235,30 @@ export function flowDir(flow, faction, x, y) {
 }
 
 // Wie flowDir, aber zum Boden unter einer bestimmten (fliegenden) Einheit tg: eigenes Feld nur mit dieser Quelle, bei
-// Bedarf angelegt und berechnet (alle PATH_REFRESH s oder nach Geländeänderung neu; 80×45 Felder kosten wenig). So
-// laufen Schützen um Mauern herum, bis sie einen Hubschrauber in Reichweite haben (vorher: an der Mauer einschlagen).
+// Bedarf angelegt und berechnet (alle PATH_REFRESH s oder nach Geländeänderung neu). So laufen Schützen um Mauern
+// herum, bis sie einen Hubschrauber in Reichweite haben. Gegen Schwärme (#61): höchstens PATH_TARGET_MAX Felder (das am
+// längsten unbenutzte wird wiederverwendet) und tbudget Neuberechnungen je Schritt; ohne frisches Feld: null.
 export function flowDirTo(world, flow, tg, x, y) {
   let fl = flow.tfields.get(tg);
-  if (!fl) { fl = makeField(flow, null); fl.tg = tg; fl.idle = 0; flow.tfields.set(tg, fl); flow.tlist.push(fl); }
+  if (!fl) {
+    if (flow.tbudget <= 0) return null;
+    if (flow.tlist.length >= PATH_TARGET_MAX) {
+      let ev = 0;
+      for (let k = 1; k < flow.tlist.length; k++) if (flow.tlist[k].idle > flow.tlist[ev].idle) ev = k;
+      fl = flow.tlist[ev];
+      flow.tfields.delete(fl.tg);
+      fl.tg = tg; fl.dirty = true; fl.ready = false; fl.age = 0;
+    } else {
+      fl = makeField(flow, null); fl.tg = tg; flow.tlist.push(fl);
+    }
+    flow.tfields.set(tg, fl);
+  }
   fl.idle = 0;
-  if (fl.dirty || !fl.ready || fl.age >= PATH_REFRESH) timed(world, flow, fl);
-  return fieldDir(flow, fl, x, y);
+  if ((fl.dirty || !fl.ready || fl.age >= PATH_REFRESH) && flow.tbudget > 0) {
+    timed(world, flow, fl);
+    flow.tbudget--;
+  }
+  return fl.ready ? fieldDir(flow, fl, x, y) : null;
 }
 
 // Erreichte Quelle des Felds der Fraktion von (x, y) aus: dem Gefälle folgen bis dist 0. Liefert den Mittelpunkt der

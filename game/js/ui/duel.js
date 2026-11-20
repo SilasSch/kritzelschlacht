@@ -14,6 +14,7 @@ const CSS = `
 .card.duelset{max-width:760px}
 .vopts.r4{grid-template-columns:repeat(4,1fr)}
 .vopts.small .btn{padding:7px 9px}.vopts.small .btn b{font-size:16px}
+@media (max-width:600px){.vopts.r4{grid-template-columns:repeat(2,1fr)}}
 `;
 
 export function createDuelUI({ game, world, ui, audio, online, onlineFight, clearWorld, undoStack, shareDlg, encode, enterBattle, editBattle, markAll }) {
@@ -37,11 +38,12 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     if (h && (h.step === 'blau' || h.step === 'rot')) finish();
     else if (st.role === 'a' && st.a) showChallenge();
     else if (st.role === 'b' && st.data && game.battle.phase === 'done') showAnswer();
+    else if (st.role === 'view' && game.battle && game.battle.phase === 'done' && game.battle.result) ui.showBattleResult(game.battle.result);
   };
 
   /* ---------- Karte ---------- */
   const ov = document.createElement('div');
-  ov.className = 'ov'; ov.id = 'ovDuel'; ov.hidden = true; ov.style.zIndex = 7;
+  ov.className = 'ov'; ov.id = 'ovDuel'; ov.hidden = true;
   ov.innerHTML = '<div class="card onl shadow" role="dialog" aria-modal="true" aria-labelledby="duelTitle"></div>';
   $('app').append(ov);
   const card = ov.firstChild;
@@ -139,7 +141,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     ui.toast(tr('Antwort geladen: euer Kampf läuft.'));
     sync();
   }
-  function stop() {
+  function stop(silent = false) {
     const b = battleRef; st = null; battleRef = null; hideCard();
     if (b && game.battle === b) {
       b.hot = null;
@@ -148,7 +150,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
       clearWorld(); world.teamMode = true;
       ui.renderUnits(); ui.updateBattle(); ui.updateCounts(); ui.updateControls();
     }
-    ui.toast(tr('Code-Duell beendet.'));
+    if (!silent) ui.toast(tr('Code-Duell beendet.'));
     sync();
   }
 
@@ -169,7 +171,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
       <div class="btnrow">${st.role === 'b' ? `<button class="go" id="duelAnswer">${tr('Antwort-Code')}</button>` : ''}<button class="go" id="duelRematch">${tr('Revanche')}</button><button class="btn" id="duelEnd">${tr('Duell beenden')}</button></div>`;
     if ($('duelAnswer')) $('duelAnswer').onclick = showAnswer;
     $('duelRematch').onclick = () => { const c = st.cfg; startA({ cat: c.cat, map: c.map || 'feld', budget: c.budget }); };
-    $('duelEnd').onclick = stop;
+    $('duelEnd').onclick = () => stop();
   }
 
   /* ---------- Anzeige ---------- */
@@ -185,9 +187,9 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     for (const id of ['batHot', 'batOnl', 'batSwap', 'batShare']) if ($(id)) $(id).hidden = true;
     const h = b.hot, side = h.step === 'blau' || h.step === 'rot' ? h.step : null, c = st.cfg;
     $('batClear').hidden = !side;
-    const label = tr(side ? 'Fertig' : st.role === 'a' ? 'Code zeigen' : st.role === 'b' && b.phase === 'done' ? 'Antwort-Code' : b.phase === 'fight' ? 'Kampf läuft' : 'Fertig');
+    const label = tr(side ? 'Fertig' : st.role === 'a' ? 'Code zeigen' : st.role === 'b' && b.phase === 'done' ? 'Antwort-Code' : st.role === 'view' && b.phase === 'done' ? 'Ergebnis' : b.phase === 'fight' ? 'Kampf läuft' : 'Fertig');
     setText(go, label);
-    go.disabled = !(side || (st.role === 'a' && st.a) || (st.role === 'b' && st.data && b.phase === 'done'));
+    go.disabled = !(side || (st.role === 'a' && st.a) || (st.role === 'b' && st.data && b.phase === 'done') || (st.role === 'view' && b.phase === 'done' && b.result));
     const head = `${tr('Code-Duell')} · ${tr(CAT_NAME[c.cat])} · ${tr((MAP[c.map] || MAP.feld).n)}`;
     const tail = side ? tr(side === 'blau' ? 'du malst links: {a} / {b} Punkte' : 'du malst rechts: {a} / {b} Punkte', { a: fmtPts(h.spent[side]), b: budgetOf(c) })
       : tr(st.role === 'a' ? 'Code verschickt · die Antwort mit „Code laden“ einfügen'
@@ -205,5 +207,5 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
   function frame() {
     if (st && game.battle !== battleRef) { st = null; battleRef = null; hideCard(); }
   }
-  return { load, frame, covered: () => !ov.hidden, active: () => !!st };
+  return { load, stop, frame, covered: () => !ov.hidden, active: () => !!st };
 }

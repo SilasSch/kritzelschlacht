@@ -278,3 +278,38 @@ test('Fix-Runde 1: einzelner Sanitäter 10 s lang immer volle Heilung; kein Gift
   b.cd = 0; attack(w, b, e, 5, 5, 0);
   assert.ok(!e.alive); assert.equal(b.stingTg, null);
 });
+
+test('Explosionen: großer Boss am Rand (R + MAX_R), Steilfeuer unverändert, Felsen ignoriert Flieger (#87)', async () => {
+  const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
+  const { blast, stepProjectiles } = await import('../game/js/combat.js');
+  const { UNITS } = await import('../game/js/data.js');
+  const w = createWorld(1400, 800, 7); w.teamMode = true;
+  // Panzer hat r = 20 (> 16); bei Abstand R + 18 muss blast ihn noch finden
+  const tank = spawn(w, 'panzer', 400 + 30 + 18, 400, 'rot');
+  const hpTank = tank.hp;
+  rebuildHash(w);
+  blast(w, 400, 400, 30, 50, 'blau', null, 'blast', 0);
+  assert.ok(tank.hp < hpTank, 'Panzer am Rand von blast getroffen');
+  // Steilfeuer (Granate/Mörser via landArc) bleibt ohne Höhenkappe wie bisher: mod-4 und mod-5 sind darauf abgestimmt
+  const w1 = createWorld(1400, 800, 7); w1.teamMode = true;
+  const s1 = spawn(w1, 'grenadier', 300, 400, 'blau');
+  const jet = spawn(w1, 'jet', 400, 400, 'rot');
+  const g = spawn(w1, 'krieger', 400, 400, 'rot');
+  const hpJet = jet.hp, hpG = g.hp;
+  rebuildHash(w1);
+  w1.proj.push({ kind: 'grenade', x: 400, y: 400, x0: 300, y0: 400, x1: 400, y1: 400, t: .99, dur: 1, arc: true, h: 30, dmg: 50, R: 30, src: s1, f: 'blau', tg: null });
+  stepProjectiles(w1, .05);
+  assert.ok(jet.hp < hpJet, 'Steilfeuer trifft weiterhin auch Flieger über dem Einschlag');
+  assert.ok(g.hp < hpG, 'Bodentruppe von Granate getroffen');
+  // Felsen (boulder) trifft keine Flieger
+  const w2 = createWorld(1400, 800, 7); w2.teamMode = true;
+  const s2 = spawn(w2, 'zyklop', 400, 400, 'blau');
+  const bee = spawn(w2, 'biene', 500, 400, 'rot');
+  const k = spawn(w2, 'krieger', 500, 400, 'rot');
+  const hpBee = bee.hp, hpK = k.hp;
+  rebuildHash(w2);
+  w2.proj.push({ kind: 'boulder', x: 500, y: 400, x0: 400, y0: 400, x1: 500, y1: 400, t: .99, dur: 1, arc: true, h: 40, dmg: 30, R: 34, src: s2, f: 'blau', tg: null });
+  stepProjectiles(w2, .05);
+  assert.equal(bee.hp, hpBee, 'Felsen ignoriert fliegende Biene');
+  assert.ok(k.hp < hpK, 'Felsen trifft Bodentruppe');
+});

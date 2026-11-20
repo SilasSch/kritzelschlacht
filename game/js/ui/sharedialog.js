@@ -16,12 +16,12 @@ export function createShareDialog(host) {
   card.append(h, p, ta, msg, row); ov.append(card); host.append(ov);
   card.querySelector('h2').id = 'shareTitle'; card.setAttribute('aria-labelledby', 'shareTitle');
 
-  let onMain = null, busy = false;
+  let onMain = null, busy = false, gen = 0;
   const setMsg = (t, bad = false) => { msg.textContent = tr(t || ''); msg.classList.toggle('bad', !!bad); };
-  function open() { ov.hidden = false; setMsg(''); }
-  function close() { ov.hidden = true; onMain = null; }
+  function open() { gen++; ov.hidden = false; setMsg(''); }
+  function close() { gen++; ov.hidden = true; onMain = null; bMain.disabled = false; }
   bClose.onclick = close;
-  bMain.onclick = () => { if (onMain && !busy) onMain(); };
+  bMain.onclick = () => { if (onMain && !busy && !bMain.disabled) onMain(); };
   ov.addEventListener('pointerdown', e => { if (e.target === ov) close(); });
   window.addEventListener('keydown', e => {
     if (ov.hidden) return;
@@ -42,10 +42,17 @@ export function createShareDialog(host) {
   // Code zeigen. code: Text oder Promise (encode ist asynchron)
   async function showCode(code, title = 'Teilen', text = 'Kopiere diesen Code und schicke ihn weiter. Wer ihn mit „Code laden“ einfügt, bekommt genau diese Aufstellung.') {
     h.textContent = tr(title); p.textContent = tr(text);
-    ta.readOnly = true; ta.value = '…'; bMain.textContent = tr('Kopieren'); bMain.hidden = false; bClose.textContent = tr('Schließen');
+    ta.readOnly = true; ta.value = '…'; bMain.textContent = tr('Kopieren'); bMain.hidden = false; bMain.disabled = true; bClose.textContent = tr('Schließen');
     onMain = copy; open();
-    try { ta.value = await code; setMsg(tr('{n} Zeichen', { n: ta.value.length })); }
-    catch (e) { ta.value = ''; setMsg(tr('Der Code konnte nicht erstellt werden.'), true); bMain.hidden = true; }
+    const myGen = gen;
+    try {
+      const val = await code;
+      if (myGen !== gen || ov.hidden) return;
+      ta.value = val; bMain.disabled = false; setMsg(tr('{n} Zeichen', { n: ta.value.length }));
+    } catch (e) {
+      if (myGen !== gen || ov.hidden) return;
+      ta.value = ''; setMsg(tr('Der Code konnte nicht erstellt werden.'), true); bMain.hidden = true; bMain.disabled = false;
+    }
     ta.focus(); ta.select();
   }
 
@@ -53,7 +60,7 @@ export function createShareDialog(host) {
   function openLoad(load) {
     h.textContent = tr('Code laden');
     p.textContent = tr('Füge einen Kritzelschlacht-Code ein: eine geteilte Schlacht oder ein eigenes Level.');
-    ta.readOnly = false; ta.value = ''; bMain.textContent = tr('Laden'); bMain.hidden = false; bClose.textContent = tr('Abbrechen');
+    ta.readOnly = false; ta.value = ''; bMain.textContent = tr('Laden'); bMain.hidden = false; bMain.disabled = false; bClose.textContent = tr('Abbrechen');
     onMain = async () => {
       busy = true; setMsg(tr('Lädt …'));
       try { await load(ta.value); close(); }

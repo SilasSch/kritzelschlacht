@@ -438,7 +438,7 @@ const EN = {
   "Lava": "Lava",
   "Verbrennt alles, was nicht fliegt. Niemand läuft freiwillig hinein, Hineingeschleuderte laufen sofort heraus.": "Burns everything that doesn't fly. Nobody walks in voluntarily, and anyone flung in runs right back out.",
   "Wald": "Forest",
-  "Deckung: halber Schaden durch Pfeile und Explosionen, nur ein Drittel durch Angriffe aus der Luft. Feuer setzt ihn in Brand.": "Cover: half damage from arrows and explosions, only a third from air attacks. Fire sets it ablaze.",
+  "Deckung: halber Schaden durch Pfeile und Explosionen, nur ein Drittel durch Angriffe von hoch oben. Feuer setzt ihn in Brand.": "Cover: half damage from arrows and explosions, only a third from attacks from high above. Fire sets it ablaze.",
   "Zum Abwurf stößt er kurz herab, nur dann erreichen ihn Nahkämpfer. Oben werfen sie Steine nach ihm.": "It swoops down briefly to drop rocks; only then can melee fighters reach it. While it is high, they throw stones at it.",
   "Mauer": "Wall",
   "Blockiert Bodentruppen, bis sie zerschlagen wird.": "Blocks ground troops until it is smashed.",

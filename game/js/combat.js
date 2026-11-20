@@ -194,11 +194,12 @@ export function hurt(world, v, a, kind, src, dot = false) {
   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7), auch beim Troll, der gerade ein Frosch ist
   if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
-  // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen (×FOREST.COVER); gegen Angriffe aus der Luft
-  // (Verursacher fliegt, kein Schaden über Zeit) schützt das Blätterdach mehr: ×FOREST.AIR für jede Art (Luft gegen
-  // Nahkampf, 20.11.: Nahkämpfer können sich vor Fliegern in den Wald retten)
+  // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen (×FOREST.COVER); gegen Angriffe von oben (Verursacher
+  // fliegt über den Baumkronen, T.flyZ ≥ FOREST.TOP, kein Schaden über Zeit) schützt das Blätterdach mehr: ×FOREST.AIR für
+  // jede Art (Luft gegen Nahkampf, 20.11.: Nahkämpfer können sich vor Fliegern in den Wald retten). Wer tief zwischen den
+  // Bäumen fliegt (Bienen, Geist, Hexe, Phönix), bekommt nur die normale Deckung.
   if (!v.T.fly && world.terr[cellIndex(world, v.x, v.y)] === 3) {
-    if (src && src.T.fly && !dot) m *= FOREST.AIR;
+    if (src && src.T.fly && src.T.flyZ >= FOREST.TOP && !dot) m *= FOREST.AIR;
     else if (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket') m *= FOREST.COVER;
   }
   // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
@@ -1688,7 +1689,7 @@ function cyclopsHit(world, u, t) {
 // SEEK px zu, bis er höchstens R·NEAR px weg ist, und werfen alle CD s (±20 %) einen Stein (Bogen wie ein Pfeil, Art
 // 'rock', Schaden DMG als 'arrow': Rüstung und Deckung wie beim Pfeil). Lava und Mauern meiden sie (hazardAt).
 // Luft behält den Vorteil (Duelle ~70 % für den Flieger), aber kein Nahkämpfer steht mehr tatenlos herum.
-export const FOREST = { COVER: .5, AIR: .35 };
+export const FOREST = { COVER: .5, AIR: .35, TOP: 28 };
 export const STONE = { R: 170, NEAR: .75, SEEK: 700, CD: 2, DMG: 3 };
 export function throwStone(world, u, t) {
   u.stoneCd = STONE.CD * (.8 + world.rng() * .4); u.swingT = .25;

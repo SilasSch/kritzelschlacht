@@ -65,8 +65,10 @@ test('Wald: Angriffe aus der Luft machen auf Bodentruppen im Wald nur FOREST.AIR
   hurt(w, v, 10, 'arrow', s); const arrow = UNITS.krieger.hp - v.hp; v.hp = UNITS.krieger.hp;
   assert.ok(Math.abs(air - open * FOREST.AIR) < 1e-9, `aus der Luft ${air} von ${open}`);
   assert.ok(Math.abs(arrow - 10 * FOREST.COVER) < 1e-9, `Pfeil ${arrow}`);
-  // Biss einer Biene (Nahkampf aus der Luft) wird auch gedämpft, ihr Gift (Schaden über Zeit) nicht
-  const b = spawn(w, 'biene', 410, 400, 'rot');
-  hurt(w, v, 10, 'melee', b); assert.ok(Math.abs(UNITS.krieger.hp - v.hp - 10 * FOREST.AIR) < 1e-9); v.hp = UNITS.krieger.hp;
+  // Biss des Adlers (Nahkampf von oben) wird auch gedämpft; Bienen fliegen tief zwischen den Bäumen (unter FOREST.TOP):
+  // ihr Stich und ihr Gift bleiben voll
+  const a = spawn(w, 'adler', 410, 400, 'rot'), b = spawn(w, 'biene', 410, 400, 'rot');
+  hurt(w, v, 10, 'melee', a); assert.ok(Math.abs(UNITS.krieger.hp - v.hp - 10 * FOREST.AIR) < 1e-9); v.hp = UNITS.krieger.hp;
+  hurt(w, v, 10, 'melee', b); assert.equal(UNITS.krieger.hp - v.hp, 10); v.hp = UNITS.krieger.hp;
   hurt(w, v, 10, 'poison', b, true); assert.equal(UNITS.krieger.hp - v.hp, 10);
 });

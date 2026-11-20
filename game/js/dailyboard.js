@@ -55,7 +55,7 @@ export function acceptOld(date, v, r, army) {
   let minSpent = 1;
   if (army !== undefined) {
     try {
-      const a = dailyArmy(date, army);
+      const a = dailyArmy(date, army, WORLD_W, WORLD_H, false);   // ohne Budget: alte Versionen hatten teils andere Kosten (Bienen 0,55 am 18.11.)
       minSpent = Math.max(1, a.spent * 0.5);
     } catch (e) { return null; }
   }
@@ -90,7 +90,7 @@ export function placeDaily(world, level) {
 }
 
 // Armee prüfen und als Einheitenliste liefern; wirft mit verständlicher Meldung
-export function dailyArmy(date, army, W = WORLD_W, H = WORLD_H) {
+export function dailyArmy(date, army, W = WORLD_W, H = WORLD_H, checkBudget = true) {
   if (!validDate(date)) throw new Error('Kein gültiges Datum.');
   const L = dailyLevel(date);
   const us = unpackArmy(army, 'blau', W, H, null);
@@ -103,7 +103,7 @@ export function dailyArmy(date, army, W = WORLD_W, H = WORLD_H) {
     if (u.x > zx + 1) throw new Error('Einheit hinter der Mallinie.');
     cost += UNITS[u.type].cost;
   }
-  if (cost > L.budget + EPS) throw new Error('Budget überschritten.');
+  if (checkBudget && cost > L.budget + EPS) throw new Error('Budget überschritten.');
   return { level: L, units: us, spent: Math.round(cost * 100) / 100 };
 }
 
@@ -166,14 +166,12 @@ export function checkNow(date, army, stamp = null) { const c = createCheck(date,
 export const stampOf = res => ({ v: SIM_VERSION, r: { win: !!res.win, spent: res.spent, time: res.time, stars: res.stars } });
 const cleanStamp = e => (e && VER_RE.test(e.v || '') && e.r && typeof e.r === 'object' ? { v: e.v, r: { win: e.r.win === true, spent: +e.r.spent || 0, time: +e.r.time || 0, stars: +e.r.stars || 0 } } : {});
 
-// Sortierung: geprüfte Siege der aktuellen Version vorn, dann Alt-Versionen (weniger Punkte, kürzere Zeit, früher eingetragen)
+// Sortierung: Siege vorn, alte und aktuelle Version gemischt (weniger Punkte, dann kürzere Zeit, dann früher eingetragen)
 export function rankEntries(list) {
   return list.slice().sort((a, b) => {
     const wa = a.res && a.res.win ? 0 : 1, wb = b.res && b.res.win ? 0 : 1;
     if (wa !== wb) return wa - wb;
     if (!wa) {
-      const oa = a.res.old ? 1 : 0, ob = b.res.old ? 1 : 0;
-      if (oa !== ob) return oa - ob;
       if (Math.abs(a.res.spent - b.res.spent) > EPS) return a.res.spent - b.res.spent;
       if (Math.abs(a.res.time - b.res.time) > EPS) return a.res.time - b.res.time;
     }

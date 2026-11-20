@@ -1118,11 +1118,20 @@ function wheel(c, r, x, y, s, f) {
 function dinoLeg(c, r, x, y, l, col, w = 3) {
   Ln(c, [[x * r, y * r], [(x + l) * r, (y + .45) * r], [(x + l * .5) * r, (y + .75) * r]], col, w);
 }
-// Mensch der Urzeit: Körper, Lendenschurz (Teamfarbe), Haar
-function caveman(c, r, k, f, hair = HAIR) {
+// Mensch der Urzeit: Körper, Lendenschurz (Teamfarbe), Haar. Unterscheidbar (20.11.) über je ein Merkmal:
+// o.w Körperbreite, o.robe Gewand bis zu den Füßen (Schamanin), o.pelt Fell über der Schulter (Höhlenmensch),
+// o.tail Pferdeschwanz nach hinten (Speerwerfer); die Haarfarbe hair dazu.
+function caveman(c, r, k, f, hair = HAIR, o = {}) {
+  const w = o.w || .82;
   feet(c, r, '#c99a72', f);
-  E(c, 0, r * .05, r * .82, r * .9, k.col);
-  poly(c, r, [[-.8, .25], [.8, .25], [.7, .75], [.3, .6], [0, .8], [-.35, .6], [-.72, .78]], k.shield, 1.2);
+  if (o.tail) poly(c, r, [[-.55, -.75], [-1.15, -.55 + (f ? .06 : 0)], [-1.25, -.2], [-1.0, -.35], [-.7, -.4]], hair, 1.2);
+  E(c, 0, r * .05, r * w, r * .9, k.col);
+  if (o.robe) poly(c, r, [[-.62, -.15], [.62, -.15], [.8, .55], [.85, .92], [-.85, .92], [-.8, .55]], o.robe, 1.2);
+  poly(c, r, [[-w + .02, .25], [w - .02, .25], [w - .12, .75], [.3, .6], [0, .8], [-.35, .6], [-w + .1, .78]], k.shield, 1.2);
+  if (o.pelt) {
+    poly(c, r, [[-.8, -.05], [-.35, -.42], [.25, .32], [-.05, .5], [-.55, .35]], o.pelt, 1.2);
+    for (const [x, y] of [[-.5, -.05], [-.2, .12], [-.45, .25], [.02, .32]]) E(c, x * r, y * r, r * .07, r * .06, '#5a3a20', 0);
+  }
   c.beginPath(); c.moveTo(-r * .78, -r * .2); c.quadraticCurveTo(-r * .7, -r * 1.05, r * .1, -r * .95);
   c.quadraticCurveTo(r * .7, -r * .95, r * .78, -r * .45); c.quadraticCurveTo(r * .4, -r * .62, r * .2, -r * .5);
   c.quadraticCurveTo(-r * .1, -r * .7, -r * .35, -r * .45); c.quadraticCurveTo(-r * .6, -r * .5, -r * .78, -r * .2);
@@ -1260,41 +1269,41 @@ Object.assign(DEF, {
       whites(c, r, this.eyes);
     },
   },
-  // Höhlenmensch: Fellschurz in Teamfarbe, Keule mit Fackelflamme
+  // Höhlenmensch: breit, schwarzes Haar, geflecktes Fell über der Schulter, Keule mit Fackelflamme
   hoehle: {
     eyes: eyePair(.25, -.22, .19),
     body(c, r, k, f) {
-      caveman(c, r, k, f);
+      caveman(c, r, k, f, '#2f2a2a', { w: .92, pelt: '#c08a4a' });
       Ln(c, [[r * .55, r * .3], [r * 1.12, -r * .55]], WOOD, 3);
       E(c, r * 1.18, -r * .66, r * .22, r * .3, WOOD, 1.2, O, .5);
       poly(c, r, [[1.02, -.88], [1.2, -1.35], [1.27, -1.0], [1.4, -1.22], [1.36, -.84]], '#ff8a3d', 1);
       whites(c, r, this.eyes);
     },
   },
-  // Speerwerfer: Stirnband in Teamfarbe, langer Speer mit Steinspitze
+  // Speerwerfer: schmal, blonder Pferdeschwanz, Stirnband in Teamfarbe, langer Speer mit Steinspitze
   speer: {
     eyes: eyePair(.25, -.22, .19),
     body(c, r, k, f) {
       Ln(c, [[-r * .7, r * .8], [r * 1.35, -r * 1.05]], WOOD, 2);
       poly(c, r, [[1.3, -1.0], [1.62, -1.32], [1.42, -.92]], '#9aa3b5', 1.1);
-      caveman(c, r, k, f);
-      Ln(c, [[-r * .76, -r * .42], [r * .76, -r * .42]], k.shield, 2.4);
+      caveman(c, r, k, f, '#e0b04a', { w: .72, tail: 1 });
+      Ln(c, [[-r * .68, -r * .42], [r * .68, -r * .42]], k.shield, 2.4);
       whites(c, r, this.eyes);
     },
   },
-  // Schamanin: Federkrone, Stab mit grüner Kugel, Kräuterrauch
+  // Schamanin: weißes Haar, grünes Blättergewand, Federkrone, Stab mit grüner Kugel, Kräuterrauch
   schamane: {
     eyes: eyePair(.25, -.2, .19),
     body(c, r, k, f) {
       Ln(c, [[r * .95, -r * 1.0], [r * .95, r * .95]], WOOD, 2);
       E(c, r * .95, -r * 1.1, r * .2, r * .2, '#4fc07a', 1.2);
       for (const [x, y, s] of [[-1.25, -.9, .2], [-1.05, -1.2, .16], [-1.4, -1.25, .12]]) E(c, x * r, y * r, s * r, s * r, 'rgba(168,216,106,.7)', 0);
-      caveman(c, r, k, f, '#7a5236');
+      caveman(c, r, k, f, '#ece8de', { robe: '#6fae5a' });
       for (const [x, col] of [[-.45, '#d8433b'], [-.15, '#ffd84d'], [.15, '#4fc07a'], [.45, '#d8433b']]) poly(c, r, [[x - .1, -.72], [x, -1.32], [x + .1, -.72]], col, 1);
       whites(c, r, this.eyes);
     },
   },
-  // Raptor: schlanker grüner Körper, langer Schwanz, Kopf mit Zähnen, Rückenstreifen in Teamfarbe
+  // Raptor: schlanker orange Körper mit Tigerstreifen, langer Schwanz, Kopf mit Zähnen, Rückenstreifen in Teamfarbe
   raptor: {
     eyes: eyePair(.95, -.5, .14),
     body(c, r, k, f) {
@@ -1302,6 +1311,7 @@ Object.assign(DEF, {
       dinoLeg(c, r, -.2, .2, l, k.dk); dinoLeg(c, r, .15, .2, -l, k.col);
       poly(c, r, [[-.45, -.25], [-1.6, -.55], [-1.75, -.42], [-.45, .25]], k.col);
       E(c, 0, 0, r * .75, r * .48, k.col);
+      for (const x of [-1.25, -.95, -.45, -.1, .25]) Ln(c, [[x * r, -r * (x < -.6 ? .38 : .3)], [(x + .12) * r, r * (x < -.6 ? -.08 : .12)]], shade(k.col, -.45), 1.4, false);
       Ln(c, [[-r * .6, -r * .28], [r * .4, -r * .38]], k.shield, 2.6, false);
       poly(c, r, [[.45, -.3], [.75, -.75], [1.45, -.7], [1.5, -.42], [.9, -.3]], k.col);
       for (const x of [1.05, 1.22, 1.38]) poly(c, r, [[x, -.42], [x + .05, -.33], [x + .1, -.43]], '#fff', .6);
@@ -1309,7 +1319,7 @@ Object.assign(DEF, {
       whites(c, r, this.eyes);
     },
   },
-  // Flugsaurier: breite Hautflügel (Bild 0 oben, 1 unten), Kopfkamm, Stein in den Krallen
+  // Flugsaurier: türkis, breite Hautflügel (Bild 0 oben, 1 unten), großer orange Kopfkamm, Stein in den Krallen
   ptera: {
     eyes: eyePair(.82, -.38, .13),
     body(c, r, k, f) {
@@ -1322,7 +1332,7 @@ Object.assign(DEF, {
       E(c, 0, 0, r * .55, r * .38, k.col);
       Ln(c, [[-r * .4, -r * .05], [r * .35, -r * .05]], k.shield, 2.4, false);
       poly(c, r, [[.4, -.25], [.6, -.6], [.95, -.62], [1.6, -.3], [1.0, -.18]], k.col);
-      poly(c, r, [[.6, -.58], [.3, -1.0], [.8, -.62]], k.dk, 1);
+      poly(c, r, [[.55, -.58], [.05, -1.15], [.4, -1.08], [.85, -.62]], '#f08a3a', 1.1);
       wing(1);
       whites(c, r, this.eyes);
     },

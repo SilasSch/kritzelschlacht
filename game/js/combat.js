@@ -1572,7 +1572,7 @@ function landArc(world, p, src) {
     if (shieldBlocks(best, p.kind, dx, dy)) { shieldHit(world, best, a, p.kind, dx, dy, src); return; }
     hurt(world, best, a, 'arrow', src);
     if (p.kind === 'firearrow' && best.alive) ignite(world, best, BURN_MAX_GEN, src);
-    emit(world, { type: 'hit', x: best.x, y: best.y, flank: false, kind: p.kind });
+    emit(world, { type: 'hit', x: best.x, y: best.y, z: best.z, flank: false, kind: p.kind });
     sound(world, 'hit');
   } else emit(world, { type: 'miss', kind: p.kind, x: p.x1, y: p.y1, a: Math.atan2(p.y1 - p.y0, p.x1 - p.x0) });
 }

@@ -1564,7 +1564,8 @@ function landArc(world, p, src) {
   // Flugsaurier (p.stone): Stein fällt auf Bodenfeinde, trifft weder ihn selbst noch andere Flieger noch Eigene
   if (p.stone) { BLAST_TOP = AIRBOMB_TOP; BLAST_FOE = p.f; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; BLAST_FOE = null; return; }
   if (p.kind === 'airbomb') { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
-  if (!ARROW_LIKE.has(p.kind)) { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
+  // Mörser und Granaten: ohne Höhenkappe wie bisher (mod-4 und mod-5 sind darauf abgestimmt, Audit #87 nur für Abstürze und Raketen)
+  if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
     if (v === p.src || Math.abs(v.z - p.tz) >= v.T.r + BODY_Z_PAD) return;

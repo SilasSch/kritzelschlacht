@@ -279,7 +279,7 @@ test('Fix-Runde 1: einzelner Sanitäter 10 s lang immer volle Heilung; kein Gift
   assert.ok(!e.alive); assert.equal(b.stingTg, null);
 });
 
-test('Explosionen: großer Boss am Rand (R + MAX_R), Bodenexplosion schont hohe Flieger, Felsen ignoriert Flieger (#87)', async () => {
+test('Explosionen: großer Boss am Rand (R + MAX_R), Steilfeuer unverändert, Felsen ignoriert Flieger (#87)', async () => {
   const { createWorld, spawn, rebuildHash } = await import('../game/js/world.js');
   const { blast, stepProjectiles } = await import('../game/js/combat.js');
   const { UNITS } = await import('../game/js/data.js');
@@ -290,7 +290,7 @@ test('Explosionen: großer Boss am Rand (R + MAX_R), Bodenexplosion schont hohe 
   rebuildHash(w);
   blast(w, 400, 400, 30, 50, 'blau', null, 'blast', 0);
   assert.ok(tank.hp < hpTank, 'Panzer am Rand von blast getroffen');
-  // Bodenexplosion (Granate via landArc) schont hohen Jet (z > AIRBOMB_TOP)
+  // Steilfeuer (Granate/Mörser via landArc) bleibt ohne Höhenkappe wie bisher: mod-4 und mod-5 sind darauf abgestimmt
   const w1 = createWorld(1400, 800, 7); w1.teamMode = true;
   const s1 = spawn(w1, 'grenadier', 300, 400, 'blau');
   const jet = spawn(w1, 'jet', 400, 400, 'rot');
@@ -299,7 +299,7 @@ test('Explosionen: großer Boss am Rand (R + MAX_R), Bodenexplosion schont hohe 
   rebuildHash(w1);
   w1.proj.push({ kind: 'grenade', x: 400, y: 400, x0: 300, y0: 400, x1: 400, y1: 400, t: .99, dur: 1, arc: true, h: 30, dmg: 50, R: 30, src: s1, f: 'blau', tg: null });
   stepProjectiles(w1, .05);
-  assert.equal(jet.hp, hpJet, 'hoher Jet über Bodenexplosion unverletzt');
+  assert.ok(jet.hp < hpJet, 'Steilfeuer trifft weiterhin auch Flieger über dem Einschlag');
   assert.ok(g.hp < hpG, 'Bodentruppe von Granate getroffen');
   // Felsen (boulder) trifft keine Flieger
   const w2 = createWorld(1400, 800, 7); w2.teamMode = true;

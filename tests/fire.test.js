@@ -51,6 +51,7 @@ test('Drachenatem zündet Getroffene mit Generation 0 an, Verursacher ist der Dr
   const w = mkWorld(), d = spawn(w, 'drache', 300, 300, 'rot');
   const a = spawn(w, 'krieger', 380, 300, 'blau'), b = spawn(w, 'biene', 360, 310, 'blau');
   const off = spawn(w, 'krieger', 300, 380, 'blau'), far = spawn(w, 'krieger', 600, 300, 'blau');
+  b.hp = 100;   // Biene soll den Atem überleben, damit das Brennen prüfbar bleibt
   rebuildHash(w);
   d.cd = 0; attack(w, d, a, 80, 80, 0);
   for (const v of [a, b]) { assert.equal(v.burnT, 3); assert.equal(v.burnGen, 0); assert.equal(v.burnSrc, d); }

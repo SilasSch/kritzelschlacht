@@ -16,6 +16,7 @@ import { tr } from '../i18n.js';
 const CSS = `
 .card.vote{max-width:680px}
 .vopts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+@media (max-width:600px){.vopts{grid-template-columns:1fr}}
 .vopts .btn{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px 12px}
 .vopts .btn b{font-family:var(--f-logo);font-weight:400;font-size:19px;letter-spacing:.5px}
 .vopts .btn span{font-size:12px;color:var(--muted);font-weight:600;line-height:1.3}
@@ -296,24 +297,36 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   const scoreText = () => (m ? `${SIDE_N.blau} ${m.score.blau} : ${m.score.rot} ${SIDE_N.rot}` : '');
 
   /* ---------- Verbindung ---------- */
+  let joining = false;
   async function start(role, code, budget) {
-    hideCard();
-    const b = game.battle; if (!b || b.phase !== 'plan') return;
-    net = net || await getRoom(); if (!net) return;
-    try { room = await net.join(roomName(code)); } catch (e) { ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
-    // voll? (zwei andere Spieler schon drin)
-    const others = room.peers().filter(p => !p.isMe && p.presence && p.presence.ks === PROTO);
-    if (others.length >= 2 || (role === 'host' && others.length)) {
-      room.leave(); room = null;
-      ui.toast(role === 'host' ? tr('Code schon vergeben, bitte noch einmal.') : tr('Der Raum ist schon voll.'));
-      return;
-    }
-    m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
-    game.clear(); undoStack.length = 0;
-    b.hot = { online: true, budget: m.budget, step: 'online', spent: { blau: 0, rot: 0 }, def: null };
-    unsubs.push(room.onPeers(onPeers, () => {}));
-    if (role === 'host') try { net.presence({ ks: PROTO, open: { code, budget: m.budget } }); } catch (e) { /* ohne Lobby */ }
-    publish(); waitCard(); sync();
+    if (joining || m) return;
+    const b = game.battle; if (!b || b.phase !== 'plan' || b.hot) return;
+    joining = true;
+    showCard('joining', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
+    try {
+      net = net || await getRoom();
+      if (!net || game.battle !== b || b.phase !== 'plan' || b.hot || m) { hideCard(); return; }
+      let newRoom;
+      try { newRoom = await net.join(roomName(code)); } catch (e) { hideCard(); ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
+      if (game.battle !== b || b.phase !== 'plan' || b.hot || m) {
+        try { newRoom.leave(); } catch (e) { /* weg */ }
+        hideCard(); return;
+      }
+      // voll? (zwei andere Spieler schon drin)
+      const others = newRoom.peers().filter(p => !p.isMe && p.presence && p.presence.ks === PROTO);
+      if (others.length >= 2 || (role === 'host' && others.length)) {
+        newRoom.leave(); hideCard();
+        ui.toast(role === 'host' ? tr('Code schon vergeben, bitte noch einmal.') : tr('Der Raum ist schon voll.'));
+        return;
+      }
+      room = newRoom;
+      m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
+      game.clear(); undoStack.length = 0;
+      b.hot = { online: true, budget: m.budget, step: 'online', spent: { blau: 0, rot: 0 }, def: null };
+      unsubs.push(room.onPeers(onPeers, () => {}));
+      if (role === 'host') try { net.presence({ ks: PROTO, open: { code, budget: m.budget } }); } catch (e) { /* ohne Lobby */ }
+      publish(); waitCard(); sync();
+    } finally { joining = false; }
   }
   function leave(msg) {
     clearTimeout(pubRetry); pubRetry = 0;

@@ -218,6 +218,7 @@ function saveSandbox() {
 
 function enterSandbox() {
   endReplay(true);
+  coach.stop();
   ui.hideOverlays();
   if (!game.mission && !game.battle && !game.editor) return;
   leaveBattle(); leaveEditor();
@@ -251,6 +252,7 @@ function loadMission(x, custom = null) {
 // Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
 function loadLevelDef(def, opts = {}) {
   endReplay(true);
+  if (opts.kind !== 'tutorial') coach.stop();
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
   leaveBattle(); leaveEditor();
   clearWorld();
@@ -416,6 +418,7 @@ const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, 
 
 function enterBattle() {
   endReplay(true);
+  coach.stop();
   const cur = game.battle;
   if (cur) {
     // schon in der Schlacht (Reiter erneut geklickt, etwa bei offener Missionsliste): nach dem Kampf die Auswertung zeigen
@@ -578,6 +581,7 @@ game.editorUI = editorUI;
 // level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
 function enterEditor(level = null) {
   endReplay(true);
+  coach.stop();
   ui.hideOverlays();
   if (game.editor && !level) return;
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
@@ -973,4 +977,5 @@ else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
 const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || gl.lost; }
 requestAnimationFrame(t => { last = t; frame(t); });

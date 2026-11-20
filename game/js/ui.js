@@ -182,7 +182,9 @@ export function createUI(game) {
   // Klick auf eine erlaubte Karte wählt die Einheit. Schließt mit Esc, Knopf oder Klick daneben.
   let lexId = '';
   function openLexicon() {
-    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-');
+    const def = game.battle && game.battle.hot && game.battle.hot.def;
+    const ruleKey = def ? (def.id || (def.cats || []).join(',') + ':' + (def.units || []).join(',')) : '-';
+    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-') + '|' + ruleKey;
     if (id !== lexId) {
       $('lexNote').textContent = tr(RETREAT_NOTE);
       // erlaubt je Einheit (units und cats des Levels; nicht malbare wie der Ghul bleiben ansehbar, ui-Toast beim Klick)
@@ -534,9 +536,9 @@ export function createUI(game) {
       cb.setAttribute('cx', x); cb.setAttribute('cy', yb); cr.setAttribute('cx', x); cr.setAttribute('cy', yr);
       hov.setAttribute('visibility', 'visible');
       tip.textContent = `${secs(p.t)} · ${SIDE_N.blau} ${fmtPts(p.blau)} · ${SIDE_N.rot} ${fmtPts(p.rot)}`;
-      const br = box.getBoundingClientRect();
-      tip.style.left = (r.left - br.left + x / vb.width * r.width) + 'px';
-      tip.style.top = (r.top - br.top + Math.min(yb, yr) / vb.height * r.height - 8) + 'px';
+      const br = box.getBoundingClientRect(), z = box.offsetWidth ? br.width / box.offsetWidth : 1;
+      tip.style.left = ((r.left - br.left + x / vb.width * r.width) / z) + 'px';
+      tip.style.top = ((r.top - br.top + Math.min(yb, yr) / vb.height * r.height) / z - 8) + 'px';
       tip.hidden = false;
     };
     svg.onpointerleave = () => { hov.setAttribute('visibility', 'hidden'); tip.hidden = true; };

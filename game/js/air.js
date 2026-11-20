@@ -45,10 +45,11 @@ const droneScore = (v, d2) => {
   return d2 > DRONE.SEEK * DRONE.SEEK ? 1e9 + d2 : -(v.T.cost - DRONE.SHARE * n) * 1e6 + d2;
 };
 function countDrones(world, u) {
-  if (DC_W === world && DC_T === world.time && DC_TEAM === u.team) return;
+  const f = factionOf(world, u);
+  if (DC_W === world && DC_T === world.time && DC_TEAM === f) return;
   for (const v of world.units) v.droneN = 0;
-  for (const v of world.units) if (v.alive && v.type === 'kampfdrohne' && v.tg && v.team === u.team) v.tg.droneN++;
-  DC_W = world; DC_T = world.time; DC_TEAM = u.team;
+  for (const v of world.units) if (v.alive && v.type === 'kampfdrohne' && v.tg && factionOf(world, v) === f) v.tg.droneN++;
+  DC_W = world; DC_T = world.time; DC_TEAM = f;
 }
 let G_W = null, G_F = null, G_S = 0, G_X = 0, G_Y = 0, G_R2 = 0;
 const groupTest = v => { if (v.alive && !v.T.fly && (v.x - G_X) ** 2 + (v.y - G_Y) ** 2 <= G_R2) G_S += factionOf(G_W, v) === G_F ? -2 : 1; };

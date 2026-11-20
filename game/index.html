@@ -240,6 +240,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .uc-ab b::before{content:"✦ ";color:var(--tc)}
 .uc-syn div{background:#fff4dc}
 .uc-syn b::before{content:"✦ Synergie: ";color:#c98a1c}
+:root[lang="en"] .uc-syn b::before{content:"✦ Synergy: "}
 .uc-vs{display:flex;flex-direction:column;gap:5px}
 .uc-vs > div{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px}
 .uc-vs .l{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:99px;color:#fff;white-space:nowrap;justify-self:start}
@@ -250,7 +251,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .uc-vs img{width:24px;height:24px}
 .uc-vs .none{color:var(--muted);font-style:normal}
 /* breite Karte über der Leiste: Werte als Kacheln, stark und schwach nebeneinander (niedriger) */
-.uc.wide{width:440px}
+.uc.wide{width:440px;max-width:calc(100vw - 16px)}
 .uc.wide .uc-st{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .uc.wide .uc-st .s{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0}
 .uc.wide .uc-st span{font-size:11px;white-space:nowrap}
@@ -295,7 +296,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .surv{display:flex;gap:6px;flex-wrap:wrap}
 .surv span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--soft);border:1px solid var(--line);font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .bgrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(250px,1fr);gap:16px;align-items:start}
-.btables{display:flex;flex-direction:column;gap:10px;min-width:0}
+.btables{display:flex;flex-direction:column;gap:10px;min-width:0;overflow-x:auto}
 .bt{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 .bt caption{caption-side:top;text-align:left;font-weight:800;font-size:14px;padding:0 0 4px}
 .bt caption .tdot{margin-right:4px}
@@ -358,7 +359,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 /* Leiste oben (UX 20.11.): Knöpfe mit Symbol, in Gruppen; Umschalter mit sichtbarem An/Aus; Abbrechen im Kampf nicht orange */
 .btn .ico{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 .misbar .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px}
-.bgrp{display:flex;align-items:center;gap:6px}
+.bgrp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .bgrp:not(:has(>.btn:not([hidden]))){display:none}
 .bgrp.vs{padding:3px 3px 3px 10px;border-radius:14px;background:var(--soft);border:1px solid var(--line)}
 .bgrp.vs .glab{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}

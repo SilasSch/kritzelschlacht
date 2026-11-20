@@ -28,7 +28,7 @@ import { WORLD_W, WORLD_H } from './camera.js';
 
 // Werte, die den Kampf der Tageschallenge bestimmen: Einheiten der Auswahl und Bosse, Formen. SIM_REV von Hand erhöhen,
 // wenn sich die Simulation selbst ändert (combat.js, physics.js …), ohne dass sich diese Werte ändern.
-export const SIM_REV = 6;   // 2: Balance-Runde 18.11. (König, Synergien, Keil, Lama, Waldbrand); 3: Bienen 1 Punkt (Kugeln, Blitze); 4: Adler packt zu, Flammenwerfer, Pikenier; 5: Wegfindung überarbeitet; 6: Römer im Block (Schildstoß, Scutum)
+export const SIM_REV = 7;   // 2: Balance-Runde 18.11.; 3: Bienen 1 Punkt; 4: Adler/Flamme/Pikenier; 5: Wegfindung; 6: Römer im Block; 7: Explosions-Radius/Höhenkappe, Felsbrocken ohne Flieger, FFA-Fraktionen
 export function simVersion() {
   const types = [...new Set([...DAILY_POOL, ...DAILY_BOSSES])].sort();
   return 'v' + hashStr(JSON.stringify([SIM_REV, types.map(t => [t, UNITS[t] || null]), SHAPES])).toString(36);
@@ -43,13 +43,14 @@ export const VERSIONS = {
   vsjyhqn: { until: '2026-11-19' },   // Adler packt zu (kleine Gegner hochheben und fallen lassen), neu: Flammenwerfer, Pikenier (18.11.); bis 19.11., weil das Update kurz vor Mitternacht kam (offene Tabs spielen den 19. noch mit dieser Version)
   v1oqxao2: { until: '2026-11-19' },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
   vh9f0ah: { until: '2026-11-20' },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
-  v1qwrxow: { until: null },   // Bienen 18 LP statt 24 (20.11.)
+  v1qwrxow: { until: '2026-11-20' },   // Bienen 18 LP statt 24 (20.11.)
+  v1xmajf1: { until: null },          // Audit-Fixes: Explosions-Radius/Höhenkappe, Felsbrocken, FFA-Fraktionen (20.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null
 export function acceptOld(date, v, r, army) {
   const k = typeof v === 'string' && Object.prototype.hasOwnProperty.call(VERSIONS, v) ? VERSIONS[v] : null;
-  if (!k || !k.until || !DATE_RE.test(date || '') || date > k.until || !r || typeof r !== 'object') return null;
+  if (!k || !k.until || !validDate(date) || date > k.until || !r || typeof r !== 'object') return null;
   const L = dailyLevel(date);
   let minSpent = 1;
   if (army !== undefined) {
@@ -69,6 +70,16 @@ export const BOARD_KEEP = 7;     // Tage je Spieler in der Live-Bestenliste
 export const NAME_MAX = 20;
 const EPS = 1e-6;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export function validDate(s) {
+  if (typeof s !== 'string' || !DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+export function maxBoardDate(now = new Date()) {
+  const t = new Date(now.getTime() + 86400000);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+}
 
 export const cleanName = s => String(s || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
 
@@ -80,7 +91,7 @@ export function placeDaily(world, level) {
 
 // Armee prüfen und als Einheitenliste liefern; wirft mit verständlicher Meldung
 export function dailyArmy(date, army, W = WORLD_W, H = WORLD_H) {
-  if (!DATE_RE.test(date || '')) throw new Error('Kein gültiges Datum.');
+  if (!validDate(date)) throw new Error('Kein gültiges Datum.');
   const L = dailyLevel(date);
   const us = unpackArmy(army, 'blau', W, H, null);
   if (!us.length) throw new Error('Keine Armee.');
@@ -173,8 +184,8 @@ export function rankEntries(list) {
 /* ---------- Ergebnis-Code (für den öffentlichen Link): { v: 1, k: 'dailyres', d, a, n } über share.js ---------- */
 // sv/r: Spielversion und Ergebnis (ältere Codes ohne sv gelten als aktuelle Version)
 export const resultCode = (date, army, name, res, sv = SIM_VERSION) => ({ v: 1, k: 'dailyres', d: date, a: army, n: cleanName(name), ...(res ? { sv, r: stampOf(res).r } : {}) });
-export function validResult(d) {
-  if (!d || !DATE_RE.test(d.d || '') || typeof d.a !== 'string' || typeof d.n !== 'string') return false;
+export function validResult(d, maxD = maxBoardDate()) {
+  if (!d || !validDate(d.d) || d.d > maxD || typeof d.a !== 'string' || typeof d.n !== 'string') return false;
   if (d.sv !== undefined && d.sv !== SIM_VERSION) return !!acceptOld(d.d, d.sv, d.r, d.a);   // ältere Version: Armee und Plausibilität prüfen
   try { dailyArmy(d.d, d.a); } catch (e) { return false; }
   return true;
@@ -187,10 +198,10 @@ export function addLocal(board, date, entry) {
   day.push({ n: cleanName(entry.n), a: entry.a, at: entry.at || Date.now(), ...(entry.me ? { me: 1 } : {}), ...cleanStamp(entry) });
   return board;
 }
-export function cleanBoard(raw, keep = BOARD_KEEP) {
+export function cleanBoard(raw, keep = BOARD_KEEP, maxD = maxBoardDate()) {
   const out = {};
   if (!raw || typeof raw !== 'object') return out;
-  for (const k of Object.keys(raw).filter(k => DATE_RE.test(k)).sort().slice(-keep)) {
+  for (const k of Object.keys(raw).filter(k => validDate(k) && k <= maxD).sort().slice(-keep)) {
     const day = Array.isArray(raw[k]) ? raw[k].filter(e => e && typeof e.a === 'string' && typeof e.n === 'string').slice(0, 50) : [];
     if (day.length) out[k] = day.map(e => ({ n: cleanName(e.n), a: e.a, at: +e.at || 0, ...(e.me ? { me: 1 } : {}), ...cleanStamp(e) }));
   }
@@ -203,7 +214,7 @@ export const DB_RULES = [{ path: 'scores', read: 'view', write: 'owner' }, { pat
 export function mergeOwn(doc, date, army, at = Date.now(), keep = BOARD_KEEP, res = null) {
   const days = { ...((doc && doc.days) || {}) };
   days[date] = { a: army, at, ...(res ? stampOf(res) : {}) };
-  const keys = Object.keys(days).filter(k => DATE_RE.test(k)).sort().slice(-keep);
+  const keys = Object.keys(days).filter(k => validDate(k)).sort().slice(-keep);
   return { days: Object.fromEntries(keys.map(k => [k, days[k]])) };
 }
 // Alle Dokumente → Einträge eines Tages [{ uid, a, at }]

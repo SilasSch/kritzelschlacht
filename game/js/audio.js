@@ -295,7 +295,7 @@ export function createAudio() {
   // Gefiltertes Rauschen; Filter fährt von f0 nach f1
   function noise(v, type, f0, f1, dur, vol, o = {}) {
     const t = v.t0 + (o.dt || 0), D = v.d(dur);
-    const s = AC.createBufferSource(); s.buffer = noiseB; s.playbackRate.value = rate;
+    const s = AC.createBufferSource(); s.buffer = noiseB; s.loop = true; s.playbackRate.value = rate;
     const f = AC.createBiquadFilter(), g = AC.createGain();
     f.type = type; f.Q.value = o.q || (type === 'bandpass' ? 1.4 : .7);
     f.frequency.setValueAtTime(f0 * rate, t);

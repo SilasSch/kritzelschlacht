@@ -60,7 +60,7 @@ export default {
       id: 'fin-4', n: 'Die Vulkaninsel', budget: 240, par: 190,
       units: ['ritter', 'troll', 'sniper', 'moerser', 'phoenix', 'drache'],
       hint: 'Ritter, Trolle, Scharfschützen, Mörser, Phönixe und Drachen. Auf der Insel im Lavaring stehen Mörser, die weit schießen, davor stürmen Reiter. Wer schießt noch weiter als ein Mörser, und wer hält solchen Schützen die Reiter vom Leib?',
-      place: [['tCircle', 'lava', .8, .5, .3, .22], ['rect', 'reiter', 24, .6, .2, .66, .8], ['circle', 'moerser', 6, .8, .5, .1],
+      place: [['tCircle', 'lava', .8, .5, .3, .22], ['rect', 'reiter', 18, .56, .2, .61, .8], ['circle', 'moerser', 6, .8, .5, .1],
         ['circle', 'zyklop', 4, .82, .5, .06], ['circle', 'mg', 6, .8, .5, .16], ['circle', 'soldat', 8, .8, .5, .19]],
       plan: {
         smart: [['troll', 10, ...F], ['sniper', 16, ...B]],

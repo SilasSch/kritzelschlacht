@@ -146,3 +146,17 @@ test('Armee-Codes: neue Einheiten nur hinten anhängen (Typ = Index in PAINT_TYP
   assert.deepEqual(PAINT_TYPES.slice(0, fixed.length), fixed);
   assert.ok(PAINT_TYPES.length <= 64);
 });
+
+test('Bestenliste: ungültige Kalenderdaten und Zukunftsdaten werden abgelehnt (#86)', () => {
+  const a = smartArmy('2026-06-15');
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-02-30', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-13-01', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2099-01-01', a, n: 'X' }), false);
+  assert.equal(validResult({ v: 1, k: 'dailyres', d: '2026-06-15', a, n: 'X' }), true);
+  const cleaned = cleanBoard({
+    '2026-02-30': [{ n: 'Fake', a, at: 1 }],
+    '2099-01-01': [{ n: 'Future', a, at: 1 }],
+    '2026-06-15': [{ n: 'Ok', a, at: 1 }],
+  });
+  assert.deepEqual(Object.keys(cleaned), ['2026-06-15']);
+});

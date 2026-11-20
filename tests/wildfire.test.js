@@ -73,3 +73,14 @@ test('deterministisch', () => {
   const play = () => { const w = mk(9); forest(w, 200, 200, 600, 500); igniteArea(w, 400, 350, 20); run(w, 8); return Array.from(w.terr).join(''); };
   assert.equal(play(), play());
 });
+
+test('übermaltes Wasser wird nicht zu Asche und Asche erhöht terrainVersion (#88)', () => {
+  const w = mk(); forest(w, 300, 300, 340, 340);
+  igniteArea(w, 320, 320, 25);
+  const wi = cellIndex(w, 320, 320);
+  w.terr[wi] = TERRAIN.wasser.id;
+  const v0 = w.terrainVersion;
+  run(w, 20);
+  assert.equal(w.terr[wi], TERRAIN.wasser.id, 'Wasser bleibt Wasser');
+  assert.ok(w.terrainVersion > v0, 'terrainVersion bei Asche erhöht');
+});

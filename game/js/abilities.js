@@ -668,6 +668,7 @@ export function curseFrog(world, v, sec = FROG.T) {
   leaveBlock(v);
   unflee(world, v);
   v.batT = 0; v.batOn = false; v.chanId = 0;
+  if (v.domeHp > 0) { v.domeHp = 0; v.domeT = DOME.DOWN; }
   v.stance = 'stand'; v.stanceT = 0; v.st = 0; v.buffT = 0; v.spdMul = 1; v.dmgMul = 1;
   if (v.T.fly && v.z > 0 && v.state === 'ok') { v.state = 'air'; v.vz = 0; v.peakZ = v.z; v.bounced = true; v.impact = 0; }
   v.frogFrom = v.type; v.frogT = sec; v.type = 'frosch'; v.T = UNITS.frosch; v.fz = 0;
@@ -1517,12 +1518,13 @@ export function teslaArc(world, u, t) {
    sie daraus einen Minibot (Fraktion der Drohne); die Leichen verblassen. */
 export const BUILD = { R: 70, N: 2, CD: 6, FADE: .6 };
 const BUILD_C = new Array(BUILD.N).fill(null);
+const sameCorpseFac = (world, c, u) => (world.teamMode ? c.team === u.team : (c.kin || c.type) === u.kin);
 function scrapNear(world, u, take) {
   const R2 = BUILD.R * BUILD.R, list = world.corpses;
   let n = 0;
   for (let i = 0; i < list.length && n < BUILD.N; i++) {
     const c = list[i];
-    if (c.kind !== 'body' || c.fade !== 0 || c.state !== 'rest' || c.team !== u.team || !UNITS[c.type] || !UNITS[c.type].bot) continue;
+    if (c.kind !== 'body' || c.fade !== 0 || c.state !== 'rest' || !sameCorpseFac(world, c, u) || !UNITS[c.type] || !UNITS[c.type].bot) continue;
     if ((c.x - u.x) ** 2 + (c.y - u.y) ** 2 > R2) continue;
     BUILD_C[n++] = c;
   }
@@ -1533,7 +1535,7 @@ function scrapNear(world, u, take) {
 const buildReady = (world, u) => scrapNear(world, u, false) >= BUILD.N;
 function buildStart(world, u) {
   let sx = 0, sy = 0, n = 0;
-  for (const c of world.corpses) if (c.kind === 'body' && c.fade === 0 && c.state === 'rest' && c.team === u.team && UNITS[c.type] && UNITS[c.type].bot &&
+  for (const c of world.corpses) if (c.kind === 'body' && c.fade === 0 && c.state === 'rest' && sameCorpseFac(world, c, u) && UNITS[c.type] && UNITS[c.type].bot &&
     (c.x - u.x) ** 2 + (c.y - u.y) ** 2 <= BUILD.R * BUILD.R && n < BUILD.N) { sx += c.x; sy += c.y; n++; }
   scrapNear(world, u, true);
   const x = n ? sx / n : u.x, y = n ? sy / n : u.y;

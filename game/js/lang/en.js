@@ -1148,5 +1148,6 @@ const EN = {
   "Neu laden": "Reload",
   "(Esc)": "(Esc)",
   'Die Sprache gilt beim nächsten Öffnen des Spiels.': 'The language applies the next time you open the game.',
+  'Dieses Ergebnis liegt in der Zukunft.': 'This result is in the future.',
 };
 export default EN;

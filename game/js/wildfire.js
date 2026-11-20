@@ -11,7 +11,7 @@
 // Für die Darstellung: Ereignis 'blaze' (je brennender Zelle höchstens FX_HZ mal je s, fxcore: Flammen und Rauch) und
 // 'terrain' für die neu verbrannte Zelle.
 import { TERRAIN, CELL } from './data.js';
-import { query } from './world.js';
+import { query, touchTerrain } from './world.js';
 import { ignite } from './combat.js';
 
 export const WILDFIRE = { BURN_T: 5, SPREAD_DT: .5, SPREAD_P: .3, IGNITE_R: 26, UNIT_GEN: 2, FX_HZ: 3 };
@@ -66,13 +66,14 @@ export function stepWildfire(world, dt) {
   const tick = Math.floor(world.time / W.SPREAD_DT) !== Math.floor((world.time - dt) / W.SPREAD_DT);
   const fxTick = Math.floor(world.time * W.FX_HZ) !== Math.floor((world.time - dt) * W.FX_HZ);
   const n = list.length;   // in diesem Schritt neu entzündete Zellen beginnen erst im nächsten
-  let keep = 0;
+  let keep = 0, turned = false;
   for (let k = 0; k < n; k++) {
     const i = list[k];
+    if (terr[i] !== WALD) { cf[i] = 0; continue; }
     cf[i] -= dt;
     const gx = i % GW, gy = i / GW | 0, x = gx * CELL + 5, y = gy * CELL + 5;
     if (cf[i] <= 0) {
-      cf[i] = 0; terr[i] = ASH;
+      cf[i] = 0; terr[i] = ASH; turned = true;
       world.events.push({ type: 'terrain', gx0: Math.max(0, gx - 1), gy0: Math.max(0, gy - 1), gx1: Math.min(GW - 1, gx + 1), gy1: Math.min(GH - 1, gy + 1) });
       continue;
     }
@@ -88,6 +89,7 @@ export function stepWildfire(world, dt) {
   // neu entzündete Zellen (hinter n) nachrücken
   for (let k = n; k < list.length; k++) list[keep++] = list[k];
   list.length = keep;
+  if (turned) touchTerrain(world);
 }
 
 // Neue Schlacht: kein Brand mehr (Asche bleibt, wie zerbrochene Mauern)

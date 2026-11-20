@@ -134,8 +134,12 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .chip{width:26px;height:26px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1.5px var(--line);padding:0}
 .chip.on{box-shadow:0 0 0 2.5px var(--ink)}
 
-.ov{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;
+.ov{position:absolute;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);pointer-events:auto;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#ovBat{z-index:5}
+#ovBoard{z-index:11}
+.ov.sharedlg{z-index:12}
+#glLost{z-index:80}
 .card{border-radius:20px;padding:22px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:14px;max-height:90%;overflow:auto}
 .card.wide{max-width:720px}
 .card h2{font-family:var(--f-logo);font-weight:400;font-size:34px;letter-spacing:1px;margin:0;line-height:1.05;color:#fff;-webkit-text-stroke:1.4px var(--ink);paint-order:stroke fill;text-shadow:2px 3px 0 var(--ink);text-wrap:balance}
@@ -183,7 +187,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .banner{position:absolute;left:0;right:0;top:22%;text-align:center;pointer-events:none;font-family:var(--f-logo);font-size:clamp(30px,6vw,64px);color:var(--gold);
   -webkit-text-stroke:2px var(--ink);paint-order:stroke fill;text-shadow:3px 4px 0 var(--ink);animation:pop .5s cubic-bezier(.3,1.7,.5,1) both;padding:0 16px}
 @keyframes pop{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
-.toast{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:12px;font-size:14px;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.toast{position:absolute;left:50%;bottom:150px;z-index:70;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:12px;font-size:14px;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 
 /* HUD-Größe zur Fenstergröße: kleine Fenster (auch das Artifact-Fenster) verkleinern die Leisten, damit das Spielfeld
    frei bleibt; große Bildschirme (4K ohne Skalierung) vergrößern sie. zoom skaliert Layout und Klickflächen mit. */
@@ -236,6 +240,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .uc-ab b::before{content:"✦ ";color:var(--tc)}
 .uc-syn div{background:#fff4dc}
 .uc-syn b::before{content:"✦ Synergie: ";color:#c98a1c}
+:root[lang="en"] .uc-syn b::before{content:"✦ Synergy: "}
 .uc-vs{display:flex;flex-direction:column;gap:5px}
 .uc-vs > div{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px}
 .uc-vs .l{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:99px;color:#fff;white-space:nowrap;justify-self:start}
@@ -246,7 +251,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .uc-vs img{width:24px;height:24px}
 .uc-vs .none{color:var(--muted);font-style:normal}
 /* breite Karte über der Leiste: Werte als Kacheln, stark und schwach nebeneinander (niedriger) */
-.uc.wide{width:440px}
+.uc.wide{width:440px;max-width:calc(100vw - 16px)}
 .uc.wide .uc-st{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .uc.wide .uc-st .s{display:flex;flex-direction:column;align-items:stretch;gap:1px;min-width:0}
 .uc.wide .uc-st span{font-size:11px;white-space:nowrap}
@@ -291,7 +296,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .surv{display:flex;gap:6px;flex-wrap:wrap}
 .surv span{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--soft);border:1px solid var(--line);font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .bgrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(250px,1fr);gap:16px;align-items:start}
-.btables{display:flex;flex-direction:column;gap:10px;min-width:0}
+.btables{display:flex;flex-direction:column;gap:10px;min-width:0;overflow-x:auto}
 .bt{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
 .bt caption{caption-side:top;text-align:left;font-weight:800;font-size:14px;padding:0 0 4px}
 .bt caption .tdot{margin-right:4px}
@@ -354,7 +359,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 /* Leiste oben (UX 20.11.): Knöpfe mit Symbol, in Gruppen; Umschalter mit sichtbarem An/Aus; Abbrechen im Kampf nicht orange */
 .btn .ico{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 .misbar .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px}
-.bgrp{display:flex;align-items:center;gap:6px}
+.bgrp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .bgrp:not(:has(>.btn:not([hidden]))){display:none}
 .bgrp.vs{padding:3px 3px 3px 10px;border-radius:14px;background:var(--soft);border:1px solid var(--line)}
 .bgrp.vs .glab{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}

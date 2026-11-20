@@ -8,6 +8,7 @@
 import { UNITS, TERRAIN, CELL } from './data.js';
 import { spawn, cellIndex, query, rebuildHash, touchTerrain, frameX } from './world.js';
 import { clearSpellWalls, STONE_WALL } from './spells.js';
+import { applyShape } from './shapes.js';
 import { releaseUnit } from './abilities.js';
 import { unitAllowed, terrainAllowed } from './campaign/index.js';
 
@@ -124,7 +125,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
       // (wie beim Sichern des Sandkastens); reborn geht mit, sonst stünde der Phönix nach Rückgängig ein zweites Mal auf.
       const T0 = UNITS[v.frogFrom || v.type], painted = T0.paint !== false;
       if (mission && painted) mission.spent = Math.max(0, mission.spent - T0.cost);
-      if (stroke && painted) stroke.erased.push({ type: v.frogFrom || v.type, team: v.team, x: v.x, y: v.y, hp: v.ashT > 0 ? T0.hp / 2 : v.hp, reborn: v.reborn });
+      if (stroke && painted) stroke.erased.push({ type: v.frogFrom || v.type, team: v.team, x: v.x, y: v.y, hp: v.ashT > 0 ? T0.hp / 2 : v.hp, reborn: v.reborn, shape: v.shape });
       v.alive = false; world.dead = (world.dead || 0) + 1; changed = true;
       releaseUnit(world, v);   // Ghul meldet sich beim Vampir ab, die Ghule eines Vampirs zerfallen (Spez. #32)
     });
@@ -146,7 +147,12 @@ export function undo(world, stroke) {
   }
   clearSpellWalls(world);
   touchTerrain(world);
-  for (const e of stroke.erased) { const n = spawn(world, e.type, e.x, e.y, e.team); n.hp = e.hp; n.reborn = e.reborn; }
+  for (const e of stroke.erased) {
+    const n = spawn(world, e.type, e.x, e.y, e.team);
+    n.hp = n.growT > 0 ? Math.min(e.hp, n.T.hp) : e.hp;
+    n.reborn = e.reborn;
+    if (e.shape) applyShape(n, e.shape, false);
+  }
   rebuildHash(world);
   return stroke.spent;
 }

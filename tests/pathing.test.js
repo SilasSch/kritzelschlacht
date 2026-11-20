@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { hitWall } from '../game/js/combat.js';
-import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA, PATH_REFRESH } from '../game/js/pathing.js';
+import { createFlow, updateFlow, flowDir, flowDirTo, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA, PATH_REFRESH, PATH_MAX_PER_STEP } from '../game/js/pathing.js';
 import { CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -282,3 +282,23 @@ test('Lava ohne Mauer: Wolf weit weg von der Lücke folgt dem Fluss, auch bei la
   assert.ok(onLava <= 6, `auf Lava: ${onLava} Schritte`);
   assert.ok(!e.alive || e.hp < e.T.hp || Math.hypot(wolf.x - e.x, wolf.y - e.y) < 60, 'Wolf kam beim Ziel an');
 });
+
+test('flowDirTo: Schwarm als Ziel bleibt begrenzt: höchstens PATH_MAX_PER_STEP Neuberechnungen je Schritt und PATH_TARGET_MAX Felder (#61)', () => {
+  const w = mk(23);
+  wallRect(w, 700, 720, 0, 600);
+  const bees = Array.from({ length: 60 }, (_, i) => spawn(w, 'biene', 850 + (i % 10) * 30, 100 + Math.floor(i / 10) * 60, 'rot'));
+  rebuildHash(w);
+  const fl = createFlow(w);
+  updateFlow(w, fl, DT);
+  const r0 = fl.stats.recomputes;
+  for (const b of bees) flowDirTo(w, fl, b, 400, 200);
+  assert.ok(fl.stats.recomputes - r0 <= PATH_MAX_PER_STEP, `höchstens ${PATH_MAX_PER_STEP} Neuberechnungen je Schritt`);
+  for (let k = 0; k < 40; k++) { updateFlow(w, fl, DT); for (const b of bees) flowDirTo(w, fl, b, 400, 200); }
+  assert.ok(fl.tlist.length <= 32, 'höchstens PATH_TARGET_MAX Felder');
+  // ein einzelnes Ziel bekommt nach dem ersten Schritt sofort eine Richtung um die Mauer
+  const w2 = mk(24); wallRect(w2, 700, 720, 0, 600);
+  const h = spawn(w2, 'biene', 900, 200, 'rot'); rebuildHash(w2);
+  const f2 = createFlow(w2); updateFlow(w2, f2, DT);
+  assert.ok(flowDirTo(w2, f2, h, 400, 200));
+});
+

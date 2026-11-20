@@ -22,6 +22,9 @@ test('Am Boden: kein Drehen, nicht in der Luft, nicht benommen', () => {
   assert.equal(p.spin, 0); assert.equal(p.air, false); assert.equal(p.dizzy, false);
   const q = poseUnit(mk('heli'), 2);
   assert.equal(q.spin, 0); assert.equal(q.air, false);
+  const egg = poseUnit(mk('rexei', { mx: 0 }), 1);
+  assert.equal(egg.tilt, 0);
+  assert.ok(Number.isFinite(egg.tilt));
 });
 
 test('In der Luft: ein voller Überschlag je Flug, Richtung nach vx', () => {

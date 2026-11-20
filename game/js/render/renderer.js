@@ -5,9 +5,9 @@
 // Höhenachse: Bildschirm-y = y − z für Einheiten, Leichen, Teile, Brocken und Geschosse; Schatten bleiben
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
-import { TEAMS, CELL, UNITS, DOME } from '../data.js';
+import { TEAMS, CELL, UNITS, DOME, TERRAIN } from '../data.js';
 import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
-import { query, factionOf, RV_MARK } from '../world.js';
+import { query, factionOf, RV_MARK, cellIndex } from '../world.js';
 import { SYN_COL, BIT_KEY } from '../synergy.js';
 import { DEBRIS_FADE } from '../physics.js';
 import { bakeRigTextures, poseUnit, TEAM_INDEX, E, BOSS_GEO } from './rig.js';
@@ -297,6 +297,26 @@ void main() {
     ring(3, O); ring(1.3, '#fff');
   });
   const TARGET_TINT = 0xff8a7a;
+  // Deckung im Wald (Terrain-Update Stufe 1a, Wunsch Silas 20.11.): Blätterbüschel vor den Füßen jeder Bodeneinheit auf
+  // einer Waldzelle, im Stil der Waldkleckse (drawTerrain). Zeigt nur, was combat.hurt schon rechnet (halber Schaden
+  // durch Fernkampf und Explosionen); gezeichnet für r = BUSH_R, BUSH_RES-fach aufgelöst, vor dem Körper (bodies)
+  const BUSH_RES = 4, BUSH_R = 10, BUSH_W = 34, BUSH_H = 18, BUSH_MAXR = 14, WALD = TERRAIN.wald.id;
+  const bushTex = canvasTex(BUSH_W * BUSH_RES, BUSH_H * BUSH_RES, c => {
+    c.setTransform(BUSH_RES, 0, 0, BUSH_RES, BUSH_W / 2 * BUSH_RES, BUSH_H / 2 * BUSH_RES);
+    c.lineWidth = 1.6; c.strokeStyle = '#2f6b3b';
+    for (const [x, y, r] of [[-8.5, 1.5, 6.5], [8.5, 1.5, 6.5], [0, 2.5, 7.5]]) {
+      c.fillStyle = '#4e9f5d'; c.beginPath(); c.ellipse(x, y, r * 1.2, r * .95, 0, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = '#6dbd78'; c.beginPath(); c.ellipse(x - r * .35, y - r * .3, r * .38, r * .3, 0, 0, TAU); c.fill();
+    }
+  });
+  // Bodeneinheit steht im Wald (Deckung wie combat.hurt: nicht fliegend, am Boden)
+  const inCover = (w, u) => !u.T.fly && u.z < 3 && !(u.batT > 0) && w.terr[cellIndex(w, u.x, u.y)] === WALD;
+  let coverWorld = null;
+  function bush(Q, u, r) {
+    const k = Math.min(r, BUSH_MAXR) / BUSH_R / BUSH_RES;
+    Q.addPart(bushTex, null, u.x, u.y + r * .6, 0, k, k, .5, .5, 0xffffff, 1);
+    stats.covered++;
+  }
   // Mauerbrocken: 3 kleine graue Steine (Radius 2.6–3.6 Welt-px)
   const STONE_RES = 4;
   const stoneTex = [2.6, 3.1, 3.6].map((r, k) => canvasTex(Math.ceil((r * 2 + 3) * STONE_RES), Math.ceil((r * 2 + 3) * STONE_RES), c => {
@@ -395,7 +415,7 @@ void main() {
   const groundList = [], airList = [];
   const byY = (a, b) => a.y - b.y;
   const pose = {};   // wird für jede Einheit überschrieben (keine Allokation pro Bild)
-  const stats = { drawn: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
+  const stats = { drawn: 0, covered: 0, culled: 0, airUnits: 0, stunned: 0, bats: 0, stances: { stand: 0, down: 0, prone: 0, up: 0 }, corpses: 0, corpsesFlying: 0, parts: 0, partsFlying: 0,
     debris: 0, debrisFlying: 0, projShadows: 0, targets: 0, shadowLevels: [0, 0, 0] };
   const viewR = { x0: 0, y0: 0, x1: 0, y1: 0 };   // sichtbarer Weltausschnitt des Bilds (drawUnits)
 
@@ -487,7 +507,7 @@ void main() {
       if (u.domeHp > 0) ring(u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
       if (u.shdHit > 0 && u.shd > 0) ring(u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
     }
-    nBoss = 0;
+    nBoss = 0; stats.covered = 0; coverWorld = world;
     bodies(groundList, groundQ, groundBars, t, tm, inv);
     bodies(airList, airQ, airBars, t, tm, inv);
     starPool.finish();
@@ -569,6 +589,7 @@ void main() {
       if (rig.boss) {
         // Boss-Sticker: eigene Teile statt der normalen Rig-Teile
         drawBoss(Q, u, p, rig, vi, tm ? TEAM_INDEX[u.team] || 0 : 0, face, inv);
+        if (Q === groundQ && inCover(coverWorld, u)) bush(Q, u, rig.r);
         bar(bars, u, T, rig, sy, 0);
         continue;
       }
@@ -593,6 +614,7 @@ void main() {
       if (rig.weapon && !back) weaponPart(Q, rig, p, vi, pr, inv);
       // Römer im Block: Schild vor dem Körper, über der Waffe
       if (rig.shield && p.shieldFront) shieldPart(Q, rig, p, vi, inv);
+      if (Q === groundQ && inCover(coverWorld, u)) bush(Q, u, rig.r);
       bar(bars, u, T, rig, sy, pr);
     }
   }
@@ -1057,13 +1079,13 @@ void main() {
   }
 
   // Für Prüfungen (?debug: window.__kritzel.renderer.debugPhysics()): im letzten Bild gezeichnete Leichen
-  // (liegend in corpseQ / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe,
+  // (liegend in corpseQ / fliegend), Teile, Brocken, Einheiten in der Luft und betäubt, Schatten je Stufe, Einheiten in Walddeckung (covered),
   // Haltung der lebenden MG-Schützen und Scharfschützen (stances: stand/down/prone/up, Spez. #22)
   function debugPhysics() {
     const pcUsed = corpseQ.count;
     return { corpses: stats.corpses, corpsesFlying: stats.corpsesFlying, parts: stats.parts, partsFlying: stats.partsFlying,
       debris: stats.debris, debrisFlying: stats.debrisFlying, airUnits: stats.airUnits, stunned: stats.stunned,
-      stances: { ...stats.stances },
+      stances: { ...stats.stances }, covered: stats.covered,
       projShadows: stats.projShadows, targets: stats.targets, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
   }
 

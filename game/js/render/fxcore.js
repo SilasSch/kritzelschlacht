@@ -7,7 +7,7 @@
 // unsichtbar (Weiß bleibt Weiß); sichtbar sind die normal gemischten Kerne, Rauch, Staub und Krater.
 // Deckel: höchstens FX_CAP lebende Partikel; je consume() höchstens FRAME_LIMITS Ereignisse je Art mit
 // Partikeln bzw. Decals (500 land-Ereignisse in einem Bild kosten so nur 24 Staubwolken).
-import { UNITS } from '../data.js';
+import { UNITS, TERRAIN } from '../data.js';
 import { HELI_CRASH_R, DRAGON_CRASH_R, MUZZLE_Z } from '../combat.js';
 import { shade } from './rig.js';
 import { projScreen, BOSS, BOSS_VIS, CHANNEL_LIFT } from './pose.js';
@@ -18,7 +18,7 @@ import { SYN_COL } from '../synergy.js';
 export const FX_CAP = 3000;
 export const STINK_COL = 0xa8c24a, STINK_CLOUD = 0xc4d36a;
 export const STEPS = { MASS: 6, GAP: 1.4, R: .2, COL: '#6b5a48', A: .1 };
-export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24, impact: 64 };
+export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24, impact: 64, leaf: 40 };
 
 /* ---------- Wackeln ---------- */
 // Explosion: max(shake, min(12, R/6)). Abklingen je Sekunde wie früher ×0.85 je Bild bei 60 fps.
@@ -238,6 +238,9 @@ export function createParticles(cap = FX_CAP) {
 /* ---------- Aussehen ---------- */
 // Bildteile des Atlas in fx.js
 // wave: dünner Ring (Wellen der Fähigkeiten), note: Achtelnote (Heulen), bang: Ausrufezeichen (Schreck)
+// Deckung im Wald: Treffer dieser Arten auf Bodeneinheiten im Wald lassen Blätter fliegen (combat.hurt: Pfeil, Kugel)
+const COVER_HITS = new Set(['bullet', 'arrow', 'pilum', 'firearrow']);   // Pfeilartige wie combat.ARROW_LIKE
+const WOOD_ID = TERRAIN.wald.id, LEAF_COLS = [0x2f6b3b, 0x4e9f5d, 0x8fd18a];
 export const F = { disc: 0, soft: 1, puff: 2, ring: 3, plus: 4, soul: 5, arrow: 6, warm: 7, streak: 8, pilum: 9, wave: 10, note: 11, bang: 12 };
 // Einheitsradius je Bildteil (F) in Atlas-px: ein Partikel mit r = FRAME_R[f] wird in Originalgröße gezeichnet
 export const FRAME_R = [30, 32, 26, 26, 30, 24, 58, 32, 30, 32, 28, 30, 30];
@@ -318,6 +321,8 @@ export function look(p, o) {
     }
     case 'ring': o.frame = F.ring; o.r = p.r * (1.15 - a * .5); o.alpha = a * .8; break;
     // Wasser (Nachtrag 7, #48): flacher Ring am Boden (Waten, Fontäne), Bugwelle (Strich), Gischt (weiße Wolke)
+    // Blatt aus der Walddeckung (coverLeaves): flache Scheibe, trudelt (vrot), blendet im letzten Drittel aus
+    case 'leaf': o.sy = .45; o.alpha = a > .35 ? 1 : a / .35; break;
     case 'wade': o.frame = F.wave; o.r = p.r * (WADE.R0 + (WADE.R1 - WADE.R0) * (1 - a * a)); o.sy = .42; o.alpha = p.a0 * a * Math.min(1, q / .12); o.under = true; break;
     case 'bow': o.frame = F.streak; o.sy = 1.3; o.alpha = p.a0 * a * Math.min(1, q / .15); o.under = true; break;
     // Leuchtspur des Scharfschützen: steht kurz, blendet dann aus, glüht warm
@@ -473,6 +478,17 @@ export function createFxCore(hooks = {}, opt = {}) {
     for (let i = 0; i < n; i++) {
       const p = add('dot', x, y, life, rnd(r0, r1), col); if (!p) return;
       p.vx = rnd(-s, s); p.vy = rnd(-s, s); p.drag = DRAG;
+    }
+  }
+  // Deckung im Wald (Terrain-Update 1a, 20.11.): ein Fernkampftreffer oder eine Explosion auf eine Bodeneinheit im Wald
+  // lässt Blätter fliegen (combat.hurt halbiert dort den Schaden). Explosionen mitten im Wald ebenso; die Welt kommt aus update().
+  let coverW = null;
+  const inWood = (x, y, z) => coverW && !(z > 3) && coverW.terr[cellIndex(coverW, x, y)] === WOOD_ID;
+  function coverLeaves(x, y, n, s) {
+    if (!take('leaf')) return;
+    for (let i = 0; i < n; i++) {
+      const p = add('leaf', x + rnd(-4, 4), y - rnd(4, 10), rnd(.7, 1.05), rnd(3.6, 4.8), LEAF_COLS[i % 3]); if (!p) return;
+      p.vx = rnd(-s, s); p.vy = -rnd(.5, 1.2) * s; p.ay = 110; p.drag = 2.2; p.rot = rand() * TAU; p.vrot = rnd(-9, 9);
     }
   }
   // Rauchwolke: steigt genau SMOKE.rise px/s und treibt SMOKE.wind px/s nach rechts
@@ -1149,6 +1165,7 @@ export function createFxCore(hooks = {}, opt = {}) {
       case 'blast': {
         for (let i = 0; i < crashPts.length; i += 2) if (Math.abs(crashPts[i] - e.x) < 1 && Math.abs(crashPts[i + 1] - e.y) < 1) return;
         explosion('blast', e.x, e.y, e.R, e.kind === 'fire', SMOKE.life, !!e.water);
+        if (inWood(e.x, e.y, 0)) coverLeaves(e.x, e.y, 8, 90);
         return;
       }
       case 'crash': {
@@ -1228,6 +1245,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         break;
       }
       case 'hit':
+        if (COVER_HITS.has(e.kind) && inWood(e.x, e.y, e.z)) coverLeaves(e.x, e.y, 6, 60);
         if (e.kind === 'bullet' && take('impact')) bulletHit(e);
         else if ((e.kind === 'arrow' || e.kind === 'pilum' || e.kind === 'firearrow') && take('impact')) {
           // Pfeil im Ziel: zwei Holzsplitter
@@ -1321,6 +1339,7 @@ export function createFxCore(hooks = {}, opt = {}) {
     s.x = u.x; s.y = u.y; s.side = -s.side;
   }
   function update(dt, world) {
+    if (world && world.terr) coverW = world;
     if (world && dt > 0) {
       const proj = world.proj;
       for (let i = 0; i < proj.length; i++) {

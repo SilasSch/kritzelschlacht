@@ -7,7 +7,8 @@
 // - Verlässt der Zeiger die Leiste, das Fenster oder die Seite, verliert das Fenster den Fokus, wird gescrollt,
 //   die Größe geändert oder auf dem Feld gemalt: Hover endet sofort (hoverEnd).
 // - Eine neue Auswahl (Klick, Taste, Kategorie) zeigt ihre Karte SEL_SHOW_MS lang, wenn kein Hover aktiv ist.
-//   Malen auf dem Feld beendet auch das (paint).
+//   Malen auf dem Feld beendet auch das (paint). Endet ein Hover (Zeiger verlässt die Leiste), endet auch die
+//   Auswahlanzeige: sonst blieb die Karte der eben angeklickten Einheit noch Sekunden stehen, obwohl die Maus weg war.
 export const SEL_SHOW_MS = 4500, GAP_MS = 150;
 
 export const createCardHover = () => ({ hoverK: null, gapUntil: 0, selUntil: 0 });
@@ -18,7 +19,7 @@ export function hoverOver(s, k, now) {
   else if (s.hoverK && !s.gapUntil) s.gapUntil = now + GAP_MS;
 }
 // Zeiger hat die Leiste verlassen, Fenster ohne Fokus, Scrollen, Größenänderung
-export function hoverEnd(s) { s.hoverK = null; s.gapUntil = 0; }
+export function hoverEnd(s) { if (s.hoverK) s.selUntil = 0; s.hoverK = null; s.gapUntil = 0; }
 // Neue Auswahl: Karte SEL_SHOW_MS lang
 export function selected(s, now) { s.selUntil = now + SEL_SHOW_MS; }
 // Malen auf dem Feld: alles aus

@@ -47,7 +47,7 @@ export const UNITS = {
   moerser:{n:'Mörser',cat:'modern',col:'#8a8f5a',r:9,hp:40,dmg:40,range:420,splash:66,speed:34,cd:4.2,cost:8.5,mass:1,d:'Indirektes Feuer über Mauern hinweg. Hilflos im Nahkampf.'},
   panzer:{n:'Panzer',cat:'modern',col:'#6b7b45',r:22,hp:1000,dmg:45,range:260,splash:30,speed:32,cd:3,cost:35,mass:40,d:'Kugeln, Pfeile und Schwerter prallen ab. Kanone mit Flächenschaden. Schwach gegen Raketen.'},
   // Overhaul 18.11.: high = fliegt so hoch, dass Nahkämpfer am Boden nicht rankommen (world.outOfMelee); Heli hält Abstand
-  heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,high:1,mass:12,d:'Schwebt auf Abstand und feuert Salven. Gepanzert gegen Kugeln, Pfeile und Raketen treffen voll. Nahkämpfer kommen nicht ran.'},
+  heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,high:1,mass:12,d:'Schwebt auf Abstand und feuert Salven. Gepanzert gegen Kugeln, Pfeile und Raketen treffen voll. Nahkämpfer kommen nicht ran und werfen nur Steine.'},
   // Lufteinheiten (18.11., air.js): Jet = Luftüberlegenheit im Überflug, Kampfdrohne = billige Kamikaze-Drohne gegen Panzerung,
   // Bomber = langsamer Teppich aus Bomben gegen Bodentruppen. Alle drei fliegen hoch (high).
   jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:150,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast im Überflug heran, feuert die Bordkanone und dreht weit. Jagt zuerst Flieger. Gegen Bodentruppen schwach.'},
@@ -99,7 +99,7 @@ export const UNITS = {
   speer:{n:'Speerwerfer',cat:'urzeit',col:'#f6d2ac',r:9,hp:45,dmg:13,range:190,speed:46,cd:1.5,cost:2.5,mass:1,d:'Wirft Speere im Bogen, trifft auch Flieger. Weicht Nahkämpfern aus.'},
   schamane:{n:'Schamanin',cat:'urzeit',col:'#f2c9a0',r:9,hp:45,heal:8,range:90,speed:48,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete. Ihr Kräuterrauch lässt Jungtiere in der Nähe doppelt so schnell wachsen.'},
   raptor:{n:'Raptor',cat:'urzeit',col:'#e5a04e',r:10,hp:80,dmg:13,range:3,speed:92,cd:.7,cost:2.5,mass:1,grow:10,d:'Schlüpft klein und wächst in 10 s. Springt Fernkämpfer und Heiler an.'},
-  ptera:{n:'Flugsaurier',cat:'urzeit',col:'#7fb8b0',r:12,hp:70,dmg:18,range:30,splash:26,speed:80,cd:2.4,cost:4.5,fly:1,flyZ:34,mass:1,d:'Fliegt hoch und lässt Steine fallen: Flächenschaden, sprengt Mauern. Nahkämpfer erreichen ihn nicht.'},
+  ptera:{n:'Flugsaurier',cat:'urzeit',col:'#7fb8b0',r:12,hp:140,dmg:18,range:30,splash:26,speed:80,cd:2.4,cost:4.5,fly:1,flyZ:34,mass:1,d:'Fliegt hoch und stößt herab, um Steine fallen zu lassen: Flächenschaden, sprengt Mauern. Nahkämpfer erwischen ihn nur unten.'},
   anky:{n:'Ankylosaurus',cat:'urzeit',col:'#a68a5b',r:15,hp:330,dmg:16,range:4,speed:34,cd:1.2,cost:6.5,mass:6,grow:12,d:'Gepanzerter Tank, wächst in 12 s. Von vorn halber Schaden, die Schwanzkeule fegt Gegner hinter ihm weg.'},
   trike:{n:'Triceratops',cat:'urzeit',col:'#aaa498',r:15,hp:360,dmg:22,range:4,speed:52,cd:1.2,cost:8,mass:8,grow:12,d:'Wächst in 12 s. Stürmt mit den Hörnern voran durch die Reihen, im Lauf halber Schaden von vorn.'},
   rex:{n:'T-Rex',cat:'urzeit',col:'#5e8a4a',r:20,hp:1000,dmg:34,range:5,splash:24,speed:40,cd:1.4,cost:22,mass:25,grow:24,d:'Startet als Ei, schlüpft nach 8 s und ist nach 24 s ein Riese. Sein Brüllen lässt Kleinere fliehen.'},
@@ -297,7 +297,7 @@ const ABIL = {
   speer: [{n:'Speerwurf', d:'Speere im Bogen, auch auf Flieger. Römerschilde halten sie ab.'}, {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
   schamane: [{n:'Kräuterrauch', d:'Jungtiere bis 90 px wachsen doppelt so schnell.'}, {n:'Heilen', d:'Heilt einen Verbündeten, Fliehende zuerst.'}],
   raptor: [{n:'Anspringen', d:'Alle 10 s springt er einen Fernkämpfer oder Heiler bis 200 px weit an. Der erste Biss macht doppelt.'}],
-  ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden an Feinden am Boden und an Mauern. Eigene und Flieger trifft er nicht.'}, {n:'Hoch oben', d:'Nahkämpfer am Boden erreichen ihn nicht.'}],
+  ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden an Feinden am Boden und an Mauern. Eigene und Flieger trifft er nicht.'}, {n:'Sturzflug', d:'Zum Abwurf stößt er kurz herab, nur dann erreichen ihn Nahkämpfer. Oben werfen sie Steine nach ihm.'}],
   anky: [{n:'Panzerplatten', d:'Von vorn halber Schaden durch Schläge, Pfeile und Kugeln.'}, {n:'Schwanzkeule', d:'Alle 8 s fegt er Gegner hinter und neben sich weg.'}],
   trike: [{n:'Hornwand', d:'Im Lauf von vorn halber Schaden.'}, {n:'Ansturm', d:'Alle 14 s stürmt er 1,2 s geradeaus und schleudert alles zur Seite.'}],
   rex: [
@@ -449,7 +449,7 @@ export const SYNERGY = [
 export const TERRAIN = {
   wasser:{n:'Wasser',id:1,cost:.04,sp:.4,d:'Bremst Bodentruppen auf 40 % Tempo.'},
   lava:{n:'Lava',id:2,cost:.12,sp:.8,haz:true,d:'Verbrennt alles, was nicht fliegt. Niemand läuft freiwillig hinein, Hineingeschleuderte laufen sofort heraus.'},
-  wald:{n:'Wald',id:3,cost:.04,sp:.85,d:'Deckung: halber Schaden durch Pfeile und Explosionen. Feuer setzt ihn in Brand.'},
+  wald:{n:'Wald',id:3,cost:.04,sp:.85,d:'Deckung: halber Schaden durch Pfeile und Explosionen, nur ein Drittel durch Angriffe von hoch oben. Feuer setzt ihn in Brand.'},
   mauer:{n:'Mauer',id:4,cost:.1,haz:true,d:'Blockiert Bodentruppen, bis sie zerschlagen wird.'},
   // Asche (Waldbrand, wildfire.js): entsteht aus verbranntem Wald, frei begehbar, keine Deckung; nicht malbar
   asche:{n:'Asche',id:5,cost:0,paint:false,d:'Verbrannter Wald: keine Deckung mehr.'},

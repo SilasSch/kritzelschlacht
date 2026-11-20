@@ -180,11 +180,14 @@ test('Schamanin: Kräuterrauch lässt Jungtiere in der Nähe schneller wachsen',
   assert.equal(b.T, YOUNG.raptor, 'ohne noch jung');
 });
 
-test('Flugsaurier: hoch oben, Nahkämpfer am Boden suchen ihn nicht', () => {
+// Luft gegen Nahkampf (20.11.): oben unerreichbar, aber Nahkämpfer bleiben ihm auf den Fersen (world.chaseAir), damit sie
+// beim Herabstoßen zum Steinwurf zur Stelle sind
+test('Flugsaurier: oben unerreichbar, Nahkämpfer verfolgen ihn trotzdem', () => {
   const w = mkWorld(), p = spawn(w, 'ptera', 300, 300, 'blau'), k = spawn(w, 'krieger', 340, 300, 'rot');
   assert.ok(aloft(p));
   rebuildHash(w);
-  assert.notEqual(nearestEnemy(w, k), p);
+  assert.equal(nearestEnemy(w, k), p);
+  p.z = 8; assert.ok(!aloft(p), 'unten erreichbar');
 });
 
 test('Ankylosaurus: von vorn halber Schaden durch Schläge', () => {
@@ -238,7 +241,7 @@ test('Flugsaurier: Steine treffen weder ihn selbst noch andere Flugsaurier noch 
   const w = mkWorld(3);
   const P = [0, 1, 2, 3].map(i => spawn(w, 'ptera', 300, 300 + i * 20, 'blau'));
   const H = [0, 1, 2].map(i => spawn(w, 'hoehle', 320, 330 + i * 20, 'blau'));
-  const E = [0, 1, 2, 3, 4].map(i => { const e = spawn(w, 'ritter', 700, 280 + i * 25, 'rot'); e.cd = 1e9; return e; });
+  const E = [0, 1, 2, 3, 4].map(i => { const e = spawn(w, 'ritter', 700, 280 + i * 25, 'rot'); e.cd = 1e9; e.stoneCd = 1e9; return e; });
   run(w, 12);
   for (const u of P) assert.equal(u.hp, UNITS.ptera.hp, 'Flugsaurier unverletzt');
   for (const u of H) assert.equal(u.hp, UNITS.hoehle.hp, 'Höhlenmensch unverletzt');

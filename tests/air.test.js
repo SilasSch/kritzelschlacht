@@ -57,7 +57,7 @@ test('Drohne: explodiert am Ziel, trifft keine Eigenen und stirbt dabei', () => 
 
 test('Bomber: wirft einen Teppich auf Bodentruppen, trifft sich selbst nicht', () => {
   const w = mkWorld(), b = spawn(w, 'bomber', 300, 450, 'blau');
-  for (let i = 0; i < 6; i++) { const k = spawn(w, 'ritter', 800 + (i % 3) * 18, 430 + (i / 3 | 0) * 22, 'rot'); k.T = { ...k.T, speed: 0 }; }
+  for (let i = 0; i < 6; i++) { const k = spawn(w, 'ritter', 800 + (i % 3) * 18, 430 + (i / 3 | 0) * 22, 'rot'); k.T = { ...k.T, speed: 0 }; k.stoneCd = 1e9; }   // ohne Steinwurf (20.11.)
   rebuildHash(w);
   let bombs = 0;
   for (let i = 0; i < 25 * 60; i++) { step(w, 1 / 60); for (const p of w.proj) if (p.kind === 'airbomb' && p.t === 1 / 60) bombs++; w.events.length = 0; }

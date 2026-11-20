@@ -28,7 +28,7 @@ import { WORLD_W, WORLD_H } from './camera.js';
 
 // Werte, die den Kampf der Tageschallenge bestimmen: Einheiten der Auswahl und Bosse, Formen. SIM_REV von Hand erhöhen,
 // wenn sich die Simulation selbst ändert (combat.js, physics.js …), ohne dass sich diese Werte ändern.
-export const SIM_REV = 7;   // 2: Balance-Runde 18.11.; 3: Bienen 1 Punkt; 4: Adler/Flamme/Pikenier; 5: Wegfindung; 6: Römer im Block; 7: Explosions-Radius/Höhenkappe, Felsbrocken ohne Flieger, FFA-Fraktionen
+export const SIM_REV = 8;   // 2: Balance-Runde 18.11.; 3: Bienen 1 Punkt; 4: Adler/Flamme/Pikenier; 5: Wegfindung; 6: Römer im Block; 7: Explosions-Radius/Höhenkappe, Felsbrocken ohne Flieger, FFA-Fraktionen; 8: Luft gegen Nahkampf (Steinwurf, Sturzflug, Wald gegen oben)
 export function simVersion() {
   const types = [...new Set([...DAILY_POOL, ...DAILY_BOSSES])].sort();
   return 'v' + hashStr(JSON.stringify([SIM_REV, types.map(t => [t, UNITS[t] || null]), SHAPES])).toString(36);
@@ -44,7 +44,8 @@ export const VERSIONS = {
   v1oqxao2: { until: '2026-11-19' },   // Wegfindung überarbeitet: Zielwahl mit Weg, Umweg um Dornen und Wasser, Weg zu Luftzielen, Abstand zu Kanten (18.11.)
   vh9f0ah: { until: '2026-11-20' },   // Römer im Block: Schildstoß gegen Nahkämpfer, Scutum gegen Schwerthiebe von vorn (18.11.)
   v1qwrxow: { until: '2026-11-20' },   // Bienen 18 LP statt 24 (20.11.)
-  v1xmajf1: { until: null },          // Audit-Fixes: Explosions-Radius/Höhenkappe, Felsbrocken, FFA-Fraktionen (20.11.)
+  v1xmajf1: { until: '2026-11-20' },          // Audit-Fixes: Explosions-Radius/Höhenkappe, Felsbrocken, FFA-Fraktionen (20.11.)
+  v1czg68b: { until: null },   // Luft gegen Nahkampf: Steinwurf der Nahkämpfer, Sturzflug des Flugsauriers (140 LP), Wald schützt gegen oben (20.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

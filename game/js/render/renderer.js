@@ -910,6 +910,8 @@ void main() {
         projQ.line(x - ca * 7 - sa * 3, y - sa * 7 + ca * 3, x - ca * 7 + sa * 3, y - sa * 7 - ca * 3, 1.6, OC);
         disc(x + ca * 4.5, y + sa * 4.5, 1.8, 0xe5574f);
       }
+      // Steinwurf der Nahkämpfer auf Flieger (Luft gegen Nahkampf, 20.11.): kleiner Kiesel mit Umriss, dreht sich im Flug
+      else if (p.kind === 'rock') { const r = p.t * 14; disc(x, y, 3.1, OC); disc(x, y, 2.2, 0xa79c8c); disc(x + Math.cos(r) * .8 - .4, y + Math.sin(r) * .8 - .6, .8, 0xd4ccbf); }
       // Stein des Flugsauriers (p.stone): grauer Brocken statt Granate
       else if (p.stone) { disc(x, y, 4.3, OC); disc(x, y, 3.3, 0x9aa0aa); disc(x - 1, y - 1.1, 1.2, 0xc3c8cf); }
       else if (p.kind === 'bomb') {

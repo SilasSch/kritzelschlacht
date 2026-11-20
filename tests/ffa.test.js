@@ -101,3 +101,36 @@ test('FFA Demo-Schlacht mit Römern, Scharfschützen und Sanitätern: 30 s ohne 
   assert.ok(byType >= .8 * flee, `Sammelpunkt beim eigenen Typ ${byType}/${flee}`);
   assert.ok(byTeam < .6 * flee, `Gegenprobe Team ${byTeam}/${flee}`);
 });
+
+test('FFA Fraktionen: Wolfrudel, Drohnen, Schrottplatz und Kuppel-Froschfluch (#88)', async () => {
+  const { rebuildHash } = await import('../game/js/world.js');
+  const { attack } = await import('../game/js/combat.js');
+  const { stepAir } = await import('../game/js/air.js');
+  const { curseFrog } = await import('../game/js/abilities.js');
+  const { DOME } = await import('../game/js/data.js');
+  const { makeCorpse } = await import('../game/js/physics.js');
+  // Wolfrudel im FFA: blauer + roter Wolf sind dieselbe Fraktion
+  const w = mk();
+  const w1 = spawn(w, 'wolf', 300, 400, 'blau');
+  spawn(w, 'wolf', 310, 400, 'rot');
+  const k = spawn(w, 'krieger', 312, 400, 'blau'); k.hp = 1000;
+  rebuildHash(w); w1.cd = 0; attack(w, w1, k, 12, 12, 0);
+  const dmgPack = 1000 - k.hp;
+  assert.ok(dmgPack > UNITS.wolf.dmg, `Wolfrudel-Bonus im FFA: ${dmgPack} > ${UNITS.wolf.dmg}`);
+  // countDrones im FFA: Kampfdrohnen anderer Teams zählen zur selben Fraktion
+  const d1 = spawn(w, 'kampfdrohne', 500, 400, 'blau');
+  const d2 = spawn(w, 'kampfdrohne', 520, 400, 'rot');
+  const tgt = spawn(w, 'ritter', 560, 400, 'blau');
+  d1.tg = tgt; d2.rt = 0; w.time = 1; rebuildHash(w);
+  stepAir(w, d2, DT);
+  assert.equal(tgt.droneN, 1);
+  // Kuppel als Frosch: Kuppel sofort aus, domeT gesetzt
+  const kup = spawn(w, 'kuppel', 700, 400, 'blau');
+  assert.ok(kup.domeHp > 0);
+  assert.equal(curseFrog(w, kup), true);
+  assert.equal(kup.domeHp, 0);
+  assert.equal(kup.domeT, DOME.DOWN);
+  // makeCorpse speichert kin
+  const c = makeCorpse('body', null, 'kampfdrohne', 'blau', 1, 100, 100, 0, 0, 0, 0, 0, 0, 'kampfdrohne');
+  assert.equal(c.kin, 'kampfdrohne');
+});

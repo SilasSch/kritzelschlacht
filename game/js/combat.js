@@ -306,13 +306,13 @@ function die(world, v, src, kind) {
     vx += dx * sp; vy += dy * sp;
   }
   world.corpses.push(makeCorpse('body', null, ty, v.team, v.face, v.x, v.y, v.z, vx, vy, vz, 0, vrot,
-    CRASH.has(ty) ? ty : null));
+    CRASH.has(ty) ? ty : null, v.kin));
   const parts = PARTS[ty];
   for (let i = 0; i < parts.length; i++) {
     const a = world.rng() * Math.PI * 2, sp = rnd(world, PART_V[0], PART_V[1]);
     const vz = rnd(world, PART_VZ[0], PART_VZ[1]), pr = sgn() * rnd(world, PART_VROT[0], PART_VROT[1]);
     world.corpses.push(makeCorpse('part', parts[i], ty, v.team, v.face, v.x, v.y, v.z + T.r,
-      vx + Math.cos(a) * sp, vy + Math.sin(a) * sp, Math.max(0, v.vz) + vz, 0, pr));
+      vx + Math.cos(a) * sp, vy + Math.sin(a) * sp, Math.max(0, v.vz) + vz, 0, pr, null, v.kin));
   }
   emit(world, {
     type: 'death', x: v.x, y: v.y, z: v.z, unitType: ty, team: v.team,
@@ -349,7 +349,7 @@ let BLAST_TOP = Infinity;
 // BLAST_FOE: Fraktion, die von der Explosion verschont bleibt (Steine des Flugsauriers treffen nur Feinde); sonst null
 let BLAST_FOE = null;
 export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
-  query(world, x, y, R + 16, v => {
+  query(world, x, y, R + MAX_R, v => {
     if (v.z > BLAST_TOP || (BLAST_FOE !== null && factionOf(world, v) === BLAST_FOE)) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
@@ -383,10 +383,11 @@ export function blast(world, x, y, R, dmg, f, src, kind, wallMul, gen = -1) {
 // Abhebeschwelle wie bei Explosionen), ohne Schaden.
 export function crash(world, kind, x, y) {
   emit(world, { type: 'crash', kind, x, y });
-  if (kind === 'heli') blast(world, x, y, HELI_CRASH_R, HELI_CRASH_DMG, null, null, 'blast', 2);
-  else if (kind === 'jet' || kind === 'bomber') { const C = AIR_CRASH[kind]; blast(world, x, y, C[0], C[1], null, null, 'blast', 2); }
+  if (kind === 'heli') { BLAST_TOP = AIRBOMB_TOP; blast(world, x, y, HELI_CRASH_R, HELI_CRASH_DMG, null, null, 'blast', 2); BLAST_TOP = Infinity; }
+  else if (kind === 'jet' || kind === 'bomber') { const C = AIR_CRASH[kind]; BLAST_TOP = AIRBOMB_TOP; blast(world, x, y, C[0], C[1], null, null, 'blast', 2); BLAST_TOP = Infinity; }
   else if (kind === 'drache') {
-    query(world, x, y, DRAGON_CRASH_R + 16, v => {
+    query(world, x, y, DRAGON_CRASH_R + MAX_R, v => {
+      if (v.z > AIRBOMB_TOP) return;
       const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
       if (d <= DRAGON_CRASH_R + v.T.r) fling(v, dx, dy, d, DRAGON_CRASH_I);
     });
@@ -1402,13 +1403,15 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       }
       // Rudelbonus
       if (u.type === 'wolf') {
-        let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'wolf' && v.team === u.team && ++n >= 3) return true; });
+        const uf = factionOf(world, u);
+        let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'wolf' && factionOf(world, v) === uf && ++n >= 3) return true; });
         if (n >= 3) a *= 1.4;
       }
       if (u.type === 'krokodil') u.seenT = CROC.SEEN;   // Task 5: nach dem Biss sichtbar
       // Schrottplatz: Verbund der Minibots; Sprung von Springspinne und Raptor (abilities.POUNCE): erster Biss doppelt
       if (u.type === 'minibot') {
-        let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'minibot' && v.team === u.team && ++n >= 5) return true; });
+        const uf = factionOf(world, u);
+        let n = 0; query(world, u.x, u.y, 70, v => { if (v.type === 'minibot' && factionOf(world, v) === uf && ++n >= 5) return true; });
         if (n >= 5) a *= 1.25;
       }
       if (u.pounce) { a *= 2; u.pounce = false; }
@@ -1561,6 +1564,7 @@ function landArc(world, p, src) {
   // Flugsaurier (p.stone): Stein fällt auf Bodenfeinde, trifft weder ihn selbst noch andere Flieger noch Eigene
   if (p.stone) { BLAST_TOP = AIRBOMB_TOP; BLAST_FOE = p.f; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; BLAST_FOE = null; return; }
   if (p.kind === 'airbomb') { BLAST_TOP = AIRBOMB_TOP; blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); BLAST_TOP = Infinity; return; }
+  // Mörser und Granaten: ohne Höhenkappe wie bisher (mod-4 und mod-5 sind darauf abgestimmt, Audit #87 nur für Abstürze und Raketen)
   if (!ARROW_LIKE.has(p.kind)) { blast(world, p.x1, p.y1, p.R, p.dmg, p.f, src, 'blast', 3); return; }
   let best = null, bd = Infinity;
   query(world, p.x1, p.y1, 26 + MAX_R, v => {
@@ -1594,22 +1598,24 @@ function impact(world, p, v, cell, x, y, src) {
     }
     return;
   }
-  // Rakete/Feuerball: Volltreffer explodiert am Körper, sonst am Trefferpunkt
+  // Rakete/Feuerball: Volltreffer explodiert am Körper (in der Luft ohne Höhenkappe), Bodentreffer unter AIRBOMB_TOP
   // Der Feuerball setzt die Getroffenen in Brand (Spez. #31, Generation spells.FIREBALL.GEN)
   const bx = v ? v.x : x, by = v ? v.y : y, fb = p.kind === 'fire';
+  const groundHit = !(v && v.z > AIRBOMB_TOP);
+  if (groundHit) BLAST_TOP = AIRBOMB_TOP;
   blast(world, bx, by, p.R, p.dmg, p.f, src, fb ? 'fire' : 'rocket', fb ? 1.5 : 2, fb ? FIREBALL.GEN : -1);
+  if (groundHit) BLAST_TOP = Infinity;
 }
 
 /* ---------- Task 6: Kreaturen (Spez. #34) ----------
    Zyklop: Felsbrocken und unbeholfener Nahkampf; Hexe: Zauber 'hex'. Werte in abilities.js (CYCLOPS, FROG). */
 
-// Felsbrocken am Landepunkt: Explosion mit Radius p.R (Schaden, Abfall und Schleudern wie blast, trifft alle Fraktionen,
-// der Werfer ×0,5; Schadensart 'blast', also kein Schildblock und Deckung im Wald), dazu CYCLOPS.DEBRIS Brocken, die nur
-// liegen bleiben (world.debris, ohne Schaden). Kein Mauerschaden und kein Feuerball-Blitz: eigener Staub-Effekt (creature
-// 'boulder').
+// Felsbrocken am Landepunkt: Explosion mit Radius p.R (Schaden, Abfall und Schleudern wie blast, trifft alle Bodentruppen,
+// keine Flieger; der Werfer ×0,5; Schadensart 'blast', also kein Schildblock und Deckung im Wald), dazu CYCLOPS.DEBRIS Brocken.
 function landBoulder(world, p, src) {
   const x = p.x1, y = p.y1, R = p.R, dmg = p.dmg;
-  query(world, x, y, R + 16, v => {
+  query(world, x, y, R + MAX_R, v => {
+    if (v.T.fly) return;
     const dx = v.x - x, dy = v.y - y, d = Math.hypot(dx, dy);
     if (d > R + v.T.r) return;
     const fall = 1 - .5 * Math.min(1, d / R);

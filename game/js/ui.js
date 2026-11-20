@@ -182,7 +182,9 @@ export function createUI(game) {
   // Klick auf eine erlaubte Karte wählt die Einheit. Schließt mit Esc, Knopf oder Klick daneben.
   let lexId = '';
   function openLexicon() {
-    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-');
+    const def = game.battle && game.battle.hot && game.battle.hot.def;
+    const ruleKey = def ? (def.id || (def.cats || []).join(',') + ':' + (def.units || []).join(',')) : '-';
+    const id = teamVi() + '|' + accent() + '|' + (game.mission ? game.mission.id : '-') + '|' + ruleKey;
     if (id !== lexId) {
       $('lexNote').textContent = tr(RETREAT_NOTE);
       // erlaubt je Einheit (units und cats des Levels; nicht malbare wie der Ghul bleiben ansehbar, ui-Toast beim Klick)
@@ -214,12 +216,20 @@ export function createUI(game) {
   $('ovLex').addEventListener('pointerdown', e => { if (e.target === $('ovLex')) closeLexicon(); });
   $('bLex').onclick = () => ($('ovLex').hidden ? openLexicon() : closeLexicon());
   $('lexClose').onclick = () => closeLexicon();
-  // Esc ist sonst nirgends belegt (input.js); nur bei offenem Lexikon
+  // Esc schließt den obersten schließbaren Dialog (shareDlg fängt Esc in Capture-Phase selbst ab)
   window.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('ovLex').hidden) { e.preventDefault(); closeLexicon(); }
-    else if (!$('ovBat').hidden) { e.preventDefault(); hideBattleResult(); }
-    else if (game.replaying()) { e.preventDefault(); game.endReplay(); }   // Schlachtfeld ansehen; der Reiter holt sie zurück
+    const click = id => { const b = $(id); if (b && !b.disabled) { e.preventDefault(); b.click(); return true; } return false; };
+    const vis = id => $(id) && !$(id).hidden;
+    if (vis('ovBoard')) { click('boardClose'); return; }
+    if (vis('ovLex')) { e.preventDefault(); closeLexicon(); return; }
+    if (vis('ovList')) { e.preventDefault(); $('ovList').hidden = true; return; }
+    if (vis('ovHot')) { click('hotCancel'); return; }
+    if (vis('ovDuel')) { if (!click('duelCancel')) click('duelOk'); return; }
+    if (vis('ovOnl')) { if (!click('onlStay') && !click('onlOk')) click('onlCancel'); return; }
+    if (vis('ovWelcome')) { click('welSkip'); return; }
+    if (vis('ovBat')) { e.preventDefault(); hideBattleResult(); return; }
+    if (game.replaying()) { e.preventDefault(); game.endReplay(); }
   });
 
   function updateInfo() {
@@ -376,7 +386,7 @@ export function createUI(game) {
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
   // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
   const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
-    : game.mission ? openChapter(game.mission.chapter.id) : openChapters());
+    : game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
   const openCustomList = () => openCustomListView(game, openChapters);
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
@@ -526,9 +536,9 @@ export function createUI(game) {
       cb.setAttribute('cx', x); cb.setAttribute('cy', yb); cr.setAttribute('cx', x); cr.setAttribute('cy', yr);
       hov.setAttribute('visibility', 'visible');
       tip.textContent = `${secs(p.t)} · ${SIDE_N.blau} ${fmtPts(p.blau)} · ${SIDE_N.rot} ${fmtPts(p.rot)}`;
-      const br = box.getBoundingClientRect();
-      tip.style.left = (r.left - br.left + x / vb.width * r.width) + 'px';
-      tip.style.top = (r.top - br.top + Math.min(yb, yr) / vb.height * r.height - 8) + 'px';
+      const br = box.getBoundingClientRect(), z = box.offsetWidth ? br.width / box.offsetWidth : 1;
+      tip.style.left = ((r.left - br.left + x / vb.width * r.width) / z) + 'px';
+      tip.style.top = ((r.top - br.top + Math.min(yb, yr) / vb.height * r.height) / z - 8) + 'px';
       tip.hidden = false;
     };
     svg.onpointerleave = () => { hov.setAttribute('visibility', 'hidden'); tip.hidden = true; };

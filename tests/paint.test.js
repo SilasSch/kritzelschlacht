@@ -202,3 +202,21 @@ test('Rückgängig und Sandkasten behalten reborn: der Phönix steht nur einmal 
   assert.match(main, /reborn: u\.reborn(, shape: u\.shape)? \}\)\)/, 'saveSandbox sichert reborn');
   assert.match(main, /n\.hp = (n\.growT > 0 \? Math\.min\(u\.hp, n\.T\.hp\) : )?u\.hp; n\.reborn = u\.reborn;/, 'enterSandbox stellt reborn her');
 });
+
+test('Radierer + Rückgängig erhält shape und deckelt rexei-LP auf T.hp (#83)', async () => {
+  const { applyShape } = await import('../game/js/shapes.js');
+  const w = createWorld(1400, 800, 3);
+  const k = spawn(w, 'krieger', 300, 400, 'blau'); applyShape(k, 'kreis', false);
+  const r = spawn(w, 'rex', 500, 400, 'blau'); r.growT = 0; r.T = UNITS.rex; r.hp = UNITS.rex.hp;
+  rebuildHash(w);
+  const s = createStroke(0);
+  paintTerrain(w, s, 300, 400, 20, 'radierer', null, null);
+  paintTerrain(w, s, 500, 400, 20, 'radierer', null, null);
+  undo(w, s);
+  const back = alive(w);
+  const kb = back.find(u => u.x === 300), rb = back.find(u => u.x === 500);
+  assert.equal(kb.shape, 'kreis');
+  assert.ok(kb.armor < 1, 'Igel-Rüstung wiederhergestellt');
+  assert.equal(rb.T, UNITS.rexei);
+  assert.equal(rb.hp, UNITS.rexei.hp, 'Ei-LP auf rexei gedeckelt');
+});

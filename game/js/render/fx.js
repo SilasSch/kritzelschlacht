@@ -132,22 +132,38 @@ export function createFx(renderer) {
   const mkLayer = () => { const cv = document.createElement('canvas'); return { cv, ctx: cv.getContext('2d'), tex: null, sprite: new PIXI.Sprite() }; };
   let cur = mkLayer(), old = mkLayer(), dctx = cur.ctx;
   const ager = createDecalAger(30);
-  let res = 0, decalDirty = false, decalForce = false, decalUpT = -1, decalCount = 0, decalUploads = 0;
+  let res = 0, prevW = 0, prevH = 0, decalDirty = false, decalForce = false, decalUpT = -1, decalCount = 0, decalUploads = 0;
   let curN = 0, oldN = 0;   // Decals je Generation (auf cur bzw. old gemalt)
-  const OLD_MIN_ALPHA = .02;
+  const OLD_MIN_ALPHA = .02, DECAL_MAX_RES = 1.5;
   L.decals.addChild(old.sprite, cur.sprite);   // alte Generation unten
   old.sprite.alpha = 0; old.sprite.visible = false;
 
   function resize(W, H, r) {
-    res = r;
+    const nr = Math.min(DECAL_MAX_RES, r);
+    const sameWorld = W === prevW && H === prevH;
+    if (sameWorld && nr === res) return;
+    const nw = Math.ceil(W * nr), nh = Math.ceil(H * nr);
+    const keep = sameWorld && (curN > 0 || oldN > 0);
     for (const d of [cur, old]) {
-      d.cv.width = Math.ceil(W * res); d.cv.height = Math.ceil(H * res);   // leert die Decals
+      let tmp = null;
+      if (keep && d.cv.width > 0 && d.cv.height > 0) {
+        tmp = document.createElement('canvas');
+        tmp.width = d.cv.width; tmp.height = d.cv.height;
+        tmp.getContext('2d').drawImage(d.cv, 0, 0);
+      }
+      d.cv.width = nw; d.cv.height = nh;
+      if (tmp) { d.ctx.setTransform(1, 0, 0, 1, 0, 0); d.ctx.drawImage(tmp, 0, 0, nw, nh); }
       if (d.tex) d.tex.destroy(true);
       d.tex = PIXI.Texture.from(d.cv);
-      d.sprite.texture = d.tex; d.sprite.scale.set(1 / res);
+      d.sprite.texture = d.tex; d.sprite.scale.set(1 / nr);
     }
-    ager.reset(); old.sprite.alpha = 0; old.sprite.visible = false;
-    decalDirty = false; decalForce = false; decalCount = 0; curN = 0; oldN = 0;
+    res = nr; prevW = W; prevH = H;
+    if (!keep) {
+      ager.reset(); old.sprite.alpha = 0; old.sprite.visible = false;
+      decalDirty = false; decalForce = false; decalCount = 0; curN = 0; oldN = 0;
+    } else {
+      decalDirty = false; decalForce = false;
+    }
   }
   // Fleck: drei verschobene flache Ellipsen (wie im alten Spiel)
   function decal(x, y, r, col, a) {

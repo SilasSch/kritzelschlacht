@@ -31,7 +31,7 @@ function setup(blocked) {
 
 test('Tastenkürzel: wirken ohne Dialog, bei offenem Lexikon nicht; R und Space auf Buttons (#72)', () => {
   const blocked = { on: false };
-  const { calls, key } = setup(blocked);
+  const { calls, key, ptr } = setup(blocked);
   const press = () => { key('3'); key('q'); key('e'); key('x'); key('p'); key('r'); key('+'); key('z', { ctrl: true }); };
   press();
   assert.deepEqual(calls.map(c => c[0]), ['pickSlot', 'setCat', 'setCat', 'eraser', 'togglePause', 'toggleRanges', 'brushDelta', 'undo']);
@@ -39,6 +39,9 @@ test('Tastenkürzel: wirken ohne Dialog, bei offenem Lexikon nicht; R und Space 
   const btn = { tagName: 'BUTTON', closest: sel => (sel.includes('button') ? btn : null) };
   assert.equal(key(' ', { code: 'Space', target: btn }), false);
   assert.equal(key(' ', { code: 'Space' }), true);
+  // Zeiger auf dem Spielfeld: Leertaste verschiebt trotz Fokus auf einem Knopf (nach Klick auf „Los!“ oder die Malleiste)
+  ptr('pointermove', 1, 300, 300, { type: 'mouse' });
+  assert.equal(key(' ', { code: 'Space', target: btn }), true);
   calls.length = 0;
   blocked.on = true;
   press();

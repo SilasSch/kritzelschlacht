@@ -11,6 +11,7 @@ export function bindInput(canvas, cam, actions) {
   let space = false;
   let painting = false, erase = false, panning = false;
   let paintId = null, panId = null, pinch = null;
+  let over = false;   // Zeiger über dem Spielfeld: dann verschiebt die Leertaste, auch wenn noch ein Knopf den Fokus hat
   let last = null;   // letzte Stempelposition (Welt)
   let lastS = null;  // letzte Bildschirmposition (fürs Verschieben)
   const pointers = new Map();   // pointerId → { x, y }
@@ -80,6 +81,7 @@ export function bindInput(canvas, cam, actions) {
 
   canvas.addEventListener('pointermove', (e) => {
     const s = local(e);
+    over = true;
     if (pointers.has(e.pointerId)) pointers.set(e.pointerId, s);
     if (pinch) {
       const a = pointers.get(pinch.id0), b = pointers.get(pinch.id1);
@@ -108,7 +110,7 @@ export function bindInput(canvas, cam, actions) {
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
-  canvas.addEventListener('pointerleave', (e) => { if (!painting && !panning && !pinch) hover(local(e), false); });
+  canvas.addEventListener('pointerleave', (e) => { over = false; if (!painting && !panning && !pinch) hover(local(e), false); });
 
   canvas.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -132,7 +134,8 @@ export function bindInput(canvas, cam, actions) {
   window.addEventListener('keydown', (e) => {
     if (inTextInput(e.target) || (actions.keysBlocked && actions.keysBlocked())) return;
     if (e.code === 'Space') {
-      if (onInteractive(e.target)) return;
+      // fokussierter Knopf (#72): Leertaste drückt ihn, außer der Zeiger steht auf dem Spielfeld (verschieben wie bisher)
+      if (onInteractive(e.target) && !over) return;
       space = true; e.preventDefault(); return;
     }
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
@@ -151,6 +154,6 @@ export function bindInput(canvas, cam, actions) {
     else if (k === 'r' && actions.toggleRanges) actions.toggleRanges();
     else if (/^[1-9]$/.test(e.key)) actions.pickSlot(Number(e.key));
   });
-  window.addEventListener('keyup', (e) => { if (e.code === 'Space') space = false; });
+  window.addEventListener('keyup', (e) => { if (e.code === 'Space') { if (space && onInteractive(e.target)) e.preventDefault(); space = false; } });
   window.addEventListener('blur', () => { space = false; pinch = null; pointers.clear(); endStroke(); });
 }

@@ -466,7 +466,7 @@ void main() {
       LK_W = world; LK_U = u; LK_F = factionOf(world, u); LK_B = null; LK_D = 70 * 70;
       query(world, u.x, u.y, 70, wedgeTest);
       const b = LK_B; LK_B = null; LK_U = null; LK_W = null;
-      if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + u.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
+      if (b) links.line(u.x, u.y + u.T.r * .5, b.x, b.y + b.T.r * .5, 2, tm ? C(TEAMS[u.team].c) : 0xd9a35b, .45);
     }
     // Synergien (synergy.js): dünne Linie zum Partner in der Farbe der Synergie; vom Adler Markierte mit Fadenkreuz (über Körpern)
     const wt = world.time;

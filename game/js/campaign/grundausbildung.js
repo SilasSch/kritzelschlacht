@@ -15,9 +15,8 @@ const PLANS = [
   // Task 7: Budget 100 → 95, Spam 50 → 47 Krieger (mehr passt nicht ins Budget)
   // Nachtrag 7 (#47): par 70 → 75, 14 Ritter + 3 Grenadiere statt 12 + 4 (die Schützen weichen den Bomben aus)
   { smart: [['ritter', 15, ...F], ['grenadier', 3, ...B]], spam: [['krieger', 46, ...F]] },   // Budget 92 (18.11.)
-  // M3, M6: Bienen kosten 0,55 statt 0,5 (Nachtrag 4, #37). Task 7: par 85 → 90 bzw. 90 → 95 und 163 bzw. 172 Bienen
-  // (154 bzw. 163 gewannen an einzelnen Formen nur 3/8 bzw. 4/8; die alten Pläne hatten 170 bzw. 180)
-  { smart: [['biene', 90, ...F]], spam: [['krieger', 55, ...F]] },
+  // M3: Magier (Feuer gegen Schildwall, 88 Pkt <= Par 90), da Bienen seit 18 LP (PR #51) Ritter im Schildwall nicht mehr allein brechen
+  { smart: [['magier', 11, ...B]], spam: [['krieger', 55, ...F]] },
   { smart: [['reiter', 30, ...F]], spam: [['krieger', 60, ...F]] },
   { smart: [['magier', 14, ...B]], spam: [['krieger', 55, ...F]] },
   // M6: 163 Bienen hinten (B) statt vorn: der Schwarm sammelt sich, bevor die Reiter da sind (vorn 5/8, hinten 8/8)
@@ -35,8 +34,8 @@ const PLANS = [
 
 // Spam-Regeln je Mission. Der Spam-Plan muss in M2, M4, M5, M7, M8, M9 verlieren (spamMustLose, Vorgabe für neue
 // Kapitel). Ausgenommen: M1 (Einstieg), dort muss der Krieger-Spam gewinnen (spamMustWin); M3 (Eiserne Front): schon in
-// der alten Engine gewann der Krieger-Spam manchmal gegen den Ritter-Schildwall, die Mission lehrt aber, dass Bienen (und
-// Bomben, Feuer) den Wall knacken, darum gewinnt er höchstens 4/8 (spamMaxWins); M6 (Wilde Jagd) wird nicht geprüft.
+// der alten Engine gewann der Krieger-Spam manchmal gegen den Ritter-Schildwall, die Mission lehrt aber, dass Magier
+// (Feuer) und Bomben den Wall knacken, darum gewinnt er höchstens 4/8 (spamMaxWins); M6 (Wilde Jagd) wird nicht geprüft.
 // answer: Lösung der Mission, dort darf eine einzelne Einheit mit vollem Budget gewinnen (newspam). M5 (Die Festung) lehrt
 // Reichweite über die Mauer (Hinweis: Magier schießen weiter als Schützen; Smart-Plan 14 Magier); der Zyklop ist genau
 // diese Artillerie (280 px über Mauern). Er gewann M5 auch mit 5 Zyklopen (Kosten 14) oder 200 px Reichweite 8/8.

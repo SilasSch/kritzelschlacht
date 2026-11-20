@@ -10,7 +10,7 @@ import { packArmy } from '../game/js/online.js';
 import { encode, decode } from '../game/js/share.js';
 import { placePlan } from '../tools/plans.mjs';
 import { placeDaily, dailySnapshot, fightSeed, armyOf, checkNow, createCheck, rankEntries, resultCode, validResult,
-  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP, SIM_VERSION, VERSIONS, acceptOld, stampOf } from '../game/js/dailyboard.js';
+  addLocal, cleanBoard, mergeOwn, dayEntries, cleanName, BOARD_KEEP, SIM_VERSION, VERSIONS, acceptOld, stampOf, dailyArmy } from '../game/js/dailyboard.js';
 import { PAINT_TYPES } from '../game/js/online.js';
 
 const D = '2026-11-18';
@@ -126,12 +126,20 @@ test('Spielversion: alte Einträge zählen wie eingetragen, aber nur bis zum let
     assert.ok(checkNow(D, '', { v: 'valt', r: { win: true, spent: 0.001, time: 0.001, stars: 3 } }).error);
     assert.equal(validResult({ v: 1, k: 'dailyres', d: D, a: '', n: 'Fake', sv: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }), false);
     assert.ok(checkNow(D, a, { v: 'valt', r: { win: true, spent: 1, time: 1, stars: 3 } }).error);
-    // Verifizierte Siege der aktuellen Version stehen immer vor Alt-Versionen
+    // Alte Einträge behalten ihre Zahlen, auch wenn die Armee mit heutigen Kosten übers Budget käme (Silas 20.11.)
+    const cost0 = {};
+    for (const t of Object.keys(UNITS)) { cost0[t] = UNITS[t].cost; UNITS[t].cost *= 1.8; }
+    try {
+      assert.throws(() => dailyArmy(D, a), /Budget/);
+      const honest = { v: 'valt', r: { win: true, spent: res.spent, time: 12.5, stars: 3 } };
+      assert.deepEqual(checkNow(D, a, honest).result, { win: true, spent: res.spent, time: 12.5, stars: 3, old: true });
+    } finally { for (const t in cost0) UNITS[t].cost = cost0[t]; }
+    // Sortierung gemischt wie bisher: alte Version mit weniger Punkten steht vorn, markiert mit old
     const ranked = rankEntries([
-      { res: { win: true, spent: 40, time: 5, old: true }, at: 1 },
       { res: { win: true, spent: 80, time: 20 }, at: 2 },
+      { res: { win: true, spent: 40, time: 5, old: true }, at: 1 },
     ]);
-    assert.equal(ranked[0].at, 2);
+    assert.equal(ranked[0].at, 1);
   } finally { delete VERSIONS.valt; }
   // Stempel gehen in die Ablage mit
   const b = addLocal({}, D, { n: 'A', a, ...stampOf(res) });

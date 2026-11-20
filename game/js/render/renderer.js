@@ -220,13 +220,15 @@ void main() {
   function ensureWorld(world, cam) {
     const ur = clamp(Math.round(cam.fit * dpr * 2 * 2) / 2, 1, 4);
     if (!rigs) { rigs = bakeRigTextures(app.renderer, ur); wantRigUr = ur; }
-    else if (rigs.resolution !== ur && wantRigUr !== ur) {
+    else if (wantRigUr !== ur) {
       wantRigUr = ur;
-      clearTimeout(rigBakeT);
-      rigBakeT = setTimeout(() => {
-        rigBakeT = 0;
-        if (rigs && rigs.resolution !== wantRigUr) { rigs.destroy(); rigs = bakeRigTextures(app.renderer, wantRigUr); resetCorpseQuads(); }
-      }, 250);
+      clearTimeout(rigBakeT); rigBakeT = 0;
+      if (rigs.resolution !== ur) {
+        rigBakeT = setTimeout(() => {
+          rigBakeT = 0;
+          if (rigs && rigs.resolution !== wantRigUr) { rigs.destroy(); rigs = bakeRigTextures(app.renderer, wantRigUr); resetCorpseQuads(); }
+        }, 250);
+      }
     }
     const want = Math.min(2, Math.max(1, cam.fit * dpr * 2), MAX_TEX / world.W, MAX_TEX / world.H);
     // abrunden (nicht runden): W·res und H·res bleiben ≤ MAX_TEX, auch auf HiDPI-Bildschirmen

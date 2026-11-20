@@ -23,9 +23,9 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
 
   /* ---------- Knopf in der Schlachtleiste ---------- */
   const btn = document.createElement('button');
-  btn.className = 'btn'; btn.id = 'batHot'; btn.textContent = tr('Hotseat');
+  btn.className = 'btn'; btn.id = 'batHot'; btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><circle cx="8.5" cy="8" r="3"/><path d="M3 20c0-3.3 2.4-6 5.5-6s5.5 2.7 5.5 6"/><path d="M15.5 5.2a3 3 0 0 1 0 5.6M17.5 14.4c2 .8 3.5 3 3.5 5.6"/></svg><span></span>'; const lab = btn.lastChild; lab.textContent = tr('Hotseat');
   btn.title = tr('Zwei Spieler an einem Gerät: jede Seite malt verdeckt mit eigenem Budget');
-  $('batGo').before(btn);
+  { const vs = $('batVs'); if (vs) vs.append(btn); else $('batGo').before(btn); }   // Gruppe „Zu zweit“ in der Leiste (UX 20.11.)
   btn.onclick = () => { const b = game.battle; if (!b || b.phase !== 'plan') return; if (b.hot) stop(); else openSetup(); };
 
   // „Los!“ wird in der Hotseat-Planung zu „Fertig“
@@ -111,7 +111,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     const hh = b ? b.hot : null, side = painter(hh), plan = !!b && b.phase === 'plan';
     if (hh && hh.online) { btn.hidden = true; return; }   // Online 1 gegen 1: ui/online.js zeigt die Leiste
     btn.hidden = !plan;
-    btn.textContent = hh ? tr('Hotseat beenden') : tr('Hotseat');
+    lab.textContent = hh ? tr('Hotseat beenden') : tr('Hotseat');
     btn.classList.toggle('on', !!hh);
     if (!b) return;
     if (hh && plan) {

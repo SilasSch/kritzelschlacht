@@ -291,6 +291,7 @@ export function createUI(game) {
     const g = $('misGo');
     g.textContent = mis.phase === 'plan' ? tr('Los!') : tr('Abbrechen');
     g.disabled = mis.phase === 'done';
+    g.classList.toggle('stop', mis.phase !== 'plan');   // Abbrechen ist kein Hauptknopf (UX 20.11.)
   }
 
   function updateControls() {
@@ -482,6 +483,7 @@ export function createUI(game) {
     const g = $('batGo');
     setText('batGo', plan ? tr('Los!') : tr('Abbrechen'));
     g.disabled = b.phase === 'done';
+    g.classList.toggle('stop', !plan);   // Abbrechen ist kein Hauptknopf (UX 20.11.); Online/Duell nehmen es wieder weg
     if (game.hotseatUI) game.hotseatUI();   // Hotseat-Versus (Audit 18.11.): Leiste in der Hotseat-Planung
     if (game.onlineUI) game.onlineUI();     // Online 1 gegen 1 (18.11.): Leiste im Online-Spiel
   }

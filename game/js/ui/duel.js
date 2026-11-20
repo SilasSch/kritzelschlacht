@@ -24,9 +24,9 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
-  btn.className = 'btn'; btn.id = 'batDuel'; btn.textContent = tr('Code-Duell');
+  btn.className = 'btn'; btn.id = 'batDuel'; btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14"/></svg><span></span>'; const lab = btn.lastChild; lab.textContent = tr('Code-Duell');
   btn.title = tr('1 gegen 1 ohne Anmeldung: Armee als Code verschicken, der Gegner malt verdeckt dagegen');
-  $('batGo').before(btn);
+  { const vs = $('batVs'); if (vs) vs.append(btn); else $('batGo').before(btn); }   // Gruppe „Zu zweit“ in der Leiste (UX 20.11.)
   btn.onclick = () => { if (st) stop(); else { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openSetup(); } };
 
   const go = $('batGo'), goPrev = go.onclick;
@@ -178,9 +178,10 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     const b = game.battle, plan = !!b && b.phase === 'plan';
     const on = !!st && !!b && b === battleRef && !!b.hot && b.hot.duel;
     btn.hidden = !b || (!on && (!plan || !!b.hot));
-    btn.textContent = on ? tr('Duell beenden') : tr('Code-Duell');
+    lab.textContent = on ? tr('Duell beenden') : tr('Code-Duell');
     btn.classList.toggle('on', on);
     if (!on) return;
+    go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
     for (const id of ['batHot', 'batOnl', 'batSwap', 'batShare']) if ($(id)) $(id).hidden = true;
     const h = b.hot, side = h.step === 'blau' || h.step === 'rot' ? h.step : null, c = st.cfg;
     $('batClear').hidden = !side;

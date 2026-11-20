@@ -458,7 +458,7 @@ export const TERRAIN = {
   // Geröll und Krater (Terrain-Update Stufe 2, Wunsch Silas 20.11.): entstehen nur im Kampf, nicht malbar.
   // Geröll bleibt von zerschlagenen Mauern (combat.hitWall), Krater reißen Explosionen in freien Boden (combat.blast).
   geroell:{n:'Geröll',id:7,cost:0,sp:.7,paint:false,d:'Zerschlagene Mauer: Tempo 70 %, Deckung: ¾ Schaden durch Pfeile, Kugeln und Explosionen.'},
-  krater:{n:'Krater',id:8,cost:0,paint:false,d:'Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln und Explosionen.'},
+  krater:{n:'Krater',id:8,cost:0,paint:false,d:'Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln.'},
   radierer:{n:'Radierer',id:0,cost:0,d:'Entfernt Einheiten und Gelände unter dem Pinsel.'},
 };
 // Nach Gelände-id (0 = frei): Tempofaktor (physics.integrate, formation.march) und Gefahr (formation.hazardAt).

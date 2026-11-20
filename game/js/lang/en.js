@@ -446,7 +446,7 @@ const EN = {
   "Geröll": "Rubble",
   "Zerschlagene Mauer: Tempo 70 %, Deckung: ¾ Schaden durch Pfeile, Kugeln und Explosionen.": "Smashed wall: 70 % speed, cover: ¾ damage from arrows, bullets and explosions.",
   "Krater": "Crater",
-  "Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln und Explosionen.": "Left by explosions: ground troops inside take ¾ damage from bullets and explosions.",
+  "Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln.": "Left by explosions: ground troops inside take ¾ damage from bullets.",
   "Dornen": "Thorns",
   "Durchlaufbar, aber stachelig: Bodentruppen nehmen 6 Schaden pro Sekunde. Flieger und schwere Brocken wie Panzer merken nichts.": "Passable but prickly: ground troops take 6 damage per second. Flyers and heavyweights like tanks don't notice.",
   "Radierer": "Eraser",

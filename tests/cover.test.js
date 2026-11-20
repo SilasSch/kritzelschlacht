@@ -70,7 +70,7 @@ test('Explosion ab CRATER.MIN_R reißt freien Boden zu Krater auf, Feuer und kle
   assert.equal(w.terr[cellIndex(w, w.W * .15, w.H * .15)], TERRAIN.wasser.id);
 });
 
-test('Deckung: Geröll ×¾ gegen Pfeile, Krater ×¾ gegen Kugeln, Krater nicht gegen Pfeile', () => {
+test('Deckung: Geröll ×¾ gegen Pfeile, Krater ×¾ gegen Kugeln, Krater nicht gegen Pfeile und Explosionen', () => {
   const w = createWorld(1600, 900, 4);
   const dmg = (id, kind) => {
     const u = spawn(w, 'ritter', 300, 300, 'blau'); w.terr[cellIndex(w, 300, 300)] = id;
@@ -80,4 +80,5 @@ test('Deckung: Geröll ×¾ gegen Pfeile, Krater ×¾ gegen Kugeln, Krater nicht
   assert.ok(Math.abs(dmg(TERRAIN.geroell.id, 'arrow') - a0 * RUBBLE_COVER) < 1e-9);
   assert.ok(Math.abs(dmg(TERRAIN.krater.id, 'bullet') - b0 * CRATER.COVER) < 1e-9);
   assert.ok(Math.abs(dmg(TERRAIN.krater.id, 'arrow') - a0) < 1e-9);
+  const x0 = dmg(0, 'blast'); assert.ok(Math.abs(dmg(TERRAIN.krater.id, 'blast') - x0) < 1e-9, 'Granaten: keine Deckung im Krater');
 });

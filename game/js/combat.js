@@ -156,7 +156,7 @@ GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.
 GROUP_USERS.add('reiter');    // Keil (WEDGE): Reiter, die zusammen reiten
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 const HC = HASH_CELL, WALL = 4, WATER_ID = 1, RUBBLE = 7, CRATER_ID = 8;
-// Terrain-Update Stufe 2 (20.11.): Geröll (zerschlagene Mauer) und Krater (Explosionen) geben Bodentruppen Deckung ×COVER.
+// Terrain-Update Stufe 2 (20.11.): Geröll (zerschlagene Mauer) und Krater (Explosionen, nur gegen Kugeln) geben Deckung ×¾.
 // Krater: Explosion der Art 'blast' oder 'rocket' ab MIN_R px reißt freien Boden bis R · K px auf.
 export const CRATER = { MIN_R: 30, K: .35, COVER: .75 };
 export const RUBBLE_COVER = .75;
@@ -196,12 +196,13 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
   // Wald gibt Bodentruppen Deckung gegen Fernkampf und Explosionen (×½);
-  // Geröll und Krater: Deckung ×¾ (Geröll auch gegen Pfeile, Krater nur gegen Kugeln und Explosionen)
+  // Geröll: Deckung ×¾ gegen Fernkampf und Explosionen; Krater: ×¾ nur gegen Kugeln (gegen Granaten schützt das Loch
+  // nicht: sonst schwächt jede Granate die nächste, grenadier>roemer kippte)
   if (!v.T.fly) {
     const tc = world.terr[cellIndex(world, v.x, v.y)];
     if (tc === 3 && (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= .5;
     else if (tc === RUBBLE && (kind === 'arrow' || kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= RUBBLE_COVER;
-    else if (tc === CRATER_ID && (kind === 'blast' || kind === 'bullet' || kind === 'rocket')) m *= CRATER.COVER;
+    else if (tc === CRATER_ID && kind === 'bullet') m *= CRATER.COVER;
   }
   // Synergien (synergy.js): Deckung durch Ritter/Römer bzw. Panzer; Markierung des Adlers, Schreck, Spucke, Elefant
   if (v.syn) {

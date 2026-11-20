@@ -74,9 +74,9 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
-  btn.className = 'btn'; btn.id = 'batOnl'; btn.textContent = tr('Online 1v1');
+  btn.className = 'btn'; btn.id = 'batOnl'; btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg><span></span>'; const lab = btn.lastChild; lab.textContent = tr('Online 1v1');
   btn.title = tr('Zwei Spieler auf zwei Geräten: jede Runde eine zufällige Kategorie, gleiches Budget, verdeckt malen');
-  $('batGo').before(btn);
+  { const vs = $('batVs'); if (vs) vs.append(btn); else $('batGo').before(btn); }   // Gruppe „Zu zweit“ in der Leiste (UX 20.11.)
   btn.onclick = () => { if (m) confirmLeave(); else { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openLobby(); } };
 
   // Aufgeben: Runde an den Gegner (beim Malen, Warten oder im Kampf)
@@ -442,10 +442,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const b = game.battle, plan = !!b && b.phase === 'plan';
     const on = !!m && !!b && b === battleRef && !!b.hot;
     btn.hidden = !b || (!on && (!plan || !!b.hot));
-    btn.textContent = on ? tr('Online verlassen') : tr('Online 1v1');
+    lab.textContent = on ? tr('Online verlassen') : tr('Online 1v1');
     btn.classList.toggle('on', on);
     giveBtn.hidden = !on || !canGiveUp(m);
     if (!on) return;
+    go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
     $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;
     const c = m.cfg, ph = m.phase;
     $('batClear').hidden = ph !== 'paint';

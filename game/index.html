@@ -351,6 +351,21 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .lv .md i{font-style:normal;opacity:.18}
 .lv .md i.on{opacity:1}
 .btn.on{background:var(--sel);border-color:var(--selb)}
+/* Leiste oben (UX 20.11.): Knöpfe mit Symbol, in Gruppen; Umschalter mit sichtbarem An/Aus; Abbrechen im Kampf nicht orange */
+.btn .ico{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.misbar .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px}
+.bgrp{display:flex;align-items:center;gap:6px}
+.bgrp:not(:has(>.btn:not([hidden]))){display:none}
+.bgrp.vs{padding:3px 3px 3px 10px;border-radius:14px;background:var(--soft);border:1px solid var(--line)}
+.bgrp.vs .glab{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.bgrp.vs .btn{padding:7px 11px;border-radius:10px}
+.btn.tg .ico .off{display:none}
+.btn.tg:not(.on){color:var(--muted)}
+.btn.tg:not(.on) .ico .off{display:inline}
+.btn.tg.on{background:var(--sel);border-color:var(--selb);color:var(--ink)}
+.go.stop{background:#fff;color:var(--ink);border:1.5px solid var(--line);font-family:var(--f-ui);font-size:14.5px;font-weight:800;letter-spacing:0;box-shadow:none;padding:9px 14px}
+.go.stop:hover{border-color:#e5574f;color:#c23a33}
+.go.stop:active{transform:none;box-shadow:none}
 .welcome p b{color:var(--ink)}
 /* ---------- Editor und Teilen (Audit 18.11.) ---------- */
 .edbar{gap:10px;padding:8px 8px 8px 14px}
@@ -409,7 +424,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
     <div class="misbar shadow p" id="misBar" hidden>
       <div class="mt"><div class="mn" id="misName"></div><div class="mh" id="misHint"></div></div>
       <div class="budget"><div class="bbar"><i id="budFill"></i></div><span id="budTxt"></span></div>
-      <button class="btn on" id="misRange" title="Reichweiten der gegnerischen Fernkämpfer anzeigen (R)" aria-pressed="true">Reichweiten</button>
+      <button class="btn tg on" id="misRange" title="Reichweiten der gegnerischen Fernkämpfer anzeigen (R)" aria-pressed="true"><svg viewBox="0 0 24 24" class="ico"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="off" d="M4 4l16 16"/></svg>Reichweiten</button>
       <button class="btn" id="misList">Übersicht</button>
       <button class="go" id="misGo">Los!</button>
     </div>
@@ -417,9 +432,13 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
     <div class="misbar batbar shadow p" id="batBar" hidden>
       <div class="mt"><div class="mn">Schlacht</div><div class="mh" id="batHint">Blau malt links, Rot rechts · Gelände überall</div></div>
       <div class="pts" id="batPts" title="Punktwert der Armeen (nur zur Info)"><i class="tdot blau"></i><span>Blau <b id="ptsB">0</b> Pkt</span><span class="sep">·</span><i class="tdot rot"></i><span>Rot <b id="ptsR">0</b> Pkt</span></div>
-      <button class="btn" id="batClear">Leeren</button>
-      <button class="btn" id="batSwap" title="Spiegelt die Aufstellung samt Gelände an der Mittellinie">Seiten tauschen</button>
-      <button class="btn" id="batShare" title="Aufstellung als Code teilen">Teilen</button><!-- Teilen (Audit 18.11.) -->
+      <!-- Leiste in Gruppen (UX 20.11.): Feld (Leeren, Seiten tauschen, Teilen) · Zu zweit (Hotseat, Online, Code-Duell, aus ui/*.js) · Los! -->
+      <div class="bgrp" id="batTools">
+        <button class="btn" id="batClear" title="Alle Einheiten und das Gelände entfernen"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Leeren</button>
+        <button class="btn" id="batSwap" title="Spiegelt die Aufstellung samt Gelände an der Mittellinie"><svg viewBox="0 0 24 24" class="ico"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg>Seiten tauschen</button>
+        <button class="btn" id="batShare" title="Aufstellung als Code teilen"><svg viewBox="0 0 24 24" class="ico"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Teilen</button><!-- Teilen (Audit 18.11.) -->
+      </div>
+      <div class="bgrp vs" id="batVs" role="group" aria-label="Zu zweit spielen"><span class="glab">Zu zweit</span></div>
       <button class="go" id="batGo">Los!</button>
     </div>
 

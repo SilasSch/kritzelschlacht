@@ -185,10 +185,10 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   $('boardNext').onclick = () => { const ds = days(), i = ds.indexOf(day); day = ds[Math.min(ds.length - 1, (i < 0 ? ds.length - 1 : i) + 1)]; render(); };
   $('boardClose').onclick = () => { ov.hidden = true; };
   $('boardName').oninput = e => { store.name = cleanName(e.target.value); persist(); };
-  $('boardMine').onclick = async () => {
-    if (!curMine) return;
-    const code = await encode(resultCode(day, curMine.a, store.name, curMine.res, verOf(curMine)));
-    shareDlg.showCode(code, tr('Ergebnis teilen'), tr('Tageschallenge {d}: {p} Punkte. Wer den Code mit „Code laden“ oder in der Bestenliste einfügt, sieht dich dort. Der Kampf wird nachgerechnet.', { d: shortDate(day), p: fmtPts(curMine.res.spent) }));
+  $('boardMine').onclick = () => {
+    const m = curMine, d = day;
+    if (!m) return;
+    shareDlg.showCode(encode(resultCode(d, m.a, store.name, m.res, verOf(m))), tr('Ergebnis teilen'), tr('Tageschallenge {d}: {p} Punkte. Wer den Code mit „Code laden“ oder in der Bestenliste einfügt, sieht dich dort. Der Kampf wird nachgerechnet.', { d: shortDate(d), p: fmtPts(m.res.spent) }));
   };
   $('boardAdd').onclick = async () => {
     try { addCode(await decode($('boardCode').value)); $('boardCode').value = ''; render(); } catch (e) { toast(tr(e.message || 'Der Code passt nicht.')); }
@@ -255,10 +255,12 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     const old = (store.days[date] || []).find(e => e.me);
     const saveLocal = () => {
       addLocal(store.days, date, { n: store.name, a: army, me: true, ...stampOf(res) });
-      store.days = cleanBoard(store.days); persist();
+      store.days = cleanBoard(store.days); persist(); render();
     };
     if (!old) saveLocal();
-    else checkAsync(date, old.a, old).then(oldRes => { if (better(res, oldRes)) saveLocal(); });
+    else checkAsync(date, old.a, old).then(oldRes => {
+      if ((store.days[date] || []).find(e => e.me) === old && better(res, oldRes)) saveLocal();
+    });
     submitLive(date, army, res);
   }
 

@@ -302,13 +302,16 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (joining || m) return;
     const b = game.battle; if (!b || b.phase !== 'plan' || b.hot) return;
     joining = true;
-    showCard('joining', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
+    let canceled = false;
+    showCard('joining', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>
+      <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
+    $('onlCancel').onclick = () => { canceled = true; hideCard(); };
     try {
       net = net || await getRoom();
-      if (!net || game.battle !== b || b.phase !== 'plan' || b.hot || m) { hideCard(); return; }
+      if (canceled || !net || game.battle !== b || b.phase !== 'plan' || b.hot || m) { hideCard(); return; }
       let newRoom;
-      try { newRoom = await net.join(roomName(code)); } catch (e) { hideCard(); ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
-      if (game.battle !== b || b.phase !== 'plan' || b.hot || m) {
+      try { newRoom = await net.join(roomName(code)); } catch (e) { if (!canceled) { hideCard(); ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); } return; }
+      if (canceled || game.battle !== b || b.phase !== 'plan' || b.hot || m) {
         try { newRoom.leave(); } catch (e) { /* weg */ }
         hideCard(); return;
       }

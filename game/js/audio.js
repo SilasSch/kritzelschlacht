@@ -123,6 +123,20 @@ export function createAudio() {
   let AC = null, noiseB = null, mix, comp, master, sfxBus, uiBus, wetIn, hasPan = false;
   const lastT = {}, recent = {}, famEnds = {};
   let ends = [], popStep = 0, popT = -9, cam = null, rate = 1;
+  let visBound = false, pending = null, resuming = false;
+  const GESTURE_SOUNDS = new Set(['ui', 'tab', 'go', 'whoosh', 'pop', 'scribble', 'notify']);
+
+  function ensureResume() {
+    if (!AC || AC.state === 'running' || AC.state === 'closed' || resuming) return;
+    resuming = true;
+    AC.resume().then(() => {
+      resuming = false;
+      if (pending && AC && AC.state === 'running') {
+        const p = pending; pending = null;
+        audio.play(p.k, p.o);
+      }
+    }, () => { resuming = false; });
+  }
 
   const audio = {
     muted: false,
@@ -134,7 +148,13 @@ export function createAudio() {
           build();
         } catch (e) { AC = null; }
       }
-      if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
+      if (AC && !visBound && typeof document !== 'undefined') {
+        visBound = true;
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') ensureResume();
+        });
+      }
+      if (AC && AC.state !== 'running' && AC.state !== 'closed') ensureResume();
     },
     setVolume(v) {
       audio.volume = Math.max(0, Math.min(1, v));
@@ -164,7 +184,11 @@ export function createAudio() {
     },
     // k: Stimme; o: { x, y, size, kind } (alles optional)
     play(k, o) {
-      if (audio.muted || !AC || AC.state !== 'running') return;
+      if (audio.muted || !AC) return;
+      if (AC.state !== 'running') {
+        if (AC.state !== 'closed' && GESTURE_SOUNDS.has(k)) { pending = { k, o }; ensureResume(); }
+        return;
+      }
       const R = RECIPES[k];
       if (!R) return;
       const now = AC.currentTime;

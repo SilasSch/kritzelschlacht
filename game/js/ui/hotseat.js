@@ -2,6 +2,7 @@
 // Budget und Seite. Die Regeln stehen in hotseat.js (rein); main.js ruft paintAt, clear, onUndo, spent und frame auf.
 // Zustand: game.battle.hot (createHot) oder nichts (freie Schlacht wie bisher).
 import { createHot, painter, hiddenTeam, hotPaint, finishSide, clearSide, HOT_BUDGETS, HOT_DEFAULT, SIDE_NAME } from '../hotseat.js';
+import { TERRAIN } from '../data.js';
 import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
@@ -149,6 +150,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     const sel = erase ? 'radierer' : game.sel;
     const r = hotPaint(world, h, stroke, wx, wy, game.brush, sel, first);
     if (r.blocked) { stroke.blocked = true; if (r.warning) ui.toast(r.warning); return true; }
+    if (!TERRAIN[sel] && stroke.path) stroke.path.push([wx, wy]);
     if (r.changed && r.cells) renderer.markTerrainDirty(r.cells.gx0, r.cells.gy0, r.cells.gx1, r.cells.gy1);
     if (r.placed) audio.play('pop');
     if (r.placed || r.changed) ui.updateBattle();

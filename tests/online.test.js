@@ -122,18 +122,18 @@ test('Online: in der Runde nur Einheiten der Kategorie, mit Budget', () => {
   assert.ok(w.units.every(u => u.type === 'wolf' && u.x <= W / 2));
 });
 
-test('Online: Armee-Paket hin und zurück, mit Formen; falsche Seite, Kategorie und Budget fallen auf', () => {
+test('Online: Armee-Paket hin und zurück, mit Formen; falsche Seite, Kategorie, Budget und Einzel-Form fallen auf', () => {
   const w = createWorld(W, H, 2); w.teamMode = true;
-  const a = spawn(w, 'ritter', 123.4, 456.7, 'blau'); applyShape(a, 'linie');
-  spawn(w, 'schuetze', 700, 10, 'blau');
+  for (let i = 0; i < 6; i++) { const a = spawn(w, 'ritter', 123.4 + i * 20, 456.7, 'blau'); applyShape(a, 'linie'); }
+  const solo = spawn(w, 'schuetze', 700, 10, 'blau'); applyShape(solo, 'kreis');   // unter SHAPE_MIN_UNITS: wird entfernt
   spawn(w, 'wolf', 1200, 500, 'rot');   // andere Seite: nicht im Paket
   const txt = packArmy(w, 'blau');
   assert.match(txt, /^[A-Za-z0-9_-]+$/);
-  const back = unpackArmy(txt, 'blau', W, H, { cat: 'armee', budget: 10 });
-  assert.equal(back.length, 2);
+  const back = unpackArmy(txt, 'blau', W, H, { cat: 'armee', budget: 40 });
+  assert.equal(back.length, 7);
   assert.equal(back[0].type, 'ritter'); assert.equal(back[0].shape, 'linie');
   assert.ok(Math.abs(back[0].x - 123.4) < .05 && Math.abs(back[0].y - 456.7) < .05);
-  assert.equal(back[1].shape, null);
+  assert.equal(back[6].shape, null, 'Einzel-Einheit darf keinen Formationsbonus tragen');
   assert.throws(() => unpackArmy(txt, 'rot', W, H, null), /falschen Seite/);
   assert.throws(() => unpackArmy(txt, 'blau', W, H, { cat: 'tiere', budget: 99 }), /Kategorie/);
   assert.throws(() => unpackArmy(txt, 'blau', W, H, { cat: 'armee', budget: 5 }), /Budget/);
@@ -295,6 +295,23 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   for (const junk of [null, 5, 'x', [], { ks: 2, cfg: {} }, { ks: 1, cfg: { r: 'a' } }, { ks: 1, cfg: { r: 1, cat: 'gelaende', budget: 100 } }]) onPeer(C, junk, W, H);
   assert.equal(C.cfg, null);
   assert.equal(pickPeer([{ isMe: true, presence: { ks: 2 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 } }, { isMe: false, presence: { ks: 2 }, peer: 'p2' }]).peer, 'p2');
+  // pickPeer filtert Gegenrolle und bevorzugt bekannten peerRef (#59)
+  const peers3 = [
+    { isMe: false, peer: 'pHost2', presence: { ks: 2, role: 'host' } },
+    { isMe: false, peer: 'pGuest1', presence: { ks: 2, role: 'guest' } },
+    { isMe: false, peer: 'pGuest2', presence: { ks: 2, role: 'guest' } },
+  ];
+  assert.equal(pickPeer(peers3, 'guest').peer, 'pGuest1');
+  assert.equal(pickPeer(peers3, 'guest', 'pGuest2').peer, 'pGuest2');
+  // Revanche abgelehnt: Host startet nicht sofort, erst nach Einigung (#59)
+  const H1 = createMatch('host', 100, createRng(5)), G1 = createMatch('guest');
+  hostStart(H1); voteBoth(H1, G1);
+  giveUp(G1); link(H1, G1);
+  wantNext(H1, true); wantNext(G1, false); link(H1, G1);
+  assert.equal(H1.phase, 'result', 'bei ungleichem Revanche-Wunsch wartet Host auf Einigung');
+  assert.equal(H1.peerWant, 'new');
+  wantNext(H1, false); link(H1, G1);
+  assert.equal(H1.phase, 'vote'); assert.equal(G1.phase, 'vote');
   assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150 } } }, { isMe: false, presence: { open: { code: 'zz', budget: 150 } } }]), [{ code: 'KX7P', budget: 150 }]);
 });
 

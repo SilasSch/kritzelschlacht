@@ -79,28 +79,42 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   }
 
   /* ---------- Live (Datenbank) ---------- */
-  const live = { db: null, user: null, me: null, docs: [], names: {}, state: 'off', note: '' };
+  const live = { db: null, user: null, me: null, docs: [], names: {}, state: 'off', note: '', ready: false };
+  const pendingLive = new Map();   // date → { date, army, res }, wartet bis zum ersten onSnapshot
+  function flushPending() {
+    if (live.state !== 'on' || writing || !pendingLive.size) return;
+    const [date, item] = pendingLive.entries().next().value;
+    pendingLive.delete(date);
+    submitLive(item.date, item.army, item.res);
+  }
   (async () => {
     const C = typeof window !== 'undefined' && window.claude;
-    if (!C || typeof C.use !== 'function') return;
+    if (!C || typeof C.use !== 'function') { live.ready = true; pendingLive.clear(); return; }
     try {
       const [db, user] = await Promise.all([C.use('db').catch(() => null), C.use('user').catch(() => null)]);
-      if (!db) return;
+      if (!db) { live.ready = true; pendingLive.clear(); return; }
       live.db = db; live.user = user; live.state = 'load';
       live.me = user ? await user.id() : null;
       const timer = setTimeout(() => { if (live.state === 'load') { live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); } }, 10000);
       db.collection('scores').onSnapshot(snap => {
         if (!snap.metadata.fromCache) { clearTimeout(timer); live.note = ''; }
-        live.state = 'on';
+        live.state = 'on'; live.ready = true;
         live.docs = snap.docs.filter(d => d.exists).map(d => ({ id: d.id, data: d.data() }));
         render();
-      }, () => { clearTimeout(timer); live.state = 'off'; live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); });
-    } catch (e) { live.state = 'off'; }
+        flushPending();
+      }, () => { clearTimeout(timer); live.state = 'off'; live.ready = true; pendingLive.clear(); live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); });
+    } catch (e) { live.state = 'off'; live.ready = true; pendingLive.clear(); }
   })();
   const myDoc = () => (live.docs.find(d => d.id === live.me) || {}).data || null;
   let writing = false;
   async function submitLive(date, army, res) {
-    if (!live.db || !live.me || writing) return;
+    if (live.state !== 'on' || !live.db || !live.me || writing) {
+      if (!live.ready || live.state === 'load' || (live.state === 'on' && writing)) {
+        const prev = pendingLive.get(date);
+        if (!prev || better(res, prev.res)) pendingLive.set(date, { date, army, res });
+      }
+      return;
+    }
     const own = myDoc(), old = own && own.days && own.days[date];
     if (old && old.a === army && verOf(old) === SIM_VERSION) return;
     if (old && !better(res, resultNow(date, old.a, old))) return;   // der alte Eintrag ist besser
@@ -113,19 +127,21 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     } catch (e) {
       live.note = tr('Eintragen geht nur mit dem Recht „Mitwirkende“ für dieses Artefakt.');
       render();
-    } finally { writing = false; }
+    } finally { writing = false; flushPending(); }
   }
 
   /* ---------- Einträge eines Tages ---------- */
   function entries(date) {
-    const out = [], seen = new Set();
+    const out = [];
+    let myLiveArmy = null;
     for (const e of dayEntries(live.docs, date)) {
-      if (seen.has(e.a)) continue; seen.add(e.a);
+      const me = e.uid === live.me;
+      if (me) myLiveArmy = e.a;
       const doc = live.docs.find(d => d.id === e.uid);
-      out.push({ ...e, me: e.uid === live.me, live: true, nick: cleanName(doc && doc.data && doc.data.n) });
+      out.push({ ...e, me, live: true, nick: cleanName(doc && doc.data && doc.data.n) });
     }
     for (const e of store.days[date] || []) {
-      if (seen.has(e.a)) continue; seen.add(e.a);
+      if (e.me && myLiveArmy !== null && e.a === myLiveArmy) continue;
       out.push({ ...e, me: !!e.me, code: !e.me });
     }
     for (const e of out) { const r = want(date, e.a, e); e.res = r && r.res; e.error = r && r.error; e.pending = !r; }

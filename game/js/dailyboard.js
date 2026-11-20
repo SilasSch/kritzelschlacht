@@ -14,7 +14,7 @@
 // Einträge von vorher stehen (markiert „alte Version“), neue werden nach den neuen Regeln nachgerechnet; ab dem nächsten
 // Tag gilt nur noch die neue Version. tests/dailyboard.test.js schlägt fehl, solange die aktuelle Version nicht in VERSIONS steht.
 import { UNITS } from './data.js';
-import { createWorld, spawn, rebuildHash } from './world.js';
+import { createWorld, spawn, rebuildHash, cellIndex } from './world.js';
 import { buildMission, missionResult, step } from './sim.js';
 import { snapshotBattle, resetFight, STEP } from './battle.js';
 import { createRng } from './rng.js';
@@ -101,7 +101,11 @@ export function dailySnapshot(date, army) {
   const { level, units, spent } = dailyArmy(date, army);
   const w = createWorld(WORLD_W, WORLD_H, 1);
   placeDaily(w, level);
-  for (const u of units) { const n = spawn(w, u.type, u.x, u.y, 'blau'); if (u.shape) applyShape(n, u.shape); }
+  for (const u of units) {
+    if (!UNITS[u.type].fly && w.terr[cellIndex(w, u.x, u.y)] === 4) throw new Error('Einheit auf einer Mauer.');
+    const n = spawn(w, u.type, u.x, u.y, 'blau');
+    if (u.shape) applyShape(n, u.shape);
+  }
   rebuildHash(w);
   return { snap: snapshotBattle(w), level, spent };
 }
@@ -179,7 +183,7 @@ export function validResult(d) {
 /* ---------- Lokale Tagesliste: { 'YYYY-MM-DD': [{ n, a, at, me }] } ---------- */
 // Ein Eintrag je Name und Tag (der bessere bleibt, nach Nachrechnen entscheidet main/ui). Hier nur Ablage und Kürzen.
 export function addLocal(board, date, entry) {
-  const day = (board[date] = (board[date] || []).filter(e => e.a !== entry.a && !(entry.me ? e.me : e.n === entry.n && !e.me)));
+  const day = (board[date] = (board[date] || []).filter(e => !(entry.me ? e.me : e.n === entry.n && !e.me)));
   day.push({ n: cleanName(entry.n), a: entry.a, at: entry.at || Date.now(), ...(entry.me ? { me: 1 } : {}), ...cleanStamp(entry) });
   return board;
 }

@@ -214,12 +214,20 @@ export function createUI(game) {
   $('ovLex').addEventListener('pointerdown', e => { if (e.target === $('ovLex')) closeLexicon(); });
   $('bLex').onclick = () => ($('ovLex').hidden ? openLexicon() : closeLexicon());
   $('lexClose').onclick = () => closeLexicon();
-  // Esc ist sonst nirgends belegt (input.js); nur bei offenem Lexikon
+  // Esc schließt den obersten schließbaren Dialog (shareDlg fängt Esc in Capture-Phase selbst ab)
   window.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
-    if (!$('ovLex').hidden) { e.preventDefault(); closeLexicon(); }
-    else if (!$('ovBat').hidden) { e.preventDefault(); hideBattleResult(); }
-    else if (game.replaying()) { e.preventDefault(); game.endReplay(); }   // Schlachtfeld ansehen; der Reiter holt sie zurück
+    const click = id => { const b = $(id); if (b && !b.disabled) { e.preventDefault(); b.click(); return true; } return false; };
+    const vis = id => $(id) && !$(id).hidden;
+    if (vis('ovBoard')) { click('boardClose'); return; }
+    if (vis('ovLex')) { e.preventDefault(); closeLexicon(); return; }
+    if (vis('ovList')) { e.preventDefault(); $('ovList').hidden = true; return; }
+    if (vis('ovHot')) { click('hotCancel'); return; }
+    if (vis('ovDuel')) { if (!click('duelCancel')) click('duelOk'); return; }
+    if (vis('ovOnl')) { if (!click('onlStay') && !click('onlOk')) click('onlCancel'); return; }
+    if (vis('ovWelcome')) { click('welSkip'); return; }
+    if (vis('ovBat')) { e.preventDefault(); hideBattleResult(); return; }
+    if (game.replaying()) { e.preventDefault(); game.endReplay(); }
   });
 
   function updateInfo() {

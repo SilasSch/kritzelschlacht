@@ -69,7 +69,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   const style = document.createElement('style'); style.textContent = CSS; document.head.append(style);
 
   let room = null, lobby = null, net = null, m = null, battleRef = null, unsubs = [], lastPub = '', peerSeen = 0, joinT = 0;
-  let lobbyUnsub = null, roundT = 0, peerRef = null, goneAck = false;
+  let lobbyUnsub = null, roundT = 0, peerRef = null, goneAck = false, pubRetry = 0;
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
@@ -316,6 +316,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     publish(); waitCard(); sync();
   }
   function leave(msg) {
+    clearTimeout(pubRetry); pubRetry = 0;
     for (const u of unsubs) try { u(); } catch (e) { /* weg */ }
     unsubs = [];
     if (room) try { room.leave(); } catch (e) { /* weg */ }
@@ -333,18 +334,22 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (msg) ui.toast(msg);
     sync();
   }
+  const oppRole = () => (m && m.role === 'host' ? 'guest' : 'host');
   function publish() {
     if (!room || !m) return;
     const v = view(m), txt = JSON.stringify(v);
     if (txt === lastPub) return;
+    clearTimeout(pubRetry); pubRetry = 0;
     lastPub = txt;
-    room.presence(v).catch(() => { lastPub = ''; });
+    room.presence(v).catch(() => {
+      if (lastPub === txt) lastPub = '';
+      if (room && m && !pubRetry) pubRetry = setTimeout(() => { pubRetry = 0; publish(); }, 1500);
+    });
   }
   function onPeers() {
     if (!m || !room) return;
-    const p = pickPeer(room.peers());
-    const okRole = p && p.presence.role === (m.role === 'host' ? 'guest' : 'host');
-    if (okRole) {
+    const p = pickPeer(room.peers(), oppRole(), peerRef);
+    if (p) {
       if (peerRef && peerRef !== p.peer && m.cfg) { /* neuer Tab des Gegners: läuft mit der Runde weiter */ }
       peerRef = p.peer; peerSeen = Date.now(); goneAck = false;
       if (shown === 'gone') hideCard();
@@ -474,7 +479,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const now = Date.now();
     if (m.phase === 'wait' && m.role === 'guest' && shown === 'wait' && now - joinT > JOIN_MS && !card.querySelector('.warn')) waitCard();
     if (peerSeen && !goneAck && now - peerSeen > GONE_MS && shown !== 'gone' && shown !== 'leave') {
-      const p = room && pickPeer(room.peers());
+      const p = room && pickPeer(room.peers(), oppRole(), peerRef);
       if (p) peerSeen = now; else goneCard();
     }
   }

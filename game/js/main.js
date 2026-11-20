@@ -2,7 +2,7 @@
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
-import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain } from './world.js';
+import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain, cellIndex } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect } from './sim.js';
 import { createCamera, resizeCamera, setPadding, WORLD_W, WORLD_H } from './camera.js';
 import { bindInput } from './input.js';
@@ -485,7 +485,11 @@ function onlineFight(list, seed, map = 'feld') {
   cancelBatch(); endReplay(true);
   clearWorld(); world.teamMode = true;
   applyMap(world, map); markAll();   // Karte der Runde (rules.js), auf beiden Geräten gleich
-  for (const u of list) { const n = spawn(world, u.type, u.x, u.y, u.team); if (u.shape) applyShape(n, u.shape, true); }
+  for (const u of list) {
+    if (!UNITS[u.type].fly && world.terr[cellIndex(world, u.x, u.y)] === 4) continue;
+    const n = spawn(world, u.type, u.x, u.y, u.team);
+    if (u.shape) applyShape(n, u.shape, true);
+  }
   rebuildHash(world);
   b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
   fight(b, seed);
@@ -573,6 +577,7 @@ game.editorUI = editorUI;
 
 // level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
 function enterEditor(level = null) {
+  endReplay(true);
   ui.hideOverlays();
   if (game.editor && !level) return;
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
@@ -732,9 +737,12 @@ const actions = {
   undo: () => game.undo(),
   togglePause: () => game.togglePause(),
   toggleMute: () => game.toggleMute(),
+  toggleRanges: () => { if (game.mission && game.mission.phase === 'plan') game.toggleRanges(); },
   hover(wx, wy, inside) { pointer.x = wx; pointer.y = wy; pointer.inside = inside; },
-  // offenes Lexikon (Dialog): keine Tastenkürzel (input.js); Esc schließt es (ui.js)
-  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen(),
+  // offenes Modal (.ov oder Online-Abfrage): keine Tastenkürzel (input.js)
+  keysBlocked: () => ui.lexiconOpen() || shareDlg.isOpen()
+    || !!document.querySelector('.ov:not([hidden])')
+    || !!(document.getElementById('onlAsk') && !document.getElementById('onlAsk').hidden),
 };
 
 // Kritzel-Formen (Audit 18.11.): Form des Strichs erkennen und seinen Einheiten den Bonus geben. Der Gegner steht in

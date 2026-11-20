@@ -90,7 +90,8 @@ test('Ablage: lokale Liste und Live-Dokument behalten nur die letzten Tage, ein 
   let b = {};
   addLocal(b, D, { n: 'Ann', a: 'x1' }); addLocal(b, D, { n: 'Ann', a: 'x2' }); addLocal(b, D, { n: 'Bo', a: 'x3' });
   addLocal(b, D, { n: 'Ich', a: 'm1', me: true }); addLocal(b, D, { n: 'Ich', a: 'm2', me: true });
-  assert.deepEqual(b[D].map(e => e.a).sort(), ['m2', 'x2', 'x3']);
+  addLocal(b, D, { n: 'Freund', a: 'm2' });   // gleiche Armee wie eigener Eintrag darf eigenen nicht löschen (#60)
+  assert.deepEqual(b[D].map(e => `${e.n}:${e.a}`).sort(), ['Ann:x2', 'Bo:x3', 'Freund:m2', 'Ich:m2']);
   for (let i = 1; i <= 10; i++) addLocal(b, `2026-11-0${i}`.replace('0' + 10, '10'), { n: 'A', a: 'y' + i });
   assert.equal(Object.keys(cleanBoard(b)).length, BOARD_KEEP);
   assert.ok(cleanBoard(b)[D]);

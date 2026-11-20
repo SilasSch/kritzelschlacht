@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorld, spawn, setCell, cellIndex, rebuildHash } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { hitWall } from '../game/js/combat.js';
-import { createFlow, updateFlow, flowDir, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA, PATH_REFRESH } from '../game/js/pathing.js';
+import { createFlow, updateFlow, flowDir, flowDirTo, directBlocked, PATH_CELL, PATH_BLOCK_WALL, PATH_BLOCK_LAVA, PATH_REFRESH, PATH_MAX_PER_STEP } from '../game/js/pathing.js';
 import { CELL } from '../game/js/data.js';
 
 const W = 1400, H = 800, DT = 1 / 60;
@@ -282,3 +282,19 @@ test('Lava ohne Mauer: Wolf weit weg von der Lücke folgt dem Fluss, auch bei la
   assert.ok(onLava <= 6, `auf Lava: ${onLava} Schritte`);
   assert.ok(!e.alive || e.hp < e.T.hp || Math.hypot(wolf.x - e.x, wolf.y - e.y) < 60, 'Wolf kam beim Ziel an');
 });
+
+test('flowDirTo: Schwarm in derselben groben Zelle teilt ein Feld, Budget je Schritt bleibt begrenzt (#61)', () => {
+  const w = mk(23);
+  wallRect(w, 700, 720, 0, 600);
+  const bees = Array.from({ length: 20 }, (_, i) => spawn(w, 'biene', 902 + (i % 4) * 3, 202 + Math.floor(i / 4) * 2, 'rot'));
+  const far = Array.from({ length: 10 }, (_, i) => spawn(w, 'biene', 850 + i * 40, 100 + i * 50, 'rot'));
+  rebuildHash(w);
+  const fl = createFlow(w);
+  updateFlow(w, fl, DT);
+  const r0 = fl.stats.recomputes;
+  for (const b of bees) assert.ok(flowDirTo(w, fl, b, 400, 200));
+  assert.equal(fl.stats.recomputes - r0, 1, 'alle 20 Bienen in einer Zelle teilen genau ein Flussfeld');
+  for (const b of far) flowDirTo(w, fl, b, 400, 200);
+  assert.ok(fl.stats.recomputes - r0 <= PATH_MAX_PER_STEP, `höchstens ${PATH_MAX_PER_STEP} Neuberechnungen je Schritt`);
+});
+

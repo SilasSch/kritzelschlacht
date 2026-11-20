@@ -41,7 +41,7 @@ export function createFlow(world) {
     cost: new Uint8Array(0), hazards: 0,          // hazards: Mauer-, Lava-, Wasser- und Dornenzellen im Geländeraster
     head: new Int32Array(NB), next: new Int32Array(0), prev: new Int32Array(0),
     fields: new Map(), list: [], gen: 0,
-    tfields: new Map(), tlist: [],                // Felder je Luftziel (flowDirTo): Schlüssel Einheit          // list: dieselben Felder in Reihenfolge (Schleifen ohne Iteratoren)
+    tfields: new Map(), tlist: [], tbudget: PATH_MAX_PER_STEP,  // Felder je Luftziel-Zelle (flowDirTo): Schlüssel grobe Zelle
     // Zähler für ?debug (__kritzel.flow()): Neuberechnungen gesamt, ms gesamt/letzte/max, je s
     stats: { recomputes: 0, ms: 0, lastMs: 0, maxMs: 0, rate: 0, msRate: 0, winN: 0, winMs: 0, winT: 0 },
   };
@@ -49,8 +49,10 @@ export function createFlow(world) {
   return flow;
 }
 
+const PATH_TARGET_MAX = 32;
+
 function makeField(flow, f) {
-  return { f, dist: new Int32Array(flow.N).fill(INF), age: 0, dirty: true, ready: false, gen: 0, tg: null, idle: 0 };
+  return { f, dist: new Int32Array(flow.N).fill(INF), age: 0, dirty: true, ready: false, gen: 0, srcCell: -1, idle: 0 };
 }
 
 // Kosten des groben Rasters aus dem Geländeraster (bei jeder Geländeänderung)
@@ -60,7 +62,7 @@ function rebuildCost(world, flow) {
   if (N !== flow.N) {
     flow.cost = new Uint8Array(N); flow.next = new Int32Array(N); flow.prev = new Int32Array(N);
     for (let k = 0; k < flow.list.length; k++) flow.list[k].dist = new Int32Array(N).fill(INF);
-    for (let k = 0; k < flow.tlist.length; k++) flow.tlist[k].dist = new Int32Array(N).fill(INF);
+    flow.tfields.clear(); flow.tlist.length = 0;
   }
   flow.PW = PW; flow.PH = PH; flow.N = N; flow.GW = GW; flow.GH = GH;
   flow.terrRef = terr; flow.ver = world.terrainVersion | 0;
@@ -122,14 +124,14 @@ function unlink(flow, i, b) {
 }
 
 // Distanzfeld der Fraktion f: Dijkstra von allen lebenden Gegner-Bodeneinheiten aus.
-// Mit field.tg (Feld je Luftziel, flowDirTo): nur die Bodenzelle unter dieser Einheit als Quelle.
+// Mit field.srcCell >= 0 (Feld je Luftziel-Zelle, flowDirTo): nur diese Bodenzelle als Quelle.
 function compute(world, flow, field, f) {
   const { PW, PH, cost, head } = flow, dist = field.dist, units = world.units;
   dist.fill(INF); head.fill(-1);
   let queued = 0;
-  if (field.tg) {
-    const c = openCell(flow, field.tg.x, field.tg.y);
-    if (c >= 0) { dist[c] = 0; link(flow, c, 0); queued++; }
+  if (field.srcCell >= 0) {
+    const c = field.srcCell;
+    if (c < flow.N && cost[c]) { dist[c] = 0; link(flow, c, 0); queued++; }
   } else for (let i = 0; i < units.length; i++) {
     const v = units[i];
     if (!v.alive || v.T.fly || factionOf(world, v) === f) continue;
@@ -173,14 +175,15 @@ function timed(world, flow, field) {
 // Ein Schritt: Raster bei Geländeänderung neu, Fraktionen abgleichen, gestaffelt neu berechnen.
 export function updateFlow(world, flow, dt) {
   const fields = flow.fields, list = flow.list;
+  flow.tbudget = PATH_MAX_PER_STEP;
   if (flow.ver !== (world.terrainVersion | 0) || flow.terrRef !== world.terr || flow.GW !== world.GW || flow.GH !== world.GH) {
     rebuildCost(world, flow);
     for (let k = 0; k < list.length; k++) list[k].dirty = true;
     for (let k = 0; k < flow.tlist.length; k++) flow.tlist[k].dirty = true;
   }
-  // Felder je Luftziel: altern; tot oder PATH_TARGET_KEEP s ohne Nachfrage fallen sie weg
+  // Felder je Luftziel-Zelle: altern; PATH_TARGET_KEEP s ohne Nachfrage fallen sie weg
   { const tl = flow.tlist; let m = 0;
-    for (let k = 0; k < tl.length; k++) { const fl = tl[k]; fl.age += dt; fl.idle += dt; if (fl.tg.alive && fl.idle < PATH_TARGET_KEEP) tl[m++] = fl; else flow.tfields.delete(fl.tg); }
+    for (let k = 0; k < tl.length; k++) { const fl = tl[k]; fl.age += dt; fl.idle += dt; if (fl.idle < PATH_TARGET_KEEP && flow.cost[fl.srcCell]) tl[m++] = fl; else flow.tfields.delete(fl.srcCell); }
     tl.length = m; }
   // Fraktionen mit lebenden Bodentruppen
   const gen = ++flow.gen, units = world.units;
@@ -231,14 +234,30 @@ export function flowDir(flow, faction, x, y) {
   return fieldDir(flow, flow.fields.get(faction), x, y);
 }
 
-// Wie flowDir, aber zum Boden unter einer bestimmten (fliegenden) Einheit tg: eigenes Feld nur mit dieser Quelle, bei
-// Bedarf angelegt und berechnet (alle PATH_REFRESH s oder nach Geländeänderung neu; 80×45 Felder kosten wenig). So
-// laufen Schützen um Mauern herum, bis sie einen Hubschrauber in Reichweite haben (vorher: an der Mauer einschlagen).
+// Wie flowDir, aber zum Boden unter einer bestimmten (fliegenden) Einheit tg: nach grober Zelle geschlüsselt
+// (Schwärme in derselben 20-px-Zelle teilen ein Feld) und auf tbudget Neuberechnungen je Schritt begrenzt.
 export function flowDirTo(world, flow, tg, x, y) {
-  let fl = flow.tfields.get(tg);
-  if (!fl) { fl = makeField(flow, null); fl.tg = tg; fl.idle = 0; flow.tfields.set(tg, fl); flow.tlist.push(fl); }
+  const c = openCell(flow, tg.x, tg.y);
+  if (c < 0) return null;
+  let fl = flow.tfields.get(c);
+  if (!fl) {
+    if (flow.tbudget <= 0) return null;
+    if (flow.tlist.length >= PATH_TARGET_MAX) {
+      let ev = 0;
+      for (let k = 1; k < flow.tlist.length; k++) if (flow.tlist[k].idle > flow.tlist[ev].idle) ev = k;
+      fl = flow.tlist[ev];
+      flow.tfields.delete(fl.srcCell);
+      fl.srcCell = c; fl.dirty = true; fl.ready = false; fl.age = 0; fl.idle = 0;
+    } else {
+      fl = makeField(flow, null); fl.srcCell = c; flow.tlist.push(fl);
+    }
+    flow.tfields.set(c, fl);
+  }
   fl.idle = 0;
-  if (fl.dirty || !fl.ready || fl.age >= PATH_REFRESH) timed(world, flow, fl);
+  if ((fl.dirty || !fl.ready || fl.age >= PATH_REFRESH) && flow.tbudget > 0) {
+    timed(world, flow, fl);
+    flow.tbudget--;
+  }
   return fieldDir(flow, fl, x, y);
 }
 

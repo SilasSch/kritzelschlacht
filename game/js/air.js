@@ -39,22 +39,35 @@ function pick(world, u, score) {
 const jetScore = (v, d2) => (v.T.fly ? d2 : d2 * 9 + 4e5);
 // Drohne: im Umkreis SEEK das teuerste Ziel, je Drohne, die es schon anfliegt, wie DRONE.SHARE Punkte billiger (verteilt den
 // Schwarm); außerhalb das nächste
-const droneScore = (v, d2) => (d2 > DRONE.SEEK * DRONE.SEEK ? 1e9 + d2 : -(v.T.cost - DRONE.SHARE * (v.droneN || 0)) * 1e6 + d2);
+let DRONE_CUR = null, DC_W = null, DC_T = -1, DC_TEAM = null;
+const droneScore = (v, d2) => {
+  const n = (v.droneN || 0) - (DRONE_CUR && DRONE_CUR.tg === v ? 1 : 0);
+  return d2 > DRONE.SEEK * DRONE.SEEK ? 1e9 + d2 : -(v.T.cost - DRONE.SHARE * n) * 1e6 + d2;
+};
 function countDrones(world, u) {
+  if (DC_W === world && DC_T === world.time && DC_TEAM === u.team) return;
   for (const v of world.units) v.droneN = 0;
-  for (const v of world.units) if (v.alive && v !== u && v.type === 'kampfdrohne' && v.tg && v.team === u.team) v.tg.droneN++;
+  for (const v of world.units) if (v.alive && v.type === 'kampfdrohne' && v.tg && v.team === u.team) v.tg.droneN++;
+  DC_W = world; DC_T = world.time; DC_TEAM = u.team;
 }
 let G_W = null, G_F = null, G_S = 0, G_X = 0, G_Y = 0, G_R2 = 0;
 const groupTest = v => { if (v.alive && !v.T.fly && (v.x - G_X) ** 2 + (v.y - G_Y) ** 2 <= G_R2) G_S += factionOf(G_W, v) === G_F ? -2 : 1; };
 function groupAt(world, f, x, y, R) { G_W = world; G_F = f; G_X = x; G_Y = y; G_R2 = R * R; G_S = 0; query(world, x, y, R, groupTest); G_W = null; G_F = null; return G_S; }
 function bomberTarget(world, u) {
-  const f = factionOf(world, u);
+  const f = factionOf(world, u), hash = world.hash;
   let best = null, bs = -Infinity;
-  for (const v of world.units) {
-    if (v.T.fly || !enemy(world, u, v, f)) continue;
+  for (let i = 0; i < hash.length; i++) {
+    const cell = hash[i];
+    if (!cell.length) continue;
+    let rep = null;
+    for (let k = 0; k < cell.length; k++) {
+      const v = cell[k];
+      if (!v.T.fly && enemy(world, u, v, f)) { rep = v; break; }
+    }
+    if (!rep) continue;
     // dichte Gruppe zuerst, bei gleicher Dichte die nähere (1 Feind mehr ≈ 300 px Umweg)
-    const s = groupAt(world, f, v.x, v.y, BOMBER.GROUP_R) - Math.hypot(v.x - u.x, v.y - u.y) / 300;
-    if (s > bs) { bs = s; best = v; }
+    const s = groupAt(world, f, rep.x, rep.y, BOMBER.GROUP_R) - Math.hypot(rep.x - u.x, rep.y - u.y) / 300;
+    if (s > bs) { bs = s; best = rep; }
   }
   return best;
 }
@@ -158,7 +171,16 @@ export function stepMissile(world, p, dt) {
 
 function stepDrone(world, u, dt) {
   const T = u.T;
-  if (u.rt <= 0 || !valid(world, u, u.tg)) { countDrones(world, u); u.tg = pick(world, u, droneScore); u.rt = DRONE.RETARGET; }
+  if (u.rt <= 0 || !valid(world, u, u.tg)) {
+    countDrones(world, u);
+    const prev = u.tg;
+    DRONE_CUR = u; u.tg = pick(world, u, droneScore); DRONE_CUR = null;
+    if (prev !== u.tg) {
+      if (prev && prev.droneN > 0) prev.droneN--;
+      if (u.tg) u.tg.droneN = (u.tg.droneN || 0) + 1;
+    }
+    u.rt = DRONE.RETARGET;
+  }
   const t = u.tg;
   if (!t) { u.fz = T.flyZ; return; }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, gap = d - T.r - t.T.r;

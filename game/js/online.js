@@ -11,7 +11,8 @@
 //   (gleiche Aufstellung in gleicher Reihenfolge, gleiche Saat; die Simulation ist deterministisch).
 //   Ergebnis: jeder meldet res; der Host zählt und veröffentlicht score. Nächste Runde, wenn beide want = r + 1 melden.
 import { UNITS } from './data.js';
-import { SHAPES } from './shapes.js';
+import { SHAPES, SHAPE_MIN_UNITS } from './shapes.js';
+import { UNIT_CAP } from './paint.js';
 import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, ruleBudget, draw, resolveVote } from './rules.js';
 
 export const PROTO = 2;   // 2: Abstimmung über Regel und Karte
@@ -105,13 +106,16 @@ export function packArmy(world, side) {
   return b64(bytes);
 }
 
-// Text → [{ type, team, x, y, shape }]. Wirft bei kaputten Daten. Prüft die Seite (eigene Hälfte) und das Budget, damit
-// ein veränderter Client nicht mehr malt als erlaubt.
+// Text → [{ type, team, x, y, shape }]. Wirft bei kaputten Daten. Prüft die Seite (eigene Hälfte), Obergrenze,
+// Budget und Mindestzahl je Formationsbonus, damit ein veränderter Client nicht schummelt.
 export function unpackArmy(text, side, W, H, cfg) {
   if (typeof text !== 'string' || !/^[A-Za-z0-9_-]*$/.test(text)) throw new Error('Armee unlesbar');
+  if (text.length > Math.ceil(UNIT_CAP * 5 * 4 / 3) + 4) throw new Error('Zu viele Einheiten');
   const bytes = unb64(text);
+  if (bytes.length > UNIT_CAP * 5) throw new Error('Zu viele Einheiten');
   if (bytes.length % 5) throw new Error('Armee unvollständig');
-  const out = [];
+  const out = [], sc = new Map();
+  const maxCost = cfg ? budgetOf(cfg) + EPS : Infinity;
   let cost = 0;
   for (let o = 0; o < bytes.length; o += 5) {
     const type = PAINT_TYPES[bytes[o] & 63], shape = SHAPE_KEYS[bytes[o] >> 6] || null;
@@ -120,9 +124,11 @@ export function unpackArmy(text, side, W, H, cfg) {
     const x = dq((bytes[o + 1] << 8) | bytes[o + 2], W), y = dq((bytes[o + 3] << 8) | bytes[o + 4], H);
     if (side === 'blau' ? x > W / 2 + 1 : x < W / 2 - 1) throw new Error('Einheit auf der falschen Seite');
     cost += UNITS[type].cost;
+    if (cost > maxCost) throw new Error('Budget überschritten');
+    if (shape) { const k = type + '|' + shape; sc.set(k, (sc.get(k) || 0) + 1); }
     out.push({ type, team: side, x, y, shape });
   }
-  if (cfg && cost > budgetOf(cfg) + EPS) throw new Error('Budget überschritten');
+  for (const u of out) if (u.shape && (sc.get(u.type + '|' + u.shape) || 0) < SHAPE_MIN_UNITS) u.shape = null;
   return out;
 }
 export const splitChunks = (s, n = CHUNK) => { const out = []; for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n)); return out.length ? out : ['']; };
@@ -268,9 +274,9 @@ export function onPeer(m, p, W, H) {
     && m.cfg.opts.rules.includes(p.vote.rule) && m.cfg.opts.maps.includes(p.vote.map)) {
     m.peerVote = { rule: p.vote.rule, map: p.vote.map }; ev.push(...hostResolve(m));
   }
-  // Host: nächste Runde, wenn beide wollen
-  if (m.role === 'host' && m.phase === 'result' && m.want === r + 1 && num(p.want) === r + 1) {
-    const both = m.same && p.same === true;
+  // Host: nächste Runde, wenn beide wollen und sich einig sind (Revanche vs. neue Abstimmung)
+  if (m.role === 'host' && m.phase === 'result' && m.want === r + 1 && num(p.want) === r + 1 && m.same === (p.same === true)) {
+    const both = m.same;
     newRound(m, both ? rematchRound(m.cfg, m.rand) : nextRound(m.cfg, m.budget, m.rand)); ev.push(both ? 'round' : 'vote');
     return ev;
   }
@@ -301,10 +307,16 @@ export function onPeer(m, p, W, H) {
   return ev;
 }
 
-// Unter den Teilnehmern des Raums den Gegner finden (erster fremder Spieler mit unserem Protokoll)
-export function pickPeer(peers) {
-  for (const p of peers || []) if (p && !p.isMe && isObj(p.presence) && p.presence.ks === PROTO) return p;
-  return null;
+// Unter den Teilnehmern des Raums den Gegner finden (passende Gegenrolle, bevorzugter peerRef zuerst)
+export function pickPeer(peers, wantRole = null, preferPeer = null) {
+  let first = null;
+  for (const p of peers || []) {
+    if (!p || p.isMe || !isObj(p.presence) || p.presence.ks !== PROTO) continue;
+    if (wantRole && p.presence.role !== wantRole) continue;
+    if (preferPeer && p.peer === preferPeer) return p;
+    if (!first) first = p;
+  }
+  return first;
 }
 // Offene Räume aus der Lobby: [{ code, budget }]
 export function openRooms(peers) {

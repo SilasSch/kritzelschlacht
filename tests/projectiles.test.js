@@ -27,6 +27,7 @@ test('PROJECTILES: Bögen und gerade Schüsse mit Tempo', () => {
     // Task 6: Felsbrocken des Zyklopen, Zauber der Hexe
     boulder: { arc: true, speed: 380 }, hex: { arc: false, speed: 420 },
     spit: { arc: false, speed: 380 },   // Lama (18.11.)
+    rock: { arc: true, speed: 400 },   // Steinwurf der Nahkämpfer auf Flieger (20.11.)
   });
 });
 

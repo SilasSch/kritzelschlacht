@@ -54,8 +54,11 @@ export const outOfMelee = (u, v) => (v.T.high || isBat(v) || aloft(v)) && ground
 // (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
 // combat.think) wie den Hubschrauber; Fernkämpfer schon.
 export const EAGLE_REACH_Z = 14;
-export const aloft = v => (v.type === 'adler' && v.z > EAGLE_REACH_Z) || v.type === 'ptera';
-// Urzeit: der Flugsaurier fliegt immer hoch (wirft Steine von oben), Nahkämpfer am Boden erreichen ihn nie (aloft)
+export const aloft = v => (v.type === 'adler' || v.type === 'ptera') && v.z > EAGLE_REACH_Z;
+// Urzeit (Luft gegen Nahkampf, 20.11.): der Flugsaurier fliegt hoch, stößt aber zum Steinwurf herab (abilities.pteraStep);
+// nur unten (z ≤ EAGLE_REACH_Z) erreichen ihn Nahkämpfer. Anders als dem Adler bleiben sie ihm auch oben auf den Fersen
+// (chaseAir: Zielwahl und Neuwahl behalten ihn), damit sie beim Herabstoßen zur Stelle sind.
+export const chaseAir = v => v.type === 'ptera';
 // Krokodil (Festlegung 8): versteckt im Wasser (u.hidden, abilities.stepAnimal) sehen es Feinde erst ab HIDE_R px oder
 // bis seenT s nach seinem Biss. Gilt für jede Zielwahl (nearestEnemy, Neuwahl in combat.think, Ausweichziel, Salve, Speer).
 export const HIDE_R = 60;
@@ -182,6 +185,7 @@ export function spawn(world, type, x, y, team) {
   u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.auraAt = -9; u.trailT = (u.id % 4) * .06;
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.hx = 0; u.hy = 0; u.passT = 0; u.bombT = 0; u.mslCd = 0; u.mslT = 0;   // Lufteinheiten (air.js)
+  u.stoneCd = 0; u.diveT = 0;   // Luft gegen Nahkampf (20.11.): Steinwurf der Nahkämpfer, Tiefflug des Flugsauriers nach dem Abwurf
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt
   u.braveT = 0;   // Königsaura: als Double angelegt
@@ -250,7 +254,7 @@ export function nearestEnemy(world, u) {
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
           // Nahkämpfer am Boden: kein Hubschrauber, keine Fledermausform, kein Adler oben (Review Task 5: sonst stehen sie unter ihm)
-          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || isBat(v) || aloft(v)))) continue;
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || isBat(v) || (aloft(v) && !chaseAir(v))))) continue;
           if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser

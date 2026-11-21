@@ -371,7 +371,7 @@ export const MSG_NO_PAINT = 'Diese Einheit kann man nicht malen.';
 // Charakterkarten (stark/schwach gegen, cards.js).
 export const COUNTERS = [
   ['ritter', 'krieger', 60], ['ritter', 'schuetze', 60],
-  ['biene', 'ritter', 60], ['biene', 'schuetze', 60],
+  ['biene', 'schuetze', 60],
   ['wolf', 'schuetze', 60], ['wolf', 'grenadier', 60],
   ['reiter', 'schuetze', 60], ['reiter', 'grenadier', 60],
   ['magier', 'krieger', 60], ['grenadier', 'krieger', 72],   // 72 statt 60 (18.11.): bei 60 Punkten an 1726x820 und 1400x1050 nur 5/8, schon auf dem Basis-Stand
@@ -508,10 +508,10 @@ RANGED.add('laserbot'); RANGED.add('tesla'); RANGED.add('speer');
 export const MISSIONS = [
   {n:'Erster Zusammenstoß',budget:60,par:43,hint:'Wähle Krieger, male deine Armee links der Linie und drück Los. Für drei Sterne: Ritter halten mehr aus.',place:[['rect','krieger',24,.70,.36,.80,.64]]},
   {n:'Pfeilregen',budget:92,par:84,hint:'Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.',place:[['rect','krieger',20,.62,.36,.67,.64],['rect','schuetze',26,.8,.28,.88,.72]]},
-  {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
+  {n:'Eiserne Front',budget:110,par:90,hint:'Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, Schwerter und Stacheln prallen ab.',place:[['rect','ritter',16,.66,.28,.73,.72],['rect','sani',5,.8,.4,.84,.6]]},
   {n:'Über den Fluss',budget:120,par:90,hint:'Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.',place:[['tRect','wasser',.47,0,.58,1],['rect','schuetze',22,.7,.28,.78,.72],['rect','grenadier',10,.82,.38,.86,.62],['rect','magier',4,.88,.42,.9,.58]]},
   {n:'Die Festung',budget:122,par:112,hint:'Mauern stoppen Bodentruppen. Magier schießen weiter als Schützen, Geister schweben einfach hinein.',place:[['tCircle','mauer',.8,.5,.3,.25],['circle','magier',8,.8,.5,.09],['circle','schuetze',26,.8,.5,.19]]},
-  {n:'Wilde Jagd',budget:120,par:110,cats:['tiere','gelaende'],hint:'Nur Tiere. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',18,.68,.26,.76,.74],['rect','ritter',14,.8,.3,.86,.7]]},
+  {n:'Wilde Jagd',budget:120,par:110,cats:['tiere','gelaende'],hint:'Nur Tiere. Gegen Ritter hilft Masse: ein großes Rudel oder ein richtiger Schwarm.',place:[['rect','reiter',15,.68,.26,.76,.74],['rect','ritter',11,.8,.3,.86,.7]]},
   {n:'Lavafeld',budget:110,par:93,hint:'Die Lava lässt nur eine Lücke. Bären und Wölfe stürmen durch. Halte sie mit Schützen weit hinten und breit verteilt auf Abstand.',place:[['tRect','lava',.5,0,.56,.42],['tRect','lava',.5,.58,.56,1],['rect','baer',6,.7,.35,.76,.65],['rect','wolf',16,.8,.3,.86,.7]]},
   {n:'Drachenhort',budget:230,par:228,hint:'Zwei Drachen, ein Schwarm und ein Schildwall. Bomben und Feuer gegen den Schwarm, Pfeile gegen die Drachen.',place:[['unit','drache',.78,.35],['unit','drache',.78,.65],['circle','biene',36,.72,.5,.16],['rect','ritter',10,.86,.3,.9,.7]]},
   {n:'Stahlgewitter',budget:150,par:120,hint:'Zwei Panzer, Infanterie und ein Hubschrauber. Panzerfäuste knacken Panzer. Nahkämpfer erreichen den Hubschrauber nicht.',place:[['unit','panzer',.73,.36],['unit','panzer',.73,.64],['rect','soldat',18,.63,.3,.67,.7],['rect','mg',4,.78,.4,.8,.6],['unit','heli',.86,.5]]},

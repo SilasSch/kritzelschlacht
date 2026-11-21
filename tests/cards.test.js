@@ -36,9 +36,9 @@ test('Werte: das Maximum aller Einheiten ergibt 1, mehr ist mehr', () => {
 test('Konter', () => {
   const r = unitCard('ritter');
   assert.ok(r.strong.includes('krieger'));
-  assert.ok(r.weak.includes('biene'));
+  assert.ok(!r.weak.includes('biene'), 'Bienen mit 18 LP (#51) fallen gegen Ritter mit einem Schlag');
   assert.deepEqual([...r.strong].sort(), ['bueffel', 'einhorn', 'gorilla', 'krieger', 'minibot', 'raptor', 'schuetze', 'stinktier']);   // Reiter: Keil bricht Schilde (18.11.)
-  assert.deepEqual([...r.weak].sort(), ['biene', 'magier', 'ptera', 'schweisser', 'sniper']);
+  assert.deepEqual([...r.weak].sort(), ['magier', 'ptera', 'schweisser', 'sniper']);
   assert.deepEqual([...unitCard('roemer').weak].sort(), ['flamme', 'grenadier', 'magier', 'moerser', 'reiter']);
   assert.ok(unitCard('moerser').strong.includes('roemer'), 'Mörser, wie im Römer-Text');
   // Konter nur aus COUNTERS, keine erfundenen; Einheiten ohne Einträge haben leere Listen

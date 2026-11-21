@@ -483,7 +483,7 @@ const EN = {
   "Pfeilregen": "Rain of Arrows",
   "Hinter der Front warten Schützen. Ritter im Schildwall halten Pfeile aus, schnelle Reiter und Wölfe sind schnell bei ihnen. Vorsicht: Bomben treffen auch die eigenen Ritter.": "Archers wait behind the front. Knights in a shield wall withstand arrows, fast riders and wolves reach them quickly. Careful: bombs also hit your own knights.",
   "Eiserne Front": "Iron Front",
-  "Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, und ein Bienenschwarm findet jede Lücke.": "A shield wall of knights. Bombs and fire hit them fully, and a bee swarm finds every gap.",
+  "Ein Schildwall aus Rittern. Bomben und Feuer treffen sie voll, Schwerter und Stacheln prallen ab.": "A shield wall of knights. Bombs and fire hit them fully, swords and stingers bounce off.",
   "Über den Fluss": "Across the River",
   "Wasser bremst Bodentruppen auf 40 %. Geister schweben drüber, Reiter sind trotzdem schnell drüben.": "Water slows ground troops to 40 %. Ghosts float over it, riders still get across quickly.",
   "Die Festung": "The Fortress",

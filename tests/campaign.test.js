@@ -7,7 +7,7 @@ import path from 'node:path';
 import { UNITS, MISSIONS } from '../game/js/data.js';
 import {
   CHAPTERS, LEVELS, levelById, levelInfo, chapterById, nextLevel, unitAllowed, terrainAllowed, catAllowed, paintableUnits,
-  chapterUnlocked, levelUnlocked, chapterProgress, spamMustLose, validateCampaign,
+  chapterUnlocked, levelUnlocked, chapterProgress, spamMustLose, validateCampaign, harden, BUDGET_SCALE, ENEMY_SCALE,
 } from '../game/js/campaign/index.js';
 import { LEGACY_IDS } from '../game/js/campaign/grundausbildung.js';
 import { createWorld, rebuildHash } from '../game/js/world.js';
@@ -25,8 +25,9 @@ test('Kapitel in Spielreihenfolge, Grundausbildung zuerst mit den 9 Missionen', 
   const ga = CHAPTERS[0].levels;
   assert.equal(ga.length, 9);
   assert.deepEqual(ga.map(l => l.id), LEGACY_IDS);
-  // unverändert: alle Felder der Mission sind da, MISSIONS bleibt exportiert
-  ga.forEach((l, i) => { for (const k of Object.keys(MISSIONS[i])) assert.deepEqual(l[k], MISSIONS[i][k], `${l.id}.${k}`); });
+  // alle Felder der Mission sind da, MISSIONS bleibt exportiert; Budget, par und Gegnerzahl laufen durch harden()
+  ga.forEach((l, i) => { const h = harden(MISSIONS[i]); for (const k of Object.keys(MISSIONS[i])) assert.deepEqual(l[k], h[k], `${l.id}.${k}`); });
+  assert.deepEqual(ga[0].orig, { budget: MISSIONS[0].budget, par: MISSIONS[0].par });
   assert.equal(levelById('ga-5').n, 'Die Festung');
   assert.equal(levelInfo('ga-5').li, 4);
   assert.equal(levelInfo('ga-5').chapter, chapterById('grundausbildung'));
@@ -49,6 +50,18 @@ test('Kapiteldaten sind gültig (ids eindeutig, Pläne nur aus erlaubten Einheit
   assert.match(err, /ghul ist keine malbare Einheit/);
   assert.match(err, /place .* ungültig/);
   assert.match(err, /plan.smart fehlt/);
+});
+
+test('harden: Budget und par ×BUDGET_SCALE, Gegnergruppen ×ENEMY_SCALE aufgerundet, Einzelne und Gelände bleiben', () => {
+  assert.equal(BUDGET_SCALE, 0.7); assert.equal(ENEMY_SCALE, 1.2);
+  const l = { id: 'h', budget: 100, par: 90, place: [['rect', 'krieger', 10, .7, .3, .8, .7], ['circle', 'biene', 36, .7, .5, .1], ['unit', 'drache', .8, .5], ['tRect', 'wasser', .5, 0, .6, 1]] };
+  const h = harden(l);
+  assert.equal(h.budget, 70); assert.equal(h.par, 63);
+  assert.deepEqual(h.place.map(p => p[2]), [12, 44, .8, .5]);
+  assert.deepEqual(h.orig, { budget: 100, par: 90 });
+  assert.equal(l.place[0][2], 10);   // Original bleibt
+  const same = harden(l, 1, 1); assert.equal(same.budget, 100); assert.deepEqual(same.place, l.place);
+  for (const e of LEVELS) assert.ok(e.level.par <= e.level.budget, e.level.id);
 });
 
 test('nextLevel: nächstes Level im Kapitel, nach dem letzten null', () => {

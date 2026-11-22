@@ -12,7 +12,22 @@ import vampire from './vampire.js';
 import modern from './modern.js';
 import finale from './finale.js';
 
-export const CHAPTERS = [grundausbildung, burgen, rom, wildnis, akademie, vampire, modern, finale];
+/* ---------- Schwierigkeit (Silas, 22.11.: „alle Missionen pauschal schwerer, ohne Rebalance“) ---------- */
+// Zentrale Stellschraube für alle Kapitel-Level (nicht Tutorial, Tageschallenge oder eigene Level):
+// BUDGET_SCALE kürzt Budget und par (drei Sterne), ENEMY_SCALE vergrößert jede Gegnergruppe (rect/circle, aufgerundet).
+// Einzelne Einheiten ('unit', etwa Drachen oder Panzer) bleiben einzeln. 1 und 1 = die Level wie in den Kapiteldateien.
+// Die Kapiteldateien bleiben unverändert; orig hält Budget und par von dort (Prüfung des Lösungsplans unten).
+export const BUDGET_SCALE = 0.7;
+export const ENEMY_SCALE = 1.2;
+export function harden(level, budgetScale = BUDGET_SCALE, enemyScale = ENEMY_SCALE) {
+  const budget = Math.max(1, Math.round(level.budget * budgetScale));
+  const par = Math.max(1, Math.min(budget, Math.round(level.par * budgetScale)));
+  const place = level.place.map(p => (p[0] === 'rect' || p[0] === 'circle') ? [p[0], p[1], Math.ceil(p[2] * enemyScale - 1e-9), ...p.slice(3)] : p);
+  return { ...level, budget, par, place, orig: { budget: level.budget, par: level.par } };
+}
+const hardenChapter = c => ({ ...c, levels: c.levels.map(l => harden(l)) });
+
+export const CHAPTERS = [grundausbildung, burgen, rom, wildnis, akademie, vampire, modern, finale].map(hardenChapter);
 
 // Flache Liste aller Level: { level, chapter, ci (Index des Kapitels), li (Index im Kapitel) }
 export const LEVELS = CHAPTERS.flatMap((chapter, ci) => chapter.levels.map((level, li) => ({ level, chapter, ci, li })));
@@ -119,8 +134,9 @@ export function validateCampaign(chapters = CHAPTERS) {
           if (!unitAllowed(l, t) || UNITS[t].paint === false) err.push(`${at}: plan.${kind} nutzt ${t}, im Level nicht erlaubt`);
           else cost += n * UNITS[t].cost;
         }
+        // Lösungsplan gegen das par der Kapiteldatei (orig): nach harden() passt er bewusst nicht mehr ins Budget
         // der Spam-Plan darf über dem Budget liegen (Belastungsprobe, M5: 55 Krieger bei Budget 80)
-        if (kind === 'smart' && cost > l.par + 1e-6) err.push(`${at}: plan.smart kostet ${cost} > par ${l.par}`);
+        if (kind === 'smart' && cost > (l.orig || l).par + 1e-6) err.push(`${at}: plan.smart kostet ${cost} > par ${l.par}`);
       }
     }
   }

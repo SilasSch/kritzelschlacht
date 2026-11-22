@@ -1122,6 +1122,9 @@ export function think(world, u, dt) {
   if (!t) { if (u.type === 'vampir') stepBat(world, u, dt, u.batOn && hazardAt(world, u.x, u.y)); return; }
   const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
   u.face = dx < 0 ? -1 : 1; u.fx = nx; u.fy = ny;
+  // Jagd (formation.js, FORM_PURSUE): ein Römer, der aus dem Block einem Fliehenden nachsetzt (u.form bleibt gesetzt), wirft
+  // seinen Speer noch, sobald der Fliehende PILUM_MIN bis PILUM_MAX px entfernt ist; er läuft dabei weiter
+  if (u.type === 'roemer' && u.pilum === 1 && u.form && isFleeing(t) && d >= FORM.PILUM_MIN && d <= FORM.PILUM_MAX) { fire(world, u, t, 'pilum'); u.pilum = 0; }
   // Vampir auf langen Wegen (abilities.stepBat): ab BAT_START px als Fledermausschwarm geradewegs zum Ziel, ab BAT_END px
   // wieder Vampir, aber nie über Lava oder Mauer (dann fliegt er weiter aufs Ziel zu); beim Verwandeln steht er, als
   // Fledermaus beißt er nicht

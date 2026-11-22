@@ -32,8 +32,9 @@
 // Tiefe), ein Gegner ≤ FORM_FLANK px an irgendeinem Mitglied (Flanke, Prüfung gestaffelt nach id), oder der
 // Block kommt STUCK s lang keine STUCK_PX weit (stuckT). Danach bleibt er aufgelöst, bis kein Gegner mehr in
 // ENGAGE · 2 px um ein Mitglied ist und, nach Festhängen, mindestens STUCK s vergangen sind (holdT); geprüft
-// bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger.
-import { factionOf, query, nearestEnemy, cellIndex, isBat, unseen, aloft } from './world.js';
+// bei der Neubildung. Aufgelöste Römer verhalten sich wie Krieger. Flieht das Ziel des Blocks, löst er sich ebenfalls auf
+// und bildet sich erst wieder, wenn sein nächster Gegner nicht mehr flieht (FORM_PURSUE).
+import { factionOf, query, nearestEnemy, cellIndex, isBat, unseen, aloft, FLEE_DIST } from './world.js';
 import { flowDir, directBlocked } from './pathing.js';
 import { TERR_SPEED, TERR_HAZ } from './data.js';
 import { isFleeing } from './morale.js';
@@ -57,6 +58,9 @@ export const FORM_CATCHUP = 1.25;         // think: höchstens speed · 1,25
 // Block HOLD s lang mit MUL · Römertempo, und der Sammelfaktor bremst ihn dabei höchstens auf LOOSE. Sonst ließ er sich von
 // Schützen, die zurückweichen und schießen, im Tempo des Langsamsten zerpflücken.
 export const FORM_CHASE = { MUL: 1.1, LOOSE: .8, V: 8, HIT_T: .5, HOLD: 1.5 };
+// Jagd (FORM_PURSUE, Silas 22.11.): ist das Ziel des Blocks (nächster Gegner wie world.nearestEnemy, Fliehende zählen dort doppelt so
+// weit, also nur, wenn kein kämpfender Gegner ähnlich nah ist) auf der Flucht oder erschreckt (morale.isFleeing), löst sich
+// der Block auf und bildet sich nicht neu, solange das so bleibt. Im Gleichschritt des Langsamsten holte er Fliehende nie ein.
 const STUCK_PX = 10;
 // Freigabe an Hindernissen: ein Römer, dessen Platz auf oder bis SLOT_MARGIN px neben Lava oder Mauer liegt
 // oder dessen gerader Weg dorthin in den nächsten FORM_PROBE px eine solche Zelle kreuzt, verlässt den Platz
@@ -124,6 +128,21 @@ function enemyWithin(world, faction, x, y, R) {
   query(world, x, y, R, enemyTest);
   EN_W = null; EN_F = null;
   return EN_HIT;
+}
+
+// Jagd (FORM_PURSUE): ist der nächste Gegner um (x, y) auf der Flucht? Abstand wie world.nearestEnemy (Fliehende zählen
+// FLEE_DIST-mal so weit), aber ohne dessen Aufschlag für schon angegriffene Ziele: jagen alle Römer einen Fliehenden, soll
+// der Block deshalb nicht zum nächsten kämpfenden Gegner umschwenken und sich wieder schließen.
+function preyFlees(world, faction, x, y) {
+  EN_P.x = x; EN_P.y = y;
+  let bd = Infinity, fl = false;
+  for (const v of world.units) {
+    if (!v.alive || v.T.high || isBat(v) || aloft(v) || v.ashT > 0 || factionOf(world, v) === faction) continue;
+    if (v.hidden && unseen(EN_P, v)) continue;
+    const f = isFleeing(v), d = ((v.x - x) ** 2 + (v.y - y) ** 2) * (f ? FLEE_DIST * FLEE_DIST : 1);
+    if (d < bd) { bd = d; fl = f; }
+  }
+  return fl;
 }
 
 /* ---------- Neubildung ---------- */
@@ -201,7 +220,11 @@ function adopt(world, faction, oldById, claimed) {
     f.state = 'march'; f.stuckT = 0; f.cx = gx; f.cy = gy; f.sx = gx; f.sy = gy;
     f.volT = -1;   // neuer Anmarsch: wer noch einen Speer hat, wirft beim nächsten Zusammenstoß
   } else if (fresh) { f.cx = gx; f.cy = gy; f.sx = gx; f.sy = gy; f.stuckT = 0; }
-  if (f.state === 'march') face(world, f, gx, gy);
+  if (f.state === 'march') {
+    face(world, f, gx, gy);
+    // Jagd (FORM_PURSUE): flieht der nächste Gegner, bildet sich kein Block, die Römer laufen ihm einzeln nach
+    if ((f.tg && isFleeing(f.tg)) || preyFlees(world, faction, gx, gy)) { f.state = 'charge'; f.holdT = 0; f.vx = 0; f.vy = 0; f.volT = -1; }
+  }
   slots(f);
   return f;
 }
@@ -354,6 +377,8 @@ function march(world, f, dt) {
     if (f.blocked && world.flow) { const d = flowDir(world.flow, f.faction, f.cx, f.cy); if (d && d.dist > 0) { dx = d.dx; dy = d.dy; } }
     if (dx === 0 && dy === 0) { const ex = t.x - f.cx, ey = t.y - f.cy, l = Math.hypot(ex, ey); if (l > 1e-6) { dx = ex / l; dy = ey / l; } }
   }
+  // Jagd: das Ziel flieht (oder ist erschreckt) → auflösen, die Römer setzen einzeln nach (FORM_PURSUE)
+  if (t && isFleeing(t)) { charge(world, f, 0); return; }
   // Verfolgung: Ziel weicht zurück oder der Block steht unter Beschuss (FORM_CHASE)
   const C = FORM_CHASE;
   if (shot || (t && t.mx * ax + t.my * ay > C.V)) f.chaseT = C.HOLD;

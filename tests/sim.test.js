@@ -16,7 +16,7 @@ test('Mission 1: 9 Ritter gewinnen vor dem Zeitlimit (180 s)', () => {
 test('buildMission setzt Teammodus, rote Einheiten und Gelände', () => {
   const w = createWorld(1400, 820, 3); buildMission(w, 3);
   assert.equal(w.teamMode, true);
-  assert.equal(w.units.length, 22 + 10 + 4);
+  assert.equal(w.units.length, 27 + 12 + 5);   // 22, 10, 4 × ENEMY_SCALE 1,2 aufgerundet (campaign/index.js harden)
   assert.ok(w.units.every(u => u.team === 'rot'));
   assert.ok(w.terr.some(t => t === 1));
 });

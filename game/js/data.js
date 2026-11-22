@@ -136,6 +136,7 @@ const ABIL = {
     {n:'Speersalve', d:'Vor dem Zusammenstoß wirft der Block Reihe für Reihe seine Speere.'},
     {n:'Schilde', d:'Nur in Formation: Pfeile, Kugeln und Speere von vorn prallen fast wirkungslos ab.'},
     {n:'Schildstoß', d:'Im Block: alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 10 % weniger.'},
+    {n:'Jagd', d:'Flieht der nächste Gegner, löst sich der Block auf und die Römer setzen ihm einzeln nach.'},
   ],
   sani: [
     {n:'Heilwelle', d:'Alle 20 s heilt er alle Verbündeten im Umkreis um ein Viertel ihrer Lebenspunkte. Nahe Sanitäter warten danach mit ihrer Welle.'},

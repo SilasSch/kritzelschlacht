@@ -100,6 +100,8 @@ const EN = {
   "Marschiert als Block im Gleichschritt und wirft vor dem Zusammenstoß Speere. In Formation halten die Schilde Pfeile und Kugeln von vorn ab, und Schildstöße werfen Angreifer zurück: stark gegen Schützen und Krieger. Bomben, Mörser, Feuerbälle und Reiter über die Flanke brechen den Block.": "Marches as a block in lockstep and throws spears before the clash. In formation the shields block arrows and bullets from the front, and shield bashes throw attackers back: strong against archers and warriors. Bombs, mortars, fireballs and riders on the flank break the block.",
   "Schildstoß": "Shield bash",
   "Im Block: alle 4 s stößt er den Gegner mit dem Schild zurück und betäubt ihn kurz. Schwerthiebe von vorn: 10 % weniger.": "In the block: every 4 s he bashes his foe back with the shield and briefly stuns him. Sword blows from the front: 10 % less.",
+  "Jagd": "Pursuit",
+  "Flieht der nächste Gegner, löst sich der Block auf und die Römer setzen ihm einzeln nach.": "When the nearest foe flees, the block breaks up and the legionaries run after him one by one.",
   "Blockformation": "Block formation",
   "Marschiert als Block im Gleichschritt. Im Block hält er bis 15 % Leben durch.": "Marches as a block in lockstep. In the block he holds out down to 15 % health.",
   "Speersalve": "Spear volley",

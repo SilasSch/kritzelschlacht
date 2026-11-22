@@ -522,3 +522,53 @@ test('Verteilte Ziele: 12 Römer gegen 10 verteilte Gegner treffen mit Speeren �
     assert.ok(targets >= 4, `Saat ${seed}: nach dem Auflösen ${targets} verschiedene Ziele`);
   }
 });
+
+// Jagd (FORM_PURSUE, Silas 22.11.): flieht der nächste Gegner, löst sich der Block auf und die Römer laufen einzeln nach
+// Verbündete der Fliehenden weit weg in den Ecken: sonst letztes Gefecht (MORALE.MIN_ALLIES) statt Flucht
+const farAllies = w => { for (const y of [20, 40, 760, 780]) spawn(w, 'krieger', 1385, y, 'rot'); };
+test('Jagd: gegen einen Fliehenden bildet sich kein Block, die Römer laufen ihm nach', () => {
+  const go = flee => {
+    const w = mk();
+    const rs = block(w, 8, 300, 400, 'blau', 2);
+    const e = spawn(w, 'krieger', 430, 400, 'rot');   // in Speerwurfweite
+    farAllies(w);
+    if (flee) { e.hp = 14; e.flee = true; }
+    let formed = false, hunters = 0;
+    run(w, 1.5, ww => { if (romans(ww).some(u => u.formOn)) formed = true; hunters = Math.max(hunters, rs.filter(u => u.tg === e).length); });
+    return { formed, rs, e, hunters };
+  };
+  const calm = go(false), hunt = go(true);
+  assert.ok(calm.formed, 'gegen einen kämpfenden Gegner: Block');
+  assert.ok(!hunt.formed, 'gegen einen Fliehenden: kein Block');
+  assert.ok(hunt.e.flee, 'er flieht noch');
+  assert.equal(hunt.hunters, 8, 'alle Römer nehmen ihn ins Visier');
+  assert.ok(hunt.rs.every(u => u.x > 320), 'alle laufen los');
+  assert.ok(hunt.rs.filter(u => u.pilum === 0).length >= 6, 'sie werfen ihre Speere auf den Fliehenden');
+});
+
+test('Jagd: beginnt der Gegner mitten im Marsch zu fliehen, löst sich der Block auf', () => {
+  const w = mk();
+  const rs = block(w, 8, 300, 400, 'blau', 2);
+  const e = spawn(w, 'krieger', 800, 400, 'rot');
+  farAllies(w);
+  run(w, .6);
+  assert.equal(formOf(w, rs[0]).state, 'march');
+  e.hp = 14; e.flee = true;
+  run(w, DT * 2);
+  assert.ok(rs.every(u => !u.formOn), 'Block aufgelöst');
+  assert.equal(formOf(w, rs[0]).state, 'charge');
+  // bleibt aufgelöst, solange er der nächste Gegner ist und flieht
+  let again = false;
+  run(w, 1.2, () => { if (e.flee && rs.some(u => u.alive && u.formOn)) again = true; });
+  assert.ok(!again, 'kein neuer Block, solange er flieht');
+});
+
+test('Jagd: nur Fliehende in der Ferne, ein kämpfender Gegner nah: der Block bleibt', () => {
+  const w = mk();
+  block(w, 8, 300, 400, 'blau', 2);
+  const fl = spawn(w, 'krieger', 600, 200, 'rot'); fl.hp = 14; fl.flee = true;
+  spawn(w, 'krieger', 600, 420, 'rot');
+  farAllies(w);
+  run(w, .6);
+  assert.ok(romans(w).every(u => u.formOn), 'Block gegen den kämpfenden Gegner');
+});

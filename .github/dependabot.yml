@@ -1,0 +1,10 @@
+# Hält die in den Workflows benutzten GitHub Actions aktuell (ein gebündelter PR pro Monat).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']

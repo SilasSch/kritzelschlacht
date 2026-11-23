@@ -79,3 +79,7 @@ der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Bud
 Online gibt es „Aufgeben“ (beim Malen, Warten und im Kampf): die Runde geht an den Gegner (`giveUp`, presence `gave`).
 Im Code-Duell gibt es kein Aufgeben, dort läuft der Kampf ohne Gegner am anderen Ende ab.
 Beim Veröffentlichen `js/rules.js` mit hochladen.
+
+## Lizenz
+
+MIT, siehe [LICENSE](LICENSE). PixiJS (MIT) und die Schriften (OFL) behalten ihre eigenen Lizenzen.

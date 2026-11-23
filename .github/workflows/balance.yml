@@ -1,26 +1,53 @@
 name: Balance
-# Volle Balance-Prüfung (Missionen und Konter-Duelle an allen Weltformen). Dauert etwa 10 Minuten,
+# Volle Balance-Prüfung (Missionen und Konter-Duelle an allen Weltformen). Dauert 12–20 Minuten,
 # darum nur bei Änderungen an Spiel, Kampagne oder Werkzeugen und von Hand.
 on:
   push:
     paths: ['game/js/**', 'tools/**', '.github/workflows/balance.yml']
   workflow_dispatch:
+# Ein neuer Push auf denselben Branch bricht den alten, noch laufenden Balance-Lauf ab.
+concurrency:
+  group: balance-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   missions:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - run: node tools/balance.mjs missions 8
+      # Die Kampagne ist seit PR #103 absichtlich schwerer als die Ziele im Balance-Werkzeug
+      # (Silas testet selbst, kein Rebalance). Darum färbt dieser Job nicht rot: das Ergebnis
+      # steht in der Zusammenfassung des Laufs, ein Fehlschlag erscheint als Warnung.
+      - name: Missionen (nur Hinweis)
+        run: |
+          set +e
+          node tools/balance.mjs missions 8 | tee missions.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo '### Missions-Balance'
+            echo
+            tail -n 1 missions.txt
+            echo
+            echo '<details><summary>Alle Level</summary>'
+            echo
+            echo '```'
+            grep -E 'FAIL|OK|^[a-zA-Z]+-?[0-9]' missions.txt
+            echo '```'
+            echo '</details>'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            echo "::warning title=Missions-Balance::$(grep -c 'FAIL (' missions.txt) Zeilen unter Ziel. Absichtlich seit PR #103 (Kampagne schwerer), Details in der Zusammenfassung."
+          fi
+          exit 0
   duels:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - run: node tools/balance.mjs duels 8

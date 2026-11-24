@@ -448,6 +448,8 @@ const EN = {
   "Verbrannter Wald: keine Deckung mehr.": "Burnt forest: no more cover.",
   "Geröll": "Rubble",
   "Zerschlagene Mauer: Tempo 70 %, Deckung: ¾ Schaden durch Pfeile, Kugeln und Explosionen.": "Smashed wall: 70 % speed, cover: ¾ damage from arrows, bullets and explosions.",
+  "Hügel": "Hill",
+  "Fernkämpfer auf dem Hügel schießen 25 % weiter. Bergauf: Tempo 80 %.": "Ranged units on the hill shoot 25 % farther. Uphill: 80 % speed.",
   "Krater": "Crater",
   "Von Explosionen: Bodentruppen darin nehmen ¾ Schaden durch Kugeln.": "Left by explosions: ground troops inside take ¾ damage from bullets.",
   "Dornen": "Thorns",

@@ -434,8 +434,8 @@ test('MAX: 200 dicht gemalte Römer bilden mehrere Blöcke zu höchstens 40', ()
 
 // Finale Prüfung: Gefahr und Geländebremse kommen aus TERRAIN (data.js), nicht aus Zahlen in formation.js
 test('Gelände: Gefahr und Tempo nach TERRAIN, gleich wie physics.integrate', () => {
-  assert.deepEqual(TERR_HAZ, [false, false, true, false, true, false, false, false, false]);   // 5: Asche (Waldbrand), 6: Dornen, 7: Geröll, 8: Krater
-  assert.deepEqual(TERR_SPEED, [1, .4, .8, .85, 1, 1, .75, .7, 1]);
+  assert.deepEqual(TERR_HAZ, [false, false, true, false, true, false, false, false, false, false]);   // 5: Asche (Waldbrand), 6: Dornen, 7: Geröll, 8: Krater, 9: Hügel
+  assert.deepEqual(TERR_SPEED, [1, .4, .8, .85, 1, 1, .75, .7, 1, .8]);
   for (const k in TERRAIN) {
     const w = mk(), x = 300, y = 300;
     if (TERRAIN[k].id) setCell(w, cellIndex(w, x, y), TERRAIN[k].id, 0);

@@ -158,10 +158,19 @@ export const GROUP_USERS = new Set(['wolf', 'biene', 'krieger', 'ritter', 'solda
 GROUP_USERS.add('bueffel');   // Task 5: Herde (abilities.HERD, Gruppe bis HERD.R = 60 px)
 GROUP_USERS.add('reiter');    // Keil (WEDGE): Reiter, die zusammen reiten
 const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
-const HC = HASH_CELL, WALL = 4, WATER_ID = 1, RUBBLE = 7, CRATER_ID = 8;
+const HC = HASH_CELL, WALL = 4, WATER_ID = 1, RUBBLE = 7, CRATER_ID = 8, HILL_ID = 9;
 // Terrain-Update Stufe 2 (20.11.): Geröll (zerschlagene Mauer) und Krater (Explosionen, nur gegen Kugeln) geben Deckung ×¾.
 // Krater: Explosion der Art 'blast' oder 'rocket' ab MIN_R px reißt freien Boden bis R · K px auf.
 export const CRATER = { MIN_R: 30, K: .35, COVER: .75 };
+// Hügel (Terrain-Update, 24.11.): Fernkämpfer am Boden, die auf einem Hügel stehen, haben RANGE-fache Reichweite (nur die
+// Reichweite fürs Angreifen in think/stance; Zielwahl, Kegel und Zauber bleiben). Ohne Flieger, Heiler, Magier, Flammen.
+export const HILL = { RANGE: 1.25 };
+const HILL_NO = new Set(['magier', 'flamme']);
+const hillOk = T => T.range >= 60 && !T.fly && !T.heal;
+export function rangeAt(world, u) {
+  const T = u.T;
+  return hillOk(T) && !HILL_NO.has(u.type) && u.z < 3 && world.terr[cellIndex(world, u.x, u.y)] === HILL_ID ? T.range * HILL.RANGE : T.range;
+}
 export const RUBBLE_COVER = .75;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
 const PATH_STUCK_T = 3;      // s Festsitzen an einer dünnen Mauer, nach denen trotz Weg eingeschlagen wird
@@ -1133,7 +1142,7 @@ export function think(world, u, dt) {
     if (s === BAT_FLY) { u.mx = nx * T.speed; u.my = ny * T.speed; u.run += dt; return; }
     if (s !== BAT_NONE) return;
   }
-  const reach = T.range + T.r + t.T.r;
+  const reach = rangeAt(world, u) + T.r + t.T.r;
   // Task 5: Adler pickt nur unten (abilities.eagleStep); Nahkämpfer am Boden erreichen ihn oben nicht (world.aloft)
   if (u.type === 'adler' && eagleStep(world, u, t, d, reach)) return;
   if (u.type === 'ptera' && pteraStep(u, d, reach, dt)) return;
@@ -1319,7 +1328,7 @@ function stance(world, u, t, d, dx, dy, reach, dt) {
   const T = u.T;
   switch (u.stance) {
     case 'prone': {
-      if (d > T.range * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP && !noBack(world, u, t))) { standUp(u); return true; }
+      if (d > (reach - T.r - t.T.r) * PRONE_RANGE + T.r + t.T.r || meleeNear(world, u) || (u.type === 'sniper' && d < T.range * SNIPER.KEEP && !noBack(world, u, t))) { standUp(u); return true; }
       if (u.cd > 0) return true;
       const kind = STRAIGHT_KIND[u.type];
       if (!lofCheck(world, u, t, kind)) {

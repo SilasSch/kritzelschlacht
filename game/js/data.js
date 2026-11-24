@@ -456,6 +456,8 @@ export const TERRAIN = {
   asche:{n:'Asche',id:5,cost:0,paint:false,d:'Verbrannter Wald: keine Deckung mehr.'},
   // Dornenhecke (Ideenrunde 18.11.): durchlaufbar, aber stachelig (physics.THORN); nur im Sandkasten malbar wie alles Gelände
   dornen:{n:'Dornen',id:6,cost:.05,sp:.75,d:'Durchlaufbar, aber stachelig: Bodentruppen nehmen 6 Schaden pro Sekunde. Flieger und schwere Brocken wie Panzer merken nichts.'},
+  // Hügel (Terrain-Update Stufe 2, 24.11.): Fernkämpfer darauf schießen weiter (combat.HILL), bergauf langsamer
+  huegel:{n:'Hügel',id:9,cost:.05,sp:.8,d:'Fernkämpfer auf dem Hügel schießen 25 % weiter. Bergauf: Tempo 80 %.'},
   // Geröll und Krater (Terrain-Update Stufe 2, Wunsch Silas 20.11.): entstehen nur im Kampf, nicht malbar.
   // Geröll bleibt von zerschlagenen Mauern (combat.hitWall), Krater reißen Explosionen in freien Boden (combat.blast).
   geroell:{n:'Geröll',id:7,cost:0,sp:.7,paint:false,d:'Zerschlagene Mauer: Tempo 70 %, Deckung: ¾ Schaden durch Pfeile, Kugeln und Explosionen.'},

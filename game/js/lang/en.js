@@ -1489,5 +1489,6 @@ const EN = {
   "Wie heißt du?": "What's your name?",
   "Dein Name in der Bestenliste, auf dem Thron und im Online-Spiel. Du kannst ihn später ändern.": "Your name on the leaderboard, on the throne and in online games. You can change it later.",
   "Später": "Later",
+  "Festgefahren: Keiner kam mehr an den anderen heran, also entschied die Armeestärke.": "Stalemate: nobody could reach the other side any more, so army strength decided.",
 };
 export default EN;

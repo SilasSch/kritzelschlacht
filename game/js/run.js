@@ -6,8 +6,9 @@ import { UNITS } from './data.js';
 import { quickPlan, placeQuick, planCost } from './quick.js';
 import { MAPS, applyMap } from './rules.js';
 import { seeded } from './waves.js';
+import { armyPoints } from './sim.js';
 
-export const RUN = { STAGES: 6, LIVES: 2, START_BUDGET: 40, START_UNITS: 3, BONUS: 14, GROW: 12, ENEMY: [30, 42, 56, 70, 86, 108], CHOICES: 3 };
+export const RUN = { STALL: 15, TIME: 180, STAGES: 6, LIVES: 2, START_BUDGET: 40, START_UNITS: 3, BONUS: 14, GROW: 12, ENEMY: [30, 42, 56, 70, 86, 108], CHOICES: 3 };
 const POOL = () => Object.keys(UNITS).filter(t => UNITS[t].paint !== false && UNITS[t].cost <= 12);
 const pickN = (list, n, rand) => { const a = list.slice(), out = []; while (out.length < n && a.length) out.push(a.splice(rand() * a.length | 0, 1)[0]); return out; };
 
@@ -28,6 +29,22 @@ export function runLevel(run) {
     id: `run-${run.seed}-${k}`, n: 'Feldzug', hint: '', budget: run.budget, par: run.budget, units: run.units.slice(), place: [],
     run: { stage: k, map: map.id, plan, pts: Math.round(planCost(plan) * 10) / 10, boss },
   };
+}
+// Stand einer Feldzug-Schlacht: 'win' | 'lose' | null. Wie missionResult, aber eine festgefahrene Schlacht (RUN.STALL s
+// ohne Schaden, z. B. eine Hexe über der Lava, die keiner erreicht) und das Zeitende entscheidet die Armeestärke statt
+// einer Niederlage. st merkt sich die Lebenspunkte und wann sie sich zuletzt änderten; st.decided sagt, ob nach Stärke entschieden wurde.
+export function runResult(world, t, st) {
+  let b = 0, r = 0, hp = 0;
+  for (const u of world.units) { if (!u.alive) continue; hp += u.hp; if (u.team === 'blau') b++; else if (u.team === 'rot') r++; }
+  if (r === 0 && b > 0) return 'win';
+  if (b === 0) return 'lose';
+  // gezählt wird erst ab dem ersten Treffer, damit der lange Anmarsch auf großen Karten nicht als Stillstand gilt
+  if (st.hp === undefined) { st.hp = hp; st.t = t; }
+  else if (Math.abs(hp - st.hp) > .01) { st.hp = hp; st.t = t; st.hit = true; }
+  if (!(st.hit && t - st.t >= RUN.STALL) && t <= RUN.TIME) return null;
+  st.decided = true;
+  const p = armyPoints(world);
+  return p.blau > p.rot ? 'win' : 'lose';
 }
 export function placeRun(world, def) { applyMap(world, def.run.map); placeQuick(world, def.run.plan, 'rot'); }
 

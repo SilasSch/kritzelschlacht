@@ -25,6 +25,9 @@ export const ONLINE_BUDGETS = [100, 150, 250];
 export const ONLINE_DEFAULT = 150;
 export const CHUNK = 2800;                 // Zeichen je Armee-Stück (presence hat 4 KiB je Spieler)
 export const SIDE = { host: 'blau', guest: 'rot' };
+// Emotes (25.11.): kleine Reaktionen, die beim Gegner übers Feld fliegen. presence emo = { n: Zähler, k: Index }
+export const EMOTES = ['😂', '🔥', '😱', '👏', '🙈', '😎'];
+export const EMOTE_GAP = 600;   // ms zwischen zwei eigenen Emotes
 const CODE_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // ohne I, L, O, 0, 1
 const EPS = 1e-6;
 
@@ -144,6 +147,7 @@ export function createMatch(role, budget = ONLINE_DEFAULT, rand = Math.random) {
     role, side: SIDE[role], budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT, rand,
     phase: 'wait', cfg: null, score: { blau: 0, rot: 0 }, mine: null, chunks: null, recv: [], theirs: null,
     res: null, peerRes: null, want: 0, same: false, counted: 0, error: null, vote: null, peerVote: null, gave: 0, peerGave: false,
+    emo: null, emoAt: -Infinity, peerEmoN: 0, peerEmo: null,
   };
 }
 const num = v => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -161,6 +165,7 @@ export function view(m) {
   if (m.res) o.res = m.res;
   if (m.gave) o.gave = m.gave;
   o.vote = m.vote && m.cfg ? { r, rule: m.vote.rule, map: m.vote.map } : null;
+  if (m.emo) o.emo = m.emo;
   return o;
 }
 
@@ -205,6 +210,12 @@ export function finishFight(m, winner) {
   endRound(m, winner);
   return ['result'];
 }
+// Eigenes Emote (k = Index in EMOTES). false: ungültig, noch kein Gegner oder zu schnell hintereinander
+export function sendEmote(m, k, now = Date.now()) {
+  if (!m.cfg || !Number.isInteger(k) || k < 0 || k >= EMOTES.length || now - m.emoAt < EMOTE_GAP) return false;
+  m.emo = { n: (m.emo ? m.emo.n : 0) + 1, k }; m.emoAt = now;
+  return true;
+}
 // Aufgeben (beim Malen, Warten oder im Kampf): die Runde geht an den Gegner
 const GIVE_PHASES = ['paint', 'ready', 'xfer', 'fight'];
 export const canGiveUp = m => !!m && !!m.cfg && GIVE_PHASES.includes(m.phase);
@@ -238,6 +249,11 @@ export function officialWinner(m) {
 export function onPeer(m, p, W, H) {
   const ev = [];
   if (!isObj(p) || p.ks !== PROTO) return ev;
+  // Emote des Gegners: nur neue (höherer Zähler)
+  const pe = p.emo;
+  if (isObj(pe) && Number.isInteger(pe.k) && pe.k >= 0 && pe.k < EMOTES.length && num(pe.n) > m.peerEmoN) {
+    m.peerEmoN = num(pe.n); m.peerEmo = pe.k; ev.push('emote');
+  }
   // Gast: Runde und Punktestand vom Host übernehmen
   if (m.role === 'guest') {
     const c = p.cfg;

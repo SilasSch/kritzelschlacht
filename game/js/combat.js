@@ -22,6 +22,7 @@ import { aloft, unseen, chaseAir, groundMelee } from './world.js';
 // --- Schrottplatz und Urzeit ---
 import { stepPike, stepDrum, MOUNTED, PIKE } from './abilities.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
+import { feast, feastMul, seekMount, stepRider, PAINT, RIDE } from './abilities.js';   // Urzeit-Rework (25.11.)
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
 import { AIR, stepAir, stepMissile, jetEvades, STRAFE } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
@@ -73,6 +74,19 @@ STRAIGHT.add('hexe'); STRAIGHT_KIND.hexe = 'hex';
 // Lama (Ideenrunde 18.11.): Spucke, gerade wie der Hexenzauber, trifft auch Flieger und bremst (SPIT)
 STRAIGHT.add('lama'); STRAIGHT_KIND.lama = 'spit';
 export const SPIT = { T: 2, SLOW: .6 };
+// Urzeit-Rework (25.11.): Speere des Speerwerfers in Zielen ab MASS: Schaden ×DMG, T s verlangsamt (wie die Spucke)
+export const BIG_GAME = { MASS: 4, DMG: 1.3, T: 3 };
+// Urzeit-Rework (25.11.): Jungtiere warten im Nest (bleiben stehen), solange kein Feind näher als R px ist und sie
+// unverletzt sind; vorher stürmten
+// sie als halbe Portion los und starben, bevor sie groß waren (Triceratops im Mittel nach 9 s, ohne Schaden zu machen)
+export const NEST = { R: 130 };
+function nestHold(world, u) {
+  if (u.hp < u.T.hp) return false;   // getroffen (Beschuss aus der Ferne): raus aus dem Nest und wehren
+  const t = nearestEnemy(world, u);
+  if (t && (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < NEST.R * NEST.R) return false;
+  u.tg = null; u.run = 0;
+  return true;
+}
 
 // Liegen (Spez. #22): MG-Schützen und Scharfschützen legen sich hin, wenn ein Ziel in Reichweite ist und
 // kein Nahkämpfer (Reichweite < 20) näher als PRONE_MELEE_R ist. Haltung u.stance: 'stand' → 'down'
@@ -210,6 +224,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (kind === 'lightning' && v.T.bot) m *= BOT.LIGHTNING;
   if ((t === 'anky' || (t === 'trike' && v.run > .4)) && src && src !== v && (kind === 'melee' || kind === 'arrow' || kind === 'bullet') &&
       (src.x - v.x) * (v.fx || v.face) + (src.y - v.y) * v.fy > 0) m *= .5;
+  if (t === 'mammut') m *= kind === 'arrow' ? .6 : isFire(kind) ? 1.3 : 1;   // Urzeit-Rework: dickes Fell (Pfeile, Speere, Steine)
   // Task 6: Feuer stoppt die Troll-Heilung (Festlegung 7), auch beim Troll, der gerade ein Frosch ist
   if ((t === 'troll' || v.frogFrom === 'troll') && isFire(kind)) v.noHealT = TROLL.NO_HEAL;
   if (v.stance === 'prone' && PRONE_HALF.has(kind)) m *= PRONE_DMG;
@@ -282,7 +297,7 @@ Object.assign(PARTS, { koenig: ['headgear', 'weapon'], lama: [], flamme: ['headg
 Object.assign(PARTS, { elefant: [], krokodil: [], gorilla: [], adler: [], bueffel: [] });
 // --- Schrottplatz und Urzeit --- (Höhlenmensch: Keule, Speerwerfer: Speer)
 Object.assign(PARTS, { minibot: [], laserbot: [], drohne: [], kuppel: [], spinne: [], schweisser: [], magnet: [], tesla: [], mega: [],
-  hoehle: [], speer: [], schamane: [], raptor: [], ptera: [], anky: [], trike: [], rex: [], rexei: [] });
+  hoehle: [], speer: [], schamane: [], raptor: [], ptera: [], anky: [], trike: [], rex: [], rexei: [], mammut: [] });
 const VROT_MIN = 4, VROT_MAX = 10;                 // rad/s, Drehung der Leiche
 const PART_V = [60, 160], PART_VZ = [160, 280], PART_VROT = [6, 14];
 const HOP_VZ = [140, 200], HOP_V = [60, 110];      // Cartoon-Hüpfer beim Sterben ohne Abheben
@@ -318,6 +333,7 @@ function die(world, v, src, kind) {
   releaseUnit(world, v);
   if (v.type === 'koenig') kingFall(world, v);   // Königsmord: eigene Truppen erschrecken
   if (v.type === 'mega') megaWreck(world, v);   // Schrottplatz: Minibots steigen aus dem Wrack
+  if (src && src !== v) feast(world, src, v);   // Urzeit: Dinos fressen ihre Beute (abilities.FEAST)
   if (kind === 'melee' && riseGhoul(world, v, src)) {
     emit(world, {
       type: 'death', x: v.x, y: v.y, z: v.z, unitType: v.type, team: v.team, ghoul: true,
@@ -681,7 +697,7 @@ export function fire(world, u, t, kind, ax, ay, dmgO, RO, mz) {
     // Bogen: fester Weg Mündung → Zielpunkt, Höhe sin(q·π)·h; trifft nur am Zielpunkt
     // dg: Ausweichwürfe schon gemacht (dodge.js; nur Bomben, Mörsergranaten und Felsbrocken würfeln)
     world.proj.push({ kind, arc: true, x0: mx, y0: my, x1: ax, y1: ay, t: 0, dur: K[0] + d / P.speed, h: d * K[1],
-      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R, dg: !DODGE_KINDS.has(kind), stone: false });
+      x: mx, y: my, z: 0, tz: t.T.fly ? t.z : 0, f, src: u, dmg, R, dg: !DODGE_KINDS.has(kind), stone: false, spear: false });
   } else {
     // Gerade: fliegt vom Körper des Schützen (Boden-x/y) zum Zielpunkt und prüft jeden Schritt das Segment;
     // die Höhe läuft linear von z0 nach zt (am Zielpunkt). x0/y0/x1/y1 sind die Darstellungspunkte (um den
@@ -1050,6 +1066,7 @@ export function think(world, u, dt) {
   if (u.buffT > 0) { u.buffT -= dt; if (u.buffT <= 0) { u.buffT = 0; u.spdMul = 1; u.dmgMul = 1; } }
   if (u.braveT > 0) u.braveT -= dt;
   if (u.slowT > 0) u.slowT -= dt;
+  if (u.paintT > 0) u.paintT -= dt;   // Urzeit: Kriegsbemalung läuft ab
   stepSynergy(world, u, dt);   // Nähe-Synergien (synergy.js)   // Lama-Spucke läuft ab   // Königsaura läuft ab (abilities.KING)
   if (u.lofWait > 0) u.lofWait -= dt;
   if (u.meleeT > 0) u.meleeT -= dt;
@@ -1064,6 +1081,7 @@ export function think(world, u, dt) {
   if (u.fireT < 1) u.fireT += dt;
   u.swingT = u.swingT > dt ? u.swingT - dt : 0;
   u.hitT = u.hitT > dt ? u.hitT - dt : 0;
+  if (u.ride !== null) { stepRider(world, u, dt); return; }   // Urzeit: Reiter auf dem Dino (abilities.RIDE)
   // Task 6: Asche des Phönix liegt still und steht nach 2 s wieder auf (abilities.stepAsh), sonst nichts
   if (u.ashT > 0) { stepAsh(world, u, dt); return; }
   // Brand läuft in jedem Zustand (kann töten)
@@ -1096,6 +1114,8 @@ export function think(world, u, dt) {
   }
   // Task 5: passive Teile der Tiere (Brustklopfen, Angst des Elefanten vor Bienen), nur im normalen Zustand
   if (T.tier) { animalPassive(world, u); if (isFleeing(u)) { retreat(world, u, dt); return; } }
+  if (u.type === 'hoehle' && seekMount(world, u, dt)) return;   // Urzeit: auf einen Dino steigen
+  if (u.growT > 0 && nestHold(world, u)) return;   // Urzeit: Jungtiere bleiben im Nest, bis sie groß sind
   if (u.tg !== null && u.tg.ashT > 0) u.tg = null;   // Task 6: Asche des Phönix ist kein Ziel (auch nicht für Fähigkeiten: vor stepAbility)
   // Fähigkeit (abilities.js): solange sie die Steuerung hat, kein normales Verhalten
   if (stepAbility(world, u, dt)) return;
@@ -1416,7 +1436,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
     // --- Schrottplatz und Urzeit ---
     case 'laserbot': laserShot(world, u, t); break;
     case 'tesla': teslaArc(world, u, t); break;
-    case 'speer': fire(world, u, t, 'pilum', undefined, undefined, T.dmg); u.swingT = .25; break;
+    case 'speer': fire(world, u, t, 'pilum', undefined, undefined, T.dmg); world.proj[world.proj.length - 1].spear = true; u.swingT = .25; break;
     case 'ptera': fire(world, u, t, 'bomb'); world.proj[world.proj.length - 1].stone = true; u.diveT = PTERA.LOW_T; break;
     case 'baer': case 'mega': case 'rex': {
       // Prankenhieb trifft mehrere
@@ -1425,7 +1445,7 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
         if (factionOf(world, v) === f || isBat(v) || aloft(v)) return;   // Fledermausform, Adler oben (Task 5): für Nahkämpfer unerreichbar
         const ex = v.x - t.x, ey = v.y - t.y;
         if (ex * ex + ey * ey > (T.splash + v.T.r) ** 2) return;
-        knock(v, dx / d, dy / d, 140); hurt(world, v, T.dmg * (.85 + world.rng() * .3), 'melee', u);
+        knock(v, dx / d, dy / d, 140); hurt(world, v, T.dmg * (.85 + world.rng() * .3) * (u.feast > 0 ? feastMul(u) : 1) * (u.rider !== null ? RIDE.DMG_MUL : 1) * (u.paintT > 0 ? PAINT.DMG : 1), 'melee', u);
       });
       u.swingT = .25;
       emit(world, { type: 'hit', x: t.x, y: t.y, flank: false, kind: 'melee', shake: 2 });
@@ -1435,6 +1455,10 @@ export function attack(world, u, t, d, dx, dy, ax, ay) {
       u.swingT = .25;
       let a = (T.dmg || 0) * (.85 + world.rng() * .3) * u.dmgMul;   // dmgMul: Verstärkung (Heulen, Schlachtruf)
       if (u.braveT > 0) a *= KING.AURA_DMG;   // Königsaura
+      // Urzeit: Kriegsbemalung, gerittener Dino, Mahlzeiten (abilities.PAINT, RIDE, FEAST)
+      if (u.paintT > 0) a *= PAINT.DMG;
+      if (u.rider !== null) a *= RIDE.DMG_MUL;
+      if (u.feast > 0) a *= feastMul(u);
       // Treffer von hinten
       const flank = ((u.x - t.x) * t.fx + (u.y - t.y) * t.fy) / d < -.3;   // fx/fy 0: noch keine Blickrichtung
       if (flank) a *= 1.35;
@@ -1661,7 +1685,10 @@ function landArc(world, p, src) {
   if (best) {
     const a = p.dmg * (.85 + world.rng() * .3), dx = p.x1 - p.x0, dy = p.y1 - p.y0;
     if (shieldBlocks(best, p.kind, dx, dy)) { shieldHit(world, best, a, p.kind, dx, dy, src); return; }
-    hurt(world, best, a, 'arrow', src);
+    // Urzeit: Großwildjagd des Speerwerfers (BIG_GAME): der Speer bleibt im großen Ziel stecken
+    const big = p.spear && (best.T.mass || 1) >= BIG_GAME.MASS;
+    hurt(world, best, big ? a * BIG_GAME.DMG : a, 'arrow', src);
+    if (big && best.alive) { best.slowT = BIG_GAME.T; emit(world, { type: 'ability', k: 'stuck', x: best.x, y: best.y, z: best.z, R: best.T.r }); }
     if (p.kind === 'firearrow' && best.alive) ignite(world, best, BURN_MAX_GEN, src);
     emit(world, { type: 'hit', x: best.x, y: best.y, z: best.z, flank: false, kind: p.kind });
     sound(world, 'hit');

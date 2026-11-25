@@ -6,7 +6,7 @@
 // am Boden (y) und werden mit der Höhe größer, blasser und weicher (pose.shadowParams, Spez. #14).
 /* global PIXI */
 import { TEAMS, CELL, UNITS, DOME, TERRAIN } from '../data.js';
-import { PHOENIX } from '../abilities.js';   // Task 6: Asche des Phönix
+import { PHOENIX, FEAST } from '../abilities.js';   // Task 6: Asche des Phönix; Urzeit: Fressen
 import { query, factionOf, RV_MARK, cellIndex } from '../world.js';
 import { SYN_COL, BIT_KEY } from '../synergy.js';
 import { DEBRIS_FADE } from '../physics.js';
@@ -529,6 +529,8 @@ void main() {
     for (const u of groundList) {
       if (u.domeHp > 0) ring(links, u.x, u.y - 6, DOME.R, 18, 2.5, tm ? C(TEAMS[u.team].c) : 0x5fb8e8, .2 + .35 * u.domeHp / DOME.HP);
       if (u.shdHit > 0 && u.shd > 0) ring(marksQ, u.x, u.y - u.z - u.T.r * .6, u.T.r * 1.25, 10, 2, 0x7fd8ff, .7 * Math.min(1, u.shdHit * 4));
+      // Urzeit: Kriegsbemalung der Schamanin (rot-weißer Doppelring am Boden, blendet in der letzten Sekunde aus)
+      if (u.paintT > 0) { const a = Math.min(1, u.paintT); ring(links, u.x, u.y + 2, u.T.r * 1.15, 12, 2.5, 0xd0452b, .7 * a); ring(links, u.x, u.y + 2, u.T.r * .85, 10, 1.5, 0xf3ead8, .6 * a); }
     }
     nBoss = 0; stats.covered = 0; coverWorld = world;
     bodies(groundList, groundQ, groundBars, t, tm, inv);
@@ -586,6 +588,7 @@ void main() {
       if (u.ashT > 0) { ashPile(Q, u, t); continue; }   // Task 6: Asche statt Figur, ohne Leiste
       const T = u.T, rig = rigOf(u), p = poseUnit(u, t, pose, rig.boss ? memOf(u) : undefined);
       if (u.growT > 0 && !T.egg) { const g = T.r / UNITS[u.type].r; p.sx *= g; p.sy *= g; }   // Jungtier: kleiner gezeichnet
+      if (u.feast > 0) { const g = 1 + FEAST.SIZE * u.feast; p.sx *= g; p.sy *= g; }   // Urzeit: satt gefressen, größer
       // Vampir in Fledermausform (ganz: nur der Schwarm; beim Verwandeln schrumpft der Körper, der Schwarm blendet ein)
       if (u.batT > 0) {
         batSwarm(Q, u, t, u.batT);

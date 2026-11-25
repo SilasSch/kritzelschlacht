@@ -367,7 +367,7 @@ test('Tabelle: neun neue Fähigkeiten mit den Abklingzeiten aus #30, Kartentexte
   // Task 6: dazu der Froschfluch der Hexe (tests/creatures.test.js); Task 5: die neuen Tiere haben eigene Fähigkeiten
   // (tests/animals.test.js)
   const NEU = ['stinktier', 'koenig', 'hexe', 'elefant', 'krokodil', 'gorilla', 'adler', 'bueffel',
-    'drohne', 'spinne', 'magnet', 'raptor', 'anky', 'trike', 'rex'];   // Schrottplatz/Urzeit: tests/eras.test.js
+    'drohne', 'spinne', 'magnet', 'raptor', 'anky', 'trike', 'rex', 'schamane', 'mammut'];   // Schrottplatz/Urzeit: tests/eras.test.js
   assert.deepEqual(Object.keys(ABILITY).filter(k => !NEU.includes(k)).sort(), Object.keys(cds).sort());
   for (const k in cds) {
     assert.equal(ABILITY[k].cd, cds[k], k);

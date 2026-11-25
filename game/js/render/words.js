@@ -16,6 +16,11 @@ export function wordFor(e) {
       if (e.k === 'grab') return ['HAPP!', 0xffd84d];
       if (e.k === 'thrown') return ['PLUMPS!', 0xffd84d];
       if (e.k === 'stampede' || e.k === 'trample') return ['RUMMS!', 0xffd84d];
+      // Urzeit-Rework (25.11.): Fressen, Rudeljagd, Stoßzähne, Aufsteigen
+      if (e.k === 'feast') return ['MAMPF!', 0xe5574f];
+      if (e.k === 'hunt') return ['JAGD!', 0xff8a3d];
+      if (e.k === 'tusk') return ['WUMMS!', 0xffd84d];
+      if (e.k === 'mount') return ['HÜH!', 0xd9a074];
       return null;
     case 'spell': return e.k === 'meteor' ? ['WUMMS!', 0xff8a3d] : null;
     default: return null;

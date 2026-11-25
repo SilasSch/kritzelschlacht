@@ -179,8 +179,10 @@ export function spawn(world, type, x, y, team) {
     // (s); Springspinne und Raptor: nächster Biss nach dem Sprung macht doppelten Schaden; Treffer-Zähler (Fackel,
     // Schweißbrenner); Takt des Flickens und des Kräuterrauchs (s).
     shd: .5, shdT: .5, shdHit: .5, shortCd: .5, domeHp: .5, domeT: .5, pounce: false, hits: 0, tickT: .5,
-    // --- Urzeit --- Restzeit bis zum Erwachsensein (s, 0 = erwachsen; abilities.stepGrow)
-    growT: .5,
+    // --- Urzeit --- Restzeit bis zum Erwachsensein (s, 0 = erwachsen; abilities.stepGrow); Rework 25.11.: Zahl der
+    // Mahlzeiten als Erwachsener (abilities.FEAST), Kriegsbemalung der Schamanin (s), Dino-Reiter: der gerittene Dino
+    // (beim Höhlenmenschen) bzw. sein Reiter (beim Dino), sonst null (abilities.RIDE)
+    growT: .5, feast: 0, paintT: .5, ride: null, rider: null,
   };
   // V8: als Double anlegen (Literal mit Nachkommastellen), dann auf den Startwert; sonst kippt die Feldart beim ersten
   // Bruchwert mitten in der Schlacht von Smi auf Double und alle Einheiten wandern auf eine neue Form (Ruckler)
@@ -198,7 +200,7 @@ export function spawn(world, type, x, y, team) {
   u.slowT = 0;    // Lama-Spucke: als Double angelegt
   // Schrottplatz: voller Schild, Kuppel bereit; Urzeit: Jungtier bzw. Ei (data.YOUNG, UNITS.rexei)
   u.shd = T.bot ? T.hp * BOT.SHIELD : 0; u.shdT = 0; u.shdHit = 0; u.shortCd = 0; u.tickT = (u.id % 5) * .1;
-  u.domeHp = type === 'kuppel' ? DOME.HP : 0; u.domeT = 0; u.growT = 0;
+  u.domeHp = type === 'kuppel' ? DOME.HP : 0; u.domeT = 0; u.growT = 0; u.paintT = 0;
   if (type === 'kuppel') world.domeN = (world.domeN | 0) + 1;   // combat.stepProjectiles sucht nur dann Kuppeln
   if (T.grow) { u.growT = T.grow; u.T = type === 'rex' ? UNITS.rexei : YOUNG[type]; u.hp = u.T.hp; }
   u.rv = new Float64Array(RV_N); u.rv[RV_T] = -9;   // nach dem Literal: mit 128 Eigenschaften darin würden die Einheiten langsam (V8)
@@ -220,7 +222,8 @@ export function rebuildHash(world) {
   facCount.clear(); world.totalAlive = 0;
   for (const u of units) {
     if (!u.alive) continue;
-    hash[hidx(world, u.x, u.y)].push(u);
+    // Urzeit: ein Reiter sitzt auf seinem Dino (abilities.RIDE): nicht im Raster, also kein Ziel, kein Schubsen, kein Treffer
+    if (u.ride === null) hash[hidx(world, u.x, u.y)].push(u);
     const f = factionOf(world, u);
     facCount.set(f, (facCount.get(f) || 0) + 1);
     world.totalAlive++;

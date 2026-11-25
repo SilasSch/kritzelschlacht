@@ -62,7 +62,8 @@ const MAX_R = Math.max(...Object.values(UNITS).map(T => T.r));
 // Schreckwirkungen treffen nur Feinde: das prüft der Aufrufer.
 // Ghule sind hirnlos (Festlegung 3): sie erschrecken nicht.
 export function scare(world, v, sec) {
-  if (!v.alive || !(sec > 0) || v.type === 'ghul' || v.type === 'frosch' || v.ashT > 0) return;   // Frosch und Asche (Task 6) erschrecken nicht: ihr Schreck liefe nie ab (kein updateMorale)
+  if (!v.alive || !(sec > 0) || v.type === 'ghul' || v.type === 'frosch' || v.ashT > 0) return;
+  if (v.rider !== null || v.paintT > 0) return;   // Urzeit: gerittene Dinos und Bemalte sind furchtlos (RIDE, PAINT)   // Frosch und Asche (Task 6) erschrecken nicht: ihr Schreck liefe nie ab (kein updateMorale)
   if (!isFleeing(v)) {
     const c = world.cent.get(factionOf(world, v));
     if (c && c.n > 0) c.n--;
@@ -1759,6 +1760,194 @@ function trikeUpdate(world, u) {
   return false;
 }
 
+/* ---------- Urzeit-Rework (25.11., Wunsch Silas: „generisch und schwach“) ----------
+   Fressen (Epochen-Regel): erledigt ein Dino (FEAST_T) einen Gegner, frisst er ihn: heilt HEAL seiner LP, ein Jungtier
+   wächst GROW s schneller, ein Erwachsener wird größer (u.feast bis MAX; je Stufe
+   ×(1 + DMG) Schaden in combat.attack, LP-Obergrenze ×(1 + HP), Zeichnung ×(1 + SIZE)). Aus combat.die. */
+export const FEAST = { HEAL: .05, GROW: 4, MAX: 3, DMG: .05, HP: .1, SIZE: .07 };
+export const FEAST_T = new Set(['raptor', 'anky', 'trike', 'rex']);
+export function feast(world, u, v) {
+  if (!u.alive || u.frogFrom !== null || u.T.egg || !FEAST_T.has(u.type) || factionOf(world, u) === factionOf(world, v)) return;
+  if (u.growT > 0) u.growT = Math.max(1e-3, u.growT - FEAST.GROW);
+  else if (u.feast < FEAST.MAX) u.feast++;
+  const T = UNITS[u.type], cap = (u.growT > 0 ? u.T.hp : T.hp) * (1 + FEAST.HP * u.feast);
+  u.hp = Math.min(cap, u.hp + FEAST.HEAL * u.T.hp);
+  emit(world, { type: 'ability', k: 'feast', x: v.x, y: v.y, z: 0, R: u.T.r, n: u.feast });
+  sound(world, 'thud');
+}
+export const feastMul = u => 1 + FEAST.DMG * u.feast;
+
+/* Raptor-Rudeljagd: ab PACK.MIN Raptoren der eigenen Fraktion bis PACK.R px wählt der Auslöser eine Beute bis PACK.REACH
+   px (Fernkämpfer und Heiler zuerst, sonst die schwächste am Boden) und alle Rudelmitglieder, die sie erreichen, springen
+   zugleich (pounceStart, erster Biss doppelt). Das Rudel lädt gemeinsam neu. Allein: der alte Sprung auf Fernkämpfer. */
+export const PACK = { MIN: 3, R: 150, REACH: 220 };
+let RP_W = null, RP_U = null, RP_F = null, RP_B = null, RP_S = 0, RP_N = 0, RP_T = null;
+function preyTest(v) {
+  if (v.T.fly || v.state !== 'ok' || factionOf(RP_W, v) === RP_F || (v.hidden && unseen(RP_U, v)) || v.ashT > 0) return;
+  const dx = v.x - RP_U.x, dy = v.y - RP_U.y, d2 = dx * dx + dy * dy;
+  if (d2 > PACK.REACH * PACK.REACH) return;
+  // Fernkämpfer und Heiler zählen viel näher, dann wenig LP: die Beute, die das Rudel am schnellsten reißt
+  const s = d2 * ((RANGED.has(v.type) || v.T.heal) ? .25 : 1) + v.hp * 40;
+  if (s < RP_S) { RP_S = s; RP_B = v; }
+}
+function packMate(v) {
+  if (v.type !== 'raptor' || v.state !== 'ok' || (v.abOn && v !== RP_U) || isFleeing(v) || factionOf(RP_W, v) !== RP_F) return;
+  const dx = v.x - RP_U.x, dy = v.y - RP_U.y;
+  if (dx * dx + dy * dy > PACK.R * PACK.R) return;
+  if (RP_T === null) { RP_N++; return; }
+  const ex = RP_T.x - v.x, ey = RP_T.y - v.y, d2 = ex * ex + ey * ey;
+  if (d2 > PACK.REACH * PACK.REACH) return;
+  v.tg = RP_T; v.abCd = ABILITY.raptor.cd;
+  if (d2 > POUNCE.raptor.MIN * POUNCE.raptor.MIN) pounceStart(RP_W, v); else v.pounce = true;
+}
+function raptorReady(world, u) {
+  RP_W = world; RP_U = u; RP_F = factionOf(world, u); RP_N = 0; RP_T = null;
+  query(world, u.x, u.y, PACK.R, packMate);
+  if (RP_N >= PACK.MIN) {
+    RP_B = null; RP_S = Infinity;
+    query(world, u.x, u.y, PACK.REACH, preyTest);
+    const t = RP_B; RP_B = null;
+    if (t) { u.tg = t; u.abX = 1; RP_W = null; RP_U = null; RP_F = null; return true; }
+    RP_W = null; RP_U = null; RP_F = null;
+    return false;   // im Rudel: auf die gemeinsame Beute warten statt allein zu springen
+  }
+  RP_W = null; RP_U = null; RP_F = null;
+  u.abX = 0;   // abX: 1 = Rudeljagd (abK setzt stepAbility vor start zurück)
+  return pounceReady(world, u);
+}
+function raptorStart(world, u) {
+  if (!u.abX) { pounceStart(world, u); return; }
+  const t = u.tg;
+  RP_W = world; RP_U = u; RP_F = factionOf(world, u); RP_T = t;
+  query(world, u.x, u.y, PACK.R, packMate);   // springt auch u selbst
+  RP_W = null; RP_U = null; RP_F = null; RP_T = null;
+  emit(world, { type: 'ability', k: 'hunt', x: t.x, y: t.y, z: 0, R: t.T.r });
+  sound(world, 'whoosh');
+}
+
+/* Schamanin: Kriegsbemalung. Bis N kämpfende Verbündete (mit Feind bis ENGAGE px, nicht bemalt, keine Maschinen) bis R px:
+   T s lang Schaden ×DMG (combat.attack) und furchtlos (scare, morale: kein Rückzug). Ab MIN solchen. */
+export const PAINT = { R: 130, N: 4, T: 6, DMG: 1.2, MIN: 2, ENGAGE: 160, CD: 10 };
+let PT_W = null, PT_U = null, PT_F = null, PT_L = [];
+function paintTest(v) {
+  if (v === PT_U || v.paintT > 0 || v.T.bot || v.T.egg || v.T.heal || factionOf(PT_W, v) !== PT_F || v.ride !== null) return;
+  const t = v.tg;
+  if (!t || !t.alive || isFleeing(v) || (t.x - v.x) ** 2 + (t.y - v.y) ** 2 > PAINT.ENGAGE * PAINT.ENGAGE) return;
+  const dx = v.x - PT_U.x, dy = v.y - PT_U.y;
+  if (dx * dx + dy * dy <= PAINT.R * PAINT.R) PT_L.push(v);
+}
+function paintList(world, u) {
+  PT_W = world; PT_U = u; PT_F = factionOf(world, u); PT_L.length = 0;
+  query(world, u.x, u.y, PAINT.R, paintTest);
+  PT_W = null; PT_F = null;
+  // die Stärksten zuerst (meiste LP): Kriegsfarbe für die, die vorn stehen bleiben
+  PT_L.sort((a, b) => b.T.hp - a.T.hp || a.id - b.id);
+  PT_U = null;
+  return PT_L;
+}
+const paintReady = (world, u) => paintList(world, u).length >= PAINT.MIN;
+function paintStart(world, u) {
+  const L = paintList(world, u);
+  for (let i = 0; i < L.length && i < PAINT.N; i++) {
+    const v = L[i]; v.paintT = PAINT.T;
+    emit(world, { type: 'ability', k: 'paint', x: v.x, y: v.y, z: v.z, R: v.T.r });
+  }
+  L.length = 0;
+  u.swingT = .3;
+  emit(world, { type: 'ability', k: 'paintCast', x: u.x, y: u.y, z: 0, R: PAINT.R });
+  sound(world, 'pop');
+}
+
+/* Dino-Reiter: ein Höhlenmensch sucht (Takt tickT) einen eigenen Dino (auch ein Jungtier, kein Ei) (RIDE_T) ohne Reiter bis SEEK px, läuft
+   hin und steigt ab REACH px über beide Radien auf. Oben: Lage = Dino (z = r · Z), nicht im Raster (world.rebuildHash),
+   wirft alle CD s einen Stein (DMG) auf den nächsten Feind bis RANGE px. Der Dino ist furchtlos (scare, morale; DMG_MUL
+   in combat.attack, 1 = kein Bonus: mit 1,2 gewann die Urzeit fast jede gemischte Schlacht). Fällt der Dino, springt der Reiter ab und kämpft zu Fuß weiter. */
+export const RIDE = { SEEK: 110, REACH: 8, Z: 1.25, CD: 2, DMG: 4, RANGE: 180, DMG_MUL: 1, DT: .4 };
+export const RIDE_T = new Set(['anky', 'trike', 'rex', 'mammut']);
+let RD_W = null, RD_U = null, RD_F = null, RD_B = null, RD_S = 0;
+function mountTest(v) {
+  if (!RIDE_T.has(v.type) || v.T.egg || v.rider !== null || v.frogFrom !== null || factionOf(RD_W, v) !== RD_F || isFleeing(v)) return;
+  const d2 = (v.x - RD_U.x) ** 2 + (v.y - RD_U.y) ** 2;
+  if (d2 < RD_S) { RD_S = d2; RD_B = v; }
+}
+// true: der Höhlenmensch ist mit Aufsteigen beschäftigt (combat.think tut dann nichts anderes)
+export function seekMount(world, u, dt) {
+  u.tickT -= dt;
+  let d = u.tg !== null && u.tg.alive && u.tg.rider === null && RIDE_T.has(u.tg.type) && factionOf(world, u.tg) === factionOf(world, u) ? u.tg : null;
+  if (d === null) {
+    if (u.tickT > 0) return false;
+    u.tickT = RIDE.DT;
+    RD_W = world; RD_U = u; RD_F = factionOf(world, u); RD_B = null; RD_S = RIDE.SEEK * RIDE.SEEK;
+    query(world, u.x, u.y, RIDE.SEEK, mountTest);
+    d = RD_B; RD_W = null; RD_U = null; RD_F = null; RD_B = null;
+    if (d === null) return false;
+    u.tg = d;
+  }
+  if (d.T.egg || d.state !== 'ok') { u.tg = null; return false; }
+  const dx = d.x - u.x, dy = d.y - u.y, l = Math.hypot(dx, dy) || 1;
+  if (l > d.T.r + u.T.r + RIDE.REACH) { faceTo(u, d.x, d.y); u.mx = dx / l * u.T.speed; u.my = dy / l * u.T.speed; u.run += dt; return true; }
+  mount(world, u, d);
+  return true;
+}
+function mount(world, u, d) {
+  u.ride = d; d.rider = u; u.tg = null; u.mx = 0; u.my = 0; u.vx = 0; u.vy = 0; u.vz = 0; u.cd = RIDE.CD * .5;
+  u.burnT = 0; u.poisonT = 0;
+  if (d.fearT > 0) d.fearT = .01;
+  for (const v of world.units) if (v.tg === u) v.tg = null;   // selten: wer ihn eben noch jagte, sucht neu
+  emit(world, { type: 'ability', k: 'mount', x: d.x, y: d.y, z: 0, R: d.T.r });
+  sound(world, 'pop');
+}
+// combat.think für einen Reiter (u.ride !== null); Zeiten laufen dort vorher ab
+export function stepRider(world, u, dt) {
+  const d = u.ride;
+  if (!d.alive || d.frogFrom !== null) {
+    u.ride = null; if (d.rider === u) d.rider = null;
+    u.z = d.T.r * RIDE.Z; u.state = 'ok';
+    applyImpulse(u, d.face * -40, 0, 120);
+    return;
+  }
+  u.x = d.x; u.y = d.y + .5; u.z = d.T.r * RIDE.Z; u.vx = 0; u.vy = 0; u.vz = 0; u.mx = 0; u.my = 0; u.run = 0;
+  u.face = d.face; u.state = 'ok'; u.fearT = 0;
+  if (u.cd > 0) return;
+  const t = nearestEnemy(world, u);
+  if (!t || (t.x - u.x) ** 2 + (t.y - u.y) ** 2 > RIDE.RANGE * RIDE.RANGE) { u.cd = .3; return; }
+  faceTo(u, t.x, t.y);
+  u.cd = RIDE.CD * (.85 + world.rng() * .3); u.swingT = .25;
+  fire(world, u, t, 'rock', undefined, undefined, RIDE.DMG);
+}
+
+/* Mammut: Stoßzähne. Feinde am Boden bis R px über beide Radien im vorderen Kegel (cos ≥ FWD) und höchstens MAXM Masse
+   fliegen hoch und zur Seite (Stoß PUSH · Masse) und nehmen DMG. Ab MIN solchen. */
+export const TUSK = { R: 30, FWD: .35, PUSH: 260, DMG: 22, MAXM: 6, MIN: 1 };
+let TU_W = null, TU_U = null, TU_F = null, TU_N = 0, TU_DO = false;
+function tuskTest(v) {
+  const u = TU_U;
+  if (v.T.fly || v.state === 'air' || v.ride !== null || factionOf(TU_W, v) === TU_F || (v.T.mass || 1) > TUSK.MAXM) return;
+  const dx = v.x - u.x, dy = v.y - u.y, d = Math.hypot(dx, dy) || 1;
+  if (d > TUSK.R + u.T.r + v.T.r || (dx * u.face) / d < TUSK.FWD) return;
+  TU_N++;
+  if (!TU_DO) return;
+  // zur Seite: senkrecht zur Blickrichtung, weg von der Mittellinie
+  const side = dy >= 0 ? 1 : -1;
+  fling(v, u.face * .5, side, 1.12, (v.T.mass || 1) * TUSK.PUSH);
+  applyImpulse(v, 0, 0, 230 * (v.T.mass || 1));
+  hurt(TU_W, v, TUSK.DMG, 'melee', u);
+  emit(TU_W, { type: 'hit', x: v.x, y: v.y, flank: false, kind: 'melee', shake: 2 });
+}
+function tusk(world, u, apply) {
+  TU_W = world; TU_U = u; TU_F = factionOf(world, u); TU_N = 0; TU_DO = apply;
+  query(world, u.x, u.y, TUSK.R + u.T.r + MAX_R, tuskTest);
+  TU_W = null; TU_U = null; TU_F = null;
+  return TU_N;
+}
+const tuskReady = (world, u) => tusk(world, u, false) >= TUSK.MIN;
+function tuskStart(world, u) {
+  tusk(world, u, true);
+  u.swingT = .35;
+  emit(world, { type: 'ability', k: 'tusk', x: u.x + u.face * u.T.r, y: u.y, z: 0, R: TUSK.R + u.T.r, face: u.face, shake: 3 });
+  sound(world, 'thud');
+}
+
 /* ---------- Tabelle ---------- */
 export const ABILITY = {
   heli: { cd: 25, ready: heliReady, start: nothing, update: heliUpdate },
@@ -1784,10 +1973,12 @@ export const ABILITY = {
   // --- Schrottplatz und Urzeit ---
   drohne: { cd: BUILD.CD, ready: buildReady, start: buildStart, update: done },
   spinne: { cd: 10, ready: pounceReady, start: pounceStart, update: done },
-  raptor: { cd: 10, ready: pounceReady, start: pounceStart, update: done },
+  raptor: { cd: 10, ready: raptorReady, start: raptorStart, update: done },
+  schamane: { cd: PAINT.CD, ready: paintReady, start: paintStart, update: done },
   magnet: { cd: 12, ready: magnetReady, start: magnetStart, update: done },
   rex: { cd: 15, ready: rexReady, start: rexStart, update: done },
   anky: { cd: 8, ready: tailReady, start: tailStart, update: done },
   trike: { cd: 14, ready: trikeReady, start: trikeStart, update: trikeUpdate },
+  mammut: { cd: 9, ready: tuskReady, start: tuskStart, update: done },
 };
 for (const k in FIRST_CD) ABILITY[k].first = FIRST_CD[k];

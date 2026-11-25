@@ -5,7 +5,7 @@ import { createWorld } from '../game/js/world.js';
 import { step } from '../game/js/sim.js';
 import { DUEL_A, DUEL_B, placeDuel } from './plans.mjs';
 const runs = +process.argv[2] || 4, PTS = +process.argv[3] || 60;
-const NEW = process.argv[4] ? process.argv[4].split(',') : ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex'];
+const NEW = process.argv[4] ? process.argv[4].split(',') : ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'mammut'];
 const REF = ['krieger', 'schuetze', 'ritter', 'reiter', 'grenadier', 'wolf', 'baer', 'soldat', 'mg', 'panzer', 'magier', 'troll', 'drache', 'heli', 'elefant', 'biene'];
 function duel(a, b, seed) {
   const w = createWorld(1600, 900, seed); w.teamMode = true;

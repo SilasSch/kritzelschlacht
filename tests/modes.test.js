@@ -117,3 +117,21 @@ test('Feldzug: Start, Belohnungen, Leben, Sieg und Spielstand', () => {
   const boss = runLevel({ ...newRun(5), stage: RUN.STAGES });
   assert.ok(boss.run.boss && boss.run.plan.every(p => UNITS[p.type].cost >= 6));
 });
+
+test('Feldzug: festgefahrene Schlacht entscheidet die Armeestärke statt einer Niederlage', async () => {
+  const { runResult, RUN } = await import('../game/js/run.js');
+  const { createWorld, spawn } = await import('../game/js/world.js');
+  const w = createWorld(1600, 900, 1);
+  spawn(w, 'ritter', 200, 450, 'blau'); spawn(w, 'ritter', 220, 450, 'blau'); spawn(w, 'hexe', 800, 450, 'rot');
+  const st = {};
+  assert.equal(runResult(w, 0, st), null);
+  assert.equal(runResult(w, 30, st), null, 'ohne Treffer zählt der Anmarsch nicht als Stillstand');
+  w.units[0].hp -= 5;
+  assert.equal(runResult(w, 31, st), null);
+  assert.equal(runResult(w, 31 + RUN.STALL - 1, st), null);
+  assert.equal(runResult(w, 31 + RUN.STALL, st), 'win', 'Blau hat mehr Punkte');
+  assert.ok(st.decided);
+  const w2 = createWorld(1600, 900, 1);
+  spawn(w2, 'ritter', 200, 450, 'blau'); spawn(w2, 'hexe', 800, 450, 'rot'); spawn(w2, 'hexe', 820, 450, 'rot');
+  assert.equal(runResult(w2, RUN.TIME + 1, {}), 'lose', 'Zeitende: Rot hat mehr Punkte');
+});

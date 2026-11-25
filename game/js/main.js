@@ -38,7 +38,7 @@ import { createOnlineUI } from './ui/online.js';               // Online 1 gegen
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 import { createHillUI } from './ui/hill.js';                   // König des Hügels (25.11.)
 import { applyMap } from './rules.js';
-import { quickPlan, placeQuick, QUICK_DEFAULT } from './quick.js';   // Schnelle Schlacht (25.11.)
+import { quickPlan, placeQuick, freeSpot, QUICK_DEFAULT } from './quick.js';   // Schnelle Schlacht (25.11.)
 import { armyCenter, introCam, armySummary } from './intro.js';     // Gegner vorstellen (25.11.)
 import { clampCamera } from './camera.js';
 import { makeTemplate, applyTemplate, TEMPLATE_MAX } from './templates.js';   // Armee-Vorlagen (25.11.)
@@ -49,7 +49,7 @@ import { registerMode } from './ui/modes.js';
 import { weeklyLevel, placeWeekly, recordWeekly, weekKey } from './weekly.js';   // Wochenchallenge (25.11.)
 import { bump, atLeast, addType, addForm, unlocked, ACHIEVEMENTS } from './achievements.js';   // Erfolge (25.11.)
 import { openAchievements } from './ui/achievements.js';
-import { RUN, newRun, runLevel, placeRun, rewards, afterFight, applyReward } from './run.js';   // Feldzug (25.11.)
+import { RUN, newRun, runLevel, placeRun, rewards, afterFight, applyReward, runResult } from './run.js';   // Feldzug (25.11.)
 import { openReward } from './ui/run.js';
 import { createTeamUI } from './ui/team.js';                   // 2 gegen 2 (25.11.)
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
@@ -409,12 +409,15 @@ function playWaves() { loadLevelDef(wavesLevel((Math.random() * 2 ** 31) | 0), {
 function nextWave() {
   const m = game.mission, k = m.wave;
   // Überlebende gehen auf ihren Startplatz zurück (frisch aufgestellt, Schaden bleibt). Wer keinen hat (im Kampf
-  // entstanden), bleibt in der Höhe und rückt in die eigene Zone.
+  // entstanden), bleibt in der Höhe und rückt in die eigene Zone; ist der Platz Mauer oder Lava, auf den nächsten freien.
   const xMax = zoneX(world), home = m.home || new Map();
   const alive = world.units.filter(u => u.alive && u.team === PLAYER);
   world.units = [];
   for (const u of alive) {
-    const h = home.get(u.id), n = spawn(world, u.type, h ? h.x : Math.min(u.x, xMax - 6), h ? h.y : u.y, PLAYER);
+    const h = home.get(u.id), want = h || { x: Math.min(u.x, xMax - 6), y: u.y };
+    const p = freeSpot(world, u, want.x, want.y, 0, xMax);   // nie in Mauer oder (am Boden) Lava
+    if (!p) continue;
+    const n = spawn(world, u.type, p.x, p.y, PLAYER);
     n.hp = n.growT > 0 ? Math.min(u.hp, n.T.hp) : u.hp; n.reborn = u.reborn;
     if (u.shape) applyShape(n, u.shape, false);
   }
@@ -480,11 +483,12 @@ function finishRun(m) {
   afterFight(run, win);
   if (win && !run.done) run.pick = true;
   if (run.won) bump(save.ach, 'run');
-  const info = { stage: k, lives: run.lives, done: run.done, won: run.won, pts: m.def.run.pts };
+  const info = { stage: k, lives: run.lives, done: run.done, won: run.won, pts: m.def.run.pts, decided: !!(m.stall && m.stall.decided) };
+  m.stall = null;
   if (run.done) save.run = null;
   persist();
-  m.res = { win, timeUp: m.t > 180, stars: 0, spent: m.spent, budget: m.budget, par: m.par, time: m.t, custom: null, daily: null,
-    run: info, hasNext: false, nextLabel: win && !info.done ? tr('Belohnung wählen') : null, canReplay: !!m.fight };
+  m.res = { win, timeUp: false, stars: 0, spent: m.spent, budget: m.budget, par: m.par, time: m.t, custom: null, daily: null,
+    run: info, hint: info.decided ? tr('Festgefahren: Keiner kam mehr an den anderen heran, also entschied die Armeestärke.') : null, hasNext: false, nextLabel: win && !info.done ? tr('Belohnung wählen') : null, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
   achCheck();
@@ -1142,7 +1146,7 @@ function simStep() {
   } else if (m) {
     if (m.phase === 'battle') {
       m.t += STEP;
-      const r = m.kind === 'waves' ? waveResult(world, m.t) : missionResult(world, m.t);
+      const r = m.kind === 'waves' ? waveResult(world, m.t) : m.kind === 'run' ? runResult(world, m.t, m.stall || (m.stall = {})) : missionResult(world, m.t);
       if (r) { m.result = r; m.endT = 1.4; m.phase = 'done'; ui.updateMission(); }
     }
   } else {

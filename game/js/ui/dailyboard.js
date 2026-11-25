@@ -4,6 +4,7 @@
 //     Artefakts. Siege trägt das Spiel selbst ein (nur, wenn besser als der eigene Eintrag des Tages).
 //   - Auf diesem Gerät (überall, auch über den öffentlichen Link): eigene Siege und eingefügte Ergebnis-Codes von Freunden.
 // Jeder Eintrag wird hier nachgerechnet (createCheck in Häppchen); gezählt wird nur das nachgerechnete Ergebnis.
+import { getStore } from '../net.js';
 import { dateKey, shortDate } from '../daily.js';
 import { tr } from '../i18n.js';
 import { createCheck, stampOf, SIM_VERSION, rankEntries, resultCode, addLocal, cleanBoard, cleanName, mergeOwn, dayEntries, BOARD_KEEP, NAME_MAX, validDate, maxBoardDate } from '../dailyboard.js';
@@ -97,11 +98,10 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     submitLive(item.date, item.army, item.res);
   }
   (async () => {
-    const C = typeof window !== 'undefined' && window.claude;
-    if (!C || typeof C.use !== 'function') { live.ready = true; pendingLive.clear(); return; }
     try {
-      const [db, user] = await Promise.all([C.use('db').catch(() => null), C.use('user').catch(() => null)]);
-      if (!db) { live.ready = true; pendingLive.clear(); return; }
+      const S = await getStore();
+      if (!S) { live.ready = true; pendingLive.clear(); return; }
+      const { db, user } = S;
       live.db = db; live.user = user; live.state = 'load';
       live.me = user ? await user.id() : null;
       const timer = setTimeout(() => { if (live.state === 'load') { live.note = tr('Die Bestenliste ist gerade nicht erreichbar.'); render(); } }, 10000);

@@ -1516,6 +1516,24 @@ export function healMul(world, v) {
   v.healN++;
   return M[k];
 }
+// Abstand der Unterstützer (Sanitäter, Trommler, Schamanin, Schrauber-Drohne): Gegner bis R px zählen. Näher als NEAR px
+// oder auf den Unterstützer gezielt (v.tg) ist er immer eine Gefahr; sonst nur, wenn kein eigener Kämpfer ihn deckt:
+// ein Verbündeter (kein Unterstützer, nicht auf der Flucht), der höchstens SCREEN px vom Gegner steht und ihm näher ist.
+export const SUPPORT_FLEE = { R: 110, NEAR: 50, SCREEN: 45 };
+let ST_V = null, ST_U = null, ST_F = null, ST_W = null, ST_D2 = 0;
+function screens(w) {
+  if (w === ST_U || w === ST_V || factionOf(ST_W, w) !== ST_F || w.T.heal || w.T.support || isFleeing(w)) return false;
+  const dx = w.x - ST_V.x, dy = w.y - ST_V.y, d2 = dx * dx + dy * dy;
+  return d2 <= SUPPORT_FLEE.SCREEN * SUPPORT_FLEE.SCREEN && d2 < ST_D2;
+}
+function supportThreat(world, u, v, f, d) {
+  if (d < SUPPORT_FLEE.NEAR || v.tg === u) return true;
+  let hit = false;
+  ST_W = world; ST_U = u; ST_V = v; ST_F = f; ST_D2 = d * d;
+  query(world, v.x, v.y, SUPPORT_FLEE.SCREEN, w => { if (screens(w)) { hit = true; return true; } });
+  ST_W = null; ST_U = null; ST_V = null; ST_F = null;
+  return !hit;
+}
 function healer(world, u, dt) {
   const T = u.T, f = factionOf(world, u);
   if (u.rt <= 0 || !u.tg || !u.tg.alive || u.tg.hp >= u.tg.T.hp || u.tg.ashT > 0 || factionOf(world, u.tg) !== f) {
@@ -1537,12 +1555,16 @@ function healer(world, u, dt) {
     } else u.follow = false;
     u.tg = best; u.rt = HEAL_RETARGET_T[0] + world.rng() * HEAL_RETARGET_T[1];
   }
-  // Sanitäter halten sich aus dem Getümmel heraus (Fluchtrichtung alle FLEE_RECHECK s neu, gestaffelt)
+  // Sanitäter halten sich aus dem Getümmel heraus (Fluchtrichtung alle FLEE_RECHECK s neu, gestaffelt).
+  // Sie weichen nur vor Gegnern, die wirklich zu ihnen durchkommen (supportThreat): ein Gegner, den ein eigener
+  // Kämpfer vor ihnen bindet, ist kein Grund zu fliehen.
   if (!(u.fleeT > 0)) {
     let sx = 0, sy = 0;
-    query(world, u.x, u.y, 110, v => {
+    query(world, u.x, u.y, SUPPORT_FLEE.R, v => {
       if (factionOf(world, v) === f) return;
-      const qx = u.x - v.x, qy = u.y - v.y, q = Math.hypot(qx, qy) || 1; sx += qx / q; sy += qy / q;
+      const qx = u.x - v.x, qy = u.y - v.y, q = Math.hypot(qx, qy) || 1;
+      if (!supportThreat(world, u, v, f, q)) return;
+      sx += qx / q; sy += qy / q;
     });
     u.fleeX = sx; u.fleeY = sy; u.fleeT = FLEE_RECHECK + (u.id % 3) * .02;
   }

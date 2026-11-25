@@ -28,7 +28,7 @@ import { WORLD_W, WORLD_H } from './camera.js';
 
 // Werte, die den Kampf der Tageschallenge bestimmen: Einheiten der Auswahl und Bosse, Formen. SIM_REV von Hand erhöhen,
 // wenn sich die Simulation selbst ändert (combat.js, physics.js …), ohne dass sich diese Werte ändern.
-export const SIM_REV = 10;   // 2: Balance-Runde 18.11.; 3: Bienen 1 Punkt; 4: Adler/Flamme/Pikenier; 5: Wegfindung; 6: Römer im Block; 7: Explosions-Radius/Höhenkappe, Felsbrocken ohne Flieger, FFA-Fraktionen; 8: Luft gegen Nahkampf (Steinwurf, Sturzflug, Wald gegen oben); 9: Geröll und Krater (Deckung); 10: Römer jagen Fliehende statt Block
+export const SIM_REV = 11;   // 2: Balance-Runde 18.11.; 3: Bienen 1 Punkt; 4: Adler/Flamme/Pikenier; 5: Wegfindung; 6: Römer im Block; 7: Explosions-Radius/Höhenkappe, Felsbrocken ohne Flieger, FFA-Fraktionen; 8: Luft gegen Nahkampf (Steinwurf, Sturzflug, Wald gegen oben); 9: Geröll und Krater (Deckung); 10: Römer jagen Fliehende statt Block; 11: Unterstützer fliehen nur vor ungedeckten Gegnern
 export function simVersion() {
   const types = [...new Set([...DAILY_POOL, ...DAILY_BOSSES])].sort();
   return 'v' + hashStr(JSON.stringify([SIM_REV, types.map(t => [t, UNITS[t] || null]), SHAPES])).toString(36);
@@ -47,7 +47,8 @@ export const VERSIONS = {
   v1xmajf1: { until: '2026-11-20' }, // Audit-Fixes: Explosions-Radius/Höhenkappe, Felsbrocken, FFA-Fraktionen (20.11.)
   v1czg68b: { until: '2026-11-20' },   // Luft gegen Nahkampf: Steinwurf der Nahkämpfer, Sturzflug des Flugsauriers (140 LP), Wald schützt gegen oben (20.11.)
   v1fmudb2: { until: '2026-11-22' },   // Geröll aus zerschlagenen Mauern, Krater aus Explosionen, beide mit Deckung (20.11.)
-  v17rcsjn: { until: null },   // Römer jagen Fliehende: flieht der nächste Gegner, löst sich der Block auf (22.11.)
+  v17rcsjn: { until: '2026-11-25' },   // Römer jagen Fliehende: flieht der nächste Gegner, löst sich der Block auf (22.11.)
+  v12p1es8: { until: null },   // Sanitäter, Trommler, Schamanin, Schrauber-Drohne fliehen nur vor Gegnern, die kein eigener Kämpfer deckt (25.11.)
 };
 const VER_RE = /^v[0-9a-z]{1,12}$/;
 // Eintrag einer älteren Version für diesen Tag annehmen? Liefert das eingetragene Ergebnis (mit old: true) oder null

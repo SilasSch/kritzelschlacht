@@ -3,6 +3,7 @@
 // Ohne Datenbank (öffentlicher Link, lokale Kopie) verweist die Karte auf die Live-Version.
 // Gemalt wird wie im Code-Duell (battle.hot mit online: true, hill: true, def = Regel des Tages), immer rechts als Rot;
 // der König steht links und bleibt bis zum Kampf verdeckt.
+import { getStore } from '../net.js';
 import { roundDef, packArmy, CAT_NAME, budgetOf } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { hillCfg, hillSeed, kingOf, histOf, lastOf, hillList, crown, firstKing, sameKing, reign, HILL_COLL } from '../hill.js';
@@ -66,12 +67,11 @@ export function createHillUI({ game, world, ui, audio, onlineFight, clearWorld, 
   let dbP = null;
   function connect() {
     if (dbP) return dbP;
-    const C = typeof window !== 'undefined' && window.claude;
-    if (!C || typeof C.use !== 'function') return (dbP = Promise.resolve(null));
     dbP = (async () => {
       try {
-        const [db, user] = await Promise.all([C.use('db').catch(() => null), C.use('user').catch(() => null)]);
-        if (!db) return null;
+        const S = await getStore();
+        if (!S) return null;
+        const { db, user } = S;
         live.db = db;
         live.me = (user && await user.id().catch(() => null)) || 'anon-' + Math.random().toString(36).slice(2, 10);
         return db;

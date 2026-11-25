@@ -5,6 +5,7 @@
 import {
   createMatch, view, hostStart, markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms,
   makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote, budgetOf, giveUp, canGiveUp,
+  EMOTES, sendEmote,
 } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { getRoom } from '../net.js';
@@ -58,6 +59,17 @@ const CSS = `
 .onlban{--tx:-50%}
 @keyframes onlPop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes onlRing{0%{box-shadow:0 0 0 0 rgba(255,196,0,.8)}100%{box-shadow:0 0 0 26px rgba(255,196,0,0)}}
+.onlemo{position:fixed;right:16px;top:50%;transform:translateY(-50%);z-index:59;display:flex;flex-direction:column;gap:6px;padding:6px;
+  border:2px solid var(--ink);border-radius:999px;background:#fff;box-shadow:0 4px 0 var(--ink);pointer-events:auto}
+.onlemo[hidden]{display:none}
+.onlemo button{width:44px;height:44px;border:0;border-radius:50%;background:none;font-size:26px;line-height:1;cursor:pointer;padding:0}
+.onlemo button:hover{background:var(--sel)}
+.onlemo button:active{transform:scale(.88)}
+.onlfly{position:fixed;z-index:58;font-size:64px;line-height:1;pointer-events:none;animation:onlFly 2.4s ease-out forwards;filter:drop-shadow(0 3px 2px rgba(0,0,0,.25))}
+.onlfly small{display:block;font:800 13px var(--f-ui);text-align:center;color:var(--ink)}
+@keyframes onlFly{0%{transform:translate(-50%,0) scale(.3);opacity:0}12%{transform:translate(-50%,-30px) scale(1.15);opacity:1}
+  75%{opacity:1}100%{transform:translate(-50%,-220px) scale(1);opacity:0}}
+@media (prefers-reduced-motion:reduce){.onlfly{animation-duration:1.6s}}
 @media (prefers-reduced-motion:reduce){.onlban.hi,.onlask .card,.onlbox .peer{animation:none}}
 `;
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -95,6 +107,26 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     else if (m.phase === 'vote') voteCard();
     else if (m.phase === 'result') { act(wantNext(m)); }
   };
+
+  /* ---------- Emotes ---------- */
+  // Leiste rechts; eigene fliegen auf der eigenen Seite hoch, die des Gegners auf seiner
+  const emoBar = document.createElement('div'); emoBar.className = 'onlemo'; emoBar.id = 'onlEmo'; emoBar.hidden = true;
+  emoBar.innerHTML = EMOTES.map((e, k) => `<button data-k="${k}" aria-label="${e}">${e}</button>`).join('');
+  emoBar.title = tr('Reaktion senden: dein Gegner sieht sie sofort');
+  document.body.append(emoBar);
+  emoBar.onclick = e => {
+    const b = e.target.closest('button'); if (!b || !m) return;
+    if (sendEmote(m, +b.dataset.k)) { flyEmote(EMOTES[+b.dataset.k], m.side, true); publish(); }
+  };
+  function flyEmote(ch, side, mine) {
+    const el = document.createElement('div'); el.className = 'onlfly';
+    el.style.left = `${(side === 'blau' ? 25 : 75) + (Math.random() * 10 - 5)}%`;
+    el.style.top = `${62 + Math.random() * 8}%`;
+    el.textContent = ch;
+    const who = document.createElement('small'); who.textContent = mine ? tr('Du') : tr('Gegner'); el.append(who);
+    document.body.append(el);
+    setTimeout(() => el.remove(), 2600);
+  }
 
   /* ---------- Karte ---------- */
   const ov = document.createElement('div');
@@ -384,6 +416,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       else if (e === 'fight') beginFight();
       else if (e === 'error') ui.toast(tr('Die Armee des Gegners war ungültig ({e}). Sie kämpft nicht mit.', { e: tr(m.error) }));
       else if (e === 'peerres' || e === 'score' || e === 'result' || e === 'peerwant' || e === 'want') { decorate(); if (shown === 'gave') gaveCard(); }
+      else if (e === 'emote') flyEmote(EMOTES[m.peerEmo], m.side === 'blau' ? 'rot' : 'blau', false);
       else if (e === 'gave') { stopFight(); gaveCard(); }
       else if (e === 'peergave') { stopFight(); gaveCard(); chime(true); }
       else if (e === 'peerready') flash('✅ ' + tr('Dein Gegner ist fertig mit Malen!'));
@@ -465,6 +498,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     lab.textContent = on ? tr('Online verlassen') : tr('Online 1v1');
     btn.classList.toggle('on', on);
     giveBtn.hidden = !on || !canGiveUp(m);
+    emoBar.hidden = !on || !m.cfg;
     if (!on) return;
     go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
     $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;

@@ -1009,6 +1009,8 @@ const EN = {
   "du bist {s}": "you are {s}",
   "Neue Abstimmung über Regel und Karte": "New vote on rule and map",
   "Online verlassen": "Leave online",
+  "Reaktion senden: dein Gegner sieht sie sofort": "Send a reaction: your opponent sees it right away",
+  "Gegner": "Opponent",
   "Fertig": "Done",
   "Abstimmung": "Vote",
   "Warte auf Gegner …": "Waiting for opponent …",

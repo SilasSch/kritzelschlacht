@@ -9,7 +9,7 @@ import { createHot, hotPaint } from '../game/js/hotseat.js';
 import { applyShape } from '../game/js/shapes.js';
 import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
-import {
+import { EMOTES, sendEmote,
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
   markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf, giveUp, canGiveUp,
 } from '../game/js/online.js';
@@ -401,4 +401,24 @@ test('Code-Duell: kaputte oder manipulierte Codes werden abgelehnt', async () =>
   for (let i = 0; i < 80; i++) spawn(w, 'baer', 100 + (i % 8) * 70, 80 + Math.floor(i / 8) * 70, 'blau');
   await assert.rejects(decode(await encode(challengeData(cfg, packArmy(w, 'blau')))), /passt nicht/);
   await assert.rejects(decode(await encode({ v: 1, k: 'duelres', cfg, a })), /passt nicht/);
+});
+
+test('Emotes: Zähler in presence, Gegner sieht jedes neue genau einmal, Sperre gegen Dauerfeuer', () => {
+  const A = createMatch('host', 150, () => 0.3), B = createMatch('guest', 150, () => 0.7);
+  assert.equal(sendEmote(A, 0, 1000), false, 'vor der ersten Runde kein Emote');
+  hostStart(A);
+  onPeer(B, JSON.parse(JSON.stringify(view(A))), 1000, 600);
+  assert.equal(sendEmote(A, 1, 5000), true);
+  assert.equal(sendEmote(A, 2, 5100), false, 'zu schnell');
+  assert.equal(sendEmote(A, 99, 9000), false, 'ungültig');
+  let ev = onPeer(B, JSON.parse(JSON.stringify(view(A))), 1000, 600);
+  assert.ok(ev.includes('emote')); assert.equal(B.peerEmo, 1);
+  ev = onPeer(B, JSON.parse(JSON.stringify(view(A))), 1000, 600);
+  assert.ok(!ev.includes('emote'), 'dasselbe Emote nicht doppelt');
+  assert.equal(sendEmote(A, 1, 6000), true);
+  ev = onPeer(B, JSON.parse(JSON.stringify(view(A))), 1000, 600);
+  assert.ok(ev.includes('emote'), 'gleiches Emote noch mal zählt');
+  ev = onPeer(B, { ...JSON.parse(JSON.stringify(view(A))), emo: { n: 99, k: 42 } }, 1000, 600);
+  assert.ok(!ev.includes('emote'), 'unbekanntes Emote wird ignoriert');
+  assert.ok(EMOTES.length >= 4);
 });

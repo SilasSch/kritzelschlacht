@@ -1,6 +1,7 @@
 // Start, Spielzustand und Schleife. Fester Simulationsschritt 1/60 s, Tempo 1/2/4×, Zeitlupe 0,3×, Pause.
 // Leert world.events jedes Bild und reicht sie an Renderer (Gelände, renderer.fx), Audio und UI weiter.
 import { UNITS, TERRAIN, CATEGORIES, TEAMS, PLURAL } from './data.js';
+import { chapterProgress } from './campaign/index.js';
 import { CHAPTERS, levelInfo, nextLevel, unitAllowed, terrainAllowed, catAllowed, levelUnlocked, chapterUnlocked } from './campaign/index.js';
 import { createWorld, spawn, rebuildHash, clearBattle, touchTerrain, cellIndex } from './world.js';
 import { step, buildMission, missionResult, sandboxWinner, battleWinner, armyPoints, placeRect } from './sim.js';
@@ -36,7 +37,20 @@ import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 import { createHillUI } from './ui/hill.js';                   // König des Hügels (25.11.)
-import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
+import { applyMap } from './rules.js';
+import { quickPlan, placeQuick, QUICK_DEFAULT } from './quick.js';   // Schnelle Schlacht (25.11.)
+import { armyCenter, introCam, armySummary } from './intro.js';     // Gegner vorstellen (25.11.)
+import { clampCamera } from './camera.js';
+import { makeTemplate, applyTemplate, TEMPLATE_MAX } from './templates.js';   // Armee-Vorlagen (25.11.)
+import { createTemplatesUI } from './ui/templates.js';
+import { createRecorder, saveFile } from './recorder.js';   // Schlacht als Video (25.11.)
+import { wavesLevel, wavesTerrain, spawnWave, waveResult, waveGain } from './waves.js';   // Wellenmodus (25.11.)
+import { registerMode } from './ui/modes.js';
+import { weeklyLevel, placeWeekly, recordWeekly, weekKey } from './weekly.js';   // Wochenchallenge (25.11.)
+import { bump, atLeast, addType, addForm, unlocked, ACHIEVEMENTS } from './achievements.js';   // Erfolge (25.11.)
+import { openAchievements } from './ui/achievements.js';
+import { RUN, newRun, runLevel, placeRun, rewards, afterFight, applyReward } from './run.js';   // Feldzug (25.11.)
+import { openReward } from './ui/run.js';
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 import { makePaletteFold } from './ui/palfold.js';             // Malleiste klappt im Kampf und beim Malen weg (25.11.)
 import { tr, unitName, unitPlural, translateDom, LANG, switchLang } from './i18n.js';   // Sprache (18.11.)
@@ -156,9 +170,19 @@ const game = {
       markAll(); rebuildHash(world); ui.updateMission(); ui.updateCounts();
       return;
     }
+    if (game.watch) game.toggleWatch(false);
     clearWorld(); ui.updateCounts();
   },
   dice() { if (game.mission || game.battle || game.editor) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
+  // Zuschau-Modus (25.11.): im Sandkasten folgt nach jedem Sieg (oder nach WATCH_MAX s) die nächste Zufallsschlacht.
+  // Malen, Leeren oder ein anderer Modus beenden ihn.
+  watch: false,
+  toggleWatch(on = !game.watch) {
+    if (game.mission || game.battle || game.editor) on = false;
+    game.watch = on; watchT = -1; watchAge = 0;
+    if (on) { game.paused = false; game.dice(); ui.toast(tr('Zuschauen: eine Zufallsschlacht nach der anderen. Malen beendet es.')); }
+    ui.updateControls();
+  },
 
   undo() {
     const m = game.mission, b = game.battle;
@@ -174,15 +198,21 @@ const game = {
 
   enterSandbox,
   toggleRanges() { game.showRanges = !game.showRanges; ui.updateRanges(); },
-  replay: startReplay, endReplay, replaying: () => !!game.replayState, canReplay,
+  replay: startReplay, endReplay, videoReplay: () => videoReplay(), replaying: () => !!game.replayState, canReplay,
   startTutorial, skipTutorial() { save.tutorial = true; persist(); },
   enterBattle, startBattle, retryBattle, editBattle, runBatch, cancelBatch, swapSides,
   loadMission,
-  go() { const m = game.mission; if (!m) return; if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission(); },
+  go() {
+    const m = game.mission; if (!m) return;
+    if (m.kind === 'run' && m.phase === 'battle') { m.result = 'lose'; m.phase = 'done'; m.endT = .01; ui.updateMission(); return; }   // Feldzug: Abbrechen kostet ein Leben
+    if (m.kind === 'waves' && m.phase === 'battle') { m.result = 'lose'; m.phase = 'done'; m.endT = .01; ui.updateMission(); return; }   // Wellenmodus: Aufgeben
+    if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission();
+  },
   retryMission,
   // "Nächste Mission": das nächste Level im Kapitel, nach dem letzten die Kapitelübersicht
   nextMission() {
     const m = game.mission; if (!m) return;
+    if (m.kind === 'run') { runNext(); return; }   // Feldzug: Belohnung wählen
     if (!m.chapter) { ui.openChapters(); return; }   // Tutorial und andere Level ohne Kapitel: zur Kampagne
     const n = nextLevel(m.id);
     if (m.custom) game.customBack();   // eigenes Level (Audit 18.11.)
@@ -219,6 +249,7 @@ function saveSandbox() {
 }
 
 function enterSandbox() {
+  stopIntro();
   endReplay(true);
   coach.stop();
   ui.hideOverlays();
@@ -253,26 +284,48 @@ function loadMission(x, custom = null) {
 }
 // Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
 function loadLevelDef(def, opts = {}) {
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   if (opts.kind !== 'tutorial') coach.stop();
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
   leaveBattle(); leaveEditor();
   clearWorld();
   // Tageschallenge: Gegner mit fester Saat (dailyboard.js), damit der Kampf nachgerechnet werden kann
+  world.weather = null;   // Missionen immer bei klarem Wetter
   if (def.daily) placeDaily(world, def); else buildMission(world, def);
+  if (def.waves) { wavesTerrain(world, def); spawnWave(world, def, 1); }
+  if (def.weekly) placeWeekly(world, def);
+  if (def.run) placeRun(world, def);   // Feldzug: Karte und Gegner der Schlacht   // Wochenchallenge: Karte und Gegner der Woche   // Wellenmodus: Gelände und erste Welle
   game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, def,
     kind: opts.kind || (opts.chapter ? 'campaign' : opts.custom ? 'custom' : 'level'),
     budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
   if (opts.custom) game.mission.custom = opts.custom;
+  if (def.waves) game.mission.wave = 1;
   game.paused = false;
   // Auswahl auf eine erlaubte Kategorie und Einheit setzen (units, cats)
   if (!game.catAllowed(game.cat)) game.cat = CATEGORIES.map(c => c[0]).find(game.catAllowed) || 'gelaende';
   if (!game.catKeys(game.cat).includes(game.sel)) game.sel = game.catKeys(game.cat)[0];
   markAll();
   ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh(); ui.updateRanges();
+  // Gegner vorstellen (25.11.): nur beim ersten Laden eines Levels, nicht bei „Nochmal planen“ und nicht im Tutorial
+  if (opts.kind !== 'tutorial' && introSeen !== def.id) { introSeen = def.id; startIntro(); }
+}
+let introSeen = null, intro = null;
+const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+function startIntro() {
+  const c = armyCenter(world.units, 'rot');
+  if (!c) return;
+  const list = armySummary(world.units, 'rot');
+  if (list.length) ui.toast(tr('Gegner: {l}', { l: list.map(([k, n]) => `${n} ${n === 1 ? unitName(k) : unitPlural(k)}`).join(', ') }));
+  if (!reducedMotion()) intro = { target: c, t: 0 };
+}
+function stopIntro() {
+  if (!intro) return;
+  intro = null; cam.zoom = cam.fit; clampCamera(cam);
 }
 
 function startMission() {
+  stopIntro();
   const m = game.mission;
   rebuildHash(world);
   if (!(world.facCount.get(PLAYER) > 0)) { ui.toast(tr('Male zuerst deine Armee.')); return; }
@@ -303,6 +356,8 @@ function startMission() {
 // "Nochmal planen" / "Besser planen" / "Abbrechen": Mission neu laden und den Plan wiederherstellen
 function retryMission() {
   const m = game.mission; if (!m) return;
+  if (m.kind === 'waves') { playWaves(); return; }   // Wellenmodus: neuer Lauf
+  if (m.kind === 'run' && (!save.run || save.run.pick)) { playRun(); return; }   // Feldzug: vorbei (neuer) oder Belohnung offen
   // Kampagne über die id, alle anderen (eigenes Level, Tutorial, Tageschallenge) über das Level-Objekt
   const again = () => (m.chapter ? loadMission(m.id) : loadLevelDef(m.def, { kind: m.kind, custom: m.custom }));
   if (!snap || snap.id !== m.id) { again(); return; }
@@ -318,6 +373,8 @@ function retryMission() {
 
 function finishMission() {
   const m = game.mission; if (!m) return;
+  if (m.kind === 'waves') { if (m.result === 'clear') nextWave(); else endWaves(); return; }
+  if (m.kind === 'run') { finishRun(m); return; }
   const win = m.result === 'win', timeUp = m.t > 180;
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
   const camp = m.kind === 'campaign';
@@ -331,13 +388,154 @@ function finishMission() {
   const before = camp ? save.medals[m.id] || 0 : 0;
   if (camp && got) save.medals[m.id] = before | got;
   if (m.kind === 'tutorial' && win) save.tutorial = true;
+  achMission(m, win, stars);   // Erfolge
   persist();
   const hint = win ? null : defeatHint({ killers: ui.killers(), level: m.def, timeUp });
+  const weekly = m.def.weekly ? { best: recordWeekly(save.weekly, m.def.weekly.key, { win, spent: m.spent, stars }), pts: m.def.weekly.pts } : null;   // Wochenchallenge
+  if (weekly) persist();
   m.res = { win, timeUp, stars, spent: m.spent, budget: m.budget, par: m.par, time: m.t, lost: ui.lostBlue(), deployed: army.length, hasNext: !!(m.chapter && nextLevel(m.id)), custom: m.custom || null,
-    daily, nextLabel: m.chapter || m.custom || daily ? null : tr('Zur Kampagne'), hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
+    daily, weekly, nextLabel: m.chapter || m.custom || daily ? null : tr('Zur Kampagne'), hint: hint && hint.text, medals: { mask: before | got, fresh: got & ~before }, canReplay: !!m.fight };
   ui.showResult(m.res);
   audio.play(win ? 'win' : 'lose');
+  achCheck();
 }
+
+/* ---------- Wellenmodus (25.11.) ---------- */
+// Läuft als Mission ohne Kapitel (kind 'waves', waves.js). Nach einer geschafften Welle bleiben die Überlebenden stehen,
+// das Budget wächst um waveGain, die nächste Welle steht schon rechts. Bestwert in save.waves.
+function playWaves() { loadLevelDef(wavesLevel((Math.random() * 2 ** 31) | 0), { kind: 'waves' }); }
+function nextWave() {
+  const m = game.mission, k = m.wave;
+  world.units = world.units.filter(u => u.alive && u.team === PLAYER);
+  for (const u of world.units) { u.vx = 0; u.vy = 0; }
+  const gain = waveGain(k);
+  m.wave = k + 1; m.budget += gain; m.par = m.budget;
+  m.phase = 'plan'; m.t = 0; m.endT = -1; m.result = null; m.fight = null; snap = null;
+  if (k > save.waves.best) save.waves.best = k;
+  atLeast(save.ach, 'wave', k);
+  persist();
+  spawnWave(world, m.def, m.wave);
+  undoStack.length = 0; renderer.fx.clear(); markAll(); rebuildHash(world);
+  audio.play('win');
+  ui.updateMode(); ui.updateMission(); ui.updateControls(); ui.updateCounts();
+  ui.toast(tr('Welle {k} geschafft! +{g} Punkte. Male nach und drück „Los!“.', { k, g: gain }));
+  achCheck();
+}
+function endWaves() {
+  const m = game.mission, reached = m.wave - 1, fresh = reached > save.waves.best;
+  if (fresh) save.waves.best = reached;
+  save.waves.runs++; persist();
+  m.res = { win: false, timeUp: false, stars: 0, spent: m.spent, budget: m.budget, par: m.par, time: m.t, custom: null, daily: null,
+    waves: { reached, best: save.waves.best, fresh }, canReplay: !!m.fight, hasNext: false };
+  ui.showResult(m.res);
+  audio.play(fresh ? 'win' : 'lose');
+}
+game.playWaves = playWaves;
+registerMode({
+  id: 'waves', tag: tr('Spielmodus'), n: tr('Wellenmodus'),
+  d: tr('Welle um Welle stürmen Gegner heran. Wer überlebt, bleibt stehen, nach jeder Welle malst du nach.'),
+  foot: g => (g.save.waves.best ? `<span class="tag best">${tr('Bestwert: Welle {k}', { k: g.save.waves.best })}</span>` : `<span class="tag">${tr('Noch nicht gespielt')}</span>`),
+  open: () => { ui.hideOverlays(); playWaves(); },
+});
+
+/* ---------- Wochenchallenge (25.11.) ---------- */
+game.playWeekly = () => loadLevelDef(weeklyLevel(weekKey()), { kind: 'weekly' });
+registerMode({
+  id: 'weekly', tag: tr('Jede Woche neu'), n: tr('Wochenchallenge'),
+  d: tr('Eine Mission pro Woche mit Sonderregel für deine Armee. Gewinne mit möglichst wenig Punkten.'),
+  foot: g => { const b = g.save.weekly[weekKey()]; return b ? `<span class="tag best">${tr('Diese Woche: {p} Pkt', { p: b.spent })} ${'★'.repeat(b.stars)}</span>` : `<span class="tag">${tr('Diese Woche noch offen')}</span>`; },
+  open: () => { ui.hideOverlays(); game.playWeekly(); },
+});
+
+/* ---------- Feldzug (25.11.) ---------- */
+// Roguelite aus RUN.STAGES Schlachten (run.js). save.run hält den Lauf, auch über das Neuladen hinweg; run.pick heißt:
+// gewonnen, Belohnung noch nicht gewählt. Läuft als Mission ohne Kapitel (kind 'run').
+game.runStages = RUN.STAGES;
+function playRun() {
+  if (!save.run) { save.run = newRun((Math.random() * 2 ** 31) | 0); persist(); }
+  if (save.run.pick) { runNext(); return; }
+  loadLevelDef(runLevel(save.run), { kind: 'run' });
+}
+function runNext() {
+  const run = save.run;
+  if (!run) { ui.openChapters(); return; }
+  if (!run.pick) { playRun(); return; }
+  ui.hideOverlays();
+  openReward(game, rewards(run), r => { applyReward(run, r); run.pick = false; persist(); playRun(); });
+}
+function finishRun(m) {
+  const run = save.run; if (!run) return;
+  const win = m.result === 'win', k = run.stage;
+  if (win) { bump(save.ach, 'wins'); if (ui.lostBlue() === 0) bump(save.ach, 'flawless'); }
+  afterFight(run, win);
+  if (win && !run.done) run.pick = true;
+  if (run.won) bump(save.ach, 'run');
+  const info = { stage: k, lives: run.lives, done: run.done, won: run.won, pts: m.def.run.pts };
+  if (run.done) save.run = null;
+  persist();
+  m.res = { win, timeUp: m.t > 180, stars: 0, spent: m.spent, budget: m.budget, par: m.par, time: m.t, custom: null, daily: null,
+    run: info, hasNext: false, nextLabel: win && !info.done ? tr('Belohnung wählen') : null, canReplay: !!m.fight };
+  ui.showResult(m.res);
+  audio.play(win ? 'win' : 'lose');
+  achCheck();
+}
+game.playRun = playRun;
+registerMode({
+  id: 'run', tag: tr('Roguelite'), n: tr('Feldzug'),
+  d: tr('Sechs Schlachten am Stück. Starte mit wenigen Einheiten, wähle nach jedem Sieg eine Belohnung. Zwei Leben.'),
+  foot: g => (g.save.run ? `<span class="tag best">${tr('Schlacht {k}/{n}', { k: g.save.run.stage, n: RUN.STAGES })} · ${'♥'.repeat(g.save.run.lives)}</span>` : `<span class="tag">${tr('Neuer Feldzug')}</span>`),
+  open: () => { ui.hideOverlays(); playRun(); },
+});
+
+/* ---------- Erfolge (25.11.) ---------- */
+// achievements.js zählt mit (save.ach); achCheck meldet neue Erfolge als Toast. Gespeichert wird gebündelt (achDirty).
+let achDirty = false, achSaveT = 0;
+const ach = () => save.ach;
+function achCheck() {
+  const fresh = unlocked(save.ach, dateKey());
+  if (fresh.length) { persist(); achDirty = false; audio.play('horn'); for (const x of fresh) ui.toast(tr('🏆 Erfolg: {n}', { n: tr(x.n) })); }
+}
+function achMission(m, win, stars) {
+  if (!win) return;
+  const a = ach();
+  bump(a, 'wins');
+  if (m.spent <= m.budget / 2) bump(a, 'half');
+  if (ui.lostBlue() === 0) bump(a, 'flawless');
+  if (m.def.daily) bump(a, 'daily');
+  if (m.def.weekly && stars === 3) bump(a, 'weekly3');
+  if (m.chapter) { const p = chapterProgress(save.stars, m.chapter.id); if (p.total && p.done === p.total) atLeast(a, 'chapter', 1); }
+}
+registerMode({
+  id: 'ach', tag: tr('Sammeln'), n: tr('Erfolge'),
+  d: tr('Ziele quer durchs Spiel: Drachentöter, Sparfuchs, Sammler und mehr.'),
+  foot: g => `<span class="tag">${tr('{a} von {b} geschafft', { a: ACHIEVEMENTS.filter(x => g.save.ach.got[x.id]).length, b: ACHIEVEMENTS.length })}</span>`,
+  open: g => openAchievements(g),
+});
+
+/* ---------- Wetter (25.11.) ---------- */
+// Klar, Regen, Nebel: im Sandkasten und in der freien Schlacht (world.weather, combat.WEATHER). Missionen, Tages- und
+// Wochenchallenge, Online und Code-Duell spielen immer bei klarem Wetter.
+const WEATHERS = [null, 'regen', 'nebel'];
+const WEATHER_N = { null: tr('Klar'), regen: tr('Regen'), nebel: tr('Nebel') };
+const WEATHER_D = { null: tr('Klar'), regen: tr('Regen: kein Waldbrand, Brände gehen schneller aus'), nebel: tr('Nebel: Fernkämpfer sehen nur 60 % so weit') };
+game.weather = null;
+const weatherFree = () => !game.mission && !game.editor && !(game.battle && game.battle.hot && game.battle.hot.online);
+function applyWeather() {
+  world.weather = weatherFree() ? game.weather : null;
+  const b = document.getElementById('bWeather');
+  if (b) { b.title = tr('Wetter: {w}', { w: WEATHER_N[game.weather] }); b.classList.toggle('on', !!game.weather); b.hidden = !!game.mission || !!game.editor; }
+}
+game.cycleWeather = () => {
+  if (!weatherFree()) return;
+  const b = game.battle;
+  if (b && b.phase !== 'plan') { ui.toast(tr('Das Wetter lässt sich nur vor dem Kampf ändern.')); return; }
+  game.weather = WEATHERS[(WEATHERS.indexOf(game.weather) + 1) % WEATHERS.length];
+  applyWeather(); if (b) b.snap = null;
+  ui.toast(WEATHER_D[game.weather]);
+};
+document.getElementById('bWeather').onclick = () => game.cycleWeather();
+const wxBox = document.getElementById('wx');
+let wxShown = undefined;
 
 /* ---------- Replay (Audit 18.11.) ---------- */
 // Jeder Kampf beginnt mit resetFight (battle.js) aus einem Schnappschuss und einer Saat; danach ist er deterministisch.
@@ -357,6 +555,24 @@ function fightSrc() {
   return null;
 }
 function canReplay() { return !!fightSrc(); }
+// Video (25.11.): dasselbe Replay, dabei nimmt recorder.js die Leinwand auf (nur die Zeitlupe, ohne HUD). Am Ende des
+// Replays (auch „Überspringen“) wird die Datei zum Speichern angeboten.
+let recorder = null;
+function videoReplay() {
+  if (!recorder) recorder = createRecorder(renderer.canvas);
+  if (!recorder.supported()) { ui.toast(tr('Dieser Browser kann keine Videos aufnehmen.')); return; }
+  startReplay();
+  if (game.replayState) { game.replayState.rec = true; ui.replayBar(true, tr('Video: wird vorbereitet …')); }
+}
+function finishVideo() {
+  if (!recorder || !recorder.active) return;
+  ui.toast(tr('Video wird erstellt …'));
+  recorder.stop().then(v => {
+    if (!v) { ui.toast(tr('Kein Video aufgenommen.')); return null; }
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    return saveFile(v.blob, `kritzelschlacht-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${v.ext}`);
+  }).then(st => { if (st === 'saved' || st === 'link') { ui.toast(tr('Video gespeichert.')); bump(save.ach, 'video'); persist(); achCheck(); } }, () => ui.toast(tr('Das Video ließ sich nicht speichern.')));
+}
 function startReplay() {
   const src = fightSrc(); if (!src) return;
   ui.hideOverlays(); ui.closeBanner();
@@ -371,6 +587,7 @@ function startReplay() {
 function endReplay(quiet = false) {
   if (!game.replayState) return;
   game.replayState = null; ui.replayBar(false);
+  finishVideo();
   if (quiet) return;
   const m = game.mission, b = game.battle;
   if (m && m.res) ui.showResult(m.res); else if (b && b.result) ui.showBattleResult(b.result);
@@ -380,7 +597,7 @@ function replayFrame(realDt) {
   if (!r.play) {
     const end = performance.now() + REPLAY_FF_MS;
     while (r.t < r.from && performance.now() < end) { step(world, STEP); world.events.length = 0; r.t += STEP; }
-    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, tr("Zeitlupe · letzte {n} s", { n: Math.round(r.to - r.from) })); }
+    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); if (r.rec && !recorder.start()) { r.rec = false; ui.toast(tr('Dieser Browser kann keine Videos aufnehmen.')); } ui.replayBar(true, tr(r.rec ? "● Aufnahme · letzte {n} s" : "Zeitlupe · letzte {n} s", { n: Math.round(r.to - r.from) })); }
     else ui.replayBar(true, `${tr('wird vorbereitet …')} ${Math.round(r.t / r.from * 100)} %`);
     return;
   }
@@ -419,6 +636,8 @@ function startTutorial() {
 const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
 
 function enterBattle() {
+  stopIntro();
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   coach.stop();
   const cur = game.battle;
@@ -488,7 +707,7 @@ function restoreSnap(b) {
 function onlineFight(list, seed, map = 'feld') {
   const b = game.battle; if (!b) return false;
   cancelBatch(); endReplay(true);
-  clearWorld(); world.teamMode = true;
+  clearWorld(); world.teamMode = true; world.weather = null;   // Online und Duell: immer klares Wetter
   applyMap(world, map); markAll();   // Karte der Runde (rules.js), auf beiden Geräten gleich
   for (const u of list) {
     if (!UNITS[u.type].fly && world.terr[cellIndex(world, u.x, u.y)] === 4) continue;
@@ -567,6 +786,62 @@ function finishBattle() {
   audio.play(b.result.winner === 'draw' ? 'lose' : 'win');
 }
 
+/* ---------- Schnelle Schlacht (25.11.) ---------- */
+// „Zufallsgegner“ in der Planung: Rot bekommt eine neue Zufallsarmee (quick.js) mit so vielen Punkten wie Blau, ohne
+// Blau QUICK_DEFAULT. Aus dem Sandkasten oder einer Mission geht es dafür in den Schlacht-Modus.
+function quickEnemy() {
+  if (!game.battle) enterBattle();
+  const b = game.battle;
+  if (!b || b.hot) return;
+  if (b.phase !== 'plan') editBattle();
+  world.units = world.units.filter(u => u.team !== 'rot');
+  const pts = armyPoints(world).blau;
+  placeQuick(world, quickPlan(pts > 0 ? pts : QUICK_DEFAULT), 'rot');
+  b.snap = null; undoStack.length = 0;
+  rebuildHash(world); audio.init(); audio.play('whoosh');
+  ui.updateBattle(); ui.updateCounts();
+  ui.toast(pts > 0 ? tr('Rot hat eine Zufallsarmee. Jetzt „Los!“.') : tr('Rot hat eine Zufallsarmee. Male Blau links und drück „Los!“.'));
+}
+game.quickEnemy = quickEnemy;
+
+/* ---------- Armee-Vorlagen (25.11.) ---------- */
+// Blau in der Planung einer Mission (links der Mallinie, mit Budget und erlaubten Einheiten) oder der freien Schlacht
+// (linke Hälfte, ohne Grenze). templates.js rechnet, ui/templates.js zeigt die Liste.
+function tplZone() {
+  const m = game.mission, b = game.battle;
+  if (m && m.phase === 'plan') return { xMax: zoneX(world), mission: m };
+  if (b && b.phase === 'plan' && !b.hot) return { xMax: world.W / 2, mission: null };
+  return null;
+}
+Object.assign(game, {
+  tplList: () => save.armies,
+  tplReady: () => !!tplZone(),
+  tplSave() {
+    const z = tplZone(); if (!z) return false;
+    const name = z.mission ? tr(z.mission.def.n) : tr('Schlacht');
+    const t = makeTemplate(world.units, PLAYER, z.xMax, world.H, `${name} · ${new Date().toLocaleDateString()}`);
+    if (!t) { ui.toast(tr('Male zuerst deine Armee.')); return false; }
+    save.armies = [t, ...save.armies].slice(0, TEMPLATE_MAX); persist();
+    ui.toast(tr('Vorlage gespeichert.'));
+    return true;
+  },
+  tplLoad(i) {
+    const z = tplZone(), t = save.armies[i]; if (!z || !t) return;
+    const m = z.mission;
+    world.units = world.units.filter(u => u.team !== PLAYER);
+    if (m) m.spent = 0;
+    const r = applyTemplate(world, t, { team: PLAYER, xMax: z.xMax, budget: m ? m.budget : Infinity, spent: 0, allowed: m ? game.unitAllowed : () => true });
+    if (m) m.spent = r.spent;
+    if (game.battle) game.battle.snap = null;
+    undoStack.length = 0; rebuildHash(world);
+    ui.updateMission(); ui.updateBattle(); ui.updateCounts();
+    const sk = r.skipped, miss = sk.type + sk.budget + sk.terrain;
+    ui.toast(miss ? tr('Vorlage geladen: {a} Einheiten, {b} passten nicht (Budget, erlaubte Einheiten oder Gelände).', { a: r.placed, b: miss }) : tr('Vorlage geladen: {a} Einheiten.', { a: r.placed }));
+  },
+  tplDelete(i) { save.armies = save.armies.filter((_, k) => k !== i); persist(); },
+});
+const tplUI = createTemplatesUI(game);
+
 /* ---------- Editor und Teilen (Audit 18.11.) ---------- */
 // Level-Editor: game.editor ist edState ({ meta: { n, hint, budget, cats }, savedId, keep }), solange der Editor offen ist,
 // sonst null. Gemalt werden Gegner (paint.EDITOR: Rot, nur rechts der Mallinie) und Gelände überall; die Simulation steht.
@@ -582,6 +857,8 @@ game.editorUI = editorUI;
 
 // level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
 function enterEditor(level = null) {
+  stopIntro();
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   coach.stop();
   ui.hideOverlays();
@@ -691,6 +968,7 @@ document.getElementById('batShare').onclick = () => shareBattle();
 const actions = {
   strokeStart() {
     audio.init();
+    if (game.watch) game.toggleWatch(false);   // Zuschau-Modus: Malen beendet ihn
     if (!game.mission) ui.closeBanner();
     stroke = createStroke(game.mission ? game.mission.spent : 0);
     stroke.first = true; stroke.blocked = false; stroke.path = [];
@@ -728,6 +1006,8 @@ const actions = {
     palFold?.paint(false);
     if (stroke && !stroke.blocked) shapeStroke(stroke);
     if (stroke && !stroke.blocked && !strokeEmpty(stroke)) {
+      const us = stroke.units.filter(u => u.alive);   // Erfolge: gemalte Einheiten und Typen
+      if (us.length && !game.editor) { bump(save.ach, 'painted', us.length); for (const u of us) addType(save.ach, u.type); achDirty = true; achCheck(); }
       undoStack.push(stroke);
       if (undoStack.length > UNDO_MAX) undoStack.shift();
     }
@@ -763,6 +1043,7 @@ function shapeStroke(s) {
   const k = classifyStroke(s.path, game.brush, dir);
   if (!k) return;
   for (const u of us) applyShape(u, k);
+  addForm(save.ach, k); achDirty = true;
   ui.toast(tr(us.length === 1 ? '{f}! {n} Einheit: {d}' : '{f}! {n} Einheiten: {d}', { f: tr(SHAPES[k].n), n: us.length, d: tr(SHAPES[k].d) }));
   audio.play('horn');   // Formbonus: Signalhorn
 }
@@ -811,7 +1092,11 @@ function drainEvents() {
   const ev = world.events;
   renderer.consume(ev);        // Gelände-Änderungen und Effekte (fx.js, mit Budget je Bild)
   audio.onEvents(ev, cam, game.slow);   // Töne mit Stereo nach Bildlage; Zeitlupe klingt tiefer
-  for (let i = 0; i < ev.length; i++) ui.onEvent(ev[i]);
+  for (let i = 0; i < ev.length; i++) {
+    const e = ev[i];
+    ui.onEvent(e);
+    if (e.type === 'death' && e.killerTeam === 'blau' && e.team !== 'blau' && !game.replayState) { bump(save.ach, 'kills'); if (e.unitType === 'drache') bump(save.ach, 'dragon'); achDirty = true; }
+  }
   ev.length = 0;
   if (game.battle) game.battle.evFrom = 0;
 }
@@ -832,12 +1117,13 @@ function simStep() {
   } else if (m) {
     if (m.phase === 'battle') {
       m.t += STEP;
-      const r = missionResult(world, m.t);
+      const r = m.kind === 'waves' ? waveResult(world, m.t) : missionResult(world, m.t);
       if (r) { m.result = r; m.endT = 1.4; m.phase = 'done'; ui.updateMission(); }
     }
   } else {
     const f = sandboxWinner(world);
     if (f) ui.banner(world.teamMode ? tr('Team {t} gewinnt!', { t: tr(TEAMS[f].n) }) : tr('{u} gewinnen!', { u: unitPlural(f) }));
+    if (game.watch) { watchAge += STEP; if ((f || watchAge > WATCH_MAX) && watchT < 0) watchT = WATCH_GAP; }
   }
 }
 
@@ -851,6 +1137,8 @@ function finaleSlow(world) {
 }
 
 let acc = 0, last = performance.now(), uiT = 0;
+let watchT = -1, watchAge = 0;   // Zuschau-Modus: Pause bis zur nächsten Schlacht, Dauer der laufenden
+const WATCH_MAX = 120, WATCH_GAP = 3;
 const params = new URLSearchParams(location.search);
 
 
@@ -889,6 +1177,7 @@ function frame(now) {
     drainEvents();
     renderer.fx.update(realDt * .5, null);
   }
+  if (game.watch && watchT >= 0 && !game.paused) { watchT -= realDt; if (watchT < 0) { if (watchAge <= WATCH_MAX) { bump(save.ach, 'watched'); achDirty = true; } watchAge = 0; game.dice(); } }
   if (m && m.endT >= 0) { m.endT -= realDt; if (m.endT < 0) { m.endT = -1; finishMission(); } }
   if (bt && bt.endT >= 0) { bt.endT -= realDt; if (bt.endT < 0) { bt.endT = -1; finishBattle(); } }
 
@@ -900,6 +1189,10 @@ function frame(now) {
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
+  if (intro) { intro.t += realDt; if (!introCam(cam, intro.target, intro.t)) intro = null; }   // Gegner vorstellen
+  if (!(m && m.phase !== 'plan') && !(bt && bt.phase !== 'plan')) applyWeather();   // Wetter: nur in der Planung umstellen
+  if (wxBox && wxShown !== world.weather) { wxShown = world.weather; wxBox.className = 'wx' + (world.weather ? ' ' + world.weather : ''); }
+  tplUI.sync();      // Armee-Vorlagen: Knöpfe nur in der Planung
   palFold?.sync(game);   // Malleiste: im Kampf und beim Malen weggeklappt (ui/palfold.js)
   hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
   online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
@@ -907,7 +1200,7 @@ function frame(now) {
   hill.frame();      // König des Hügels: Krönung nach dem Kampf speichern
   renderer.draw(world, cam, now / 1000);
 
-  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }
+  uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); achSaveT -= .25; if (achDirty && achSaveT <= 0) { achSaveT = 3; achDirty = false; persist(); achCheck(); } }
   // Fx-Detailstufe aus der gemessenen Arbeitszeit dieses Bilds (Simulation, Effekte, Zeichnen), nicht aus dem
   // Bildabstand rawMs: sonst bliebe ein auf 30 Hz begrenzter Browser auf Stufe 1 (über 16 ms: Rauch aus,
   // Partikel ×0,5; fx.debug().lod)
@@ -987,6 +1280,7 @@ if (bench.n) bench.start();
 else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
+for (const ev of ['pointerdown', 'wheel']) renderer.canvas.addEventListener(ev, stopIntro, { capture: true, passive: true });
 const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || gl.lost; }
 requestAnimationFrame(t => { last = t; frame(t); });

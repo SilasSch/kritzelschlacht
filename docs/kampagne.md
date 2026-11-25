@@ -12,6 +12,8 @@ Die Kampagne (Spez. #52) besteht aus Kapiteln. Jedes Kapitel ist **eine eigene D
 | `vampire.js` | Nacht der Vampire | `vamp-` |
 | `modern.js` | Moderner Krieg | `mod-` |
 | `finale.js` | Finale | `fin-` |
+| `schrott.js` | Schrottplatz (25.11.) | `schrott-` |
+| `urzeit.js` | Urzeit (25.11.) | `urzeit-` |
 
 Wer ein Kapitel baut, ändert nur seine eigene Datei. `campaign/index.js` lädt alle Kapitel schon in der richtigen Reihenfolge. Ein Kapitel ohne Level zeigt in der Übersicht „Bald verfügbar“.
 
@@ -89,3 +91,13 @@ node tools/balance.mjs newspam 8 --chapter=burgen
 4. **Smart gewinnt:** `plan.smart` gewinnt an **allen 6 Formen mindestens 6/8** und kostet **höchstens `par`**.
 5. **Spam verliert:** `plan.spam` verliert mindestens 6/8. In `newspam` verliert jede erlaubte Einheit allein mit vollem Budget mindestens 6/8. Ausgenommen ist nur eine Einheit, die als Masse wirklich die Lösung ist; sie steht dann in `answer`.
 6. **Nichts außerhalb der eigenen Datei ändern.** Gibt es Fehler in Einheiten oder Engine, werden sie gemeldet und nicht im Kapitel umgangen.
+
+## Budget und par aus der Spar-Suche (25.11.)
+
+Von Hand gesetzte Budgets waren oft viel zu großzügig: Viele Level ließen sich mit einem Bruchteil der Punkte gewinnen.
+`node tools/cheapwin.mjs <kapitel|level>[,…]` sucht deshalb je Level die billigste Armee, die gegen die echten, gehärteten
+Gegner gewinnt (jede erlaubte Einheit allein und jedes Paar halb-halb, binäre Suche über die Punkte, Sieg = 3 von 4 Saaten).
+Es meldet den billigsten Sieg in Prozent des Budgets, den billigsten Sieg je Einheit allein und schlägt par (billigster
+Sieg × 1,12) und Budget (par × 1,3) vor, auch als Rohwerte für die Kapiteldatei (vor `harden()`).
+Die Kapitel Schrottplatz und Urzeit sind so eingestellt; ihr `plan.smart` ist der Fund der Suche.
+

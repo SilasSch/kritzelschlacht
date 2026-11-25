@@ -11,6 +11,7 @@ import { MEDALS, hasMedal } from './medals.js';
 import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
 import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 import { tr, unitName, unitPlural, dec } from './i18n.js';   // Sprache (18.11.)
+import { modeCards } from './ui/modes.js';   // Spielmodi (25.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -280,12 +281,15 @@ export function createUI(game) {
   function updateMode() {
     const mis = game.mission, bat = game.battle;
     $('mMis').classList.toggle('on', !!mis); $('mSand').classList.toggle('on', !mis && !bat); $('mBat').classList.toggle('on', !!bat);
-    $('misBar').hidden = !mis; $('batBar').hidden = !bat; $('bDice').hidden = !!mis || !!bat; $('teamBox').hidden = !!mis || !!bat;
+    $('misBar').hidden = !mis; $('batBar').hidden = !bat; $('bDice').hidden = !!mis || !!bat; $('bWatch').hidden = !!mis || !!bat || !!game.editor; $('teamBox').hidden = !!mis || !!bat;
     $('teamToggle').checked = game.world.teamMode;
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
     if (mis) {
       // Level ohne Kapitel (Tutorial, Tageschallenge, eigene Level): nur der Name
+      if (mis.def.weekly) { const w = mis.def.weekly; $('misName').textContent = tr('Wochenchallenge · {w}', { w: w.key.slice(5) }); $('misHint').textContent = tr('Regel der Woche: {r} ({d}). Gewinne mit möglichst wenig Punkten.', { r: tr(w.ruleN), d: tr(w.ruleD) }); $('misName').title = ''; } else
+      if (mis.def.run) { const r = mis.def.run; $('misName').textContent = tr('Feldzug · Schlacht {k}/{n}', { k: r.stage, n: game.runStages }) + (r.boss ? ' · ' + tr('Boss') : ''); $('misHint').textContent = tr('Gegner: {p} Punkte. Leben: {l}. Nach jedem Sieg wächst dein Heer.', { p: fmtPts(r.pts), l: game.save.run ? '♥'.repeat(game.save.run.lives) : '' }); $('misName').title = ''; } else
+      if (mis.kind === 'waves') { $('misName').textContent = tr('Wellenmodus · Welle {k}', { k: mis.wave }); $('misHint').textContent = tr(mis.def.hint); $('misName').title = ''; } else
       $('misName').textContent = mis.chapter ? tr('Mission {i} · {n}', { i: mis.idx + 1, n: tr(mis.def.n) }) : tr(mis.def.n); $('misHint').textContent = tr(mis.def.hint);
       $('misName').title = mis.chapter ? tr(mis.chapter.n) : '';
     }
@@ -309,6 +313,7 @@ export function createUI(game) {
     $('bPause').classList.toggle('on', game.paused);
     $('bSpeed').textContent = game.speed + '×';
     $('bSlow').classList.toggle('on', game.slow);
+    $('bWatch').classList.toggle('on', !!game.watch); $('bWatch').setAttribute('aria-pressed', String(!!game.watch));
     $('muteIco').innerHTML = game.save.muted ? ICON_MUTED : ICON_SOUND;
     $('bMute').classList.toggle('on', game.save.muted);
     const vol = $('vol'); if (vol && document.activeElement !== vol) vol.value = Math.round((typeof game.save.volume === 'number' ? game.save.volume : .6) * 100);
@@ -359,6 +364,7 @@ export function createUI(game) {
       g.append(b);
     });
     g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
+    modeCards(g, game);   // Spielmodi (25.11.): Wellen, Wochenchallenge, Feldzug, Erfolge
     $('listBack').hidden = true;
     $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
     $('ovList').hidden = false;
@@ -386,6 +392,7 @@ export function createUI(game) {
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
   // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
   const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
+    : game.mission && (game.mission.kind === 'waves' || game.mission.kind === 'run' || game.mission.kind === 'weekly') ? openChapters()
     : game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
   const openCustomList = () => openCustomListView(game, openChapters);
 
@@ -396,7 +403,7 @@ export function createUI(game) {
     h.className = r.win ? 'win' : '';
     $('resStars').innerHTML = [0, 1, 2].map(i => `<i class="${i < r.stars ? 'on' : ''}">★</i>`).join('');
     $('resStats').innerHTML = `<li><span>${tr('Eingesetzte Punkte')}</span>${tr('{a} von {b}', { a: fmtPts(r.spent), b: r.budget })}</li>
-    <li><span>${tr('Drei Sterne bei höchstens')}</span>${tr('{n} Punkten', { n: r.par })}</li>
+    ${r.run ? '' : `<li><span>${tr('Drei Sterne bei höchstens')}</span>${tr('{n} Punkten', { n: r.par })}</li>`}
     <li><span>${tr('Eigene Verluste')}</span>${stats.lostBlue}</li><li><span>${tr('Besiegte Gegner')}</span>${stats.lostRed}</li>
     <li><span>${tr('Kampfdauer')}</span>${Math.round(r.time)} s</li>
     ${stats.heroType ? `<li><span>${tr('Held der Schlacht')}</span>${tr('{u} mit {k} Siegen', { u: esc(unitName(stats.heroType)), k: stats.heroK })}</li>` : ''}`;
@@ -406,11 +413,32 @@ export function createUI(game) {
     $('resMedals').hidden = !md;
     if (md) $('resMedals').innerHTML = MEDALS.map((x, k) => `<span class="${hasMedal(md.mask, k) ? 'on' : ''}${hasMedal(md.fresh, k) ? ' new' : ''}" title="${esc(tr(x.d))}">${x.icon} ${esc(tr(x.n))}</span>`).join('');
     $('resReplay').hidden = !r.canReplay;
+    $('resVideo').hidden = !r.canReplay;
     // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
     $('resNext').hidden = !r.win || !!r.custom;   // eigene Level: keine nächste Mission
     $('resList').textContent = r.custom === 'editor' ? tr('Zum Editor') : r.custom ? tr('Eigene Level') : tr('Übersicht');
     $('resNext').textContent = r.nextLabel || (r.hasNext ? tr('Nächste Mission') : tr('Zu den Kapiteln'));
     $('resRetry').textContent = r.win ? tr('Besser planen') : tr('Nochmal planen');
+    if (r.weekly) $('resStats').insertAdjacentHTML('beforeend', `<li><span>${tr('Gegnerarmee')}</span>${tr('{n} Punkten', { n: fmtPts(r.weekly.pts) })}</li>${r.weekly.best ? `<li><span>${tr('Bestwert der Woche')}</span>${tr('{p} Pkt', { p: fmtPts(r.weekly.best.spent) })} ${'★'.repeat(r.weekly.best.stars)}</li>` : ''}`);   // Wochenchallenge (25.11.)
+    if (r.run) {   // Feldzug (25.11.)
+      const f = r.run;
+      h.textContent = f.won ? tr('Feldzug gewonnen!') : f.done ? tr('Feldzug verloren') : r.win ? tr('Schlacht {k} gewonnen!', { k: f.stage }) : tr('Niederlage');
+      h.className = r.win ? 'win' : '';
+      $('resStars').innerHTML = '';
+      $('resStats').insertAdjacentHTML('afterbegin', `<li><span>${tr('Schlacht')}</span>${f.stage} / ${game.runStages}</li><li><span>${tr('Leben')}</span>${f.done && !f.won ? '–' : '♥'.repeat(f.lives)}</li>`);
+      $('resNext').hidden = !(r.win && !f.done);
+      $('resRetry').hidden = r.win && !f.done;
+      $('resRetry').textContent = f.done ? tr('Neuer Feldzug') : tr('Nochmal versuchen');
+      $('resList').textContent = tr('Übersicht');
+    } else $('resRetry').hidden = false;
+    if (r.waves) {   // Wellenmodus (25.11.)
+      const w = r.waves;
+      h.textContent = tr('Welle {k} erreicht', { k: w.reached + 1 }); h.className = w.fresh ? 'win' : '';
+      $('resStars').innerHTML = '';
+      $('resStats').innerHTML = `<li><span>${tr('Geschaffte Wellen')}</span>${w.reached}</li><li><span>${tr('Bestwert')}</span>${w.best}${w.fresh ? ' ★ ' + tr('neu!') : ''}</li>
+        <li><span>${tr('Eingesetzte Punkte')}</span>${fmtPts(r.spent)}</li>`;
+      $('resRetry').textContent = tr('Neuer Lauf'); $('resList').textContent = tr('Übersicht');
+    }
     dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }
@@ -437,6 +465,7 @@ export function createUI(game) {
   $('bSlow').onclick = () => game.toggleSlow();
   $('bClear').onclick = () => game.clear();
   $('bDice').onclick = () => game.dice();
+  $('bWatch').onclick = () => game.toggleWatch();   // Zuschau-Modus (25.11.)
   $('bUndo').onclick = () => game.undo();
   $('brush').oninput = e => game.setBrush(+e.target.value);
   $('teamToggle').onchange = e => game.setTeamMode(e.target.checked);
@@ -454,6 +483,8 @@ export function createUI(game) {
   $('misRange').onclick = () => game.toggleRanges();
   $('resReplay').onclick = () => { $('ovRes').hidden = true; game.replay(); };
   $('batReplay').onclick = () => game.replay();
+  $('resVideo').onclick = () => { $('ovRes').hidden = true; game.videoReplay(); };   // Video (25.11.)
+  $('batVideo').onclick = () => game.videoReplay();
   $('replaySkip').onclick = () => game.endReplay();
   $('welTut').onclick = () => { $('ovWelcome').hidden = true; game.startTutorial(); };
   $('welSkip').onclick = () => { $('ovWelcome').hidden = true; game.skipTutorial(); };
@@ -468,6 +499,7 @@ export function createUI(game) {
   $('batGo').onclick = e => { e.currentTarget.blur(); const b = game.battle; if (!b) return; if (b.phase === 'plan') game.startBattle(); else if (b.phase === 'fight') game.editBattle(); };
   $('batClear').onclick = () => game.clear();
   $('batSwap').onclick = () => game.swapSides();
+  $('batQuick').onclick = () => game.quickEnemy();   // Schnelle Schlacht (25.11.)
   $('batAgain').onclick = () => game.retryBattle();
   $('batTen').onclick = () => game.runBatch(10);
   $('batEdit').onclick = () => game.editBattle();
@@ -489,7 +521,7 @@ export function createUI(game) {
     const plan = b.phase === 'plan';
     setText('batHint', plan ? tr('Blau malt links, Rot rechts · Gelände überall')
       : b.phase === 'fight' ? `${tr('Kampf läuft')} · ${clock(b.t)}${b.t > 150 ? ' · ' + tr('ab 3:00 entscheidet die Stärke') : ''}` : `${tr('Kampf vorbei')} · ${clock(b.t)}`);
-    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan;
+    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan; $('batQuick').hidden = !plan || !!b.hot;
     const g = $('batGo');
     setText('batGo', plan ? tr('Los!') : tr('Abbrechen'));
     g.disabled = b.phase === 'done';
@@ -574,6 +606,7 @@ export function createUI(game) {
     const bb = game.battle;
     if (bb && bb.batchRes) batchDone(bb.batchRes); else { $('batBatch').hidden = true; $('batTen').disabled = false; }
     $('batReplay').hidden = !game.canReplay();
+    $('batVideo').hidden = !game.canReplay();
     document.body.classList.add('bat-res');
     $('ovBat').hidden = false;
   }

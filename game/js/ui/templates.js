@@ -30,7 +30,7 @@ export function createTemplatesUI(game) {
     return b;
   };
   const bMis = mk('misTpl', $('misList'));
-  const bBat = mk('batTpl', $('batShare'));
+  const bBat = mk('batTpl', $('batMoreW') || $('batShare'));   // vor dem Mehr-Menü (UX-Review 25.11.)
 
   function close() { if (pop) { pop.remove(); pop = null; } }
   function open(anchor) {

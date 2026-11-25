@@ -173,7 +173,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     <div class="addrow"><input id="boardName" maxlength="${NAME_MAX}" placeholder="${tr('Dein Name')}">
       <button class="btn" id="boardMine">${tr('Mein Ergebnis als Code')}</button></div>
     <textarea id="boardCode" rows="2" placeholder="${tr('Ergebnis-Code eines Freundes (KS1.…) hier einfügen')}"></textarea>
-    <div class="btnrow"><button class="btn" id="boardAdd">${tr('Code hinzufügen')}</button><button class="go" id="boardClose">${tr('Schließen')}</button></div>
+    <div class="btnrow"><button class="btn" id="boardAdd">${tr('Code hinzufügen')}</button><button class="btn" id="boardClose">${tr('Schließen')}</button></div>
   </div>`;
   $('app').append(ov);
   let day = dateKey(), curMine = null;

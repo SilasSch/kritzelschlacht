@@ -59,6 +59,6 @@ export function openCustomList(game, back) {
   g.append(tools);
   $('listBack').hidden = false;
   $('listBack').onclick = back;
-  $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
+  $('listClose').textContent = tr('Schließen');
   $('ovList').hidden = false;
 }

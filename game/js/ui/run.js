@@ -36,5 +36,6 @@ export function openReward(game, list, onPick) {
     g.append(b);
   });
   $('listBack').hidden = true;
+  if ($('listTabs')) $('listTabs').hidden = true;   // Reiter von „Spielen“ (UX-Review 25.11.)
   $('ovList').hidden = false;
 }

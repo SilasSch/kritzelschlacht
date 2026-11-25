@@ -407,9 +407,24 @@ test('Geist flieht nicht unter 25 % und heilt sich durch seine Treffer', () => {
 
 /* ---------- Nachtrag 8, #50: besserer Rückzug ---------- */
 test('#50: Werte und die Liste derer, die nie fliehen', () => {
-  assert.deepEqual([...NO_RETREAT].sort(), ['biene', 'drache', 'elefant', 'frosch', 'geist', 'ghul', 'panzer']);
+  assert.deepEqual([...NO_RETREAT].sort(), ['biene', 'drache', 'elefant', 'frosch', 'geist', 'ghul', 'kampfdrohne', 'panzer']);
   assert.equal(FLEE_MELEE_R, 120);
   assert.equal(RALLY.D, 120); assert.equal(RALLY.REPICK, 2);
+});
+
+// 25.11. (Silas: "suicide drones solten nicht fliehen"): die Kamikaze-Drohne fliegt ihr Ziel bis zum Einschlag an,
+// auch mit 10 % LP und einem Flieger-Nahkämpfer (Adler) neben sich, dem sie sonst davonfliegen würde
+test('Kampfdrohne mit 10 % LP flieht nicht vor dem Adler, sondern schlägt ein', () => {
+  const w = mkWorld(), d = spawn(w, 'kampfdrohne', 600, 400, 'blau');
+  d.hp = .1 * UNITS.kampfdrohne.hp;
+  allies(w, 200, 700);
+  const a = dummy(w, 'adler', 610, 400), p = dummy(w, 'panzer', 1100, 400);
+  rebuildHash(w);
+  let fled = false;
+  run(w, 6, () => { if (d.alive && (d.flee || d.fearT > 0)) fled = true; });
+  assert.equal(fled, false, 'keine Flucht');
+  assert.equal(d.alive, false, 'eingeschlagen');
+  assert.ok(a.hp < 1e9 || p.hp < 1e9, 'Ziel getroffen');
 });
 
 test('#50: Bienen mit 10 % LP fliehen nie, auch mit einem Krieger daneben', () => {

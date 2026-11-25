@@ -167,9 +167,14 @@ export const CRATER = { MIN_R: 30, K: .35, COVER: .75 };
 export const HILL = { RANGE: 1.25 };
 const HILL_NO = new Set(['magier', 'flamme']);
 const hillOk = T => T.range >= 60 && !T.fly && !T.heal;
+// Wetter (25.11.): Nebel verkürzt die Reichweite der Fernkämpfer (ab 60 px, ohne Heiler) auf FOG; Regen löscht schneller
+// (brennende Einheiten nur RAIN_BURN der Brennzeit) und lässt keinen Waldbrand zu (wildfire.igniteCell). Ohne world.weather
+// (Missionen, Tageschallenge, Online) ändert sich nichts.
+export const WEATHER = { FOG: .6, RAIN_BURN: .5 };
 export function rangeAt(world, u) {
   const T = u.T;
-  return hillOk(T) && !HILL_NO.has(u.type) && u.z < 3 && world.terr[cellIndex(world, u.x, u.y)] === HILL_ID ? T.range * HILL.RANGE : T.range;
+  const r = hillOk(T) && !HILL_NO.has(u.type) && u.z < 3 && world.terr[cellIndex(world, u.x, u.y)] === HILL_ID ? T.range * HILL.RANGE : T.range;
+  return world.weather === 'nebel' && T.range >= 60 && !T.heal ? r * WEATHER.FOG : r;
 }
 export const RUBBLE_COVER = .75;
 const PATH_RANGE_PAD = 20;   // px: so weit über den Punkt in Reichweite hinaus prüfen Fernkämpfer die Linie
@@ -796,7 +801,7 @@ export function ignite(world, u, gen, src) {
   const burning = u.burnT > 0;
   if (burning && u.burnGen < gen) return false;
   if (wet(world, u)) return false;
-  u.burnT = BURN_T; u.burnGen = gen; u.burnSrc = src || null;
+  u.burnT = world.weather === 'regen' ? BURN_T * WEATHER.RAIN_BURN : BURN_T; u.burnGen = gen; u.burnSrc = src || null;
   if (!burning) {
     // erste Prüfung nach (1..16)/16 · SPREAD_DT, nach id gestaffelt: nicht alle im selben Schritt
     u.burnCk = SPREAD_DT * ((u.id * 7) % 16 + 1) / 16;

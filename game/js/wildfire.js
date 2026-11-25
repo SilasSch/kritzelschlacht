@@ -26,7 +26,7 @@ function cells(world) {
 // Zelle i entzünden, wenn sie Wald ist und noch nicht brennt; true bei Erfolg
 export function igniteCell(world, i) {
   const cf = cells(world);
-  if (world.terr[i] !== WALD || cf[i] > 0) return false;
+  if (world.terr[i] !== WALD || cf[i] > 0 || world.weather === 'regen') return false;   // Regen (25.11.): kein Waldbrand
   cf[i] = WILDFIRE.BURN_T;
   world.blaze.push(i);
   const gx = i % world.GW, gy = i / world.GW | 0;

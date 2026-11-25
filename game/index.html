@@ -407,11 +407,21 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
 .lv.cl.new{border-style:dashed;background:var(--soft)}
 .go.sm{font-size:14px;padding:5px 11px;border-radius:9px;box-shadow:0 2px 0 #c4541f}
 .mini.del.sure{border-color:#d8433b;color:#d8433b}
+
+/* Wetter (25.11.) */
+.wx{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .6s}
+.wx.regen{opacity:1;background-image:repeating-linear-gradient(105deg,rgba(90,120,170,.0) 0 18px,rgba(90,120,170,.22) 18px 19.5px,rgba(90,120,170,0) 19.5px 46px);background-size:240px 240px;animation:wxrain .5s linear infinite}
+.wx.nebel{opacity:1;background:radial-gradient(ellipse at 30% 40%,rgba(255,255,255,.55),rgba(255,255,255,0) 55%),radial-gradient(ellipse at 75% 65%,rgba(255,255,255,.5),rgba(255,255,255,0) 50%),rgba(235,238,244,.35);animation:wxfog 14s ease-in-out infinite alternate}
+@keyframes wxrain{to{background-position:-60px 240px}}
+@keyframes wxfog{to{background-position:60px -20px,-40px 30px,0 0}}
+@media (prefers-reduced-motion:reduce){.wx{animation:none!important}}
+#bWeather.on{background:var(--sel);border-color:var(--selb)}
 </style>
 </head>
 <body>
 <div id="app">
   <canvas id="cv" aria-label="Schlachtfeld: hier Einheiten malen"></canvas>
+  <div class="wx" id="wx" aria-hidden="true"></div><!-- Wetter (25.11.): Regen und Nebel über dem Feld -->
   <div class="hud">
     <div class="top">
       <div class="logo" aria-label="Kritzelschlacht">Kritzel<span>schlacht</span></div>
@@ -425,6 +435,7 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
         <button class="ib shadow txt lexb" id="bLex" title="Lexikon: alle Einheiten mit Werten, Fähigkeiten und Kontern" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>Lexikon</button>
         <button class="ib shadow" id="bDice" title="Zufallsschlacht" aria-label="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button>
         <button class="ib shadow" id="bWatch" title="Zuschauen: Zufallsschlachten laufen von allein nacheinander" aria-label="Zuschauen" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><!-- Zuschau-Modus (25.11.) -->
+        <button class="ib shadow" id="bWeather" title="Wetter: Klar" aria-label="Wetter"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.6 4.2 4.2 0 0 0 7 18z"/></svg></button><!-- Wetter (25.11.) -->
         <button class="ib shadow" id="bCode" title="Code laden: geteilte Schlacht oder eigenes Level" aria-label="Code laden" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg></button><!-- Teilen (Audit 18.11.) -->
         <button class="ib shadow txt" id="bSpeed" title="Tempo">1×</button>
         <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>

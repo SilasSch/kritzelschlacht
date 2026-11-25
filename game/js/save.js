@@ -6,6 +6,9 @@
 import { LEGACY_IDS } from './campaign/grundausbildung.js';
 import { isLevel, CUSTOM_MAX } from './editor.js';
 import { cleanTemplates } from './templates.js';   // Armee-Vorlagen (25.11.)
+import { cleanWaves } from './waves.js';   // Wellenmodus (25.11.)
+import { cleanWeekly } from './weekly.js';   // Wochenchallenge (25.11.)
+import { cleanAch } from './achievements.js';   // Erfolge (25.11.)
 
 export const SAVE_KEY = 'kritzelschlacht-v1';
 
@@ -28,6 +31,9 @@ export function parseSave(text) {
   save.custom = parseCustom(save.custom);
   save.daily = cleanDaily(save.daily);
   save.armies = cleanTemplates(save.armies);
+  save.waves = cleanWaves(save.waves);
+  save.weekly = cleanWeekly(save.weekly);
+  save.ach = cleanAch(save.ach);
   return save;
 }
 
@@ -72,6 +78,12 @@ export function serializeSave(save) {
   if (Object.keys(daily).length) out.daily = daily;
   const armies = cleanTemplates(save.armies);
   if (armies.length) out.armies = armies;
+  const waves = cleanWaves(save.waves);
+  if (waves.runs) out.waves = waves;
+  const weekly = cleanWeekly(save.weekly);
+  if (Object.keys(weekly).length) out.weekly = weekly;
+  const ach = cleanAch(save.ach);
+  if (Object.keys(ach.n).length || ach.types.length || ach.forms.length || Object.keys(ach.got).length) out.ach = ach;
   return JSON.stringify(out);
 }
 

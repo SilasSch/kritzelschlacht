@@ -11,6 +11,7 @@ import { MEDALS, hasMedal } from './medals.js';
 import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
 import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 import { tr, unitName, unitPlural, dec } from './i18n.js';   // Sprache (18.11.)
+import { modeCards } from './ui/modes.js';   // Spielmodi (25.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -286,6 +287,8 @@ export function createUI(game) {
     if (bat) updateBattle();
     if (mis) {
       // Level ohne Kapitel (Tutorial, Tageschallenge, eigene Level): nur der Name
+      if (mis.def.weekly) { const w = mis.def.weekly; $('misName').textContent = tr('Wochenchallenge · {w}', { w: w.key.slice(5) }); $('misHint').textContent = tr('Regel der Woche: {r} ({d}). Gewinne mit möglichst wenig Punkten.', { r: tr(w.ruleN), d: tr(w.ruleD) }); $('misName').title = ''; } else
+      if (mis.kind === 'waves') { $('misName').textContent = tr('Wellenmodus · Welle {k}', { k: mis.wave }); $('misHint').textContent = tr(mis.def.hint); $('misName').title = ''; } else
       $('misName').textContent = mis.chapter ? tr('Mission {i} · {n}', { i: mis.idx + 1, n: tr(mis.def.n) }) : tr(mis.def.n); $('misHint').textContent = tr(mis.def.hint);
       $('misName').title = mis.chapter ? tr(mis.chapter.n) : '';
     }
@@ -360,6 +363,7 @@ export function createUI(game) {
       g.append(b);
     });
     g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
+    modeCards(g, game);   // Spielmodi (25.11.): Wellen, Wochenchallenge, Feldzug, Erfolge
     $('listBack').hidden = true;
     $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
     $('ovList').hidden = false;
@@ -387,6 +391,7 @@ export function createUI(game) {
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
   // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
   const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
+    : game.mission && game.mission.kind === 'waves' ? openChapters()
     : game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
   const openCustomList = () => openCustomListView(game, openChapters);
 
@@ -413,6 +418,15 @@ export function createUI(game) {
     $('resList').textContent = r.custom === 'editor' ? tr('Zum Editor') : r.custom ? tr('Eigene Level') : tr('Übersicht');
     $('resNext').textContent = r.nextLabel || (r.hasNext ? tr('Nächste Mission') : tr('Zu den Kapiteln'));
     $('resRetry').textContent = r.win ? tr('Besser planen') : tr('Nochmal planen');
+    if (r.weekly) $('resStats').insertAdjacentHTML('beforeend', `<li><span>${tr('Gegnerarmee')}</span>${tr('{n} Punkten', { n: fmtPts(r.weekly.pts) })}</li>${r.weekly.best ? `<li><span>${tr('Bestwert der Woche')}</span>${tr('{p} Pkt', { p: fmtPts(r.weekly.best.spent) })} ${'★'.repeat(r.weekly.best.stars)}</li>` : ''}`);   // Wochenchallenge (25.11.)
+    if (r.waves) {   // Wellenmodus (25.11.)
+      const w = r.waves;
+      h.textContent = tr('Welle {k} erreicht', { k: w.reached + 1 }); h.className = w.fresh ? 'win' : '';
+      $('resStars').innerHTML = '';
+      $('resStats').innerHTML = `<li><span>${tr('Geschaffte Wellen')}</span>${w.reached}</li><li><span>${tr('Bestwert')}</span>${w.best}${w.fresh ? ' ★ ' + tr('neu!') : ''}</li>
+        <li><span>${tr('Eingesetzte Punkte')}</span>${fmtPts(r.spent)}</li>`;
+      $('resRetry').textContent = tr('Neuer Lauf'); $('resList').textContent = tr('Übersicht');
+    }
     dailyResult(r, toast, game);   // Tageschallenge (Audit 18.11.): Bestwert, Ergebnis kopieren, ohne „Nächste Mission“
     $('ovRes').hidden = false;
   }

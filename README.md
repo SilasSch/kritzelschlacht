@@ -22,6 +22,7 @@ node tools/balance.mjs duels 4                   # COUNTERS-Duelle (data.js): je
 node tools/eramatrix.mjs 2 60                    # Schrottplatz/Urzeit: jede neue Einheit gegen 16 Bezugseinheiten
 node tools/catbattle.mjs 10 80                   # Kategorie gegen Kategorie mit gemischten Armeen
 node tools/bench.mjs                             # Simulations-Benchmark
+node tools/cheapwin.mjs urzeit                   # Spar-Suche: billigste Siegerarmee je Level, Vorschlag für par und Budget
 ```
 
 Die Simulation ist deterministisch (`world.rng`, fester Schritt 1/60 s, Welt fest 1600×900). Darauf beruhen Balance-Läufe und das Replay.
@@ -79,6 +80,19 @@ der Herausforderer. Revanche startet die Runde mit gleicher Regel, Karte und Bud
 Online gibt es „Aufgeben“ (beim Malen, Warten und im Kampf): die Runde geht an den Gegner (`giveUp`, presence `gave`).
 Im Code-Duell gibt es kein Aufgeben, dort läuft der Kampf ohne Gegner am anderen Ende ab.
 Beim Veröffentlichen `js/rules.js` mit hochladen.
+
+## Neue Modi und Komfort (25.11.)
+
+| Was | Wo | Dateien |
+|---|---|---|
+| Zufallsgegner | Schlachtleiste: Rot bekommt eine Zufallsarmee mit den Punkten von Blau | `quick.js` |
+| Zuschauen | Auge oben (Sandkasten): Zufallsschlachten nacheinander | `main.js` |
+| Gegner vorstellen | Kamerafahrt beim ersten Laden einer Mission | `intro.js` |
+| Armee-Vorlagen | Missions- und Schlachtleiste, `save.armies` | `templates.js`, `ui/templates.js` |
+| Video | Ergebnis-Dialoge: Replay als WebM; im Artefakt über `capabilities.downloads` | `recorder.js` |
+| Wellenmodus, Wochenchallenge, Feldzug, Erfolge | Karten unter den Kapiteln (`ui/modes.js`), `save.waves`, `save.weekly`, `save.run`, `save.ach` | `waves.js`, `weekly.js`, `run.js`, `achievements.js`, `ui/run.js`, `ui/achievements.js` |
+| Wetter | Wolke oben (Sandkasten, freie Schlacht): Regen, Nebel; Missionen und Online immer klar | `combat.WEATHER`, `wildfire.js` |
+| Kapitel Schrottplatz, Urzeit | nach dem Finale; par und Budget aus `tools/cheapwin.mjs` | `campaign/schrott.js`, `campaign/urzeit.js` |
 
 ## Lizenz
 

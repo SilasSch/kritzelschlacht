@@ -20,7 +20,7 @@ const alive = w => w.units.filter(u => u.alive);
 
 /* ---------- Daten ---------- */
 test('Kapitel in Spielreihenfolge, Grundausbildung zuerst mit den 9 Missionen', () => {
-  assert.deepEqual(CHAPTERS.map(c => c.id), ['grundausbildung', 'burgen', 'rom', 'wildnis', 'akademie', 'vampire', 'modern', 'finale']);
+  assert.deepEqual(CHAPTERS.map(c => c.id), ['grundausbildung', 'burgen', 'rom', 'wildnis', 'akademie', 'vampire', 'modern', 'finale', 'schrott', 'urzeit']);
   for (const c of CHAPTERS) { assert.ok(c.n && c.d, c.id); assert.ok(Array.isArray(c.levels), c.id); }
   const ga = CHAPTERS[0].levels;
   assert.equal(ga.length, 9);

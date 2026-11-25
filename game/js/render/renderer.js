@@ -18,6 +18,7 @@ import { DODGE, DODGE_KINDS } from '../dodge.js';
 import { createFx } from './fx.js';
 import { TRACER } from './fxcore.js';   // Schüsse-Overhaul: Leuchtspur der Kugeln je Schütze
 import { createWords } from './words.js';
+import { createWeather } from './weather.js';   // Regen als Kritzel-Striche (25.11.)
 import { tr } from '../i18n.js';
 const LASER_T = 1.5;   // Sniper-Laser: so lange vor dem Schuss sichtbar (s)
 import { createQuadBatch, newMat, mat, mul } from './quads.js';
@@ -77,6 +78,7 @@ export function createRenderer(canvasHost) {
   let paperW = 0, paperH = 0, edge = false;
   const EDGE_BG = 0xeceef4, PAPER_LINE = 0xd9dce6;
   const fx = createFx({ layers: L, app });   // Effekte: Decals, Bodenlicht, Partikel, Wackeln
+  const weather = createWeather({ app, scene, layer: L.decals });   // Regen: Spritzer am Boden, Striche über dem Bild
 
   /* ---------- Gelände (Offscreen-Canvas, Code aus drawTerrain) ---------- */
   const zoneG = new PIXI.Graphics();
@@ -1075,6 +1077,7 @@ void main() {
     const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
+    weather.frame(world.weather, cam, t);
     if (paperW !== world.W || paperH !== world.H) {
       paperW = world.W; paperH = world.H;
       paper.clear().beginFill(0xffffff).drawRect(0, 0, paperW, paperH).endFill();
@@ -1117,5 +1120,5 @@ void main() {
       projShadows: stats.projShadows, targets: stats.targets, shadowLevels: stats.shadowLevels.slice(), corpseQuads: pcUsed, pcUsed };
   }
 
-  return { app, canvas: view, layers: L, fx, resize, markTerrainDirty, draw, prepare, present, gpuFinish, countObjects, prepMs, setOverlay, consume, debugRig, debugPhysics };
+  return { app, canvas: view, layers: L, fx, weather, resize, markTerrainDirty, draw, prepare, present, gpuFinish, countObjects, prepMs, setOverlay, consume, debugRig, debugPhysics };
 }

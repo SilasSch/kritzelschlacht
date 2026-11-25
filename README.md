@@ -82,4 +82,4 @@ Beim Veröffentlichen `js/rules.js` mit hochladen.
 
 ## Lizenz
 
-MIT, siehe [LICENSE](LICENSE). PixiJS (MIT) und die Schriften (OFL) behalten ihre eigenen Lizenzen.
+MIT, siehe [LICENSE](LICENSE). PixiJS (MIT) und die Schriften (OFL) behalten ihre eigenen Lizenzen, siehe [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -23,7 +23,7 @@ export function snapshotBattle(world) {
   }
   const towner = world.towner.slice(), terr = world.terr.slice(), whp = world.whp.slice();
   for (let i = 0; i < towner.length; i++) if (towner[i] === STONE_WALL.OWNER) { terr[i] = 0; towner[i] = 0; whp[i] = 0; }
-  return { W: world.W, H: world.H, GW: world.GW, GH: world.GH, units, terr, towner, whp };
+  return { W: world.W, H: world.H, GW: world.GW, GH: world.GH, units, terr, towner, whp, weather: world.weather || null };   // Wetter (25.11.)
 }
 
 // Stellt die Aufstellung exakt wieder her: leert alles, was zur Schlacht gehört (Leichen, Geschosse, Trümmer, Formationen,
@@ -32,6 +32,7 @@ export function snapshotBattle(world) {
 export function restoreBattle(world, s) {
   clearBattle(world);
   world.contested = false; world.teamMode = true;
+  world.weather = s.weather || null;   // Wetter (25.11.)
   world.terr.fill(0); world.towner.fill(0); world.whp.fill(0);
   const mw = Math.min(s.GW, world.GW), mh = Math.min(s.GH, world.GH);
   for (let y = 0; y < mh; y++) for (let x = 0; x < mw; x++) {

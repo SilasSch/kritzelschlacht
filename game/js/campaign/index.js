@@ -11,6 +11,8 @@ import akademie from './akademie.js';
 import vampire from './vampire.js';
 import modern from './modern.js';
 import finale from './finale.js';
+import schrott from './schrott.js';   // 25.11.: neue Kapitel nach dem Finale, damit niemand ein offenes Kapitel verliert
+import urzeit from './urzeit.js';
 
 /* ---------- Schwierigkeit (Silas, 22.11.: „alle Missionen pauschal schwerer, ohne Rebalance“) ---------- */
 // Zentrale Stellschraube für alle Kapitel-Level (nicht Tutorial, Tageschallenge oder eigene Level):
@@ -27,7 +29,7 @@ export function harden(level, budgetScale = BUDGET_SCALE, enemyScale = ENEMY_SCA
 }
 const hardenChapter = c => ({ ...c, levels: c.levels.map(l => harden(l)) });
 
-export const CHAPTERS = [grundausbildung, burgen, rom, wildnis, akademie, vampire, modern, finale].map(hardenChapter);
+export const CHAPTERS = [grundausbildung, burgen, rom, wildnis, akademie, vampire, modern, finale, schrott, urzeit].map(hardenChapter);
 
 // Flache Liste aller Level: { level, chapter, ci (Index des Kapitels), li (Index im Kapitel) }
 export const LEVELS = CHAPTERS.flatMap((chapter, ci) => chapter.levels.map((level, li) => ({ level, chapter, ci, li })));

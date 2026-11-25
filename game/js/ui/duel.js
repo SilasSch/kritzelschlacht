@@ -184,7 +184,7 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     btn.classList.toggle('on', on);
     if (!on) return;
     go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
-    for (const id of ['batHot', 'batOnl', 'batSwap', 'batShare']) if ($(id)) $(id).hidden = true;
+    for (const id of ['batHot', 'batOnl', 'batSwap', 'batShare', 'batQuick']) if ($(id)) $(id).hidden = true;
     const h = b.hot, side = h.step === 'blau' || h.step === 'rot' ? h.step : null, c = st.cfg;
     $('batClear').hidden = !side;
     const label = tr(side ? 'Fertig' : st.role === 'a' ? 'Code zeigen' : st.role === 'b' && b.phase === 'done' ? 'Antwort-Code' : st.role === 'view' && b.phase === 'done' ? 'Ergebnis' : b.phase === 'fight' ? 'Kampf läuft' : 'Fertig');

@@ -101,7 +101,7 @@ export function spatial(cam, x, y) {
 const GAP = .03;
 const MIN_GAP = { pop: .07, scribble: .11, crackle: .25, heal: .3, hit: .055, clink: .07, die: .06, dieBeast: .08, dieBug: .12,
   shot: .05, thunk: .06, thwip: .09, land: .08, splash: .12, sizzle: .2, hiss: .2, horn: .8, notify: .6, ui: .05, rise: .4, ignite: .2,
-  twang: .05, fire: .12, jet: .6, whistle: .3,
+  twang: .05, fire: .12, jet: .6, whistle: .3, sonic: .4, flare: .3,
   rifle: .045, mg: .045, sniper: .12, heliGun: .06, jetGun: .11, bhit: .05, bhitBig: .1, zing: .25, grenade: .15, drop: .15,
   heave: .3, fireball: .15, spit: .1, fireTwang: .08, rocket: .12, cannon: .15, thump: .15 };
 // Häufige Töne (Massenkampf) leiser als seltene, damit Explosionen, Zauber und Tode einzelner Großer herausstechen
@@ -512,6 +512,15 @@ export function createAudio() {
     // Lufteinheiten (18.11.): Bombe pfeift im Fall (fallender Sinus), Jet donnert im Überflug vorbei
     whistle(v) { osc(v, 'sine', v.f(1500, .08), 520, .7, .035, { a: .05, vib: [7, 12] }); },
     jet(v) { noise(v, 'bandpass', v.f(1800, .1), 380, 1.1, .08, { a: .25, q: .7 }); noise(v, 'lowpass', 500, 160, 1.0, .07, { a: .3 }); },
+    // Jet-Rework (25.11.): Überschallknall (doppelter Peitschenknall, dann Donnergrollen und Nachbrenner-Fauchen),
+    // Täuschkörper (drei kurze Zisch-Plopps)
+    sonic(v) {
+      noise(v, 'highpass', 900, 600, .05, .16); noise(v, 'highpass', 900, 600, .05, .13, { dt: .09 });
+      noise(v, 'lowpass', 420, 60, 1.4, .14, { a: .03, dt: .02 });
+      noise(v, 'bandpass', v.f(1400, .1), 300, 1.2, .07, { a: .1, q: .6, dt: .05 });
+      v.wet(.4);
+    },
+    flare(v) { for (let i = 0; i < 3; i++) { noise(v, 'highpass', 2600, 1600, .14, .045, { dt: i * .08, a: .01 }); osc(v, 'sine', v.f(700, .2), 300, .08, .02, { dt: i * .08 }); } },
     wind(v) { noise(v, 'bandpass', 300, 900, .8, .08, { a: .25, q: 1.2 }); noise(v, 'bandpass', 900, 400, .7, .05, { a: .3, dt: .1, q: 2 }); },
     crash(v) { explosion(v, 1.4, .3); metal(v, v.f(380, .1), .5, .04); },
 

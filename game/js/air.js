@@ -112,20 +112,135 @@ export function stepAir(world, u, dt) {
   else stepBomber(world, u, dt);
 }
 
+// Jet-Rework (25.11., Silas: „useless und uncool“): drei Teile, alle hier und in combat (Ausweichen, Tiefflug-Treffer).
+// A Tiefflug-Angriff: ohne Flieger als Ziel wählt er die dichteste Feindgruppe am Boden (wie der Bomber). Im Anflug
+//   (Ziel näher als STRAFE.DIVE und vor der Nase, cos ≥ STRAFE.AIM_DIVE) sinkt er auf STRAFE.LOW px; ab STRAFE.START px
+//   zieht er STRAFE.DUR s lang eine Garbe: alle STRAFE.GAP s eine Kugel auf einen Bodenpunkt STRAFE.LEAD px vor der
+//   Nase (Streuung STRAFE.SPREAD), die Einschläge laufen also als Streifen durch die Gruppe. Danach zieht er hoch
+//   (Flughöhe zurück, STRAFE.CLIMB s geradeaus) und hat STRAFE.CD s Pause bis zum nächsten Anflug. Unter
+//   STRAFE.EXPOSED_Z px Höhe trifft ihn alles STRAFE.EXPOSED-fach (combat.hurt) und er weicht nicht aus.
+// B Überschallknall: zu Beginn jeder Garbe (höchstens alle BOOM.CD s) durchbricht er die Schallmauer: Bodentruppen
+//   (ohne Schwergewichte, Masse ≥ BOOM.MASS) in einem Streifen BOOM.LEN px vor ihm, BOOM.W px breit, fallen BOOM.STUN s
+//   um; dazu Nachbrenner (Tempo ×BOOM.BURN für BOOM.BURN_T s).
+// C Ausweichen: Kugeln und Pfeile verfehlen ihn mit EVADE.BULLET (Fassrolle, u.rollT für die Optik); kommt eine
+//   Rakete oder Luft-Luft-Rakete auf ihn zu (näher als EVADE.FLARE_D), wirft er Täuschkörper (höchstens alle EVADE.FLARE_CD
+//   s): Luft-Luft-Raketen verlieren das Ziel, gerade Raketen gehen EVADE.FLARE_T s lang an ihm vorbei.
+export const STRAFE = { DIVE: 420, AIM_DIVE: .5, START: 230, AIM: .8, LOW: 24, DUR: .8, GAP: .05, LEAD: 60, SPREAD: 14, DMG: 12,
+  CLIMB: .7, CD: 2.2, EXPOSED_Z: 40, EXPOSED: 1.15, HIT_R: 40 };
+export const BOOM = { CD: 7, LEN: 220, W: 45, STUN: 1.2, MASS: 20, BURN: 1.4, BURN_T: 1.2 };
+export const EVADE = { BULLET: .55, FLARE_D: 170, FLARE_CD: 7, FLARE_T: 1.2, ROLL_T: .5 };
+
 function stepJet(world, u, dt) {
   const T = u.T;
-  if (u.rt <= 0 || !valid(world, u, u.tg)) { u.tg = pick(world, u, jetScore); u.rt = RETARGET; }
+  if (u.strCd > 0) u.strCd -= dt;
+  if (u.boomCd > 0) u.boomCd -= dt;
+  if (u.ngT > 0) u.ngT -= dt;
+  if (u.rollT > 0) u.rollT -= dt;
+  if (u.flareT > 0) u.flareT -= dt;
+  if (u.flareCd > 0) u.flareCd -= dt;
+  jetFlares(world, u);
+  // Garbe läuft: geradeaus tief über den Boden, feuern
+  if (u.strT > 0) {
+    u.strT -= dt; u.fz = STRAFE.LOW;
+    steer(world, u, u.x + u.hx, u.y + u.hy, dt, JET.TURN, JET.EDGE, true);
+    strafeFire(world, u, dt);
+    if (u.strT <= 0) { u.strT = 0; u.fz = T.flyZ; u.passT = STRAFE.CLIMB; u.strCd = STRAFE.CD; }
+    speedUp(u);
+    return;
+  }
+  if (u.rt <= 0 || !valid(world, u, u.tg)) {
+    let t = pick(world, u, jetScore);
+    if (t && !t.T.fly) t = bomberTarget(world, u) || t;   // Bodenziel: die dichteste Gruppe
+    u.tg = t; u.rt = RETARGET;
+  }
   const t = u.tg;
-  if (!t) { steer(world, u, world.W / 2, world.H / 2, dt, JET.TURN, JET.EDGE, false); return; }
-  steer(world, u, t.x, t.y, dt, JET.TURN, JET.EDGE, passing(world, u, t, dt, JET));
-  const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1;
+  if (!t) { u.fz = T.flyZ; steer(world, u, world.W / 2, world.H / 2, dt, JET.TURN, JET.EDGE, false); speedUp(u); return; }
+  const pass = passing(world, u, t, dt, JET);
+  steer(world, u, t.x, t.y, dt, JET.TURN, JET.EDGE, pass);
+  const dx = t.x - u.x, dy = t.y - u.y, d = Math.hypot(dx, dy) || 1, cos = (dx * u.hx + dy * u.hy) / d;
+  speedUp(u);
+  if (!t.T.fly) {
+    // Anflug: sinken, wenn das Ziel vorn liegt; Garbe ab START px
+    const diving = !pass && u.strCd <= 0 && d < STRAFE.DIVE && cos >= STRAFE.AIM_DIVE;
+    u.fz = diving ? STRAFE.LOW : T.flyZ;
+    if (diving && d < STRAFE.START && cos >= STRAFE.AIM) startStrafe(world, u);
+    return;
+  }
+  u.fz = T.flyZ;
   jetMissiles(world, u, t, dx, dy, d, dt);
-  if (u.cd > 0 || d > T.range + T.r + t.T.r || (dx * u.hx + dy * u.hy) / d < JET.AIM) return;
+  if (u.cd > 0 || d > T.range + T.r + t.T.r || cos < JET.AIM) return;
   const a = clearShot(world, u, t, 'bullet');
   if (!a) return;
   u.cd = T.cd * (.85 + world.rng() * .3);
-  fire(world, u, t, 'bullet', a.x, a.y, T.dmg * (t.T.fly ? JET.AIR : JET.GROUND));
+  fire(world, u, t, 'bullet', a.x, a.y, T.dmg * JET.AIR);
   world.events.push({ type: 'sound', k: 'shot' });
+}
+// Nachbrenner: Tempo ×BOOM.BURN, solange u.ngT läuft
+function speedUp(u) { if (u.ngT > 0) { u.mx *= BOOM.BURN; u.my *= BOOM.BURN; } }
+
+function startStrafe(world, u) {
+  u.strT = STRAFE.DUR; u.strK = 0;
+  if (u.boomCd > 0) return;
+  // Überschallknall: Streifen vor der Nase
+  u.boomCd = BOOM.CD; u.ngT = BOOM.BURN_T;
+  const f = factionOf(world, u), L = BOOM.LEN, W = BOOM.W, cx = u.x + u.hx * L * .5, cy = u.y + u.hy * L * .5;
+  query(world, cx, cy, L * .5 + W, v => {
+    if (!v.alive || v.T.fly || factionOf(world, v) === f || (v.T.mass || 1) >= BOOM.MASS || v.state !== 'ok') return;
+    const rx = v.x - u.x, ry = v.y - u.y, along = rx * u.hx + ry * u.hy, side = Math.abs(rx * u.hy - ry * u.hx);
+    if (along < 0 || along > L || side > W + v.T.r) return;
+    v.state = 'stun'; v.stunT = Math.max(v.stunT || 0, BOOM.STUN); v.vx = 0; v.vy = 0;
+  });
+  world.events.push({ type: 'jetfx', k: 'boom', x: u.x, y: u.y, z: u.z, hx: u.hx, hy: u.hy, L, W, shake: 3 });
+  world.events.push({ type: 'sound', k: 'sonic', x: u.x, y: u.y });
+}
+
+// Garbe: Kugel auf einen Bodenpunkt vor der Nase; Ziel ist der nächste Feind dort (sonst nur Einschlag im Boden)
+let SF_BEST = null, SF_BD = 0, SF_X = 0, SF_Y = 0, SF_F = null, SF_W = null;
+const sfTest = v => {
+  if (!v.alive || v.T.fly || factionOf(SF_W, v) === SF_F || (v.hidden && !(v.seenT > 0))) return;
+  const d = (v.x - SF_X) ** 2 + (v.y - SF_Y) ** 2; if (d < SF_BD) { SF_BD = d; SF_BEST = v; }
+};
+function strafeFire(world, u, dt) {
+  u.strG = (u.strG || 0) - dt;
+  if (u.strG > 0) return;
+  u.strG += STRAFE.GAP;
+  const sp = STRAFE.SPREAD, ax = u.x + u.hx * STRAFE.LEAD + (world.rng() - .5) * 2 * sp, ay = u.y + u.hy * STRAFE.LEAD + (world.rng() - .5) * 2 * sp;
+  SF_W = world; SF_F = factionOf(world, u); SF_X = ax; SF_Y = ay; SF_BEST = null; SF_BD = STRAFE.HIT_R * STRAFE.HIT_R;
+  query(world, ax, ay, STRAFE.HIT_R, sfTest); SF_W = null; SF_F = null;
+  const t = SF_BEST; SF_BEST = null;
+  if (t) {
+    fire(world, u, t, 'bullet', ax, ay, STRAFE.DMG);
+  } else {
+    world.events.push({ type: 'shot', kind: 'bullet', x: u.x + u.hx * u.T.r, y: u.y, z: u.z, face: u.face, tx: ax, ty: ay, shake: 0, mg: false, ut: 'jet' });
+    world.events.push({ type: 'miss', kind: 'bullet', x: ax, y: ay, a: Math.atan2(u.hy, u.hx), ut: 'jet', wall: false });
+  }
+  if ((u.strK = (u.strK || 0) + 1) % 3 === 1) world.events.push({ type: 'sound', k: 'shot' });
+}
+
+// Täuschkörper gegen anfliegende Raketen
+function jetFlares(world, u) {
+  if (u.flareCd > 0 || u.z < STRAFE.EXPOSED_Z) return;
+  const D2 = EVADE.FLARE_D * EVADE.FLARE_D, proj = world.proj;
+  let hit = false;
+  for (let i = 0; i < proj.length; i++) {
+    const p = proj[i];
+    if (p.tg !== u || (p.kind !== 'rocket' && p.kind !== 'aam')) continue;
+    if ((p.x - u.x) ** 2 + (p.y - u.y) ** 2 < D2) { hit = true; break; }
+  }
+  if (!hit) return;
+  u.flareCd = EVADE.FLARE_CD; u.flareT = EVADE.FLARE_T; u.rollT = EVADE.ROLL_T;
+  for (let i = 0; i < proj.length; i++) if (proj[i].tg === u && proj[i].kind === 'aam') proj[i].tg = null;
+  world.events.push({ type: 'jetfx', k: 'flare', x: u.x, y: u.y, z: u.z, hx: u.hx, hy: u.hy });
+  world.events.push({ type: 'sound', k: 'flare', x: u.x, y: u.y });
+}
+// Weicht der Jet diesem geraden Geschoss aus? (combat.stepProjectiles, ein Wurf je Geschoss und Körper)
+export function jetEvades(world, v, p) {
+  if (v.type !== 'jet' || v.z < STRAFE.EXPOSED_Z || v.state !== 'ok') return false;
+  if (p.kind === 'rocket') return v.flareT > 0;
+  if (p.kind !== 'bullet') return false;
+  if (world.rng() >= EVADE.BULLET) return false;
+  if (!(v.rollT > 0)) v.rollT = EVADE.ROLL_T;
+  return true;
 }
 
 // Raketensalve gegen Flieger: läuft angefangen zu Ende (auf das aktuelle Ziel, wenn es noch fliegt)

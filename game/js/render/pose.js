@@ -13,6 +13,7 @@ import { GRAVITY, CORPSE_FADE, SINK_T, ASH_T } from '../physics.js';
 import { MUZZLE_Z, PRONE_DOWN_T, PRONE_UP_T } from '../combat.js';
 import { isFleeing } from '../morale.js';
 import { GHOUL } from '../abilities.js';
+import { EVADE } from '../air.js';
 import { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, TILT_MAX, DRAGON_GEO, dragonHead, tankAim, headAim, tipOffset } from '../muzzle.js';
 
 export const RIG_PARTS = ['shadow', 'body', 'pupilL', 'pupilR', 'lid', 'headgear', 'weapon'];
@@ -90,6 +91,7 @@ function frac(v) { return v - Math.floor(v); }
    der Drache hält beim Feuerspeien (fireT < BREATH_HOLD) den Kopf ungeglättet zum Ziel und ohne Auf und Ab;
    der Heli neigt sich um seine Mündung. So startet jeder Schuss an der gezeichneten Mündung. */
 export const BOSS = new Set(['panzer', 'heli', 'drache']);
+export const JET_TILT = 1.1;   // höchste Neigung der Nase von Jet und Bomber (rad)
 BOSS.add('elefant');   // Task 5 (elephantPose)
 export { BOSS_VIS, BOSS_SQUASH, HEAD_MAX, TANK_ELEV_MAX, DRAGON_GEO, dragonHead };
 export const TURN_T = .15, ELEV_RATE = 10;                            // s Umdrehen des Turms, 1/s Rohr
@@ -280,6 +282,13 @@ export function poseUnit(u, t, out = {}, mem) {
   // Meteor-Kanal (spells.js): der Magier reckt den Stab hoch (CHANNEL_LIFT · r, schwingt sanft), kein Rückstoß
   if (u.chanId > 0) { out.weaponLift = CHANNEL_LIFT + CHANNEL_SWAY * Math.sin(TAU * CHANNEL_HZ * t + u.seed); out.recoil = 0; }
   if (BOSS.has(u.type)) bossPose(u, t, out, mem, mx, my);
+  // Jet und Bomber (Jet-Rework 25.11.): Nase zeigt in Flugrichtung (Drehung nach der Spiegelung, also mit face),
+  // der Jet dreht bei Fassrolle und Täuschkörpern einmal um die Längsachse (sy läuft über cos durch −1)
+  if ((u.type === 'jet' || u.type === 'bomber') && (u.hx || u.hy)) {
+    const f = u.face < 0 ? -1 : 1;
+    out.tilt = clamp(Math.atan2(f * u.hy, Math.abs(u.hx)), -JET_TILT, JET_TILT);
+    if (u.rollT > 0) out.sy *= Math.cos(TAU * (1 - u.rollT / EVADE.ROLL_T));
+  }
   if (u.type === 'ghul') {
     out.tilt += (u.face < 0 ? -1 : 1) * GHOUL_HUNCH + GHOUL_SWAY * Math.sin(TAU * GHOUL_HZ * t + u.seed);
     if (u.riseT > 0) {

@@ -24,7 +24,7 @@ import { stepPike, stepDrum, MOUNTED, PIKE } from './abilities.js';
 import { stepBot, botShield, domeCatch, laserShot, teslaArc, megaWreck, stepGrow, stepHerbs, WELD } from './abilities.js';
 import { BOT, MACHINE } from './data.js';
 import { DODGE, DODGE_KINDS, rollDodges } from './dodge.js';   // Nachtrag 7, #47
-import { AIR, stepAir, stepMissile } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
+import { AIR, stepAir, stepMissile, jetEvades, STRAFE } from './air.js';   // 18.11.: Jet, Kampfdrohne, Bomber
 
 // Typen, die in Reihe marschieren bzw. vor Nahkämpfern zurückweichen
 export const LINE = new Set(['krieger', 'ritter', 'soldat']);
@@ -201,6 +201,7 @@ export function hurt(world, v, a, kind, src, dot = false) {
   if (t === 'panzer') m *= kind === 'bullet' ? .25 : kind === 'arrow' ? .2 : kind === 'melee' ? .7 : kind === 'rocket' ? 1.6 : isFire(kind) ? .6 : .8;
   if (t === 'heli') m *= kind === 'rocket' ? HELI.ROCKET : kind === 'bullet' ? HELI.BULLET : kind === 'melee' ? HELI.MELEE : 1;
   if (t === 'jet' || t === 'bomber' || t === 'kampfdrohne') m *= AIR_ARMOR[t][kind] ?? 1;
+  if (t === 'jet' && v.z < STRAFE.EXPOSED_Z) m *= STRAFE.EXPOSED;   // Jet-Rework 25.11.: im Tiefflug verwundbar
   if (t === 'geist' && !isFire(kind)) m *= .5;
   // Bienen (1 Punkt, Wunsch Silas 18.11.: weniger, aber stärkere Bienen): zäh gegen Klingen, Kugeln und Blitze zerfetzen sie
   if (t === 'biene') m *= kind === 'bullet' ? BEE_BULLET : kind === 'lightning' ? BEE_ZAP : isFire(kind) ? BEE_FIRE : 1;
@@ -1616,7 +1617,8 @@ export function stepProjectiles(world, dt) {
     const s1 = Math.min(p.len, p.t * p.sp), x1 = p.sx + p.nx * s1, y1 = p.sy + p.ny * s1;
     const z1 = zAlong(p.z0, p.zt, p.el, s1);
     let r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0, p.f);
-    while (r.unit && r.unit.stance === 'prone' && r.unit !== p.tg && world.rng() >= PRONE_DODGE) {
+    // Jet (25.11.): Fassrolle gegen Kugeln, Täuschkörper gegen Raketen (air.jetEvades), wie Liegende ein Wurf je Körper
+    while (r.unit && ((r.unit.stance === 'prone' && r.unit !== p.tg && world.rng() >= PRONE_DODGE) || (r.unit.type === 'jet' && jetEvades(world, r.unit, p)))) {
       (p.pass || (p.pass = new Set())).add(r.unit);
       r = cast(world, p.x, p.y, x1, y1, p.z, z1, p.src, p.pass, 0, p.f);
     }

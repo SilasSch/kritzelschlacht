@@ -97,3 +97,43 @@ test('Jet: keine Luft-Luft-Raketen auf Bodentruppen', () => {
   for (let i = 0; i < 5 * 60; i++) { step(w, 1 / 60); fired += w.proj.filter(q => q.kind === 'aam').length; w.events.length = 0; }
   assert.equal(fired, 0);
 });
+
+// Jet-Rework (25.11.): Tiefflug-Garbe, Überschallknall, Fassrolle und Täuschkörper (air.js STRAFE, BOOM, EVADE)
+test('Jet-Rework: Tiefflug-Garbe trifft eine Bodengruppe, Knall wirft sie um', async () => {
+  const { STRAFE } = await import('../game/js/air.js');
+  const w = mkWorld(), j = spawn(w, 'jet', 300, 450, 'blau');
+  j.hx = 1; j.hy = 0;
+  const ks = [];
+  for (let i = 0; i < 12; i++) { const k = spawn(w, 'krieger', 700 + (i % 4) * 18, 420 + ((i / 4) | 0) * 22, 'rot'); k.T = { ...k.T, speed: 0 }; ks.push(k); }
+  rebuildHash(w);
+  let minZ = 1e9, stunned = 0, boom = 0;
+  for (let i = 0; i < 3 * 60; i++) {
+    step(w, 1 / 60);
+    for (const e of w.events) if (e.type === 'jetfx' && e.k === 'boom') boom++;
+    w.events.length = 0; minZ = Math.min(minZ, j.z);
+    stunned = Math.max(stunned, ks.filter(k => k.alive && k.state === 'stun').length);
+  }
+  assert.ok(minZ <= STRAFE.LOW + 2, `tief geflogen (${minZ | 0})`);
+  assert.equal(boom, 1, 'genau ein Überschallknall');
+  assert.ok(stunned >= 3, `umgeworfen: ${stunned}`);
+  const dmg = ks.reduce((s, k) => s + (UNITS.krieger.hp - Math.max(0, k.hp)), 0);
+  assert.ok(dmg >= 80, `Garbe-Schaden ${dmg | 0}`);
+});
+
+test('Jet-Rework: oben weicht er Kugeln aus, unten nicht; Täuschkörper lassen Lenkraketen los', async () => {
+  const { jetEvades, EVADE, STRAFE } = await import('../game/js/air.js');
+  const w = mkWorld(), j = spawn(w, 'jet', 400, 400, 'blau');
+  j.z = UNITS.jet.flyZ;
+  let n = 0; for (let i = 0; i < 2000; i++) if (jetEvades(w, j, { kind: 'bullet' })) n++;
+  assert.ok(Math.abs(n / 2000 - EVADE.BULLET) < .05, `Ausweichquote ${n / 2000}`);
+  j.z = STRAFE.LOW;
+  assert.equal(jetEvades(w, j, { kind: 'bullet' }), false);
+  // Lenkrakete eines feindlichen Jets auf ihn: Täuschkörper, Rakete verliert das Ziel
+  j.z = UNITS.jet.flyZ; j.fz = UNITS.jet.flyZ;
+  const e = spawn(w, 'jet', 900, 400, 'rot');
+  rebuildHash(w);
+  w.proj.push({ kind: 'aam', arc: false, homing: true, x: 500, y: 400, z: 70, vx: -430, vy: 0, t: 0, life: 2.4, tg: j, src: e, f: null, dmg: 40, R: 0 });
+  step(w, 1 / 60);
+  assert.ok(j.flareT > 0, 'Täuschkörper geworfen');
+  assert.equal(w.proj.filter(p => p.kind === 'aam' && p.tg === j).length, 0);
+});

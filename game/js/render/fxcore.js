@@ -16,6 +16,7 @@ import { cellIndex } from '../world.js';
 import { SYN_COL } from '../synergy.js';
 
 export const FX_CAP = 3000;
+export const JET_FX = { TRAIL: 60, TRAIL_LIFE: 1.1, BURN: 70, CONE: 10, FLARES: 8 };   // Jet-Rework 25.11.: Raten je s, Anzahlen
 export const STINK_COL = 0xa8c24a, STINK_CLOUD = 0xc4d36a;
 export const STEPS = { MASS: 6, GAP: 1.4, R: .2, COL: '#6b5a48', A: .1 };
 export const FRAME_LIMITS = { blast: 32, crash: 8, land: 24, splash: 24, death: 64, shot: 96, decal: 48, misc: 160, jet: 24, ignite: 48, ability: 24, spell: 24, impact: 64, leaf: 40 };
@@ -1160,6 +1161,50 @@ export function createFxCore(hooks = {}, opt = {}) {
     per('mring', hx + ux * 2, hy + uy * 2, 6.3, OUTLINE, 1, dt);
   }
 
+  // Jet-Rework (25.11., air.js): Kondensstreifen hinter beiden Flügelspitzen, Nachbrenner nach dem Überschallknall
+  // (Feuer und Funken), Überschallknall (weißer Dampfkegel um den Jet, Druckwellen im Streifen am Boden, Staub, Wackeln),
+  // Täuschkörper (glühende Funken, die nach hinten fallen). Werte JET_FX.
+  function jetTrail(u, dt) {
+    const sy = u.y - u.z, tx = u.x - u.hx * u.T.r * 1.6, ty = sy - u.hy * u.T.r * 1.6;
+    if (rand() < dt * JET_FX.TRAIL) {
+      const w = u.T.r * .7, p = add('wisp', tx - u.hy * w * rnd(-1, 1), ty + u.hx * w * rnd(-1, 1), JET_FX.TRAIL_LIFE * rnd(.8, 1.2), rnd(3.5, 5.5), 0xf4f6fa);
+      if (p) { p.vx = -u.hx * 20; p.vy = -u.hy * 20; p.rot = rand() * TAU; }
+    }
+    if (u.ngT > 0 && rand() < dt * JET_FX.BURN) {
+      const p = add('fire', tx + rnd(-2, 2), ty + rnd(-2, 2), rnd(.15, .28), rnd(3, 5.5)); if (p) { p.vx = -u.hx * 140; p.vy = -u.hy * 140; p.drag = DRAG; }
+    }
+  }
+  function jetEvent(e) {
+    const sy = e.y - (e.z || 0);
+    if (e.k === 'boom') {
+      shake = Math.max(shake, e.shake || 3);
+      if (!take('ability')) return;
+      // Dampfkegel: Ring aus weißen Wolken um die Nase, nach hinten geöffnet
+      for (let i = 0; i < JET_FX.CONE; i++) {
+        const a = TAU * i / JET_FX.CONE, ca = Math.cos(a), sa = Math.sin(a), R = 14;
+        const p = add('wisp', e.x + (-e.hy * ca) * R - e.hx * 4, sy + (e.hx * ca) * R * .8 + sa * 7, rnd(.45, .7), rnd(6, 9), 0xffffff);
+        if (p) { p.vx = -e.hx * 90 + (-e.hy * ca) * 30; p.vy = -e.hy * 90 + (e.hx * ca) * 30; p.rot = rand() * TAU; }
+      }
+      add('ring', e.x, sy, .45, 34, 0xffffff);
+      add('flash', e.x, sy, .12, 10);
+      // Druckwellen im Streifen am Boden
+      for (let s = 30; s <= e.L; s += 45) {
+        const gx = e.x + e.hx * s, gy = e.y + e.hy * s;
+        add('wave', gx, gy, .45 + s / e.L * .2, e.W, 0xe8f0ff);
+        puff('dust', gx + rnd(-e.W, e.W) * .6, gy + rnd(-6, 6), DUST.life * .8, rnd(6, 10));
+      }
+      return;
+    }
+    if (e.k === 'flare') {
+      if (!take('misc')) return;
+      for (let i = 0; i < JET_FX.FLARES; i++) {
+        const side = i % 2 ? 1 : -1, p = add('spark', e.x - e.hx * 8, sy - e.hy * 8, rnd(.8, 1.2), rnd(2.2, 3.2)); if (!p) break;
+        p.vx = -e.hx * rnd(60, 120) - e.hy * side * rnd(40, 90); p.vy = -e.hy * rnd(60, 120) + e.hx * side * rnd(40, 90) + 10; p.ay = 60; p.drag = 1.2;
+      }
+      add('flash', e.x, sy, .15, 7);
+    }
+  }
+
   function event(e) {
     switch (e.type) {
       case 'blast': {
@@ -1177,6 +1222,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         dots(e.x, e.y, 10, 90, .6, 2, 4, 0x9aa0aa);
         return;
       }
+      case 'jetfx': jetEvent(e); break;
       case 'shot': {
         if (e.kind === 'breath') { if (take('jet')) jet(e); break; }
         const G = GUN_FX[e.ut + ':' + e.kind] || GUN_FX[e.kind];
@@ -1389,6 +1435,7 @@ export function createFxCore(hooks = {}, opt = {}) {
         if (!u.alive) continue;
         if (BOSS.has(u.type)) bossList.push(u);
         if ((u.T.mass || 1) >= STEPS.MASS && !u.T.fly && u.z < 2) steps(u);
+        if (u.type === 'jet') jetTrail(u, dt);
         if (!(u.burnT > 0)) continue;
         all++;
         if (done >= BURN_FX_UNITS) continue;

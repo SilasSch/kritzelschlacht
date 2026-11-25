@@ -117,6 +117,8 @@ export function spawn(world, type, x, y, team) {
     pathT: 0, pathBlk: 0, pathX: 0,   // pathX: Aufpreis der geraden Linie in px (Einschlagen bzw. Wasser/Dornen)
     // Lufteinheiten (air.js): Blickrichtung, Rest des Überflugs, Bomben des laufenden Teppichs und Takt bis zur nächsten
     hx: .5, hy: .5, passT: .5, bombK: 0, bombT: .5, droneN: 0, mslCd: .5, mslK: 0, mslT: .5,
+    // Jet-Rework (25.11., air.js): Garbe (Rest, Pause, Takt, Zähler), Überschallknall, Nachbrenner, Fassrolle, Täuschkörper
+    strT: .5, strCd: .5, strG: .5, strK: 0, boomCd: .5, ngT: .5, rollT: .5, flareT: .5, flareCd: .5,
     // Felder, die erst später gesetzt werden, schon hier anlegen (gleiche Form für alle Einheiten, Task 13):
     // px/py (physics.integrate; NaN = noch keine Lage vor dem Schritt), bounced/impact (Abheben), fx/fy
     // (Blickrichtung; 0/0 = noch keine: kein Flankenbonus), follow (Sanitäter). Zahlenfelder starten als Zahl
@@ -188,6 +190,7 @@ export function spawn(world, type, x, y, team) {
   u.frogT = 0; u.ashT = 0; u.noHealT = 0; u.auraT = (u.id % 5) * .1; u.auraAt = -9; u.trailT = (u.id % 4) * .06;
   u.seenT = 0; u.herdCd = 0; u.beatCd = 0; u.beeCd = 0;   // Task 5: Tiere
   u.hx = 0; u.hy = 0; u.passT = 0; u.bombT = 0; u.mslCd = 0; u.mslT = 0;   // Lufteinheiten (air.js)
+  u.strT = 0; u.strCd = 0; u.strG = 0; u.strK = 0; u.boomCd = 0; u.ngT = 0; u.rollT = 0; u.flareT = 0; u.flareCd = 0;   // Jet-Rework (25.11.)
   u.stoneCd = 0; u.diveT = 0;   // Luft gegen Nahkampf (20.11.): Steinwurf der Nahkämpfer, Tiefflug des Flugsauriers nach dem Abwurf
   u.dmgOut = 0;   // Schlacht-Statistik: als Double angelegt
   u.hopT = 0;     // Ausweich-Hüpfer: als Double angelegt

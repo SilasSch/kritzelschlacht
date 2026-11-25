@@ -6,9 +6,9 @@ import { CoverDragons, CoverModern, CoverPaper, Banner } from './Cover.jsx';
 export const Root = () => (
   <>
     <Composition id="Trailer" component={Trailer} width={1920} height={1080} fps={FPS}
-      durationInFrames={trailerFrames} defaultProps={{ vertical: false, cta: 'Free in your browser · no account' }} />
+      durationInFrames={trailerFrames} defaultProps={{ vertical: false, cta: 'Free in your browser · no account', url: 'slilok.itch.io/kritzelschlacht' }} />
     <Composition id="TrailerVertical" component={Trailer} width={1080} height={1920} fps={FPS}
-      durationInFrames={trailerFrames} defaultProps={{ vertical: true, cta: 'Free in your browser · no account' }} />
+      durationInFrames={trailerFrames} defaultProps={{ vertical: true, cta: 'Free in your browser · no account', url: 'slilok.itch.io/kritzelschlacht' }} />
     {/* itch.io: Cover 630x500 (hier doppelt), Seitenbanner bis 960 breit (hier doppelt) */}
     <Still id="CoverDragons" component={CoverDragons} width={1260} height={1000} />
     <Still id="CoverModern" component={CoverModern} width={1260} height={1000} />

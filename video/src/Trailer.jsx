@@ -151,7 +151,7 @@ const FeaturesShot = ({ shot, vertical }) => {
   );
 };
 
-const EndShot = ({ vertical, cta }) => {
+const EndShot = ({ vertical, cta, url }) => {
   const f = useCurrentFrame(), { fps } = useVideoConfig();
   const b = pop(f, fps, 12), wob = Math.sin(f / 5) * 1.5;
   return (
@@ -161,12 +161,13 @@ const EndShot = ({ vertical, cta }) => {
         <div style={{ ...LOGO, fontSize: vertical ? 96 : 110, background: GO, padding: '0.28em 0.7em 0.12em', borderRadius: 999,
           border: `8px solid ${INK}`, boxShadow: `8px 10px 0 ${INK}`, transform: `rotate(${-2 + wob}deg) scale(${b})` }}>Play now</div>
         <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: vertical ? 50 : 56, color: INK, opacity: b, textAlign: 'center' }}>{cta}</div>
+        {url && <div style={{ fontFamily: 'Nunito', fontWeight: 800, fontSize: vertical ? 46 : 52, color: GO, opacity: b }}>{url}</div>}
       </AbsoluteFill>
     </Paper>
   );
 };
 
-export const Trailer = ({ vertical, cta }) => {
+export const Trailer = ({ vertical, cta, url }) => {
   useFonts();
   let at = 0;
   return (
@@ -175,7 +176,7 @@ export const Trailer = ({ vertical, cta }) => {
         const from = at, d = frames(s); at += d;
         const el = s.type === 'title' ? <TitleShot vertical={vertical} />
           : s.type === 'features' ? <FeaturesShot shot={s} vertical={vertical} />
-          : s.type === 'end' ? <EndShot vertical={vertical} cta={cta} />
+          : s.type === 'end' ? <EndShot vertical={vertical} cta={cta} url={url} />
           : <ClipShot shot={s} vertical={vertical} />;
         return <Sequence key={i} from={from} durationInFrames={d}>{el}</Sequence>;
       })}

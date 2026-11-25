@@ -37,6 +37,7 @@ import { createOnlineUI } from './ui/online.js';               // Online 1 gegen
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
+import { makePaletteFold } from './ui/palfold.js';             // Malleiste klappt im Kampf und beim Malen weg (25.11.)
 import { tr, unitName, unitPlural, translateDom, LANG, switchLang } from './i18n.js';   // Sprache (18.11.)
 
 // Feste Texte aus index.html übersetzen, bevor die Leisten gebaut werden; Knopf DE/EN in der Kopfleiste
@@ -695,7 +696,7 @@ const actions = {
   },
   paintAt(wx, wy, erase) {
     if (!stroke) return;
-    if (hotseat.paintAt(stroke, wx, wy, erase)) return;   // Hotseat (Audit 18.11.): eigene Hälfte, eigenes Budget
+    if (hotseat.paintAt(stroke, wx, wy, erase)) { palFold?.paint(true); return; }   // Hotseat (Audit 18.11.): eigene Hälfte, eigenes Budget
     const m = game.mission;
     if (stroke.first) {
       stroke.first = false;
@@ -706,6 +707,7 @@ const actions = {
       else if (game.editor && !erase && UNITS[game.sel] && wx <= zoneX(world)) ui.toast(tr('Gegner nur rechts der gestrichelten Linie, Gelände überall.'));
     }
     if (stroke.blocked) return;
+    palFold?.paint(true);   // Malleiste weg, solange gemalt wird (Missionen, Schlacht)
     pointer.erasing = erase;
     const sel = erase ? 'radierer' : game.sel, phase = m ? m.phase : null;
     if (TERRAIN[sel]) {
@@ -721,6 +723,7 @@ const actions = {
   },
   strokeEnd() {
     pointer.erasing = false;
+    palFold?.paint(false);
     if (stroke && !stroke.blocked) shapeStroke(stroke);
     if (stroke && !stroke.blocked && !strokeEmpty(stroke)) {
       undoStack.push(stroke);
@@ -892,6 +895,7 @@ function frame(now) {
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
+  palFold?.sync(game);   // Malleiste: im Kampf und beim Malen weggeklappt (ui/palfold.js)
   hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
   online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
   duel.frame();      // Code-Duell: Antwort-Code nach dem Kampf
@@ -931,6 +935,7 @@ function updatePad() {
 if (hudGap && typeof ResizeObserver === 'function') new ResizeObserver(updatePad).observe(hudGap);
 // Malleiste per Griff verschiebbar (ui/dragbar.js); die Lage bleibt zwischen Sitzungen erhalten
 const palette = document.querySelector('.palette');
+const palFold = palette ? makePaletteFold({ el: palette, host }) : null;
 if (palette) makeDraggable({ el: palette, grip: document.getElementById('palGrip'), reset: document.getElementById('palReset'), host, key: 'kritzelschlacht.palettePos', onMove: updatePad });
 let resizeQueued = false;
 const queueResize = () => { if (resizeQueued) return; resizeQueued = true; requestAnimationFrame(() => { resizeQueued = false; onResize(); }); };

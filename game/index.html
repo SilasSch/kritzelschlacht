@@ -102,6 +102,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
    sonst wächst die Leiste mit langen Texten (Römer: 1680 px). Volle Beschreibung: Charakterkarte und title. */
 .palette{width:720px}
 .palette .info,.palette .keys{width:0;min-width:100%;box-sizing:border-box}
+/* Wegklappen (ui/palfold.js, 25.11.): im Kampf (Missionen, Schlacht) und während eines Pinselstrichs rutscht die Leiste
+   nach unten aus dem Bild. Beim Malen erst nach kurzem Zögern (ein Klick lässt sie stehen), zurück nach dem Loslassen. */
+.palette{transition:transform .28s cubic-bezier(.3,.7,.4,1) .3s,opacity .2s ease .3s,visibility 0s linear .3s}
+body.pal-fold .palette{transform:translateY(var(--pal-drop,calc(100% + 24px)));opacity:0;visibility:hidden;pointer-events:none;
+  transition:transform .3s cubic-bezier(.5,0,.75,.4),opacity .25s ease .05s,visibility 0s linear .3s}
+body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
+.palette.dragging{transition:none}
+@media (prefers-reduced-motion:reduce){body.pal-fold .palette{transform:none}}
 .info b{color:var(--ink)}
 .tabs{display:flex;gap:2px;flex-wrap:wrap}
 .tabs button{border:0;background:transparent;border-radius:9px;padding:5px 11px;color:var(--muted);font-weight:800;font-size:14px}

@@ -110,6 +110,24 @@ body.pal-fold .palette{transform:translateY(var(--pal-drop,calc(100% + 24px)));o
 body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
 .palette.dragging{transition:none}
 @media (prefers-reduced-motion:reduce){body.pal-fold .palette{transform:none}}
+/* Ganzes HUD (ui/palfold.js hudMode, 25.11.): beim Malen blendet alles aus (nach kurzem Zögern, damit ein Klick nichts
+   flackern lässt, zurück kurz nach dem Loslassen). Im Kampf bleibt nur das Nötigste: Tempo, Zeitlupe, Pause, Ton,
+   Name mit Uhr, Abbrechen/Aufgeben, Armeestärke. Online-Partien behalten ihre Knöpfe zum Verlassen. */
+.hud,#onlEmo,.ucard{transition:opacity .2s ease .3s}
+body.hud-paint .hud,body.hud-paint #onlEmo,body.hud-paint .ucard{opacity:0;transition:opacity .18s ease .12s}
+body.hud-paint .hud .p,body.hud-paint #onlEmo{pointer-events:none}
+body.hud-fight .logo,body.hud-fight .seg,body.hud-fight #teamBox,
+body.hud-fight #bLex,body.hud-fight #bDice,body.hud-fight #bWatch,body.hud-fight #bWeather,body.hud-fight #bCode,body.hud-fight #bLang,body.hud-fight #bClear,
+body.hud-fight #misHint,body.hud-fight #misBar .budget,body.hud-fight #misRange,body.hud-fight #misList,
+body.hud-fight #batPts,body.hud-fight #batTools,body.hud-fight:not(.hud-net) #batVs{display:none!important}
+body.hud-fight .top{justify-content:flex-end}
+body.hud-fight .misbar{position:absolute;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);max-width:calc(100% - 520px)}
+body.hud-fight .misbar{gap:10px;padding:5px 5px 5px 14px;border-radius:999px}
+body.hud-fight .misbar .mt{min-width:0}
+body.hud-fight .misbar .mn{font-size:14px}
+body.hud-fight .misbar .go.stop{border-radius:999px;padding:7px 13px;font-size:13.5px}
+body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5px}
+@media (prefers-reduced-motion:reduce){.hud,#onlEmo,.ucard{transition:none}}
 .info b{color:var(--ink)}
 .tabs{display:flex;gap:2px;flex-wrap:wrap}
 .tabs button{border:0;background:transparent;border-radius:9px;padding:5px 11px;color:var(--muted);font-weight:800;font-size:14px}

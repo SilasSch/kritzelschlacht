@@ -11,3 +11,19 @@ test('Malleiste klappt in Missionen und Schlacht im Kampf und beim Malen weg, im
     for (const ph of ['battle', 'fight', 'done']) assert.equal(foldReason({ [k]: { phase: ph } }, false), 'fight');
   }
 });
+
+test('Ganzes HUD: beim Malen überall weg, im Kampf reduziert, in Aufstellung und Auswertung voll', async () => {
+  const { hudMode, isNet } = await import('../game/js/ui/palfold.js');
+  assert.equal(hudMode({}, false), null);
+  assert.equal(hudMode({}, true), 'paint');                         // auch im Sandkasten
+  assert.equal(hudMode({ battle: { phase: 'fight' } }, true), 'paint');
+  assert.equal(hudMode({ mission: { phase: 'plan' } }, false), null);
+  assert.equal(hudMode({ mission: { phase: 'battle' } }, false), 'fight');
+  assert.equal(hudMode({ mission: { phase: 'done' } }, false), null);   // Ergebnis: volle Leiste
+  assert.equal(hudMode({ battle: { phase: 'fight' } }, false), 'fight');
+  assert.equal(hudMode({ battle: { phase: 'fight', batch: {} } }, false), null);
+  assert.equal(hudMode({ battle: { phase: 'done' } }, false), null);
+  assert.equal(isNet({ battle: { hot: { online: true } } }), true);
+  assert.equal(isNet({ battle: { hot: { step: 'blau' } } }), false);
+  assert.equal(isNet({}), false);
+});

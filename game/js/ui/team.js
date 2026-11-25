@@ -50,7 +50,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   // Kampf-Ablauf der Runde: { stage: 'duel' | 'finale' | 'done', runs, results, finale, winner }
   let fx = null, goneSince = 0, goneAck = false;
 
-  /* ---------- Knopf (vorläufig, bis die gemeinsame Online-Lobby ihn aufruft) ---------- */
+  /* ---------- Knopf: nur im laufenden 2v2 sichtbar (Verlassen); hinein geht es über die Online-Lobby ---------- */
   const btn = document.createElement('button');
   btn.className = 'btn'; btn.id = 'batTeam'; btn.innerHTML = '<span class="ico" aria-hidden="true">👥</span><span></span>'; const lab = btn.lastChild; lab.textContent = tr('2v2');
   btn.title = tr('2 gegen 2 online: zwei Teams, vier Geräte');
@@ -331,7 +331,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   function sync() {
     const b = game.battle, plan = !!b && b.phase === 'plan';
     const on = !!m && !!b && b === battleRef && !!b.hot && b.hot.team2;
-    btn.hidden = !b || (!on && (!plan || !!b.hot));
+    btn.hidden = !on;   // Einstieg über die Online-Lobby (ui/online.js); der Knopf dient nur noch zum Verlassen
     lab.textContent = on ? tr('2v2 verlassen') : tr('2v2');
     btn.classList.toggle('on', on);
     if (!on) return;

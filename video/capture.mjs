@@ -72,6 +72,16 @@ for (const clip of clips) {
   if (clip.css) await page.addStyleTag({ content: clip.css });
   for (let i = 0; i < (clip.warmup || 0) * FPS; i++) await page.evaluate(() => window.__step(1000 / 30));
 
+  // Standbild (Cover, Banner): ein PNG nach der Vorlaufzeit statt eines Videos
+  if (clip.still) {
+    if (clip.camAt) await page.evaluate(([z, x, y]) => window.__cam(z, x, y), clip.camAt(0));
+    await page.evaluate(() => window.__step(1000 / 30));
+    await mkdir(join(OUT, '../stills'), { recursive: true });
+    await page.screenshot({ type: 'png', path: join(OUT, '../stills', clip.name + '.png') });
+    console.log(`${clip.name}: Standbild`);
+    await page.close();
+    continue;
+  }
   const ff = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-i', '-',
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '16', '-preset', 'medium', join(OUT, clip.name + '.mp4')], { stdio: ['pipe', 'inherit', 'inherit'] });
   const n = Math.round(clip.seconds * FPS);

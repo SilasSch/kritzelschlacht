@@ -27,6 +27,17 @@ export const CLIPS = [
     { warmup: 1, seconds: 7, camAt: t => [1.05 + .05 * t, .5, .5] }),
 ];
 
+// Standbilder für Cover und Banner (public/stills/<name>.png): gleiche Armeen, späterer Zeitpunkt, näher dran
+const still = (name, base, warmup, z, cx, cy) => {
+  const b = CLIPS.find(c => c.name === base);
+  return { ...b, name, still: true, warmup, camAt: () => [z, cx, cy] };
+};
+CLIPS.push(
+  still('cover-dragons', 'dragons', 4.2, 2.1, .44, .5),
+  still('cover-romans', 'romans', 4.6, 2.0, .47, .5),
+  still('cover-modern', 'modern', 5.5, 1.9, .5, .5),
+  still('cover-epic', 'epic', 6.0, 1.5, .45, .5),
+);
 // Malen: Pinselstriche mit der Maus (Bildschirm-Koordinaten aus Weltanteilen), danach Pause aus = Kampf
 // Striche: [Startzeit s, Dauer s, Team, Slot, Punkte als [x, y] in Weltanteilen]
 const STROKES = [

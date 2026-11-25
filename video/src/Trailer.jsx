@@ -7,7 +7,7 @@ import {
 } from 'remotion';
 
 export const FPS = 30;
-const INK = '#2a2a33', GO = '#ff7a3d', BLUE = '#4d82f0', RED = '#ef4b4b', PAPER = '#fbfaf4';
+export const INK = '#2a2a33', GO = '#ff7a3d', BLUE = '#4d82f0', RED = '#ef4b4b', PAPER = '#fbfaf4';
 
 // type: 'title' | 'clip' | 'features' | 'end'. clip: Dateiname, from: Start im Clip (s), sec: Länge (s)
 export const SHOTS = [
@@ -27,7 +27,7 @@ const frames = s => Math.round(s.sec * FPS);
 export const trailerFrames = SHOTS.reduce((n, s) => n + frames(s), 0);
 
 // Schriften des Spiels (OFL) einmal laden, bevor das erste Bild gerendert wird
-const useFonts = () => {
+export const useFonts = () => {
   const [handle] = useState(() => delayRender('fonts'));
   useEffect(() => {
     const faces = [
@@ -38,7 +38,7 @@ const useFonts = () => {
   }, [handle]);
 };
 
-const LOGO = { fontFamily: "'Luckiest Guy', Impact, sans-serif", color: '#fff', WebkitTextStroke: `0.06em ${INK}`, paintOrder: 'stroke fill', textShadow: `0.05em 0.07em 0 ${INK}`, letterSpacing: '0.02em', lineHeight: 1 };
+export const LOGO = { fontFamily: "'Luckiest Guy', Impact, sans-serif", color: '#fff', WebkitTextStroke: `0.06em ${INK}`, paintOrder: 'stroke fill', textShadow: `0.05em 0.07em 0 ${INK}`, letterSpacing: '0.02em', lineHeight: 1 };
 const pop = (frame, fps, delay = 0) => spring({ frame: frame - delay, fps, config: { damping: 11, stiffness: 170, mass: 0.7 } });
 
 // Gekritzelte Unterstreichung, die sich selbst zeichnet

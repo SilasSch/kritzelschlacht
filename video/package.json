@@ -6,7 +6,8 @@
     "capture": "node capture.mjs",
     "studio": "remotion studio",
     "render": "remotion render Trailer out/trailer.mp4",
-    "render:vertical": "remotion render TrailerVertical out/trailer-vertical.mp4"
+    "render:vertical": "remotion render TrailerVertical out/trailer-vertical.mp4",
+    "covers": "for c in CoverDragons CoverModern CoverPaper Banner; do remotion still $c out/$c.png; done"
   },
   "dependencies": {
     "@remotion/cli": "4.0.547",

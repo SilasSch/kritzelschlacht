@@ -8,10 +8,11 @@ import { createCardHover, hoverOver, hoverEnd, selected, paint, cardKey, nextCha
 import { armyPoints } from './sim.js';
 import { MEDALS, hasMedal } from './medals.js';
 /* ---------- Editor (Audit 18.11.) ---------- */
-import { customCard, openCustomList as openCustomListView } from './ui/customlist.js';
+import { openCustomList as openCustomListView } from './ui/customlist.js';
 import { dailyCard, dailyResult } from './ui/daily.js';   // Tageschallenge (Audit 18.11.)
 import { tr, unitName, unitPlural, dec } from './i18n.js';   // Sprache (18.11.)
-import { modeCards } from './ui/modes.js';   // Spielmodi (25.11.)
+import { modeCards } from './ui/modes.js';
+import { openAchievements } from './ui/achievements.js';   // Spielmodi (25.11.)
 
 const $ = id => document.getElementById(id);
 const ICON_PAUSE = '<path d="M9 5v14M15 5v14"/>';
@@ -313,7 +314,8 @@ export function createUI(game) {
     $('bPause').classList.toggle('on', game.paused);
     $('bSpeed').textContent = game.speed + '×';
     $('bSlow').classList.toggle('on', game.slow);
-    $('bWatch').classList.toggle('on', !!game.watch); $('bWatch').setAttribute('aria-pressed', String(!!game.watch));
+    $('bWatch').classList.toggle('on', !!game.watch); $('bWatch').setAttribute('aria-checked', String(!!game.watch));
+    $('bWatchStop').hidden = !game.watch;
     $('muteIco').innerHTML = game.save.muted ? ICON_MUTED : ICON_SOUND;
     $('bMute').classList.toggle('on', game.save.muted);
     const vol = $('vol'); if (vol && document.activeElement !== vol) vol.value = Math.round((typeof game.save.volume === 'number' ? game.save.volume : .6) * 100);
@@ -344,11 +346,32 @@ export function createUI(game) {
   // Kapitel „Bald verfügbar“), und die Level eines Kapitels mit Sternen und Schlössern wie früher die Missionsliste.
   const starRow = s => `${'★'.repeat(s)}<em>${'★'.repeat(3 - s)}</em>`;
   const LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>';
-  function openChapters() {
+  // „Spielen“ (UX-Review 25.11.): Reiter Kampagne | Herausforderungen | Eigene Level | Erfolge statt 16 Kacheln untereinander
+  let listTab = 'kampagne';
+  function listTabs(t) {
+    const el = $('listTabs');
+    if (!t) { el.hidden = true; return; }
+    listTab = t;
+    const tabs = [['kampagne', tr('Kampagne')], ['modi', tr('Herausforderungen')], ['eigene', tr('Eigene Level')], ['erfolge', tr('Erfolge')]];
+    el.innerHTML = tabs.map(([k, n]) => `<button role="tab" data-t="${k}" class="${k === t ? 'on' : ''}" aria-selected="${k === t}">${esc(n)}</button>`).join('');
+    el.querySelectorAll('button').forEach(b => { b.onclick = () => openChapters(b.dataset.t); });
+    el.hidden = false;
+    $('listTut').hidden = t !== 'kampagne';
+    $('listBack').hidden = true;
+  }
+  function openChapters(t = listTab) {
+    if (t === 'eigene') { openCustomList(); listTabs('eigene'); return; }
+    if (t === 'erfolge') { openAchievements(game); listTabs('erfolge'); return; }
+    const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
+    if (t === 'modi') {
+      $('listTitle').textContent = tr('Herausforderungen');
+      $('listText').textContent = tr('Tageschallenge, Wochenchallenge, Wellenmodus und Feldzug: unabhängig von der Kampagne spielbar.');
+      dailyCard(g, game);   // Tageschallenge (Audit 18.11.)
+      modeCards(g, game, m => m.id !== 'ach');   // Spielmodi (25.11.): Wellen, Wochenchallenge, Feldzug
+    } else {
+    t = 'kampagne';
     $('listTitle').textContent = tr('Kampagne');
     $('listText').textContent = tr('Kapitel für Kapitel: Jedes Level erlaubt nur bestimmte Einheiten. Schaffe das letzte Level eines Kapitels, um das nächste freizuschalten.');
-    const g = $('lvGrid'); g.innerHTML = ''; g.className = 'chgrid';
-    dailyCard(g, game);   // Tageschallenge (Audit 18.11.): Karte ganz oben
     CHAPTERS.forEach((c, ci) => {
       const b = document.createElement('button'); b.className = 'ch'; b.dataset.ch = c.id;
       const p = chapterProgress(game.save.stars, c.id), empty = !p.total, open = !empty && game.chapterUnlocked(c.id);
@@ -363,10 +386,9 @@ export function createUI(game) {
       if (open) b.onclick = () => openChapter(c.id);
       g.append(b);
     });
-    g.append(customCard(game, () => openCustomList()));   // Editor (Audit 18.11.)
-    modeCards(g, game);   // Spielmodi (25.11.): Wellen, Wochenchallenge, Feldzug, Erfolge
-    $('listBack').hidden = true;
-    $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
+    }
+    listTabs(t);
+    $('listClose').textContent = tr('Schließen');
     $('ovList').hidden = false;
   }
   function openChapter(id) {
@@ -385,16 +407,17 @@ export function createUI(game) {
       b.onclick = () => { $('ovList').hidden = true; game.loadMission(m.id); };
       g.append(b);
     });
+    listTabs(null); $('listTut').hidden = false;
     $('listBack').hidden = false;
-    $('listClose').textContent = game.mission ? tr('Zurück zum Sandkasten') : tr('Schließen');
+    $('listClose').textContent = tr('Schließen');
     $('ovList').hidden = false;
   }
   // Reiter „Missionen“: die Kapitel; „Übersicht“ in einer Mission: deren Kapitel
   // eigenes Level (Editor, Audit 18.11.): zurück zum Editor bzw. zur Liste der eigenen Level
   const openMissionList = () => (game.mission && game.mission.custom ? game.customBack()
-    : game.mission && (game.mission.kind === 'waves' || game.mission.kind === 'run' || game.mission.kind === 'weekly') ? openChapters()
+    : game.mission && (game.mission.kind === 'waves' || game.mission.kind === 'run' || game.mission.kind === 'weekly') ? openChapters('modi')
     : game.mission && game.mission.chapter ? openChapter(game.mission.chapter.id) : openChapters());
-  const openCustomList = () => openCustomListView(game, openChapters);
+  const openCustomList = () => { openCustomListView(game, () => openChapters('eigene')); listTabs('eigene'); };
 
   // r = { win, timeUp, stars, spent, budget, par, time, hasNext }
   function showResult(r) {
@@ -466,18 +489,37 @@ export function createUI(game) {
   $('bClear').onclick = () => game.clear();
   $('bDice').onclick = () => game.dice();
   $('bWatch').onclick = () => game.toggleWatch();   // Zuschau-Modus (25.11.)
+  // Tastenzeile (UX-Review 25.11.): aus, bis „?“ sie einschaltet; die Wahl bleibt gespeichert
+  {
+    let on = false; try { on = localStorage.getItem('kritzelschlacht.keys') === '1'; } catch (e) { /* privat */ }
+    const setKeys = v => { on = v; document.body.classList.toggle('show-keys', v); $('bKeys').setAttribute('aria-pressed', String(v)); try { localStorage.setItem('kritzelschlacht.keys', v ? '1' : '0'); } catch (e) { /* privat */ } };
+    setKeys(on);
+    $('bKeys').onclick = () => setKeys(!on);
+  }
+  $('bWatchStop').onclick = () => game.toggleWatch(false);
+  // Mehr-Menüs (UX-Review 25.11.: obere Leiste, Schlacht-Leiste): auf/zu per Knopf, zu bei Klick daneben, Esc oder nach einer
+  // Wahl (Wetter bleibt offen zum Durchschalten)
+  for (const w of document.querySelectorAll('.morew')) {
+    const more = w.querySelector('[aria-haspopup=menu]'), pop = w.querySelector('.morepop');
+    const setMore = on => { pop.hidden = !on; more.setAttribute('aria-expanded', String(on)); more.classList.toggle('on', on); };
+    more.onclick = e => { e.stopPropagation(); setMore(pop.hidden); };
+    pop.addEventListener('click', e => { const b = e.target.closest('.mi'); if (b && b.id !== 'bWeather') setMore(false); });
+    document.addEventListener('pointerdown', e => { if (!pop.hidden && !w.contains(e.target)) setMore(false); }, true);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !pop.hidden) { setMore(false); more.focus(); e.stopPropagation(); } }, true);
+  }
   $('bUndo').onclick = () => game.undo();
   $('brush').oninput = e => game.setBrush(+e.target.value);
   $('teamToggle').onchange = e => game.setTeamMode(e.target.checked);
   $('mSand').onclick = () => game.enterSandbox();
-  $('mMis').onclick = () => openChapters();
+  $('mMis').onclick = () => openChapters();   // „Spielen“: zuletzt gewählter Reiter
   $('misList').onclick = () => openMissionList();
   $('misGo').onclick = () => game.go();
   $('resRetry').onclick = () => { $('ovRes').hidden = true; game.retryMission(); };
   $('resNext').onclick = () => { $('ovRes').hidden = true; game.nextMission(); };
   $('resList').onclick = () => { $('ovRes').hidden = true; openMissionList(); };
-  $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission) game.enterSandbox(); };
-  $('listBack').onclick = () => openChapters();
+  // Schließen (UX-Review 25.11.): eine Mission in der Aufstellung bleibt offen, eine fertige führt zurück in den Sandkasten
+  $('listClose').onclick = () => { $('ovList').hidden = true; if (game.mission && game.mission.phase !== 'plan') game.enterSandbox(); };
+  $('listBack').onclick = () => openChapters('kampagne');
   $('mBat').onclick = () => game.enterBattle();
   /* ---------- Audit 18.11.: Reichweiten, Replay, Tutorial ---------- */
   $('misRange').onclick = () => game.toggleRanges();

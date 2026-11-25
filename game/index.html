@@ -62,6 +62,26 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--selb);outline-o
 .volpop::before{content:'';position:absolute;left:0;right:0;top:-8px;height:8px}
 .volw:hover .volpop,.volw:focus-within .volpop{display:flex}
 .volpop input{width:110px;accent-color:var(--selb)}
+/* Obere Leiste (UX-Review 25.11.): Tempo, Zeitlupe, Pause als eine Gruppe; seltene Knöpfe im Mehr-Menü mit Beschriftung */
+.ctl{display:inline-flex;align-items:center;gap:0;border-radius:999px;padding:0 2px}
+.ctl .ib{border:0;background:transparent;width:38px}
+.ctl .ib.txt{width:auto;padding:0 10px}
+.ctl .ib.on{background:var(--sel)}
+.ib{color:var(--ink)}
+.morew{position:relative;display:inline-flex}
+.morepop{position:absolute;top:calc(100% + 6px);right:0;z-index:8;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:14px;min-width:220px}
+.morepop[hidden]{display:none}
+.mi{display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:8px 10px;border-radius:9px;font-size:14px;font-weight:800;text-align:left;white-space:nowrap}
+.mi:hover,.mi:focus-visible{background:var(--soft)}
+.mi svg{width:18px;height:18px;stroke:var(--ink);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mi.on{background:var(--sel)}
+.mi .ico{width:18px;height:18px}
+.misbar .morew>.btn{display:inline-flex;align-items:center;gap:7px}
+.misbar .morepop{top:calc(100% + 6px);right:auto;left:0}
+.morew>.btn.on{border-color:var(--ink)}
+#bWatchStop{gap:6px;display:inline-flex;align-items:center}
+#bWatchStop[hidden]{display:none}
+#bWatchStop svg{width:16px;height:16px}
 
 .misbar{align-self:center;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 16px;border-radius:16px;flex-wrap:wrap;justify-content:center;max-width:100%}
 .misbar .mt{display:flex;flex-direction:column;min-width:0}
@@ -117,10 +137,11 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
 body.hud-paint .hud,body.hud-paint #onlEmo,body.hud-paint .ucard{opacity:0;transition:opacity .18s ease .12s}
 body.hud-paint .hud .p,body.hud-paint #onlEmo{pointer-events:none}
 body.hud-fight .logo,body.hud-fight .seg,body.hud-fight #teamBox,
-body.hud-fight #bLex,body.hud-fight #bDice,body.hud-fight #bWatch,body.hud-fight #bWeather,body.hud-fight #bCode,body.hud-fight #bLang,body.hud-fight #bClear,
+body.hud-fight #bLex,body.hud-fight .morew,body.hud-fight #bLang,body.hud-fight #bClear,
 body.hud-fight #misHint,body.hud-fight #misBar .budget,body.hud-fight #misRange,body.hud-fight #misList,
 body.hud-fight #batPts,body.hud-fight #batTools,body.hud-fight:not(.hud-net) #batVs{display:none!important}
 body.hud-fight .top{justify-content:flex-end}
+.misbar .go.stop:disabled{display:none}   /* Kampf vorbei: kein ausgegrautes Abbrechen bis zur Auswertung (UX-Review 25.11.) */
 body.hud-fight .misbar{position:absolute;top:max(12px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);max-width:calc(100% - 520px)}
 body.hud-fight .misbar{gap:10px;padding:5px 5px 5px 14px;border-radius:999px}
 body.hud-fight .misbar .mt{min-width:0}
@@ -133,6 +154,9 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .tabs button{border:0;background:transparent;border-radius:9px;padding:5px 11px;color:var(--muted);font-weight:800;font-size:14px}
 .tabs button.on{background:var(--soft);color:var(--ink)}
 .tabs button:disabled{opacity:.35;cursor:default}
+.listtabs{gap:4px;padding:4px;border-radius:12px;background:var(--soft);align-self:flex-start}
+.listtabs button{font-size:14.5px;padding:7px 14px}
+.listtabs button.on{background:#fff;box-shadow:0 1px 3px rgba(30,35,60,.12)}
 .units{display:flex;gap:5px;overflow-x:auto;padding:2px;scrollbar-width:thin}
 .ub{flex:0 0 auto;width:58px;height:54px;border-radius:11px;border:1.5px solid var(--line);background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2px;position:relative}
 .ub img{width:40px;height:40px;pointer-events:none}
@@ -147,6 +171,11 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .counts .pw{flex:1;height:5px;border-radius:9px;min-width:30px;max-width:70px;background:var(--soft);overflow:hidden;margin-left:auto}
 .counts .pw u{display:block;height:100%;border-radius:9px}
 @media (hover:none){.keys{display:none}}
+/* Tastenzeile nur auf Wunsch (UX-Review 25.11.): Knopf „?“ in der Pinselzeile */
+body:not(.show-keys) .keys{display:none}
+#bKeys{padding:3px 9px}
+body.show-keys #bKeys{background:var(--sel);border-color:var(--selb)}
+@media (hover:none){#bKeys{display:none}}
 
 .teams{border-radius:14px;padding:8px 12px;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
 .switch{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;user-select:none}
@@ -288,6 +317,10 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .uc.wide .uc-vs .u{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}
 .uc-note{font-size:11.5px;color:#c0443c;font-weight:800}
 .ucard{position:absolute;z-index:4;pointer-events:none}
+/* Kompakte Hover-Karte bei wenig Höhe (UX-Review 25.11.: bei 720 px verdeckte sie Missionsleiste und Tabs). Die volle Karte
+   mit Synergien und Kontern steht im Lexikon. */
+@media (max-height:820px){#ucard .uc-syn,#ucard .uc-vs{display:none}#ucard .uc-pic{width:56px;height:56px}#ucard .uc-pic img{width:52px;height:52px}
+  #ucard .uc-hd{padding:8px 14px 7px}#ucard .uc{gap:7px}}
 .ucard .uc::after{content:"";position:absolute;bottom:-9px;left:var(--ax,50%);width:14px;height:14px;background:#fff;
   border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:translateX(-50%) rotate(45deg)}
 .ucard.pop .uc{animation:ucpop .14s ease-out both}
@@ -309,6 +342,13 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .fps{position:absolute;left:8px;top:8px;z-index:5;background:var(--ink);color:#fff;font:800 12px/1 var(--f-ui);padding:5px 8px;border-radius:8px;pointer-events:none;font-variant-numeric:tabular-nums}
 /* Schlacht-Modus (Spez. #45, #46): Leiste mit Punktepille, Auswertungskarte mit Tabellen, Verlauf und Held */
 .batbar .mt{min-width:150px}
+/* einzeilig bei 1280 px (UX-Review 25.11.): Punkte nur als Zahlen, Hinweis zweizeilig */
+.batbar .mh{max-width:200px}
+.batbar .pts{gap:6px;padding:6px 10px}
+.batbar .pts span{font-size:0}
+.batbar .pts span b{font-size:14px}
+.batbar .pts .sep{font-size:14px}
+#batMore{padding:9px 11px}
 .pts{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:var(--soft);border:1px solid var(--line);font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pts b{font-weight:800}
 .pts .sep{color:var(--muted)}
@@ -386,7 +426,8 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .btn .ico{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
 .misbar .btn{display:inline-flex;align-items:center;gap:7px;padding:9px 13px}
 .bgrp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.bgrp:not(:has(>.btn:not([hidden]))){display:none}
+.bgrp:not(:has(>.btn:not([hidden]),>.morew .mi:not([hidden]))){display:none}
+.morew:not(:has(.mi:not([hidden]))){display:none}
 .bgrp.vs{padding:3px 3px 3px 10px;border-radius:14px;background:var(--soft);border:1px solid var(--line)}
 .bgrp.vs .glab{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .bgrp.vs .btn{padding:7px 11px;border-radius:10px}
@@ -433,7 +474,7 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 @keyframes wxrain{to{background-position:-60px 240px}}
 @keyframes wxfog{to{background-position:60px -20px,-40px 30px,0 0}}
 @media (prefers-reduced-motion:reduce){.wx{animation:none!important}}
-#bWeather.on{background:var(--sel);border-color:var(--selb)}
+#bWeather.on{background:var(--sel)}
 </style>
 </head>
 <body>
@@ -445,19 +486,26 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
       <div class="logo" aria-label="Kritzelschlacht">Kritzel<span>schlacht</span></div>
       <div class="seg shadow p" role="tablist" aria-label="Modus">
         <button id="mSand" class="on" role="tab">Sandkasten</button>
-        <button id="mMis" role="tab">Missionen</button>
+        <button id="mMis" role="tab" title="Kampagne, Herausforderungen, eigene Level und Erfolge">Spielen</button>
         <button id="mBat" role="tab">Schlacht</button>
         <button id="mEd" role="tab" title="Level-Editor: eigene Missionen bauen und teilen">Editor</button><!-- Editor (Audit 18.11.) -->
       </div>
       <div class="icons p">
         <button class="ib shadow txt lexb" id="bLex" title="Lexikon: alle Einheiten mit Werten, Fähigkeiten und Kontern" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>Lexikon</button>
-        <button class="ib shadow" id="bDice" title="Zufallsschlacht" aria-label="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button>
-        <button class="ib shadow" id="bWatch" title="Zuschauen: Zufallsschlachten laufen von allein nacheinander" aria-label="Zuschauen" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><!-- Zuschau-Modus (25.11.) -->
-        <button class="ib shadow" id="bWeather" title="Wetter: Klar" aria-label="Wetter"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.6 4.2 4.2 0 0 0 7 18z"/></svg></button><!-- Wetter (25.11.) -->
-        <button class="ib shadow" id="bCode" title="Code laden: geteilte Schlacht oder eigenes Level" aria-label="Code laden" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h4"/></svg></button><!-- Teilen (Symbol Zwischenablage statt Download-Pfeil, UX-Review 25.11.) (Audit 18.11.) -->
-        <button class="ib shadow txt" id="bSpeed" title="Tempo">1×</button>
-        <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
-        <button class="ib shadow" id="bPause" title="Pause (P)" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIco"><path d="M9 5v14M15 5v14"/></svg></button>
+        <!-- Mehr-Menü (UX-Review 25.11.): seltene Knöpfe mit Beschriftung statt fünf rätselhafter Symbole, ui.js moreMenu -->
+        <span class="morew"><button class="ib shadow" id="bMore" title="Mehr: Zufallsschlacht, Zuschauen, Wetter, Code laden" aria-label="Mehr" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24"><circle cx="5.5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18.5" cy="12" r="1.3" fill="currentColor"/></svg></button>
+          <span class="morepop shadow" id="morePop" role="menu" hidden>
+            <button class="mi" id="bDice" role="menuitem" title="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg><span>Zufallsschlacht</span></button>
+            <button class="mi" id="bWatch" role="menuitemcheckbox" title="Zuschauen: Zufallsschlachten laufen von allein nacheinander" aria-checked="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Zuschauen</span></button><!-- Zuschau-Modus (25.11.) -->
+            <button class="mi" id="bWeather" role="menuitem" title="Wetter: Klar"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.6 4.2 4.2 0 0 0 7 18z"/></svg><span id="bWeatherTxt">Wetter: Klar</span></button><!-- Wetter (25.11.) -->
+            <button class="mi" id="bCode" role="menuitem" title="Code laden: geteilte Schlacht oder eigenes Level" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h4"/></svg><span>Code laden</span></button><!-- Teilen (Audit 18.11.) -->
+          </span></span>
+        <button class="ib shadow txt" id="bWatchStop" title="Zuschauen beenden" hidden><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Zuschauen beenden</button>
+        <span class="ctl shadow" role="group" aria-label="Tempo">
+        <button class="ib txt" id="bSpeed" title="Tempo">1×</button>
+        <button class="ib" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
+        <button class="ib" id="bPause" title="Pause (P)" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIco"><path d="M9 5v14M15 5v14"/></svg></button>
+        </span>
         <span class="volw"><button class="ib shadow" id="bMute" title="Ton (M)" aria-label="Ton an oder aus"><svg viewBox="0 0 24 24" id="muteIco"></svg></button><span class="volpop shadow"><input type="range" id="vol" min="0" max="100" value="60" aria-label="Lautstärke"></span></span>
         <button class="ib shadow txt" id="bLang" title="Sprache: Deutsch / English" aria-label="Sprache wechseln">EN</button><!-- Sprache (18.11.), main.js -->
         <button class="ib shadow" id="bClear" title="Alles leeren" aria-label="Alles leeren"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
@@ -467,20 +515,23 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
     <div class="misbar shadow p" id="misBar" hidden>
       <div class="mt"><div class="mn" id="misName"></div><div class="mh" id="misHint"></div></div>
       <div class="budget"><div class="bbar"><i id="budFill"></i></div><span id="budTxt"></span></div>
-      <button class="btn tg on" id="misRange" title="Reichweiten der gegnerischen Fernkämpfer anzeigen (R)" aria-pressed="true"><svg viewBox="0 0 24 24" class="ico"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="off" d="M4 4l16 16"/></svg>Reichweiten</button>
+      <button class="btn tg" id="misRange" title="Alle Reichweiten der gegnerischen Fernkämpfer zeigen (R). Sonst nur beim Zeigen auf einen Gegner." aria-pressed="false"><svg viewBox="0 0 24 24" class="ico"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="off" d="M4 4l16 16"/></svg>Reichweiten</button>
       <button class="btn" id="misList">Übersicht</button>
       <button class="go" id="misGo">Los!</button>
     </div>
 
     <div class="misbar batbar shadow p" id="batBar" hidden>
       <div class="mt"><div class="mn">Schlacht</div><div class="mh" id="batHint">Blau malt links, Rot rechts · Gelände überall</div></div>
-      <div class="pts" id="batPts" title="Punktwert der Armeen (nur zur Info)"><i class="tdot blau"></i><span>Blau <b id="ptsB">0</b> Pkt</span><span class="sep">·</span><i class="tdot rot"></i><span>Rot <b id="ptsR">0</b> Pkt</span></div>
+      <div class="pts" id="batPts" title="Punktwert der Armeen: Blau gegen Rot (nur zur Info)"><i class="tdot blau"></i><span>Blau <b id="ptsB">0</b> Pkt</span><span class="sep">·</span><i class="tdot rot"></i><span>Rot <b id="ptsR">0</b> Pkt</span></div>
       <!-- Leiste in Gruppen (UX 20.11.): Feld (Leeren, Seiten tauschen, Teilen) · Zu zweit (Hotseat, Online, Code-Duell, aus ui/*.js) · Los! -->
       <div class="bgrp" id="batTools">
-        <button class="btn" id="batClear" title="Alle Einheiten und das Gelände entfernen"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Leeren</button>
-        <button class="btn" id="batSwap" title="Spiegelt die Aufstellung samt Gelände an der Mittellinie"><svg viewBox="0 0 24 24" class="ico"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg>Seiten tauschen</button>
         <button class="btn" id="batQuick" title="Rot bekommt eine Zufallsarmee mit so vielen Punkten wie Blau"><svg viewBox="0 0 24 24" class="ico"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="15" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="9" cy="15" r="1.3"/></svg>Zufallsgegner</button><!-- Schnelle Schlacht (25.11.) -->
-        <button class="btn" id="batShare" title="Aufstellung als Code teilen"><svg viewBox="0 0 24 24" class="ico"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Teilen</button><!-- Teilen (Audit 18.11.) -->
+        <span class="morew" id="batMoreW"><button class="btn" id="batMore" title="Mehr: Leeren, Seiten tauschen, Teilen" aria-haspopup="menu" aria-expanded="false" aria-label="Mehr"><svg viewBox="0 0 24 24" class="ico"><circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/></svg></button><!-- UX-Review 25.11.: seltene Knöpfe ins Menü, damit die Leiste einzeilig bleibt -->
+          <span class="morepop shadow" role="menu" hidden>
+          <button class="mi" role="menuitem" id="batClear" title="Alle Einheiten und das Gelände entfernen"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg><span>Leeren</span></button>
+          <button class="mi" role="menuitem" id="batSwap" title="Spiegelt die Aufstellung samt Gelände an der Mittellinie"><svg viewBox="0 0 24 24" class="ico"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg><span>Seiten tauschen</span></button>
+          <button class="mi" role="menuitem" id="batShare" title="Aufstellung als Code teilen"><svg viewBox="0 0 24 24" class="ico"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg><span>Teilen</span></button>
+          </span></span>
       </div>
       <div class="bgrp vs" id="batVs" role="group" aria-label="Zu zweit spielen"><span class="glab">Zu zweit</span></div>
       <button class="go" id="batGo">Los!</button>
@@ -498,6 +549,7 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
         <div class="brushrow">
           <label class="brush" for="brush">Pinsel <input type="range" id="brush" min="10" max="150" value="48"></label>
           <button class="mini" id="bUndo" title="Letzten Pinselstrich zurücknehmen (Strg+Z)">↶ Rückgängig</button>
+          <button class="mini" id="bKeys" title="Tastenkürzel zeigen" aria-label="Tastenkürzel zeigen" aria-pressed="false">?</button><!-- Tastenzeile nur auf Wunsch (UX-Review 25.11.) -->
         </div>
         <div class="keys">Tasten: 1–9 Einheit · Q/E Kategorie · X Radierer · +/− Pinsel · Strg+Z zurück · P Pause · Mausrad Zoom · Leertaste+Ziehen verschieben</div>
       </div>
@@ -555,6 +607,7 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 
   <div class="ov" id="ovList" hidden>
     <div class="card wide shadow">
+      <div class="tabs listtabs" id="listTabs" role="tablist" aria-label="Spielen" hidden></div><!-- Reiter (UX-Review 25.11.), ui.js listTabs -->
       <h2 id="listTitle">Kampagne</h2>
       <p id="listText">Jede Mission gibt dir ein Punktebudget. Gewinne mit möglichst wenig Punkten für drei Sterne.</p>
       <div class="lvgrid" id="lvGrid"></div>

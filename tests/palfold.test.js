@@ -27,3 +27,11 @@ test('Ganzes HUD: beim Malen überall weg, im Kampf reduziert, in Aufstellung un
   assert.equal(isNet({ battle: { hot: { step: 'blau' } } }), false);
   assert.equal(isNet({}), false);
 });
+
+test('Zuschauen: reduziertes HUD und weggeklappte Malleiste, Malen geht vor', async () => {
+  const { hudMode, foldReason } = await import('../game/js/ui/palfold.js');
+  assert.equal(hudMode({ watch: true }, false), 'fight');
+  assert.equal(hudMode({ watch: true }, true), 'paint');
+  assert.equal(foldReason({ watch: true }, false), 'fight');
+  assert.equal(foldReason({ watch: true }, true), null);
+});

@@ -11,7 +11,19 @@ const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const SIDE_N = { blau: tr('Blau'), rot: tr('Rot') };
 
 const CSS = `
-.card.duelset{max-width:760px}
+.card.duelset{max-width:1040px}
+/* UX-Review 25.11.: passt bei 1280×720 ohne Scrollen (Karten 6 je Zeile, Regeln 5 je Zeile) */
+.vopts.r9{grid-template-columns:repeat(9,1fr);gap:6px}
+.vopts.r6{grid-template-columns:repeat(8,1fr);gap:5px}
+.vopts.r9 .btn{padding:4px 5px}.vopts.r9 svg{max-height:26px;width:100%}
+.vopts.r6 .btn{padding:5px 6px;text-align:center;justify-content:center}.vopts.r6 .btn b,.vopts.r9 .btn b{font-family:var(--f-ui);font-weight:800;font-size:12.5px;letter-spacing:0;line-height:1.15}.vopts.r9 .btn span{display:none}.vopts.r6 .btn span{display:none}
+.duelset .ruled{min-height:18px;font-size:13px}
+.duelset>p.muted:first-of-type{font-size:13px;line-height:1.35}
+.duelfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.duelfoot h3{margin:0 0 6px}
+.vopts.r6 .btn{min-height:0}
+.card.duelset{gap:6px;padding:14px 20px}.card.duelset h3{margin:2px 0 0}.card.duelset h2{font-size:28px}
+@media (max-width:900px){.vopts.r9{grid-template-columns:repeat(5,1fr)}.vopts.r6{grid-template-columns:repeat(3,1fr)}}
 .vopts.r4{grid-template-columns:repeat(4,1fr)}
 .vopts.small .btn{padding:7px 9px}.vopts.small .btn b{font-size:16px}
 @media (max-width:600px){.vopts.r4{grid-template-columns:repeat(2,1fr)}}
@@ -57,12 +69,13 @@ export function createDuelUI({ game, world, ui, audio, online, onlineFight, clea
     showCard(`<h2 id="duelTitle">${tr('Code-Duell')}</h2>
       <p class="muted">${tr('1 gegen 1 ohne Anmeldung: Du wählst Regel und Karte, malst deine Armee und bekommst einen Code für deinen Gegner (z. B. per WhatsApp). Er malt mit denselben Regeln dagegen, ohne deine Armee zu sehen, und schickt dir einen Antwort-Code mit dem Kampf zurück.')}</p>
       <h3>${tr('Was darf gemalt werden?')}</h3>
-      <div class="vopts r4 small">${opt('rule', 'zufall', `<b>🎲 ${tr('Zufall')}</b><span>${tr('Lass dich überraschen')}</span>`)}${RULES.map(r => opt('rule', r.id, `<b>${esc(tr(r.n))}</b><span>${esc(tr(r.d))}</span>`)).join('')}</div>
+      <div class="vopts r6 small">${opt('rule', 'zufall', `<b>🎲 ${tr('Zufall')}</b><span>${tr('Lass dich überraschen')}</span>`)}${RULES.map(r => opt('rule', r.id, `<b title="${esc(tr(r.d))}">${esc(tr(r.n))}</b><span>${esc(tr(r.d))}</span>`)).join('')}</div>
+      <p class="muted ruled">${esc(pick.rule === 'zufall' ? tr('Lass dich überraschen') : tr((RULES.find(r => r.id === pick.rule) || {}).d || ''))}</p>
       <h3>${tr('Karte')}</h3>
-      <div class="vopts r4 small">${opt('map', 'zufall', `<b>🎲 ${tr('Zufall')}</b><span>${tr('Irgendeine Karte')}</span>`)}${MAPS.map(m => opt('map', m.id, `${mapSVG(m.id)}<b>${esc(tr(m.n))}</b>`)).join('')}</div>
-      <h3>${tr('Budget')}</h3>
-      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick.budget ? ' on' : ''}" data-k="budget" data-v="${v}"><b>${v}</b><span>${tr('Punkte je Seite')}</span></button>`).join('')}</div>
-      <div class="btnrow"><button class="go" id="duelStart">${tr('Los geht\'s')}</button><button class="btn" id="duelCancel">${tr('Abbrechen')}</button></div>`);
+      <div class="vopts r9 small">${opt('map', 'zufall', `<b>🎲 ${tr('Zufall')}</b><span>${tr('Irgendeine Karte')}</span>`)}${MAPS.map(m => opt('map', m.id, `${mapSVG(m.id)}<b>${esc(tr(m.n))}</b>`)).join('')}</div>
+      <div class="duelfoot"><div><h3>${tr('Budget')}</h3>
+      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick.budget ? ' on' : ''}" data-k="budget" data-v="${v}"><b>${v}</b><span>${tr('Punkte je Seite')}</span></button>`).join('')}</div></div>
+      <div class="btnrow"><button class="go" id="duelStart">${tr('Los geht\'s')}</button><button class="btn" id="duelCancel">${tr('Abbrechen')}</button></div></div>`);
     card.classList.add('duelset');
     card.querySelectorAll('[data-k]').forEach(b => {
       b.onclick = () => { const k = b.dataset.k; pick[k] = k === 'budget' ? +b.dataset.v : b.dataset.v; openSetup(); };

@@ -8,6 +8,7 @@
 // Rein (für Tests): Grund zum Wegklappen oder null. phase 'plan' = Aufstellung, alles andere = Kampf bzw. Ergebnis.
 export function foldReason(game, painting) {
   const m = game.mission, b = game.battle;
+  if (game.watch && !painting) return 'fight';   // Zuschauen (UX-Review 25.11.): Malleiste weg, Malen beendet es
   if (!m && !b) return null;
   if ((m && m.phase !== 'plan') || (b && b.phase !== 'plan')) return 'fight';
   return painting ? 'paint' : null;
@@ -18,6 +19,7 @@ export function foldReason(game, painting) {
 // 'fight' solange in Mission oder Schlacht gekämpft wird (nicht in der Auswertung: dort braucht man die volle Leiste), sonst null.
 export function hudMode(game, painting) {
   if (painting) return 'paint';
+  if (game.watch) return 'fight';   // Zuschauen (UX-Review 25.11.): reduziert wie ein Kampf
   const m = game.mission, b = game.battle;
   if ((m && m.phase === 'battle') || (b && b.phase === 'fight' && !b.batch)) return 'fight';
   return null;

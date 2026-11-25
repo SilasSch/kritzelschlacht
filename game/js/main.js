@@ -104,7 +104,7 @@ const game = {
   sel: 'krieger', cat: 'armee', brush: 48, curTeam: 'blau',
   paused: false, speed: 1, slow: false,
   // Audit 18.11.: Reichweiten der Gegner in der Planung zeigen; laufendes Replay (oder null)
-  showRanges: true, replayState: null,
+  showRanges: false, replayState: null,   // Reichweiten (UX-Review 25.11.): aus = nur beim Zeigen auf einen Gegner
 
   // Malleiste und Tasten 1–9: nur malbare Einheiten (paint: false, z. B. der Ghul, nie; Vorgabe 3), in einem Level nur
   // die erlaubten (units, cats; Spez. #52). Die Tasten folgen den sichtbaren Plätzen.
@@ -525,6 +525,7 @@ function applyWeather() {
   world.weather = weatherFree() ? game.weather : null;
   const b = document.getElementById('bWeather');
   if (b) { b.title = tr('Wetter: {w}', { w: WEATHER_N[game.weather] }); b.classList.toggle('on', !!game.weather); b.hidden = !!game.mission || !!game.editor; }
+  const bt = document.getElementById('bWeatherTxt'); if (bt) bt.textContent = tr('Wetter: {w}', { w: WEATHER_N[game.weather] });   // Mehr-Menü (UX-Review 25.11.)
 }
 game.cycleWeather = () => {
   if (!weatherFree()) return;
@@ -907,7 +908,7 @@ function saveCustom(lv, replaceId = null) {
 }
 function editorSave() {
   const lv = editorLevel(); if (!lv) return;
-  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast(tr('Gespeichert unter Missionen → Eigene Level.')); }
+  if (saveCustom(lv, edState.savedId)) { edState.savedId = lv.id; ui.toast(tr('Gespeichert unter Spielen → Eigene Level.')); }
 }
 const customById = id => save.custom.find(l => l.id === id) || null;
 function playCustom(id) { const l = customById(id); if (l) loadMission(l, 'list'); }
@@ -1052,10 +1053,19 @@ function shapeStroke(s) {
 }
 
 // Reichweiten der gegnerischen Fernkämpfer (Planung einer Mission), für renderer.setOverlay
-function enemyRanges() {
-  const out = [];
-  for (const u of world.units) if (u.alive && u.team !== PLAYER && u.T.range >= 20 && !u.T.heal) out.push({ x: u.x, y: u.y, r: u.T.range });
-  return out;
+// all: alle Fernkämpfer (Knopf „Reichweiten“ an); sonst nur der Gegner, auf den der Zeiger gerade zeigt
+// (UX-Review 25.11.: alle Kreise auf einmal färbten das ganze Gegnerfeld rot)
+const ranged = u => u.alive && u.team !== PLAYER && u.T.range >= 20 && !u.T.heal;
+function enemyRanges(all) {
+  if (all) { const out = []; for (const u of world.units) if (ranged(u)) out.push({ x: u.x, y: u.y, r: u.T.range }); return out; }
+  if (!pointer.inside) return null;
+  let best = 30 * 30, hit = null;
+  for (const u of world.units) {
+    if (!ranged(u)) continue;
+    const d = (u.x - pointer.x) ** 2 + (u.y - pointer.y) ** 2;
+    if (d < best) { best = d; hit = u; }
+  }
+  return hit ? [{ x: hit.x, y: hit.y, r: hit.T.range }] : null;
 }
 
 /* ---------- Tageschallenge (Audit 18.11.) ---------- */
@@ -1193,7 +1203,7 @@ function frame(now) {
     erase: game.sel === 'radierer' || pointer.erasing,
     missionZoneX: (m && m.phase === 'plan') || game.editor ? zoneX(world) : null,
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
-    ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
+    ranges: m && m.phase === 'plan' ? enemyRanges(game.showRanges) : null,
   });
   if (intro) { intro.t += realDt; if (!introCam(cam, intro.target, intro.t)) intro = null; }   // Gegner vorstellen
   if (!(m && m.phase !== 'plan') && !(bt && bt.phase !== 'plan')) applyWeather();   // Wetter: nur in der Planung umstellen

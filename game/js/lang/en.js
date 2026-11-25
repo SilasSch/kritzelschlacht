@@ -202,7 +202,7 @@ const EN = {
   "Flammenwerfer": "Flamethrower",
   "Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme und dichte Blöcke. Auf Abstand hilflos.": "Short jet of flame that ignites everyone in the cone and sets forests on fire. Strong against swarms and dense blocks. Helpless at range.",
   "Flammenkegel": "Flame cone",
-  "Trifft alle im kurzen Kegel vor ihm, auch Bienen und Geister, und zündet sie an. Setzt Wald in Brand.": "Hits everyone in the short cone in front of him, including bees and ghosts, and sets them on fire. Sets forests on fire.",
+  "Trifft alle im kurzen Kegel vor ihm, auch Bienen und Adler in der Luft, und zündet sie an. Setzt Wald in Brand.": "Hits everyone in the short cone ahead, bees and eagles in the air too, and sets them on fire. Sets forests ablaze.",
   "Scharfschütze": "Sniper",
   "Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.": "Huge range, one shot, one hit, but only lying down. Very vulnerable.",
   "Nur im Liegen": "Prone only",

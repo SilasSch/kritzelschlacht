@@ -91,7 +91,7 @@ export const UNITS = {
   spinne:{n:'Springspinne',cat:'schrott',col:'#4a4552',r:9,hp:80,dmg:11,range:3,speed:70,cd:.8,cost:3,mass:1,bot:1,d:'Springt über die Front und über Mauern auf Fernkämpfer und Heiler.'},
   schweisser:{n:'Schweißer',cat:'schrott',col:'#ef8a2e',r:10,hp:90,dmg:9,range:3,speed:46,cd:.7,cost:4,mass:1.4,bot:1,d:'Nahkampf mit dem Schweißbrenner: zündet Gegner an und flickt Bots in der Nähe.'},
   magnet:{n:'Magnet-Mech',cat:'schrott',col:'#9aad58',r:13,hp:260,dmg:16,range:4,speed:38,cd:1.2,cost:5.5,mass:4,bot:1,d:'Zieht Gegner aus Metall zu sich in einen Haufen: Ritter, Römer, Soldaten und andere Roboter.'},
-  tesla:{n:'Teslaspule',cat:'schrott',col:'#c9a27a',r:11,hp:120,dmg:15,range:170,speed:32,cd:2,cost:7,mass:2,bot:1,d:'Kettenblitz springt auf bis zu 6 Gegner. Stark gegen Schwärme und Flieger.'},
+  tesla:{n:'Teslaspule',cat:'schrott',col:'#c9a27a',r:11,hp:120,dmg:15,range:170,speed:32,cd:2,cost:7,mass:2,bot:1,d:'Kettenblitz springt auf bis zu 5 Gegner. Stark gegen Schwärme und Flieger.'},
   mega:{n:'Mega-Mech',cat:'schrott',col:'#b9764a',r:22,hp:1000,dmg:30,range:5,splash:30,speed:30,cd:1.6,cost:32,mass:30,bot:1,d:'Riesiger Stampfer. Zerfällt beim Tod in 4 Minibots. Blitze und Raketen setzen ihm zu.'},
   // --- Urzeit (5. Kategorie, 18.11.): grow = s bis zum Erwachsensein. Jungtiere tragen YOUNG[t] als u.T (70 % LP,
   // 60 % Schaden, kleiner, data.js unten); der T-Rex schlüpft erst aus dem Ei (REX_HATCH). Verhalten in abilities.js.
@@ -288,7 +288,7 @@ const ABIL = {
     {n:'Flicken', d:'Bots bis 50 px reparieren 3 LP je Sekunde, er selbst nicht.'},
   ],
   magnet: [{n:'Anziehen', d:'Alle 12 s zieht er Gegner aus Metall bis 220 px zu sich und betäubt sie kurz: Ritter, Römer, Soldaten, Roboter.'}],
-  tesla: [{n:'Kettenblitz', d:'Der Blitz springt auf bis zu 5 weitere Gegner bis 80 px. Roboter nehmen doppelten Schaden.'}],
+  tesla: [{n:'Kettenblitz', d:'Der Blitz springt auf bis zu 4 weitere Gegner bis 65 px und wird bei jedem Sprung schwächer. Roboter nehmen doppelten Schaden.'}],
   mega: [
     {n:'Stampfen', d:'Jeder Schlag trifft alle Feinde vor ihm und stößt sie zurück.'},
     {n:'Zerfallen', d:'Beim Tod steigen 4 Minibots aus dem Wrack.'},

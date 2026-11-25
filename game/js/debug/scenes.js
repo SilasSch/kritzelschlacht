@@ -25,6 +25,8 @@ export const SCENES = {
   trommler(world) { world.teamMode = true; placeRect(world, 'krieger', 16, .3, .35, .36, .65, 'blau'); placeRect(world, 'trommler', 2, .22, .45, .24, .55, 'blau'); placeRect(world, 'krieger', 20, .64, .35, .7, .65, 'rot'); },
   adlergriff(world) { world.teamMode = true; placeRect(world, 'adler', 3, .3, .4, .34, .6, 'blau'); placeRect(world, 'krieger', 8, .6, .35, .66, .65, 'rot'); },
   pikenier(world) { world.teamMode = true; placeRect(world, 'pikenier', 20, .3, .3, .36, .7, 'blau'); placeRect(world, 'reiter', 12, .7, .3, .78, .7, 'rot'); spawn(world, 'elefant', world.W * .8, world.H * .5, 'rot'); },
+  // Teslaspule (25.11., Nerf): 12 Teslas gegen 42 Krieger, je 84 Punkte wie tools/teslalab.mjs
+  tesla(world) { world.teamMode = true; placeRect(world, 'tesla', 12, .22, .3, .34, .7, 'blau'); placeRect(world, 'krieger', 42, .66, .3, .78, .7, 'rot'); },
   keil(world) { world.teamMode = true; placeRect(world, 'reiter', 12, .15, .35, .25, .65, 'blau'); placeRect(world, 'ritter', 12, .66, .35, .72, .65, 'rot'); },
   grenades(world) { world.teamMode = true; placeRect(world, 'krieger', 40, .4, .3, .5, .7, 'blau'); placeRect(world, 'grenadier', 16, .72, .35, .78, .65, 'rot'); },
   tank(world) { world.teamMode = true; placeRect(world, 'soldat', 36, .42, .3, .5, .7, 'blau'); spawn(world, 'panzer', world.W * .72, world.H * .5, 'rot'); },

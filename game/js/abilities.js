@@ -1493,8 +1493,13 @@ export function laserShot(world, u, t) {
 }
 
 /* Teslaspule: Kettenblitz wie der Blitz des Magiers (Ereignis spell/bolt), auf bis zu JUMPS weitere Feinde bis R px vom
-   letzten Treffer, je Sprung ×FALL. Schadensart 'lightning' (Roboter ×2, auch die eigenen Teslas treffen nur Feinde). */
-export const TESLA = { JUMPS: 5, R: 80, FALL: .85 };
+   letzten Treffer, je Sprung ×FALL. Schadensart 'lightning' (Roboter ×2, auch die eigenen Teslas treffen nur Feinde).
+   Nerf 25.11. (Silas: „tesla coils müssen generfed werden“): vorher JUMPS 5, R 80, FALL .85 (ein Schuss in einen Pulk
+   machte 4,1 × dmg, jetzt 2,8 × dmg; Einzelziele unverändert). Stellschrauben zum Nachjustieren, Wirkung je Wert vorher
+   mit `SET="JUMPS=4,FALL=.7,R=65" node tools/teslalab.mjs 4 84` messen:
+   JUMPS = Sprünge (mehr Ziele), FALL = Restschaden je Sprung (wie hart Pulks bestraft werden), R = Sprungweite (kleiner:
+   auseinanderziehen hilft mehr). Leben/Schaden/Feuerrate/Kosten stehen in data.js (UNITS.tesla hp/dmg/cd/cost). */
+export const TESLA = { JUMPS: 4, R: 65, FALL: .7 };
 const TS_HIT = new Array(TESLA.JUMPS + 1).fill(null);
 let TS_W = null, TS_F = null, TS_N = 0, TS_X = 0, TS_Y = 0, TS_B = null, TS_D = 0;
 function arcTest(v) {

@@ -11,7 +11,7 @@ import { snapshotBattle, resetFight } from '../game/js/battle.js';
 import { step, battleWinner } from '../game/js/sim.js';
 import { EMOTES, sendEmote,
   makeCode, normCode, roomName, nextRound, roundDef, packArmy, unpackArmy, splitChunks, createMatch, view, hostStart,
-  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf, giveUp, canGiveUp,
+  markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms, ONLINE_CATS, CHUNK, castVote, randomRound, budgetOf, giveUp, canGiveUp, PROTO,
 } from '../game/js/online.js';
 import { RULES, RULE_IDS, MAP_IDS, ruleAllows, applyMap, mapParts, resolveVote, mapSVG } from '../game/js/rules.js';
 const allowed = (rule, maxCost = 6) => Object.keys(UNITS).filter(t => ruleAllows(rule, t) && UNITS[t].cost < maxCost);
@@ -292,14 +292,14 @@ test('Online: manipulierte Armee des Gegners wird abgelehnt, fremde Daten störe
   assert.ok(A2.fight.units.every(u => u.team === 'rot'), 'eigene geschummelte Armee kämpft auch lokal nicht mit');
   // Müll in presence
   const C = createMatch('guest');
-  for (const junk of [null, 5, 'x', [], { ks: 2, cfg: {} }, { ks: 1, cfg: { r: 'a' } }, { ks: 1, cfg: { r: 1, cat: 'gelaende', budget: 100 } }]) onPeer(C, junk, W, H);
+  for (const junk of [null, 5, 'x', [], { ks: PROTO, cfg: {} }, { ks: 1, cfg: { r: 'a' } }, { ks: 1, cfg: { r: 1, cat: 'gelaende', budget: 100 } }]) onPeer(C, junk, W, H);
   assert.equal(C.cfg, null);
-  assert.equal(pickPeer([{ isMe: true, presence: { ks: 2 } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 } }, { isMe: false, presence: { ks: 2 }, peer: 'p2' }]).peer, 'p2');
+  assert.equal(pickPeer([{ isMe: true, presence: { ks: PROTO } }, { isMe: false, presence: {} }, { isMe: false, presence: { ks: 1 } }, { isMe: false, presence: { ks: PROTO }, peer: 'p2' }]).peer, 'p2');
   // pickPeer filtert Gegenrolle und bevorzugt bekannten peerRef (#59)
   const peers3 = [
-    { isMe: false, peer: 'pHost2', presence: { ks: 2, role: 'host' } },
-    { isMe: false, peer: 'pGuest1', presence: { ks: 2, role: 'guest' } },
-    { isMe: false, peer: 'pGuest2', presence: { ks: 2, role: 'guest' } },
+    { isMe: false, peer: 'pHost2', presence: { ks: PROTO, role: 'host' } },
+    { isMe: false, peer: 'pGuest1', presence: { ks: PROTO, role: 'guest' } },
+    { isMe: false, peer: 'pGuest2', presence: { ks: PROTO, role: 'guest' } },
   ];
   assert.equal(pickPeer(peers3, 'guest').peer, 'pGuest1');
   assert.equal(pickPeer(peers3, 'guest', 'pGuest2').peer, 'pGuest2');
@@ -421,4 +421,124 @@ test('Emotes: Zähler in presence, Gegner sieht jedes neue genau einmal, Sperre 
   ev = onPeer(B, { ...JSON.parse(JSON.stringify(view(A))), emo: { n: 99, k: 42 } }, 1000, 600);
   assert.ok(!ev.includes('emote'), 'unbekanntes Emote wird ignoriert');
   assert.ok(EMOTES.length >= 4);
+});
+
+/* ---------- Lobby-Einstellungen und Regeländerung im Spiel (25.11.) ---------- */
+import { cleanSet, setDiff, DEFAULT_SET, proposeSet, answerProp, matchWinner, myPick } from '../game/js/online.js';
+import { rulePool, ruleGroup, RULE_GROUP_IDS } from '../game/js/rules.js';
+
+test('Online-Lobby: Einstellungen werden bereinigt, jede Regel hat genau eine Gruppe', () => {
+  assert.deepEqual(cleanSet(null), { ...DEFAULT_SET, rules: [...DEFAULT_SET.rules] });
+  const s = cleanSet({ budget: 999, pick: 'x', rules: ['eig', 'quatsch'], maps: 'feld', time: 60, goal: 3 });
+  assert.deepEqual(s, { budget: 150, pick: 'vote', rules: ['eig'], maps: 'feld', time: 60, goal: 3 });
+  assert.deepEqual(cleanSet({ rules: [] }).rules, RULE_GROUP_IDS);
+  for (const id of RULE_IDS) assert.ok(RULE_GROUP_IDS.includes(ruleGroup(id)), id);
+  assert.ok(rulePool(['kat']).every(id => ruleGroup(id) === 'kat'));
+  assert.ok(rulePool(['kat']).length >= 3);
+  assert.deepEqual(setDiff({ budget: 100 }, { budget: 250, time: 90 }).map(d => d.k), ['budget', 'time']);
+});
+
+test('Online-Lobby: Gast übernimmt die Einstellungen; Regel-Pool, nur offenes Feld und Malzeit wirken auf die Runde', () => {
+  const A = createMatch('host', { budget: 250, rules: ['kat'], maps: 'feld', time: 90 }, createRng(21)), B = createMatch('guest');
+  hostStart(A); const { evB } = link(A, B);
+  assert.ok(!evB.includes('set'), 'beim Beitreten kein Hinweis auf „neue Regeln“');
+  assert.equal(B.set.budget, 250); assert.equal(B.set.time, 90);
+  assert.ok(A.cfg.opts.rules.every(id => ruleGroup(id) === 'kat'));
+  assert.deepEqual(A.cfg.opts.maps, ['feld']);
+  assert.equal(B.cfg.time, 90);
+  assert.equal(B.phase, 'vote');
+  // ältere Räume ohne Einstellungen und 2v2-Räume (mode) erscheinen richtig in der Lobby
+  assert.deepEqual(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150, mode: 'tft' } } }]), []);
+  assert.equal(openRooms([{ isMe: false, presence: { open: { code: 'kx7p', budget: 150, set: { goal: 2 } } } }])[0].set.goal, 2);
+});
+
+test('Online-Lobby: Zufall lost Regel und Karte ohne Abstimmung aus', () => {
+  const A = createMatch('host', { pick: 'random' }, createRng(22)), B = createMatch('guest');
+  assert.deepEqual(hostStart(A), ['round']);
+  assert.equal(A.phase, 'paint');
+  const { evB } = link(A, B);
+  assert.ok(evB.includes('round'));
+  assert.equal(B.phase, 'paint'); assert.equal(B.cfg.cat, A.cfg.cat); assert.equal(B.cfg.map, A.cfg.map);
+});
+
+// Runde bis zum Ergebnis spielen; winner: 'blau' | 'rot'
+function playRound(A, B, winner) {
+  const wa = createWorld(W, H, 1); wa.teamMode = true; spawn(wa, allowed(A.cfg.cat, 99)[0], 200, 300, 'blau');
+  const wb = createWorld(W, H, 2); wb.teamMode = true; spawn(wb, allowed(B.cfg.cat, 99)[0], 1400, 300, 'rot');
+  markReady(A, packArmy(wa, 'blau')); markReady(B, packArmy(wb, 'rot'));
+  link(A, B);
+  finishFight(A, winner); finishFight(B, winner);
+  link(A, B);
+}
+
+test('Online-Lobby: Verlierer wählt allein, die Stimme des anderen zählt nicht', () => {
+  const A = createMatch('host', { pick: 'loser' }, createRng(23)), B = createMatch('guest');
+  hostStart(A); voteBoth(A, B);
+  assert.equal(A.cfg.chooser, undefined, 'erste Runde: beide stimmen ab');
+  playRound(A, B, 'blau');
+  wantNext(A); wantNext(B); link(A, B);
+  assert.equal(A.cfg.chooser, 'rot'); assert.equal(B.cfg.chooser, 'rot');
+  assert.equal(myPick(A), false); assert.equal(myPick(B), true);
+  assert.deepEqual(castVote(A, A.cfg.opts.rules[0], A.cfg.opts.maps[0]), [], 'Blau darf nicht wählen');
+  const o = B.cfg.opts;
+  castVote(B, o.rules[2], o.maps[1]); link(A, B);
+  assert.equal(A.phase, 'paint'); assert.equal(A.cfg.cat, o.rules[2]); assert.equal(B.cfg.map, o.maps[1]);
+});
+
+test('Online-Lobby: Best of 3 endet bei 2 Siegen, danach beginnt ein neues Match bei 0:0', () => {
+  const A = createMatch('host', { goal: 2 }, createRng(24)), B = createMatch('guest');
+  hostStart(A); voteBoth(A, B);
+  playRound(A, B, 'rot');
+  assert.equal(matchWinner(A), null);
+  wantNext(A, true); wantNext(B, true); link(A, B);
+  playRound(A, B, 'rot');
+  assert.equal(matchWinner(A), 'rot'); assert.equal(matchWinner(B), 'rot');
+  wantNext(A); wantNext(B); link(A, B);
+  assert.deepEqual(A.score, { blau: 0, rot: 0 }); assert.deepEqual(B.score, { blau: 0, rot: 0 });
+  assert.equal(B.match, 2);
+});
+
+test('Online-Lobby: Regeländerung im Spiel: Gast schlägt vor, Host nimmt an, Abstimmung wird neu ausgelost', () => {
+  const A = createMatch('host', { budget: 150 }, createRng(25)), B = createMatch('guest');
+  hostStart(A); link(A, B);
+  assert.equal(B.phase, 'vote');
+  const r0 = A.cfg.r;
+  assert.deepEqual(proposeSet(B, { ...B.set, budget: 400, rules: ['eig'] }), ['proposed']);
+  const l1 = link(A, B);
+  assert.ok(l1.evA.includes('peerprop'));
+  assert.equal(A.peerProp.s.budget, 400);
+  const ev = answerProp(A, true);
+  assert.ok(ev.includes('set') && ev.includes('vote'));
+  assert.equal(A.cfg.r, r0); assert.equal(A.cfg.rev, 1);
+  assert.ok(A.cfg.opts.rules.every(id => ruleGroup(id) === 'eig'));
+  const l2 = link(A, B);
+  assert.ok(l2.evB.includes('propok') && l2.evB.includes('set') && l2.evB.includes('vote'));
+  assert.equal(B.set.budget, 400); assert.equal(B.cfg.budget, 400); assert.equal(B.cfg.rev, 1);
+  assert.equal(B.prop, null);
+  // danach geht es normal weiter
+  voteBoth(A, B);
+  assert.equal(A.phase, 'paint'); assert.equal(B.phase, 'paint');
+});
+
+test('Online-Lobby: Host schlägt nach der Runde vor, Gast lehnt ab; angenommen gilt es ab der nächsten Runde', () => {
+  const A = createMatch('host', { budget: 100 }, createRng(26)), B = createMatch('guest');
+  hostStart(A); voteBoth(A, B);
+  playRound(A, B, 'blau');
+  proposeSet(A, { ...A.set, time: 60 });
+  let l = link(A, B);
+  assert.ok(l.evB.includes('peerprop'));
+  answerProp(B, false);
+  l = link(A, B);
+  assert.ok(l.evA.includes('propno'));
+  assert.equal(A.set.time, 0); assert.equal(A.prop, null);
+  // zweiter Versuch, angenommen: die laufende Runde bleibt, die nächste hat die Malzeit
+  proposeSet(A, { ...A.set, time: 60 });
+  link(A, B); answerProp(B, true); l = link(A, B);
+  assert.ok(l.evA.includes('propok') && l.evB.includes('set'));
+  assert.equal(A.set.time, 60); assert.equal(B.set.time, 60);
+  assert.equal(A.phase, 'result'); assert.equal(A.cfg.time, undefined);
+  wantNext(A); wantNext(B); link(A, B);
+  assert.equal(A.cfg.time, 60); assert.equal(B.cfg.time, 60);
+  // gleicher Vorschlag wie die aktuellen Einstellungen: nichts
+  assert.deepEqual(proposeSet(A, A.set), []);
 });

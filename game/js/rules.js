@@ -129,3 +129,25 @@ export function mapSVG(id, w = 120, h = 68) {
     + `<rect width="${w / 2}" height="${h}" rx="6" fill="#3f7cff" opacity=".08"/><rect x="${w / 2}" width="${w / 2}" height="${h}" fill="#ff4d4d" opacity=".08"/>${parts}`
     + `<line x1="${w / 2}" y1="2" x2="${w / 2}" y2="${h - 2}" stroke="#333" stroke-dasharray="3 3" opacity=".35"/></svg>`;
 }
+
+/* ---------- Regel-Gruppen (Online-Lobby, 25.11.) ---------- */
+// Welche Arten von Regeln in einer Partie vorkommen dürfen. Jede Regel gehört zu genau einer Gruppe.
+export const RULE_GROUPS = [
+  { id: 'kat', n: 'Kategorien', d: 'Eine Kategorie: Armee, Tiere, Mythisch …' },
+  { id: 'mix', n: 'Mischungen', d: 'Zwei oder mehr Kategorien zusammen' },
+  { id: 'eig', n: 'Eigenschaften', d: 'Nur Fernkampf, nur Flieger, nur Billige …' },
+  { id: 'bud', n: 'Budget-Spezial', d: 'Halbes oder doppeltes Budget' },
+];
+export const RULE_GROUP_IDS = RULE_GROUPS.map(g => g.id);
+export function ruleGroup(id) {
+  const r = RULE[id]; if (!r) return null;
+  if (r.bm) return 'bud';
+  if (r.units) return 'eig';
+  return r.cats && r.cats.length === 1 ? 'kat' : 'mix';
+}
+// Regeln aus den gewählten Gruppen (leer oder ungültig: alle)
+export function rulePool(groups) {
+  const g = Array.isArray(groups) ? groups.filter(x => RULE_GROUP_IDS.includes(x)) : [];
+  const out = g.length ? RULE_IDS.filter(id => g.includes(ruleGroup(id))) : RULE_IDS;
+  return out.length ? out : RULE_IDS;
+}

@@ -213,7 +213,7 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
 .banner{position:absolute;left:0;right:0;top:22%;text-align:center;pointer-events:none;font-family:var(--f-logo);font-size:clamp(30px,6vw,64px);color:var(--gold);
   -webkit-text-stroke:2px var(--ink);paint-order:stroke fill;text-shadow:3px 4px 0 var(--ink);animation:pop .5s cubic-bezier(.3,1.7,.5,1) both;padding:0 16px}
 @keyframes pop{from{transform:scale(.3) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
-.toast{position:absolute;left:50%;bottom:150px;z-index:70;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:12px;font-size:14px;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.toast{position:absolute;left:50%;bottom:214px;z-index:70;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 16px;border-radius:12px;font-size:14px;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
 
 /* HUD-Größe zur Fenstergröße: kleine Fenster (auch das Artifact-Fenster) verkleinern die Leisten, damit das Spielfeld
    frei bleibt; große Bildschirme (4K ohne Skalierung) vergrößern sie. zoom skaliert Layout und Klickflächen mit. */
@@ -454,7 +454,7 @@ body.hud-fight .misbar .btn{padding:7px 12px;border-radius:999px;font-size:13.5p
         <button class="ib shadow" id="bDice" title="Zufallsschlacht" aria-label="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button>
         <button class="ib shadow" id="bWatch" title="Zuschauen: Zufallsschlachten laufen von allein nacheinander" aria-label="Zuschauen" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><!-- Zuschau-Modus (25.11.) -->
         <button class="ib shadow" id="bWeather" title="Wetter: Klar" aria-label="Wetter"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.2 9.6 4.2 4.2 0 0 0 7 18z"/></svg></button><!-- Wetter (25.11.) -->
-        <button class="ib shadow" id="bCode" title="Code laden: geteilte Schlacht oder eigenes Level" aria-label="Code laden" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg></button><!-- Teilen (Audit 18.11.) -->
+        <button class="ib shadow" id="bCode" title="Code laden: geteilte Schlacht oder eigenes Level" aria-label="Code laden" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><rect x="6" y="5" width="12" height="16" rx="2"/><path d="M9 5V3.5h6V5M9 11h6M9 15h4"/></svg></button><!-- Teilen (Symbol Zwischenablage statt Download-Pfeil, UX-Review 25.11.) (Audit 18.11.) -->
         <button class="ib shadow txt" id="bSpeed" title="Tempo">1×</button>
         <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
         <button class="ib shadow" id="bPause" title="Pause (P)" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIco"><path d="M9 5v14M15 5v14"/></svg></button>

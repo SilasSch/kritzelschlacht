@@ -68,7 +68,7 @@ export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
     if (px < r || py < r || px > W - r || py > H - r) continue;
     if (!canPaintAt(world, px, mission, phase, py)) continue;
     if (team === EDITOR && px <= zoneX(world)) continue;
-    if (!T.fly && world.terr[cellIndex(world, px, py)] === 4) continue;
+    { const tc = world.terr[cellIndex(world, px, py)]; if (!T.fly && (tc === 4 || tc === 2)) continue; }   // Bodentruppen nicht in Mauer oder Lava (Silas 25.11.); Flieger dürfen darüber
     let ok = true;
     query(world, px, py, minD + 26, v => {
       if (!!v.T.fly !== !!T.fly && sel !== 'geist') return;

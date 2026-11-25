@@ -137,3 +137,14 @@ test('Jet-Rework: oben weicht er Kugeln aus, unten nicht; Täuschkörper lassen 
   assert.ok(j.flareT > 0, 'Täuschkörper geworfen');
   assert.equal(w.proj.filter(p => p.kind === 'aam' && p.tg === j).length, 0);
 });
+
+test('Jet trifft einzelne Bodenziele, auch laufende (Silas 25.11.: „trifft einzelne Units einfach nie“)', () => {
+  for (const moving of [false, true]) {
+    const w = mkWorld(3), j = spawn(w, 'jet', 200, 450, 'blau'), k = spawn(w, 'krieger', 1100, 400, 'rot');
+    j.hp = 1e6;
+    if (moving) { const d = spawn(w, 'sani', 100, 100, 'blau'); d.T = { ...d.T, speed: 0 }; d.hp = 1e9; }
+    else k.T = { ...k.T, speed: 0 };
+    rebuildHash(w); run(w, 8);
+    assert.equal(k.alive, false, moving ? 'laufender Krieger' : 'stehender Krieger');
+  }
+});

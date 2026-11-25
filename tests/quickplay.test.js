@@ -80,3 +80,19 @@ test('Gegner vorstellen: Kamera fährt heran und endet auf dem ganzen Feld', () 
   assert.ok(Math.abs(cam.zoom - cam.fit) < 1e-9);
   assert.deepEqual(armySummary(w.units, 'rot'), [['krieger', 6]]);
 });
+
+test('placeQuick: auf keiner Karte stehen Bodentruppen in Lava oder Mauer, sie rücken auf freie Plätze ihrer Hälfte', async () => {
+  const { MAPS, applyMap } = await import('../game/js/rules.js');
+  const { seeded } = await import('../game/js/waves.js');
+  const { cellIndex: ci } = await import('../game/js/world.js');
+  for (const map of MAPS) for (let s = 1; s <= 4; s++) {
+    const w = createWorld(1600, 900, s); applyMap(w, map.id);
+    const plan = quickPlan(90, seeded(s * 31 + map.id.length), 'rot');
+    const n = plan.reduce((a, p) => a + p.n, 0);
+    placeQuick(w, plan, 'rot');
+    const bad = w.units.filter(u => !u.T.fly && [2, 4].includes(w.terr[ci(w, u.x, u.y)]));
+    assert.deepEqual(bad.map(u => u.type), [], `${map.id}/${s}`);
+    assert.ok(w.units.every(u => u.x >= 800), `${map.id}/${s}: Rot bleibt rechts`);
+    assert.ok(w.units.length >= n * .9, `${map.id}/${s}: ${w.units.length} von ${n} aufgestellt`);
+  }
+});

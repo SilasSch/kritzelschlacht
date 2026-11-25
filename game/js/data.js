@@ -50,7 +50,7 @@ export const UNITS = {
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,high:1,mass:12,d:'Schwebt auf Abstand und feuert Salven. Gepanzert gegen Kugeln, Pfeile und Raketen treffen voll. Nahkämpfer kommen nicht ran und werfen nur Steine.'},
   // Lufteinheiten (18.11., air.js): Jet = Luftüberlegenheit im Überflug, Kampfdrohne = billige Kamikaze-Drohne gegen Panzerung,
   // Bomber = langsamer Teppich aus Bomben gegen Bodentruppen. Alle drei fliegen hoch (high).
-  jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:220,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast heran, jagt zuerst Flieger und stürzt sich sonst im Tiefflug auf Bodengruppen. Zu schnell für die meisten Kugeln, aber MG und Panzer holen ihn runter.'},
+  jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:170,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast heran, jagt zuerst Flieger und stürzt sich sonst im Tiefflug auf Bodengruppen. Zu schnell für die meisten Kugeln, aber MG und Panzer holen ihn runter.'},
   kampfdrohne:{n:'Kampfdrohne',cat:'modern',col:'#9aa39a',r:6,hp:24,dmg:70,range:4,splash:26,speed:130,cd:4,cost:3,fly:1,flyZ:30,high:1,mass:.4,d:'Billige Kamikaze-Drohne. Sucht sich das teuerste Ziel in der Nähe und stürzt sich hinein. Zerbrechlich.'},
   bomber:{n:'Bomber',cat:'modern',col:'#6f7d63',r:20,hp:620,dmg:60,range:4,splash:50,speed:52,cd:5,cost:26,fly:1,flyZ:86,high:1,mass:25,d:'Langsamer Riese. Überfliegt die dichteste Gruppe am Boden und wirft einen Bombenteppich, der auch Eigene trifft. Knackt Panzer und Elefanten. Wehrlos gegen Flieger und Gewehre.'},
   // --- Task 6: Kreaturen (Spez. #34; Verhalten in abilities.js, Abschnitt Kreaturen) ---
@@ -91,7 +91,7 @@ export const UNITS = {
   spinne:{n:'Springspinne',cat:'schrott',col:'#4a4552',r:9,hp:80,dmg:11,range:3,speed:70,cd:.8,cost:3,mass:1,bot:1,d:'Springt über die Front und über Mauern auf Fernkämpfer und Heiler.'},
   schweisser:{n:'Schweißer',cat:'schrott',col:'#ef8a2e',r:10,hp:90,dmg:9,range:3,speed:46,cd:.7,cost:4,mass:1.4,bot:1,d:'Nahkampf mit dem Schweißbrenner: zündet Gegner an und flickt Bots in der Nähe.'},
   magnet:{n:'Magnet-Mech',cat:'schrott',col:'#9aad58',r:13,hp:260,dmg:16,range:4,speed:38,cd:1.2,cost:5.5,mass:4,bot:1,d:'Zieht Gegner aus Metall zu sich in einen Haufen: Ritter, Römer, Soldaten und andere Roboter.'},
-  tesla:{n:'Teslaspule',cat:'schrott',col:'#c9a27a',r:11,hp:120,dmg:15,range:170,speed:32,cd:2,cost:7,mass:2,bot:1,d:'Kettenblitz springt auf bis zu 6 Gegner. Stark gegen Schwärme und Flieger.'},
+  tesla:{n:'Teslaspule',cat:'schrott',col:'#c9a27a',r:11,hp:120,dmg:15,range:170,speed:32,cd:2,cost:7,mass:2,bot:1,d:'Kettenblitz springt auf bis zu 5 Gegner. Stark gegen Schwärme und Flieger.'},
   mega:{n:'Mega-Mech',cat:'schrott',col:'#b9764a',r:22,hp:1000,dmg:30,range:5,splash:30,speed:30,cd:1.6,cost:32,mass:30,bot:1,d:'Riesiger Stampfer. Zerfällt beim Tod in 4 Minibots. Blitze und Raketen setzen ihm zu.'},
   // --- Urzeit (5. Kategorie, 18.11.): grow = s bis zum Erwachsensein. Jungtiere tragen YOUNG[t] als u.T (70 % LP,
   // 60 % Schaden, kleiner, data.js unten); der T-Rex schlüpft erst aus dem Ei (REX_HATCH). Verhalten in abilities.js.
@@ -206,9 +206,9 @@ const ABIL = {
     {n:'Hoch oben', d:'Hält Abstand und schwebt seitlich hin und her. Nahkämpfer am Boden kommen nicht ran.'},
   ],
   jet: [
-    {n:'Tiefflug-Angriff', d:'Stürzt sich auf die dichteste Gruppe am Boden und zieht eine Garbe als Streifen durch sie. Unten trifft ihn alles etwas härter.'},
+    {n:'Tiefflug-Angriff', d:'Stürzt sich auf die dichteste Gruppe oder ein einzelnes Ziel am Boden und zieht eine Garbe darüber. Unten trifft ihn alles etwas härter.'},
     {n:'Überschallknall', d:'Höchstens alle 7 s durchbricht er beim Anflug die Schallmauer: Bodentruppen im Streifen vor ihm fallen kurz um. Schwergewichte nicht.'},
-    {n:'Fassrolle', d:'Oben verfehlt ihn gut die Hälfte der Kugeln. Kommt eine Rakete, wirft er Täuschkörper und sie geht vorbei.'},
+    {n:'Fassrolle', d:'Oben verfehlt ihn fast die Hälfte der Kugeln. Kommt eine Rakete, wirft er Täuschkörper und sie geht vorbei.'},
     {n:'Luftüberlegenheit', d:'Jagt zuerst Flieger, macht gegen sie dreifachen Schaden und feuert alle 6 s zwei Lenkraketen auf sie.'},
   ],
   kampfdrohne: [
@@ -289,7 +289,7 @@ const ABIL = {
     {n:'Flicken', d:'Bots bis 50 px reparieren 3 LP je Sekunde, er selbst nicht.'},
   ],
   magnet: [{n:'Anziehen', d:'Alle 12 s zieht er Gegner aus Metall bis 220 px zu sich und betäubt sie kurz: Ritter, Römer, Soldaten, Roboter.'}],
-  tesla: [{n:'Kettenblitz', d:'Der Blitz springt auf bis zu 5 weitere Gegner bis 80 px. Roboter nehmen doppelten Schaden.'}],
+  tesla: [{n:'Kettenblitz', d:'Der Blitz springt auf bis zu 4 weitere Gegner bis 65 px und wird bei jedem Sprung schwächer. Roboter nehmen doppelten Schaden.'}],
   mega: [
     {n:'Stampfen', d:'Jeder Schlag trifft alle Feinde vor ihm und stößt sie zurück.'},
     {n:'Zerfallen', d:'Beim Tod steigen 4 Minibots aus dem Wrack.'},

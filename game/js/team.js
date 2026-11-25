@@ -9,7 +9,10 @@
 // Sitze: 0, 1 = Team Blau; 2, 3 = Team Rot. Sitz 0 ist der Host (erstellt den Raum), er verteilt die Sitze und lost die
 // Runden aus. Gesprochen wird nur über presence (wie online.js):
 //   jeder:  { ks: 'ks2v2', v: PROTO, role, pref: 'blau' | 'rot', n: Name, arm: { r, d } | null, want }
-//   Host:   zusätzlich { mode, budget, seats: [peer-ids], cfg, score }
+//   Host:   zusätzlich { mode, budget, seats: [peer-ids], cfg, score, bots }
+// KI-Mitspieler (25.11.) laufen beim Host. Er veröffentlicht sie in seiner presence: bots = [{ id, l: Stufe, t: Team, w: want,
+// a: { r, c: Kurzform der Armee (bot.packBot) } | null }]. Jedes Gerät macht daraus Teilnehmer mit der peer-id
+// <Host>~<id> (botPeers), die wie Menschen Sitze bekommen, Armeen abgeben und weiter wollen. Geht der Host, gehen sie mit.
 // Die Armeen sind klein genug für ein presence-Objekt (höchstens 150 Punkte, jede Einheit kostet mindestens 1).
 // Alle Kämpfe sind deterministisch: Jedes Gerät rechnet beide Duelle und das Finale selbst und kommt zum selben Ergebnis.
 import { UNITS } from './data.js';
@@ -18,10 +21,11 @@ import { step, battleWinner } from './sim.js';
 import { snapshotBattle, resetFight, STEP } from './battle.js';
 import { applyShape } from './shapes.js';
 import { RULE_IDS, MAP_IDS, applyMap, ruleDef } from './rules.js';
-import { unpackArmy, budgetOf, roundDef } from './online.js';
+import { unpackArmy, budgetOf, roundDef, packUnits, PAINT_TYPES } from './online.js';
+import { unpackBot, botName, isLevel, BOT_LEVELS } from './bot.js';
 import { cleanName } from './dailyboard.js';
 
-export const PROTO = 1;
+export const PROTO = 2;   // 2 (25.11.): KI-Mitspieler (bots in der presence des Hosts)
 export const KS = 'ks2v2';
 export const ROOM_PREFIX = 'ks2v2-';
 export const MODES = ['staffel', 'feld'];
@@ -151,17 +155,81 @@ export function createTeamMatch(role, mode = 'staffel', budget = BUDGET_DEFAULT,
     role, rand, mode: MODES.includes(mode) ? mode : 'staffel', budget: BUDGETS.includes(budget) ? budget : BUDGET_DEFAULT,
     seats: [null, null, null, null], me: null, seat: -1, pref: null, name: '',
     phase: 'lobby', cfg: null, score: { blau: 0, rot: 0 }, mine: null, armies: [null, null, null, null], errors: [],
-    want: 0, counted: 0, names: ['', '', '', ''],
+    want: 0, counted: 0, names: ['', '', '', ''], bots: [], botN: 0, levels: [null, null, null, null], prev: null,
   };
 }
 // Was ich veröffentliche
 export function teamView(m) {
   const o = { ks: KS, v: PROTO, role: m.role, pref: m.pref, n: cleanName(m.name), arm: null, want: m.want };
   if (m.mine && m.cfg && m.phase !== 'lobby') o.arm = { r: m.cfg.r, d: m.mine };
-  if (m.role === 'host') { o.mode = m.mode; o.budget = m.budget; o.seats = m.seats; o.cfg = m.cfg; o.score = m.score; }
+  if (m.role === 'host') {
+    o.mode = m.mode; o.budget = m.budget; o.seats = m.seats; o.cfg = m.cfg; o.score = m.score;
+    if (m.bots.length) o.bots = m.bots.map(b => ({ id: b.id, l: b.lvl, t: b.pref, w: b.want, a: b.arm }));
+  }
   return o;
 }
 const live = p => p && !p.isMe && isObj(p.presence) && p.presence.ks === KS && p.presence.v === PROTO;
+
+/* ---------- KI-Mitspieler ---------- */
+export const MAX_BOTS = 3;
+const BOT_ID = /^k[0-9]{1,3}$/;
+// presence-Eintrag bots des Hosts → Teilnehmer wie aus room.peers(). Die Armee kommt in der normalen Form (online.packUnits),
+// damit sie dieselbe Prüfung durchläuft wie die eines Menschen (seatArmy).
+export function botPeers(hostPeer, list, W, H) {
+  const out = [];
+  if (!Array.isArray(list)) return out;
+  for (const b of list.slice(0, MAX_BOTS)) {
+    if (!isObj(b) || typeof b.id !== 'string' || !BOT_ID.test(b.id) || (b.t !== 'blau' && b.t !== 'rot')) continue;
+    const lvl = isLevel(b.l) ? b.l : 'mittel';
+    let arm = null;
+    if (isObj(b.a) && typeof b.a.c === 'string') {
+      try { arm = { r: num(b.a.r), d: packUnits(unpackBot(b.a.c, b.t, W, H, PAINT_TYPES), W, H) }; } catch (e) { arm = { r: num(b.a.r), d: '!' }; }
+    }
+    out.push({ peer: `${hostPeer}~${b.id}`, isMe: false, bot: true, presence: { ks: KS, v: PROTO, role: 'bot', pref: b.t, lvl, n: botName(lvl), arm, want: num(b.w) } });
+  }
+  return out;
+}
+// Teilnehmer samt KI: beim Host aus dem eigenen Zustand, bei den anderen aus der presence des Hosts
+export function withBots(m, peers, W, H) {
+  peers = peers || [];
+  if (m.role === 'host') return m.me ? [...peers, ...botPeers(m.me, teamView(m).bots, W, H)] : peers;
+  const h = peers.find(p => live(p) && p.presence.role === 'host');
+  return h ? [...peers, ...botPeers(h.peer, h.presence.bots, W, H)] : peers;
+}
+// Host, in der Lobby: KI dazu (Stufe, Team). false, wenn kein Platz ist (vier Sitze voll oder das Team schon fest besetzt).
+export function addBot(m, lvl, team) {
+  if (m.role !== 'host' || m.phase !== 'lobby' || !BOT_LEVELS.includes(lvl) || (team !== 'blau' && team !== 'rot')) return false;
+  const humans = m.seats.filter((id, i) => id && !isBotId(m, id));
+  if (m.bots.length >= MAX_BOTS || humans.length + m.bots.length >= 4) return false;
+  // im Team: Host (Blau), KI dieses Teams und Menschen, die ausdrücklich dorthin wollen
+  const fixed = m.bots.filter(b => b.pref === team).length
+    + m.seats.filter((id, i) => id && !isBotId(m, id) && SEAT_TEAM[i] === team && (i === 0 || (m.lastPrefs && m.lastPrefs[id] === team))).length;
+  if (fixed >= 2) return false;
+  m.bots.push({ id: 'k' + (++m.botN), lvl, pref: team, want: 0, arm: null });
+  return true;
+}
+export function removeBot(m, id) {
+  if (m.role !== 'host' || m.phase !== 'lobby') return false;
+  const n = m.bots.length;
+  m.bots = m.bots.filter(b => b.id !== id);
+  return m.bots.length !== n;
+}
+export const isBotId = (m, id) => typeof id === 'string' && id.includes('~');
+export const botOf = (m, seatId) => (m.role === 'host' && isBotId(m, seatId) ? m.bots.find(b => `${m.me}~${b.id}` === seatId) || null : null);
+// Host: Armee einer KI für die laufende Runde (Kurzform)
+export function setBotArm(m, id, c) {
+  const b = m.bots.find(x => x.id === id);
+  if (!b || !m.cfg || m.phase === 'lobby') return false;
+  b.arm = { r: m.cfg.r, c };
+  return true;
+}
+// Host: alle KI wollen die nächste Runde
+export function botsWant(m) {
+  if (!m.cfg) return false;
+  let ch = false;
+  for (const b of m.bots) if (b.want !== m.cfg.r + 1) { b.want = m.cfg.r + 1; ch = true; }
+  return ch;
+}
 
 // Host: Sitze an die Spieler im Raum verteilen (Lobby). peers = room.peers(). Liefert true, wenn sich etwas geändert hat.
 // Wer schon sitzt, bleibt sitzen. Will jemand ins andere Team (pref), bekommt er dort einen freien Sitz oder tauscht mit
@@ -173,6 +241,7 @@ export function hostSeats(m, peers) {
   const seats = [m.me, null, null, null];
   for (let i = 1; i < 4; i++) if (m.seats[i] && here.has(m.seats[i])) seats[i] = m.seats[i];
   const prefOf = id => { const p = here.get(id); return p && (p.pref === 'blau' || p.pref === 'rot') ? p.pref : null; };
+  m.lastPrefs = Object.fromEntries([...here.keys()].map(id => [id, prefOf(id)]));
   for (const [id] of here) {
     if (seats.includes(id)) continue;
     const want = prefOf(id);
@@ -233,6 +302,7 @@ function hostNext(m, peers) {
 // 'score', 'error', 'mode' (Host hat Modus/Budget geändert)
 export function teamPeers(m, peers, W, H) {
   const ev = [];
+  peers = withBots(m, peers, W, H);
   m.lastPeers = peers;
   const byId = new Map(peers.filter(live).map(p => [p.peer, p.presence]));
   if (m.role === 'host') { if (hostSeats(m, peers)) ev.push('seats'); }
@@ -252,7 +322,7 @@ export function teamPeers(m, peers, W, H) {
     }
   }
   m.seat = m.seats.indexOf(m.me);
-  for (let i = 0; i < 4; i++) { const p = m.seats[i] && byId.get(m.seats[i]); if (p) m.names[i] = cleanName(p.n); }
+  for (let i = 0; i < 4; i++) { const p = m.seats[i] && byId.get(m.seats[i]); if (p) { m.names[i] = cleanName(p.n); m.levels[i] = p.role === 'bot' ? p.lvl : null; } else m.levels[i] = null; }
   if (m.seat >= 0) m.names[m.seat] = cleanName(m.name);
   // Armeen einsammeln
   if (m.cfg && (m.phase === 'ready' || m.phase === 'paint')) {
@@ -266,7 +336,7 @@ export function teamPeers(m, peers, W, H) {
       m.armies = texts.map((t, i) => {
         try { return seatArmy(t, m.cfg, i, W, H); } catch (e) { m.errors.push({ seat: i, e: e.message }); return []; }
       });
-      m.phase = 'fight';
+      m.phase = 'fight'; m.prev = { cfg: m.cfg, armies: m.armies };
       ev.push('fight');
       if (m.errors.length) ev.push('error');
     }
@@ -276,8 +346,8 @@ export function teamPeers(m, peers, W, H) {
   return ev;
 }
 // Fehlt ein Spieler, der einen Sitz hat? (Sitz-Indizes)
-export function missing(m, peers) {
-  const ids = new Set(peers.filter(live).map(p => p.peer));
+export function missing(m, peers, W = 1600, H = 900) {
+  const ids = new Set(withBots(m, peers, W, H).filter(live).map(p => p.peer));
   return m.seats.map((id, i) => (i !== m.seat && id && !ids.has(id) ? i : -1)).filter(i => i >= 0);
 }
 // Offene 2v2-Räume aus der Lobby-presence (wie online.openRooms)

@@ -115,8 +115,8 @@ export function stepAir(world, u, dt) {
 // Jet-Rework (25.11., Silas: „useless und uncool“): drei Teile, alle hier und in combat (Ausweichen, Tiefflug-Treffer).
 // A Tiefflug-Angriff: ohne Flieger als Ziel wählt er die dichteste Feindgruppe am Boden (wie der Bomber). Im Anflug
 //   (Ziel näher als STRAFE.DIVE und vor der Nase, cos ≥ STRAFE.AIM_DIVE) sinkt er auf STRAFE.LOW px; ab STRAFE.START px
-//   zieht er STRAFE.DUR s lang eine Garbe: alle STRAFE.GAP s eine Kugel auf einen Bodenpunkt STRAFE.LEAD px vor der
-//   Nase (Streuung STRAFE.SPREAD), die Einschläge laufen also als Streifen durch die Gruppe. Danach zieht er hoch
+//   zieht er STRAFE.DUR s lang eine Garbe: alle STRAFE.GAP s eine Kugel auf einen Bodenpunkt vor der Nase, der mit dem
+//   Anflug über das Ziel läuft (strafeFire), die Einschläge laufen also als Streifen durch die Gruppe. Danach zieht er hoch
 //   (Flughöhe zurück, STRAFE.CLIMB s geradeaus) und hat STRAFE.CD s Pause bis zum nächsten Anflug. Unter
 //   STRAFE.EXPOSED_Z px Höhe trifft ihn alles STRAFE.EXPOSED-fach (combat.hurt) und er weicht nicht aus.
 // B Überschallknall: zu Beginn jeder Garbe (höchstens alle BOOM.CD s) durchbricht er die Schallmauer: Bodentruppen
@@ -125,10 +125,10 @@ export function stepAir(world, u, dt) {
 // C Ausweichen: Kugeln und Pfeile verfehlen ihn mit EVADE.BULLET (Fassrolle, u.rollT für die Optik); kommt eine
 //   Rakete oder Luft-Luft-Rakete auf ihn zu (näher als EVADE.FLARE_D), wirft er Täuschkörper (höchstens alle EVADE.FLARE_CD
 //   s): Luft-Luft-Raketen verlieren das Ziel, gerade Raketen gehen EVADE.FLARE_T s lang an ihm vorbei.
-export const STRAFE = { DIVE: 420, AIM_DIVE: .5, START: 230, AIM: .8, LOW: 24, DUR: .8, GAP: .05, LEAD: 60, SPREAD: 14, DMG: 12,
+export const STRAFE = { DIVE: 420, AIM_DIVE: .5, START: 230, AIM: .8, LOW: 24, DUR: .8, GAP: .05, NEAR: 40, REACH: 200, SPREAD: 10, DMG: 8,
   CLIMB: .7, CD: 2.2, EXPOSED_Z: 40, EXPOSED: 1.15, HIT_R: 40 };
 export const BOOM = { CD: 7, LEN: 220, W: 45, STUN: 1.2, MASS: 20, BURN: 1.4, BURN_T: 1.2 };
-export const EVADE = { BULLET: .55, FLARE_D: 170, FLARE_CD: 7, FLARE_T: 1.2, ROLL_T: .5 };
+export const EVADE = { BULLET: .45, FLARE_D: 170, FLARE_CD: 7, FLARE_T: 1.2, ROLL_T: .5 };
 
 function stepJet(world, u, dt) {
   const T = u.T;
@@ -194,7 +194,11 @@ function startStrafe(world, u) {
   world.events.push({ type: 'sound', k: 'sonic', x: u.x, y: u.y });
 }
 
-// Garbe: Kugel auf einen Bodenpunkt vor der Nase; Ziel ist der nächste Feind dort (sonst nur Einschlag im Boden)
+// Garbe: Kugel auf einen Bodenpunkt vor der Nase. Der Punkt liegt so weit vorn, wie das Ziel (u.tg) entlang der
+// Flugrichtung entfernt ist (zwischen STRAFE.NEAR und STRAFE.REACH px), läuft also mit dem Anflug über das Ziel.
+// Getroffen wird der nächste Feind am Punkt, mit Vorhalt auf seine Bewegung (combat.fire ohne Zielpunkt); nur ohne
+// Feind dort schlägt die Kugel in den Boden. Fix 25.11. (Silas: „trifft einzelne Units einfach nie“): vorher lag der Punkt
+// fest 60 px vor der Nase, mit ±14 px Streuung und ohne Vorhalt; einzelne laufende Ziele lagen fast nie auf der Linie.
 let SF_BEST = null, SF_BD = 0, SF_X = 0, SF_Y = 0, SF_F = null, SF_W = null;
 const sfTest = v => {
   if (!v.alive || v.T.fly || factionOf(SF_W, v) === SF_F || (v.hidden && !(v.seenT > 0))) return;
@@ -204,15 +208,18 @@ function strafeFire(world, u, dt) {
   u.strG = (u.strG || 0) - dt;
   if (u.strG > 0) return;
   u.strG += STRAFE.GAP;
-  const sp = STRAFE.SPREAD, ax = u.x + u.hx * STRAFE.LEAD + (world.rng() - .5) * 2 * sp, ay = u.y + u.hy * STRAFE.LEAD + (world.rng() - .5) * 2 * sp;
-  SF_W = world; SF_F = factionOf(world, u); SF_X = ax; SF_Y = ay; SF_BEST = null; SF_BD = STRAFE.HIT_R * STRAFE.HIT_R;
-  query(world, ax, ay, STRAFE.HIT_R, sfTest); SF_W = null; SF_F = null;
-  const t = SF_BEST; SF_BEST = null;
-  if (t) {
-    fire(world, u, t, 'bullet', ax, ay, STRAFE.DMG);
+  const t = u.tg && u.tg.alive && !u.tg.T.fly ? u.tg : null;
+  const ahead = t ? (t.x - u.x) * u.hx + (t.y - u.y) * u.hy : STRAFE.NEAR;
+  const L = Math.max(STRAFE.NEAR, Math.min(STRAFE.REACH, ahead)), sp = STRAFE.SPREAD;
+  const px = u.x + u.hx * L + (world.rng() - .5) * 2 * sp, py = u.y + u.hy * L + (world.rng() - .5) * 2 * sp;
+  SF_W = world; SF_F = factionOf(world, u); SF_X = px; SF_Y = py; SF_BEST = null; SF_BD = STRAFE.HIT_R * STRAFE.HIT_R;
+  query(world, px, py, STRAFE.HIT_R, sfTest); SF_W = null; SF_F = null;
+  const v = SF_BEST; SF_BEST = null;
+  if (v) {
+    fire(world, u, v, 'bullet', undefined, undefined, STRAFE.DMG);
   } else {
-    world.events.push({ type: 'shot', kind: 'bullet', x: u.x + u.hx * u.T.r, y: u.y, z: u.z, face: u.face, tx: ax, ty: ay, shake: 0, mg: false, ut: 'jet' });
-    world.events.push({ type: 'miss', kind: 'bullet', x: ax, y: ay, a: Math.atan2(u.hy, u.hx), ut: 'jet', wall: false });
+    world.events.push({ type: 'shot', kind: 'bullet', x: u.x + u.hx * u.T.r, y: u.y, z: u.z, face: u.face, tx: px, ty: py, shake: 0, mg: false, ut: 'jet' });
+    world.events.push({ type: 'miss', kind: 'bullet', x: px, y: py, a: Math.atan2(u.hy, u.hx), ut: 'jet', wall: false });
   }
   if ((u.strK = (u.strK || 0) + 1) % 3 === 1) world.events.push({ type: 'sound', k: 'shot' });
 }

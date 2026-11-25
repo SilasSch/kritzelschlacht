@@ -350,6 +350,7 @@ function startMission() {
     resetFight(world, m.fight.snap, m.fight.seed);
     renderer.fx.clear(); markAll();
   } else m.fight = beginFight();
+  if (m.kind === 'waves') m.home = new Map(world.units.filter(u => u.alive && u.team === PLAYER).map(u => [u.id, { x: u.x, y: u.y }]));   // Wellenmodus: Startplätze (nach beginFight, das die Einheiten neu aufstellt)
   undoStack.length = 0; ui.resetBattle(); audio.init(); audio.play('go');
   ui.updateMission(); ui.updateControls();
 }
@@ -402,13 +403,21 @@ function finishMission() {
 }
 
 /* ---------- Wellenmodus (25.11.) ---------- */
-// Läuft als Mission ohne Kapitel (kind 'waves', waves.js). Nach einer geschafften Welle bleiben die Überlebenden stehen,
+// Läuft als Mission ohne Kapitel (kind 'waves', waves.js). Nach einer geschafften Welle kehren die Überlebenden auf ihren Startplatz zurück,
 // das Budget wächst um waveGain, die nächste Welle steht schon rechts. Bestwert in save.waves.
 function playWaves() { loadLevelDef(wavesLevel((Math.random() * 2 ** 31) | 0), { kind: 'waves' }); }
 function nextWave() {
   const m = game.mission, k = m.wave;
-  world.units = world.units.filter(u => u.alive && u.team === PLAYER);
-  for (const u of world.units) { u.vx = 0; u.vy = 0; }
+  // Überlebende gehen auf ihren Startplatz zurück (frisch aufgestellt, Schaden bleibt). Wer keinen hat (im Kampf
+  // entstanden), bleibt in der Höhe und rückt in die eigene Zone.
+  const xMax = zoneX(world), home = m.home || new Map();
+  const alive = world.units.filter(u => u.alive && u.team === PLAYER);
+  world.units = [];
+  for (const u of alive) {
+    const h = home.get(u.id), n = spawn(world, u.type, h ? h.x : Math.min(u.x, xMax - 6), h ? h.y : u.y, PLAYER);
+    n.hp = n.growT > 0 ? Math.min(u.hp, n.T.hp) : u.hp; n.reborn = u.reborn;
+    if (u.shape) applyShape(n, u.shape, false);
+  }
   const gain = waveGain(k);
   m.wave = k + 1; m.budget += gain; m.par = m.budget;
   m.phase = 'plan'; m.t = 0; m.endT = -1; m.result = null; m.fight = null; snap = null;
@@ -434,7 +443,7 @@ function endWaves() {
 game.playWaves = playWaves;
 registerMode({
   id: 'waves', tag: tr('Spielmodus'), n: tr('Wellenmodus'),
-  d: tr('Welle um Welle stürmen Gegner heran. Wer überlebt, bleibt stehen, nach jeder Welle malst du nach.'),
+  d: tr('Welle um Welle stürmen Gegner heran. Wer überlebt, kehrt auf seinen Platz zurück, nach jeder Welle malst du nach.'),
   foot: g => (g.save.waves.best ? `<span class="tag best">${tr('Bestwert: Welle {k}', { k: g.save.waves.best })}</span>` : `<span class="tag">${tr('Noch nicht gespielt')}</span>`),
   open: () => { ui.hideOverlays(); playWaves(); },
 });

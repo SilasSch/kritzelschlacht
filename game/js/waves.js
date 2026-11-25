@@ -1,5 +1,5 @@
 // Wellenmodus (25.11.): Welle um Welle kommen Gegner von rechts. Vor jeder Welle malt der Spieler nach, wer überlebt,
-// bleibt stehen. Jede geschaffte Welle bringt Punkte; die Punkte sind ein Gesamtkonto (Verluste kommen nicht zurück).
+// kehrt auf seinen Startplatz zurück. Jede geschaffte Welle bringt Punkte; die Punkte sind ein Gesamtkonto (Verluste kommen nicht zurück).
 // Vorbei ist es, wenn Blau niemand mehr hat. Rein bis auf das Aufstellen (placeQuick); Zufall aus der Saat des Laufs.
 import { quickPlan, placeQuick } from './quick.js';
 import { MAPS, applyMap } from './rules.js';
@@ -23,7 +23,7 @@ export function wavesLevel(seed) {
   const rand = seeded(seed ^ 0x5eed);
   const maps = MAPS.filter(m => m.id !== 'furt');
   return {
-    id: 'waves', n: 'Wellenmodus', hint: 'Halte so viele Wellen wie möglich. Wer überlebt, bleibt stehen. Nach jeder Welle gibt es neue Punkte.',
+    id: 'waves', n: 'Wellenmodus', hint: 'Halte so viele Wellen wie möglich. Wer überlebt, kehrt auf seinen Platz zurück. Nach jeder Welle gibt es neue Punkte.',
     budget: WAVES.START, par: WAVES.START, place: [], waves: { seed, map: maps[rand() * maps.length | 0].id },
   };
 }

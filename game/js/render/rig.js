@@ -1107,7 +1107,7 @@ DEF.elefant = {
    der Roboter, Fell, Stirnband, Rückenstreifen der Dinos); darum je Team gebacken (ERA_ACCENT). Bild 0/1 = Schritt
    (Räder, Beine) bzw. Flügel und Rotoren. Jungtiere und das Ei: pose.js verkleinert die Figur nach u.T.r. */
 export const ERA_ACCENT = new Set(['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega',
-  'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
+  'hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei', 'mammut']);
 const METAL_DK = '#4a4552', SKIN = '#f2c9a0', HAIR = '#5a4334', WOOD = '#8a5a33';
 // Rad mit Speiche (Bild f dreht die Speiche)
 function wheel(c, r, x, y, s, f) {
@@ -1382,6 +1382,32 @@ Object.assign(DEF, {
       poly(c, r, [[.25, -.45], [.3, -1.0], [.7, -1.15], [1.5, -1.05], [1.55, -.75], [.95, -.62], [1.45, -.55], [1.35, -.38], [.6, -.3]], k.col);
       for (const x of [.95, 1.1, 1.25, 1.4]) poly(c, r, [[x, -.75], [x + .05, -.65], [x + .1, -.75]], '#fff', .6);
       Ln(c, [[r * .45, -r * .2], [r * .7, -r * .05]], k.col, 1.6); Ln(c, [[r * .4, -r * .1], [r * .6, r * .05]], k.dk, 1.4);
+      whites(c, r, this.eyes);
+    },
+  },
+  // Mammut (Urzeit-Rework 25.11.): zotteliger Rumpf mit Fellfransen, hoher Kopf mit Buckel, Rüssel, gebogene Stoßzähne,
+  // Decke in Teamfarbe auf dem Rücken (darauf sitzt ein Höhlenmensch, abilities.RIDE)
+  mammut: {
+    eyes: eyePair(.98, -.42, .1),
+    body(c, r, k, f) {
+      const l = f ? .1 : -.1, fur = shade(k.col, -.25);
+      for (const [x, i] of [[-.75, 0], [-.4, 1], [.15, 0], [.5, 1]]) RR(c, (x + (i ? l : -l)) * r - r * .13, r * .25, r * .27, r * .68, r * .1, i ? fur : k.dk);
+      poly(c, r, [[-.95, -.1], [-1.25, .1], [-1.1, .2], [-.9, .1]], fur);
+      E(c, -r * .1, 0, r * 1.02, r * .7, k.col);
+      // Fellfransen unten
+      const fr = []; for (let i = 0; i <= 10; i++) fr.push([-1.0 + i * .19, .45 + (i % 2 ? .22 : 0)]);
+      poly(c, r, [[-1.02, .2], ...fr, [.92, .2]], fur, 1.1);
+      for (const x of [-.6, -.25, .1, .45]) Ln(c, [[x * r, -r * .35], [(x - .08) * r, -r * .1]], fur, 1, false);
+      // Decke in Teamfarbe
+      poly(c, r, [[-.55, -.62], [.25, -.66], [.35, -.2], [-.65, -.18]], k.shield, 1.2);
+      // Kopf mit Buckel, Ohr, Rüssel
+      E(c, r * .78, -r * .45, r * .52, r * .5, k.col);
+      E(c, r * .7, -r * .85, r * .3, r * .22, k.col, 0);
+      E(c, r * .55, -r * .35, r * .2, r * .28, fur, 1.1);
+      Ln(c, [[r * 1.15, -r * .2], [r * 1.3, r * .25], [r * 1.25, r * .6], [r * 1.05, r * .72]], k.col, 4.5);
+      // Stoßzähne
+      Ln(c, [[r * .95, -r * .05], [r * 1.5, r * .2], [r * 1.75, -r * .05], [r * 1.7, -r * .3]], '#f3ead8', 2.4);
+      Ln(c, [[r * .8, 0], [r * 1.25, r * .3], [r * 1.5, r * .15]], '#e8dcc4', 1.8);
       whites(c, r, this.eyes);
     },
   },

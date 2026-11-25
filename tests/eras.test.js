@@ -16,9 +16,9 @@ const mkWorld = (seed = 7) => { const w = createWorld(1400, 800, seed); w.teamMo
 const dummy = (w, type, x, y, team = 'rot') => { const e = spawn(w, type, x, y, team); e.hp = 1e9; e.cd = 1e9; e.abCd = 1e9; return e; };
 const run = (w, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { step(w, DT); if (each) each(w.events); w.events.length = 0; } };
 const SCHROTT = ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega'];
-const URZEIT = ['hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex'];
+const URZEIT = ['hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'mammut'];
 
-test('Daten: 9 Roboter und 8 Urzeit-Einheiten malbar, mit Texten, Mehrzahl, Karte und Zeichnung', () => {
+test('Daten: 9 Roboter und 9 Urzeit-Einheiten malbar, mit Texten, Mehrzahl, Karte und Zeichnung', () => {
   const cat = c => Object.keys(UNITS).filter(k => UNITS[k].cat === c && UNITS[k].paint !== false);
   assert.deepEqual(cat('schrott'), SCHROTT);
   assert.deepEqual(cat('urzeit'), URZEIT);

@@ -13,7 +13,7 @@ const mkWorld = (seed = 7) => { const w = createWorld(1400, 800, seed); w.teamMo
 const run = (w, secs, each) => { for (let t = 0; t < secs - 1e-9; t += DT) { step(w, DT); if (each) each(w.events); w.events.length = 0; } };
 
 test('Codes: neue Einheiten hinten an PAINT_TYPES, alte Indizes fest', () => {
-  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier', 'trommler', 'stinktier']);
+  assert.deepEqual(PAINT_TYPES.slice(48), ['koenig', 'jet', 'kampfdrohne', 'bomber', 'lama', 'flamme', 'pikenier', 'trommler', 'stinktier', 'mammut']);
   assert.ok(PAINT_TYPES.length <= 64, 'Typ passt in 6 Bit');
 });
 

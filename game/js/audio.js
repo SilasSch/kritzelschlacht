@@ -43,7 +43,7 @@ export function eventSound(e) {
 // Größe), alle anderen sind Menschen ("uff").
 const METAL = new Set(['panzer', 'heli', 'minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega', 'jet', 'kampfdrohne', 'bomber']);
 const SPIRIT = new Set(['geist']);
-const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei']);
+const BEAST = new Set(['drache', 'troll', 'zyklop', 'phoenix', 'einhorn', 'frosch', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'rexei', 'mammut']);
 export function deathVoice(type) {
   const T = UNITS[type];
   if (!T) return 'die';

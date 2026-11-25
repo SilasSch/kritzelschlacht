@@ -95,14 +95,17 @@ export const UNITS = {
   mega:{n:'Mega-Mech',cat:'schrott',col:'#b9764a',r:22,hp:1000,dmg:30,range:5,splash:30,speed:30,cd:1.6,cost:32,mass:30,bot:1,d:'Riesiger Stampfer. Zerfällt beim Tod in 4 Minibots. Blitze und Raketen setzen ihm zu.'},
   // --- Urzeit (5. Kategorie, 18.11.): grow = s bis zum Erwachsensein. Jungtiere tragen YOUNG[t] als u.T (70 % LP,
   // 60 % Schaden, kleiner, data.js unten); der T-Rex schlüpft erst aus dem Ei (REX_HATCH). Verhalten in abilities.js.
-  hoehle:{n:'Höhlenmensch',cat:'urzeit',col:'#d9a074',r:9,hp:76,dmg:12,range:3,speed:50,cd:.85,cost:2,mass:1,d:'Keule mit Fackel: jeder vierte Schlag zündet den Gegner an.'},
-  speer:{n:'Speerwerfer',cat:'urzeit',col:'#f6d2ac',r:9,hp:45,dmg:13,range:190,speed:46,cd:1.5,cost:2.5,mass:1,d:'Wirft Speere im Bogen, trifft auch Flieger. Weicht Nahkämpfern aus.'},
-  schamane:{n:'Schamanin',cat:'urzeit',col:'#f2c9a0',r:9,hp:45,heal:8,range:90,speed:48,cd:1,cost:3.5,mass:1,d:'Heilt Verbündete. Ihr Kräuterrauch lässt Jungtiere in der Nähe doppelt so schnell wachsen.'},
-  raptor:{n:'Raptor',cat:'urzeit',col:'#e5a04e',r:10,hp:80,dmg:13,range:3,speed:92,cd:.7,cost:2.5,mass:1,grow:10,d:'Schlüpft klein und wächst in 10 s. Springt Fernkämpfer und Heiler an.'},
+  hoehle:{n:'Höhlenmensch',cat:'urzeit',col:'#d9a074',r:9,hp:76,dmg:12,range:3,speed:50,cd:.85,cost:2,mass:1,d:'Keule mit Fackel: jeder vierte Schlag zündet an. Reitet Dinos und Mammuts und wirft von oben Steine.'},
+  speer:{n:'Speerwerfer',cat:'urzeit',col:'#f6d2ac',r:9,hp:45,dmg:13,range:190,speed:46,cd:1.5,cost:2.5,mass:1,d:'Wirft Speere im Bogen, auch auf Flieger. Großwild bremst und verwundet er schwer.'},
+  schamane:{n:'Schamanin',cat:'urzeit',col:'#f2c9a0',r:9,hp:45,heal:10,range:90,speed:48,cd:1,cost:3.5,mass:1,d:'Heilt und bemalt Kämpfer mit Kriegsfarbe: stärker und furchtlos. Ihr Kräuterrauch lässt Jungtiere schneller wachsen.'},
+  raptor:{n:'Raptor',cat:'urzeit',col:'#e5a04e',r:10,hp:80,dmg:13,range:3,speed:92,cd:.7,cost:2.5,mass:1,grow:10,d:'Schlüpft klein und wächst in 10 s. Ab drei jagen Raptoren als Rudel und springen gemeinsam dieselbe Beute an.'},
   ptera:{n:'Flugsaurier',cat:'urzeit',col:'#7fb8b0',r:12,hp:140,dmg:18,range:30,splash:26,speed:80,cd:2.4,cost:4.5,fly:1,flyZ:34,mass:1,d:'Fliegt hoch und stößt herab, um Steine fallen zu lassen: Flächenschaden, sprengt Mauern. Nahkämpfer erwischen ihn nur unten.'},
   anky:{n:'Ankylosaurus',cat:'urzeit',col:'#a68a5b',r:15,hp:330,dmg:16,range:4,speed:34,cd:1.2,cost:6.5,mass:6,grow:12,d:'Gepanzerter Tank, wächst in 12 s. Von vorn halber Schaden, die Schwanzkeule fegt Gegner hinter ihm weg.'},
   trike:{n:'Triceratops',cat:'urzeit',col:'#aaa498',r:15,hp:360,dmg:22,range:4,speed:52,cd:1.2,cost:8,mass:8,grow:12,d:'Wächst in 12 s. Stürmt mit den Hörnern voran durch die Reihen, im Lauf halber Schaden von vorn.'},
   rex:{n:'T-Rex',cat:'urzeit',col:'#5e8a4a',r:20,hp:1000,dmg:34,range:5,splash:24,speed:40,cd:1.4,cost:22,mass:25,grow:24,d:'Startet als Ei, schlüpft nach 8 s und ist nach 24 s ein Riese. Sein Brüllen lässt Kleinere fliehen.'},
+  // Mammut (Urzeit-Rework 25.11., Wunsch Silas): Dickhäuter der Steinzeit, wirft mit den Stoßzähnen, dickes Fell gegen
+  // Pfeile und Speere (combat.hurt); Höhlenmenschen reiten es (abilities.RIDE). Kein Dino: wächst nicht, frisst nicht.
+  mammut:{n:'Mammut',cat:'urzeit',col:'#8a5a3c',r:19,hp:520,dmg:26,range:5,speed:38,cd:1.4,cost:12,mass:14,d:'Zottiger Riese. Schleudert Gegner mit den Stoßzähnen hoch, sein Fell hält Pfeile ab. Höhlenmenschen reiten es.'},
   rexei:{n:'Dino-Ei',cat:'urzeit',col:'#f3e6cf',r:9,hp:160,dmg:0,range:3,speed:0,cd:1,cost:0,mass:3,paint:false,egg:1,d:'Aus dem Ei schlüpft nach 8 s ein T-Rex. Wer früh angreift, trifft ihn hier.'},
 };
 
@@ -295,17 +298,19 @@ const ABIL = {
     {n:'Zerfallen', d:'Beim Tod steigen 4 Minibots aus dem Wrack.'},
   ],
   // --- Urzeit ---
-  hoehle: [{n:'Fackel', d:'Jeder vierte Schlag zündet den Gegner an.'}],
-  speer: [{n:'Speerwurf', d:'Speere im Bogen, auch auf Flieger. Römerschilde halten sie ab.'}, {n:'Ausweichen', d:'Weicht heranstürmenden Nahkämpfern aus.'}],
-  schamane: [{n:'Kräuterrauch', d:'Jungtiere bis 90 px wachsen doppelt so schnell.'}, {n:'Heilen', d:'Heilt einen Verbündeten, Fliehende zuerst.'}],
-  raptor: [{n:'Anspringen', d:'Alle 10 s springt er einen Fernkämpfer oder Heiler bis 200 px weit an. Der erste Biss macht doppelt.'}],
+  hoehle: [{n:'Fackel', d:'Jeder vierte Schlag zündet den Gegner an.'}, {n:'Dino-Reiter', d:'Reitet Triceratops, Ankylosaurus, T-Rex oder Mammut: das Tier flieht nicht mehr, der Reiter wirft von oben Steine.'}],
+  speer: [{n:'Speerwurf', d:'Speere im Bogen, auch auf Flieger. Römerschilde halten sie ab.'}, {n:'Großwildjagd', d:'Speere bleiben in großen Zielen (Masse ab 4) stecken: +30 % Schaden und 3 s langsamer.'}],
+  schamane: [{n:'Kriegsbemalung', d:'Alle 10 s bemalt sie bis zu 4 kämpfende Verbündete: 6 s lang +20 % Schaden und furchtlos.'}, {n:'Kräuterrauch', d:'Jungtiere bis 90 px wachsen doppelt so schnell.'}, {n:'Heilen', d:'Heilt einen Verbündeten, Fliehende zuerst.'}],
+  raptor: [{n:'Rudeljagd', d:'Ab 3 Raptoren beieinander wählen sie eine Beute und springen sie alle zugleich an. Der erste Biss macht doppelt.'}, {n:'Anspringen', d:'Allein springt er alle 10 s Fernkämpfer oder Heiler bis 200 px weit an.'}, {n:'Fressen', d:'Wie jeder Dino: wer einen Gegner erledigt, frisst ihn, heilt und wächst.'}],
   ptera: [{n:'Steinwurf', d:'Lässt Steine fallen: Flächenschaden an Feinden am Boden und an Mauern. Eigene und Flieger trifft er nicht.'}, {n:'Sturzflug', d:'Zum Abwurf stößt er kurz herab, nur dann erreichen ihn Nahkämpfer. Oben werfen sie Steine nach ihm.'}],
-  anky: [{n:'Panzerplatten', d:'Von vorn halber Schaden durch Schläge, Pfeile und Kugeln.'}, {n:'Schwanzkeule', d:'Alle 8 s fegt er Gegner hinter und neben sich weg.'}],
-  trike: [{n:'Hornwand', d:'Im Lauf von vorn halber Schaden.'}, {n:'Ansturm', d:'Alle 14 s stürmt er 1,2 s geradeaus und schleudert alles zur Seite.'}],
+  anky: [{n:'Panzerplatten', d:'Von vorn halber Schaden durch Schläge, Pfeile und Kugeln.'}, {n:'Schwanzkeule', d:'Alle 8 s fegt er Gegner hinter und neben sich weg.'}, {n:'Fressen', d:'Erledigt er einen Gegner, frisst er ihn: heilt, wächst schneller, erwachsen bis 3× größer und stärker.'}],
+  trike: [{n:'Hornwand', d:'Im Lauf von vorn halber Schaden.'}, {n:'Ansturm', d:'Alle 14 s stürmt er 1,2 s geradeaus und schleudert alles zur Seite.'}, {n:'Fressen', d:'Erledigt er einen Gegner, frisst er ihn: heilt, wächst schneller, erwachsen bis 3× größer und stärker.'}],
   rex: [
     {n:'Ei', d:'Startet als Ei mit 160 LP, schlüpft nach 8 s und wächst bis 24 s zum Riesen.'},
     {n:'Brüllen', d:'Erwachsen alle 15 s: Feinde bis 110 px mit weniger LP als er fliehen 2,5 s lang.'},
+    {n:'Fressen', d:'Erledigt er einen Gegner, frisst er ihn: heilt, wächst schneller, erwachsen bis 3× größer und stärker.'},
   ],
+  mammut: [{n:'Stoßzähne', d:'Alle 9 s schleudert es Gegner vor sich hoch und zur Seite.'}, {n:'Dickes Fell', d:'Pfeile, Speere und Steine machen nur 60 % Schaden, Feuer dafür 130 %.'}],
   rexei: [{n:'Schlüpfen', d:'Nicht malbar: so beginnt jeder T-Rex. Nach 8 s schlüpft er.'}],
 };
 for (const k in ABIL) if (UNITS[k] && !UNITS[k].abil) UNITS[k].abil = ABIL[k];
@@ -324,7 +329,7 @@ for (const k in UNITS) if (UNITS[k].paint === undefined) UNITS[k].paint = true;
 // normal 30 % (unteres Ende von "etwa 35 %"): mit 35 % fiel grenadier > krieger an einer Weltform (Balance nach #47)
 export const AGILITY = { flink: .6, normal: .3 };
 export const NIMBLE = new Set(['wolf', 'biene', 'reiter', 'adler', 'einhorn', 'geist', 'vampir', 'spinne', 'raptor']);
-export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0, mega: 0, magnet: .1, rex: 0, anky: .05, trike: .1, rexei: 0 };
+export const HEAVY = { ritter: 0, troll: .05, zyklop: .05, elefant: 0, bueffel: .1, panzer: 0, mega: 0, magnet: .1, rex: 0, anky: .05, trike: .1, mammut: 0, rexei: 0 };
 for (const k in UNITS) UNITS[k].dodge = NIMBLE.has(k) ? AGILITY.flink : k in HEAVY ? HEAVY[k] : AGILITY.normal;
 const UNIT_KEYS = [...new Set(Object.values(UNITS).flatMap(T => Object.keys(T)))];
 function UnitType(T) { for (const p of UNIT_KEYS) this[p] = T[p]; }
@@ -481,7 +486,7 @@ Object.assign(PLURAL, {jet:'Kampfjets',kampfdrohne:'Kampfdrohnen',bomber:'Bomber
 Object.assign(PLURAL, {elefant:'Elefanten',krokodil:'Krokodile',gorilla:'Gorillas',adler:'Adler',bueffel:'Büffel'});
 // --- Schrottplatz und Urzeit ---
 Object.assign(PLURAL, {minibot:'Minibots',laserbot:'Laserbots',drohne:'Schrauber-Drohnen',kuppel:'Schildkuppeln',spinne:'Springspinnen',schweisser:'Schweißer',magnet:'Magnet-Mechs',tesla:'Teslaspulen',mega:'Mega-Mechs',
-  hoehle:'Höhlenmenschen',speer:'Speerwerfer',schamane:'Schamaninnen',raptor:'Raptoren',ptera:'Flugsaurier',anky:'Ankylosaurier',trike:'Triceratopse',rex:'T-Rexe',rexei:'Dino-Eier'});
+  hoehle:'Höhlenmenschen',speer:'Speerwerfer',schamane:'Schamaninnen',raptor:'Raptoren',ptera:'Flugsaurier',anky:'Ankylosaurier',trike:'Triceratopse',rex:'T-Rexe',mammut:'Mammuts',rexei:'Dino-Eier'});
 
 export const CATEGORIES = [['armee','Armee'],['tiere','Tiere'],['mythisch','Mythisch'],['modern','Modern'],['schrott','Schrottplatz'],['urzeit','Urzeit'],['gelaende','Gelände']];
 

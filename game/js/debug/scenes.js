@@ -212,11 +212,21 @@ export const SCENES = {
     world.teamMode = true;
     const W = world.W, H = world.H;
     const S = ['minibot', 'laserbot', 'drohne', 'kuppel', 'spinne', 'schweisser', 'magnet', 'tesla', 'mega'];
-    const U = ['hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex'];
+    const U = ['hoehle', 'speer', 'schamane', 'raptor', 'ptera', 'anky', 'trike', 'rex', 'mammut'];
     S.forEach((t, i) => { const u = spawn(world, t, W * (.32 + i * .045), H * .4, 'blau'); u.cd = 1e9; u.abCd = 1e9; });
     U.forEach((t, i) => { const u = spawn(world, t, W * (.33 + i * .048), H * .52, 'rot'); u.cd = 1e9; u.abCd = 1e9; if (u.growT > 0) { u.growT = 0; u.T = UNITS[t]; u.hp = u.T.hp; } });
     const y = spawn(world, 'raptor', W * .45, H * .62, 'rot'), e = spawn(world, 'rex', W * .55, H * .62, 'rot');
     y.cd = e.cd = 1e9;
+  },
+  // Urzeit-Rework (25.11.): Urzeit (68 Punkte, mit Mammut und Reitern) gegen Armee (67,5 Punkte), wie im Vorher/Nachher-GIF
+  steinzeit(world) {
+    world.teamMode = true;
+    placeRect(world, 'trike', 1, .3, .35, .32, .45, 'blau'); placeRect(world, 'anky', 1, .3, .58, .32, .62, 'blau');
+    placeRect(world, 'mammut', 1, .3, .48, .31, .52, 'blau'); placeRect(world, 'raptor', 6, .34, .3, .37, .7, 'blau');
+    placeRect(world, 'hoehle', 4, .27, .4, .29, .6, 'blau'); placeRect(world, 'schamane', 1, .25, .5, .25, .5, 'blau');
+    placeRect(world, 'speer', 6, .22, .35, .24, .65, 'blau');
+    placeRect(world, 'krieger', 14, .64, .3, .67, .7, 'rot'); placeRect(world, 'reiter', 4, .7, .3, .72, .7, 'rot');
+    placeRect(world, 'schuetze', 11, .75, .3, .77, .7, 'rot');
   },
   // Schüsse (Overhaul 18.11.): alle Fernkampfwaffen der Moderne/Armee gegen einen Haufen Krieger, Luftkampf darüber
   schuesse(world) {

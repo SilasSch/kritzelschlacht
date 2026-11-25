@@ -173,7 +173,7 @@ export function updateMorale(world, u, dt) {
     // sich, indem sie Schaden machen (Lebensraub, combat.js)
     // Königsaura (abilities.KING): wer sie spürt, flieht nicht
     if (u.hp > (u.formOn || u.rv[RV_DRUM] > world.time ? M.FLEE_FORM : M.FLEE) * T.hp ||   // Trommler: wie im Block erst spät
-       others < M.MIN_ALLIES || NO_RETREAT.has(u.type) || u.braveT > 0) return false;
+       others < M.MIN_ALLIES || NO_RETREAT.has(u.type) || u.braveT > 0 || u.rider !== null || u.paintT > 0) return false;
     // Fluchtbeginn nur vor Nahkämpfern, denen man davonläuft (#50), gedrosselt
     if (u.rv[RV_CK] > 0) { u.rv[RV_CK] -= dt; return false; }
     u.rv[RV_CK] = FLEE_CK + (u.id % 4) * FLEE_STAGGER;

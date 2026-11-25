@@ -1021,6 +1021,30 @@ export function createFxCore(hooks = {}, opt = {}) {
           p.vy = -rnd(14, 26);
         }
         break;
+      // Urzeit-Rework (25.11.): feast (Fleischbrocken und Knochen), hunt (roter Zielkreis um die Beute), paint und
+      // paintCast (rote und weiße Farbtupfer), mount (Staub), stuck (Speer bleibt stecken: Splitter), tusk (Ring nach vorn)
+      case 'feast':
+        bits(x, y - 4, 9, [0xe5574f, 0xb83a35, 0xf3ead8], 40, 110, 130);
+        add('ring', x, e.y, .3, R * 1.3, 0xe5574f);
+        break;
+      case 'hunt':
+        add('ring', x, e.y, .6, R * 2.6, 0xff8a3d); add('ring', x, e.y, .45, R * 1.6, 0xe5574f);
+        break;
+      case 'paint':
+        for (let i = 0; i < 5; i++) {
+          const p = add('dot', x + rnd(-R, R) * .7, y - R * rnd(.4, 1.2), rnd(.4, .7), rnd(1.4, 2.2), i % 2 ? 0xf3ead8 : 0xd0452b); if (!p) break;
+          p.vy = -rnd(10, 25);
+        }
+        break;
+      case 'paintCast': wave(x, e.y, R, .5, 0xd0452b); break;
+      case 'mount': for (let i = 0; i < 5; i++) puff('dust', x + rnd(-R, R), e.y + rnd(-3, 3), DUST.life * .8, rnd(3, 5)); break;
+      case 'stuck': bits(x, y - 4, 5, [0xf6d2ac, 0x8a5a33], 30, 70, 80); break;
+      case 'tusk': {
+        const f = e.face < 0 ? -1 : 1;
+        add('ring', x + f * R * .3, e.y, .35, R, OUTLINE);
+        for (let i = 0; i < 6; i++) puff('dust', x + f * R * rnd(.2, .8), e.y + rnd(-6, 6), DUST.life, rnd(4, 6));
+        break;
+      }
       case 'tail': {
         const f = e.face < 0 ? -1 : 1;
         add('ring', x - f * R * .5, e.y, .3, R, OUTLINE);

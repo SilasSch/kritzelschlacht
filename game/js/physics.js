@@ -49,6 +49,7 @@ export function integrate(world, dt) {
   const fr = Math.exp(-GROUND_FRICTION * dt), drag = Math.exp(-AIR_DRAG * dt);
   for (const u of world.units) {
     if (!u.alive) continue;
+    if (u.ride !== null) { u.px = u.x; u.py = u.y; continue; }   // Urzeit: Reiter sitzt auf dem Dino (abilities.stepRider)
     const T = u.T;
     u.px = u.x; u.py = u.y;        // für die Mauerprüfung in collideWalls
     let wx = 0, wy = 0, f = fr;

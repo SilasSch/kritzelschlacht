@@ -36,6 +36,7 @@ import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
 import { createHillUI } from './ui/hill.js';                   // König des Hügels (25.11.)
+import { createTeamUI } from './ui/team.js';                   // 2 gegen 2 (25.11.)
 import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 import { makePaletteFold } from './ui/palfold.js';             // Malleiste klappt im Kampf und beim Malen weg (25.11.)
@@ -494,6 +495,7 @@ function onlineFight(list, seed, map = 'feld') {
     if (!UNITS[u.type].fly && world.terr[cellIndex(world, u.x, u.y)] === 4) continue;
     const n = spawn(world, u.type, u.x, u.y, u.team);
     if (u.shape) applyShape(n, u.shape, true);
+    if (u.hp != null) n.hp = Math.max(1, Math.min(u.hp, n.T.hp));   // 2v2-Finale: Überlebende behalten ihre LP (team.js buildSnap)
   }
   rebuildHash(world);
   b.phase = 'plan'; b.snap = snapshotBattle(world); b.batchRes = null;
@@ -655,13 +657,14 @@ function shareBattle() {
 // Code laden: Schlacht (in die Planung des Schlacht-Modus) oder eigenes Level (gespeichert und gleich als Mission)
 async function loadCode(text) {
   const d = await decode(text);
-  if (d.k === 'duel' || d.k === 'duelres') { if (hill.active()) hill.stop(true); duel.load(d); return; }   // Code-Duell (18.11.)
+  if (d.k === 'duel' || d.k === 'duelres') { if (hill.active()) hill.stop(true); if (team.active()) team.leave(null); duel.load(d); return; }   // Code-Duell (18.11.)
   if (d.k === 'dailyres') { board.addCode(d); return; }   // Ergebnis der Tageschallenge (Bestenliste 18.11.)
   if (d.k === 'battle') {
     game.endReplay(true);
     if (online.active()) online.leave(null);
     if (duel.active()) duel.stop(true);
     if (hill.active()) hill.stop(true);
+    if (team.active()) team.leave(null);
     if (game.battle && game.battle.hot) hotseat.stop(true);
     if (!game.battle) enterBattle(); else if (game.battle.phase !== 'plan') editBattle();
     clearWorld(); world.teamMode = true;
@@ -805,6 +808,9 @@ const duel = createDuelUI({ game, world, ui, audio, online, onlineFight, clearWo
 // König des Hügels (25.11.): Thron des Tages in der Datenbank des Artefakts (hill.js, ui/hill.js)
 const hill = createHillUI({ game, world, ui, audio, onlineFight, clearWorld, undoStack, markAll });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || hill.covered(); }
+// 2 gegen 2 online (25.11.): Staffel und gemeinsames Feld (team.js, ui/team.js)
+const team = createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, undoStack, markAll });
+{ const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || team.covered(); }
 
 /* ---------- Schleife ---------- */
 function drainEvents() {
@@ -905,6 +911,7 @@ function frame(now) {
   online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
   duel.frame();      // Code-Duell: Antwort-Code nach dem Kampf
   hill.frame();      // König des Hügels: Krönung nach dem Kampf speichern
+  team.frame();      // 2 gegen 2: Duelle, Finale, fehlende Spieler
   renderer.draw(world, cam, now / 1000);
 
   uiT -= realDt; if (uiT <= 0) { uiT = .25; ui.updateCounts(); if (bt) ui.updateBattle(); if (game.editor) game.editorUI.tick(); coach.tick(); }

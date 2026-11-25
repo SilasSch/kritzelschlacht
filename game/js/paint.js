@@ -37,8 +37,9 @@ export const strokeEmpty = s => !s.units.length && !s.cells.size && !s.erased.le
 // Mallinie der Missionen in px (world.frameX)
 export const zoneX = world => frameX(world, ZONE);
 
-export function canPaintAt(world, x, mission, phase) {
-  // Hotseat (Audit 18.11.): mission.zone = [x0, x1] in px, die Hälfte der malenden Seite
+export function canPaintAt(world, x, mission, phase, y = null) {
+  // Hotseat (Audit 18.11.): mission.zone = [x0, x1] in px, die Hälfte der malenden Seite; 2v2 (25.11.): zoneY = [y0, y1]
+  if (mission && mission.zoneY && y !== null && (y < mission.zoneY[0] || y > mission.zoneY[1])) return false;
   if (mission && mission.zone) return phase === 'plan' && x >= mission.zone[0] && x <= mission.zone[1];
   return !(mission && (phase !== 'plan' || x > zoneX(world)));
 }
@@ -65,7 +66,7 @@ export function stamp(world, stroke, x, y, R, sel, team, mission, phase) {
     const a = world.rng() * 6.283, d = Math.sqrt(world.rng()) * R;
     const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d;
     if (px < r || py < r || px > W - r || py > H - r) continue;
-    if (!canPaintAt(world, px, mission, phase)) continue;
+    if (!canPaintAt(world, px, mission, phase, py)) continue;
     if (team === EDITOR && px <= zoneX(world)) continue;
     if (!T.fly && world.terr[cellIndex(world, px, py)] === 4) continue;
     let ok = true;
@@ -99,7 +100,7 @@ export function paintTerrain(world, stroke, x, y, R, key, mission, phase) {
   for (let gy = Math.max(0, g0y); gy <= Math.min(GH - 1, g1y); gy++) for (let gx = Math.max(0, g0x); gx <= Math.min(GW - 1, g1x); gx++) {
     const cx = gx * CELL + 5, cy = gy * CELL + 5;
     if ((cx - x) ** 2 + (cy - y) ** 2 > R * R) continue;
-    if (!canPaintAt(world, cx, mission, phase)) continue;
+    if (!canPaintAt(world, cx, mission, phase, cy)) continue;
     const i = gy * GW + gx, old = terr[i];
     if (mission) {
       if (old && !towner[i]) continue;   // Gelände der Mission ist geschützt

@@ -303,5 +303,7 @@ export function createHillUI({ game, world, ui, audio, onlineFight, clearWorld, 
   }
   // Datum wechselt um Mitternacht: neuer Hügel
   setInterval(() => { if (live.db && shown && live.date && live.date !== dateKey()) { watch(dateKey()); refresh(); } }, 30000);
-  return { frame, stop, covered: () => !ov.hidden, active: () => !!st };
+  const api = { open: () => { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openThrone(); }, frame, stop, covered: () => !ov.hidden, active: () => !!st };
+  game.hillUI = api;   // Einstieg für die gemeinsame Online-Lobby (ui/online.js)
+  return api;
 }

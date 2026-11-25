@@ -76,10 +76,12 @@ STRAIGHT.add('lama'); STRAIGHT_KIND.lama = 'spit';
 export const SPIT = { T: 2, SLOW: .6 };
 // Urzeit-Rework (25.11.): Speere des Speerwerfers in Zielen ab MASS: Schaden ×DMG, T s verlangsamt (wie die Spucke)
 export const BIG_GAME = { MASS: 4, DMG: 1.3, T: 3 };
-// Urzeit-Rework (25.11.): Jungtiere warten im Nest (bleiben stehen), solange kein Feind näher als R px ist; vorher stürmten
+// Urzeit-Rework (25.11.): Jungtiere warten im Nest (bleiben stehen), solange kein Feind näher als R px ist und sie
+// unverletzt sind; vorher stürmten
 // sie als halbe Portion los und starben, bevor sie groß waren (Triceratops im Mittel nach 9 s, ohne Schaden zu machen)
 export const NEST = { R: 130 };
 function nestHold(world, u) {
+  if (u.hp < u.T.hp) return false;   // getroffen (Beschuss aus der Ferne): raus aus dem Nest und wehren
   const t = nearestEnemy(world, u);
   if (t && (t.x - u.x) ** 2 + (t.y - u.y) ** 2 < NEST.R * NEST.R) return false;
   u.tg = null; u.run = 0;

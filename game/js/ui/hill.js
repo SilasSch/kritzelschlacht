@@ -4,16 +4,16 @@
 // Gemalt wird wie im Code-Duell (battle.hot mit online: true, hill: true, def = Regel des Tages), immer rechts als Rot;
 // der König steht links und bleibt bis zum Kampf verdeckt.
 import { getStore } from '../net.js';
+import { getName, setName, onName, needsName, askName } from './playername.js';
 import { roundDef, packArmy, CAT_NAME, budgetOf } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
 import { hillCfg, hillSeed, kingOf, histOf, lastOf, hillList, crown, firstKing, sameKing, reign, HILL_COLL } from '../hill.js';
-import { cleanName, NAME_MAX } from '../dailyboard.js';
+import { NAME_MAX } from '../dailyboard.js';
 import { dateKey, shortDate } from '../daily.js';
 import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
-const NAME_KEY = 'kritzel-hill-name';
 const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 const CSS = `
@@ -35,7 +35,8 @@ export function createHillUI({ game, world, ui, audio, onlineFight, clearWorld, 
   // live: Datenbank-Verbindung; st: laufende Herausforderung { role: 'paint' | 'fight' | 'view', date, cfg, king, b, done }
   const live = { db: null, me: null, state: 'off', date: '', doc: null, unsub: null, note: '' };
   let st = null, battleRef = null, name = '';
-  try { name = cleanName(localStorage.getItem(NAME_KEY) || ''); } catch (e) { /* ohne Speicher */ }
+  name = getName();
+  onName(n => { name = n; });
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
@@ -113,6 +114,7 @@ export function createHillUI({ game, world, ui, audio, onlineFight, clearWorld, 
 
   /* ---------- Thron-Karte ---------- */
   async function openThrone() {
+    if (needsName()) await askName();
     showCard(`<h2 id="hillTitle">👑 ${tr('König des Hügels')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
     const db = await connect();
     if (!shown) return;
@@ -153,7 +155,7 @@ export function createHillUI({ game, world, ui, audio, onlineFight, clearWorld, 
       <div class="btnrow">${mine ? `<button class="go" disabled>${tr('Du bist König')}</button>` : `<button class="go" id="hillGo"${live.state !== 'on' ? ' disabled' : ''}>${k ? tr('Herausfordern') : tr('Thron besteigen')}</button>`}
         ${last ? `<button class="btn" id="hillLast" title="${tr('Den Kampf der letzten Krönung ansehen')}">${tr('Letzte Krönung ansehen')}</button>` : ''}<button class="btn" id="hillClose">${tr('Schließen')}</button></div>`);
     const inp = $('hillName');
-    inp.oninput = () => { name = cleanName(inp.value); try { localStorage.setItem(NAME_KEY, name); } catch (e) { /* ohne Speicher */ } };
+    inp.oninput = () => { setName(inp.value); };
     inp.onkeydown = e => e.stopPropagation();
     if ($('hillGo')) $('hillGo').onclick = () => startChallenge(date, k);
     if ($('hillLast')) $('hillLast').onclick = () => viewLast(date, last);

@@ -1473,5 +1473,8 @@ const EN = {
   "Höhlenmenschen, Speerwerfer, Raptoren und Flugsaurier. Ankylosaurier und Triceratopse halten von vorn viel aus. Aber Feuer brennt auch unter dem Panzer.": "Cavemen, spear throwers, raptors and pterosaurs. Ankylosaurs and triceratops take a lot from the front. But fire burns under armor too.",
   "Der König der Echsen": "The Lizard King",
   "Alle Urzeit-Einheiten. Zwei T-Rex-Eier, Raptoren als Wache und Schamaninnen, die heilen. Schnell zuschlagen oder lange durchhalten?": "All Stone Age units. Two T-rex eggs, raptors on guard and shamans who heal. Strike fast or hold out long?",
+  "Wie heißt du?": "What's your name?",
+  "Dein Name in der Bestenliste, auf dem Thron und im Online-Spiel. Du kannst ihn später ändern.": "Your name on the leaderboard, on the throne and in online games. You can change it later.",
+  "Später": "Later",
 };
 export default EN;

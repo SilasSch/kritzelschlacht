@@ -4,9 +4,12 @@
 // team2: true, def = Regel des Sitzes, zoneY = Viertel im Feld-Modus).
 import {
   createTeamMatch, teamView, KS, teamPeers, hostStart, teamReady, teamResult, teamNext, full, missing, openTeamRooms,
+  addBot, removeBot, setBotArm, botsWant, isBotId, seatZone as zoneOf,
   seatDef, seatBudget, seatZone, roundLists, winners, createRun, finaleList, staffelWinner, roomName, SEAT_TEAM, MODES, BUDGETS, BUDGET_DEFAULT, duelOf, mate,
 } from '../team.js';
-import { makeCode, normCode, packArmy, CAT_NAME } from '../online.js';
+import { makeCode, normCode, packArmy, CAT_NAME, PAINT_TYPES } from '../online.js';
+import { createBotArmy, makeCtx, packBot, BOT_LEVELS, BOT_LEVEL_N, BOT_LEVEL_D, thinkMs, BOT_CAP_2V2, isLevel } from '../bot.js';
+import { soloRoom } from '../botroom.js';
 import { MAP, applyMap, mapSVG } from '../rules.js';
 import { NAME_MAX } from '../dailyboard.js';
 import { getRoom } from '../net.js';
@@ -39,6 +42,13 @@ const CSS = `
 .t2duel{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%}
 .t2duel div{border:2px solid var(--ink);border-radius:12px;padding:8px 10px;background:#fffbe9}
 #batTeam.on{background:var(--sel);border-color:var(--selb)}
+.t2seat.bot{display:flex;justify-content:space-between;align-items:center;gap:6px;background:#f2f7ee}
+.t2seat .x{border:0;background:none;font:800 15px var(--f-ui);color:var(--muted);cursor:pointer;padding:0 4px}
+.t2seat .x:hover{color:#b3261e}
+.t2team .addbot{font-size:13px;padding:5px 10px}
+.t2botlvl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.t2botlvl button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:4px 11px;font:700 13px var(--f-ui);color:var(--ink);cursor:pointer}
+.t2botlvl button.on{background:var(--ink);border-color:var(--ink);color:#fff}
 `;
 
 export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, undoStack, markAll }) {
@@ -50,6 +60,11 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   onName(n => { name = n; if ($('t2Name') && $('t2Name') !== document.activeElement) $('t2Name').value = n; if (m) { m.name = n; publish(); } });
   // Kampf-Ablauf der Runde: { stage: 'duel' | 'finale' | 'done', runs, results, finale, winner }
   let fx = null, goneSince = 0, goneAck = false;
+  // KI-Mitspieler (25.11.): laufen beim Host. jobs[id] = { seat, search, readyAt }
+  let botJobs = new Map(), botLvl = 'mittel', botWantT = 0, botHumansAt = 0;
+  try { const v = localStorage.getItem('kritzelschlacht-online-bot'); if (isLevel(v)) botLvl = v; } catch (e) { /* ohne Speicher */ }
+  const botLabel = l => `🤖 ${tr('KI')} ${tr(BOT_LEVEL_N[l])}`;
+  const nm = i => (m && m.levels[i] ? botLabel(m.levels[i]) : m ? m.names[i] : '');
 
   /* ---------- Knopf: nur im laufenden 2v2 sichtbar (Verlassen); hinein geht es über die Online-Lobby ---------- */
   const btn = document.createElement('button');
@@ -92,10 +107,20 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     showCard('open', `<h2 id="t2Title">${tr('2 gegen 2')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
     net = await getRoom();
     if (shown !== 'open') return;
+    const opt0 = (k, v, inner) => `<button class="btn${pick[k] === v ? ' on' : ''}" data-k="${k}" data-v="${v}">${inner}</button>`;
     if (!net) {
+      // ohne Live-Verbindung: 2 gegen 2 mit drei KI-Mitspielern (eine Partie nur auf diesem Gerät)
       showCard('open', `<h2 id="t2Title">${tr('2 gegen 2')}</h2>
-        <p>${tr('2 gegen 2 braucht die Live-Verbindung. Spiel es in der <a href="{u}" target="_blank" rel="noopener">Live-Version</a> (nur mit Einladung).', { u: LIVE_URL })}</p>
-        <div class="btnrow"><button class="btn" id="t2Close">${tr('Schließen')}</button></div>`);
+        <p>${tr('Ohne Live-Verbindung spielst du hier mit der KI: ein KI-Partner gegen zwei KI-Gegner. Mit Freunden geht 2 gegen 2 in der <a href="{u}" target="_blank" rel="noopener">Live-Version</a> oder auf itch.io.', { u: LIVE_URL })}</p>
+        <h3>${tr('Modus')}</h3>
+        <div class="vopts" style="grid-template-columns:1fr 1fr">${MODES.map(id => opt0('mode', id, `<b>${esc(MODE_N[id])}</b><span>${esc(MODE_D[id])}</span>`)).join('')}</div>
+        <h3>${tr('Budget')}</h3>
+        <div class="hotbud">${BUDGETS.map(v => opt0('budget', v, `<b>${v}</b><span>${tr('Punkte je Spieler')}</span>`)).join('')}</div>
+        ${nameRow()}
+        <div class="btnrow"><button class="go" id="t2Solo">🤖 ${tr('Mit KI spielen')}</button><button class="btn" id="t2Close">${tr('Abbrechen')}</button></div>`);
+      card.querySelectorAll('[data-k]').forEach(b2 => { b2.onclick = () => { const k = b2.dataset.k; pick[k] = k === 'budget' ? +b2.dataset.v : b2.dataset.v; open(); }; });
+      wireName();
+      $('t2Solo').onclick = () => start('host', 'BOT', true);
       $('t2Close').onclick = hideCard; return;
     }
     const opt = (k, v, inner) => `<button class="btn${pick[k] === v ? ' on' : ''}" data-k="${k}" data-v="${v}">${inner}</button>`;
@@ -129,7 +154,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   async function join(code) { const c = normCode(code); if (!c) return; net = net || await getRoom(); if (net) start('guest', c); }
 
   let joining = false;
-  async function start(role, code) {
+  async function start(role, code, solo = false) {
     if (joining || m) return;
     const b = game.battle; if (!b || b.phase !== 'plan' || b.hot) return;
     if (!name) { ui.toast(tr('Gib zuerst deinen Namen ein.')); if ($('t2Name')) $('t2Name').focus(); return; }
@@ -137,11 +162,12 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     try {
       showCard('joining', `<h2 id="t2Title">${tr('2 gegen 2')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
       let r;
-      try { r = await net.join(roomName(code)); } catch (e) { hideCard(); ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
+      if (solo) r = soloRoom();
+      else try { r = await net.join(roomName(code)); } catch (e) { hideCard(); ui.toast(tr('Keine Verbindung zum Raum. Versuch es gleich noch mal.')); return; }
       if (game.battle !== b || b.hot || m) { try { r.leave(); } catch (e) { /* weg */ } hideCard(); return; }
       room = r;
       m = createTeamMatch(role, pick.mode, pick.budget);
-      m.code = code; m.name = name;
+      m.code = code; m.name = name; m.solo = solo;
       const meP = room.peers().find(p => p.isMe);
       m.me = meP ? meP.peer : null;
       if (role === 'host') m.seats[0] = m.me;
@@ -158,7 +184,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     unsubs = [];
     if (room) try { room.leave(); } catch (e) { /* weg */ }
     if (net && m && m.openK && m.openK !== 'null') try { net.presence({ open: null }); } catch (e) { /* weg */ }
-    room = null; m = null; fx = null;
+    room = null; m = null; fx = null; botJobs = new Map(); clearTimeout(botWantT);
     hideCard();
     const b = battleRef; battleRef = null;
     if (b && game.battle === b) {
@@ -179,7 +205,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     lastPub = txt; clearTimeout(pubRetry); pubRetry = 0;
     room.presence(v).catch(() => { if (lastPub === txt) lastPub = ''; if (room && m && !pubRetry) pubRetry = setTimeout(() => { pubRetry = 0; publish(); }, 1500); });
     // Lobby-Eintrag „offener Raum“ (Host, solange Sitze frei sind)
-    if (m.role === 'host' && net) {
+    if (m.role === 'host' && net && !m.solo) {
       // Lobby-Eintrag wie beim 1v1 (open), mit mode, damit die gemeinsame Online-Lobby ihn als 2v2-Raum zeigt
       const n = m.seats.filter(Boolean).length, open = m.phase === 'lobby' && n < 4 ? { code: m.code, budget: m.budget, mode: m.mode === 'staffel' ? 'tft' : 'feld', n } : null;
       const k = JSON.stringify(open);
@@ -197,30 +223,46 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   function act(evs) {
     for (const e of evs) {
       if (e === 'seats' || e === 'mode') { if (m.phase === 'lobby' && shown === 'lobby') lobbyCard(); }
-      else if (e === 'round') beginRound();
+      else if (e === 'round') { beginRound(); startBots(); }
       else if (e === 'fight') beginFight();
       else if (e === 'error') ui.toast(tr('Eine Armee war ungültig und kämpft nicht mit.'));
       else if (e === 'score' || e === 'result') decorate();
+      if (e === 'result' && m.role === 'host' && m.bots.length) {
+        clearTimeout(botWantT);
+        botWantT = setTimeout(() => { if (m && m.phase === 'result' && botsWant(m)) { publish(); onPeers(); } }, 1200);
+      }
     }
     publish(); sync();
   }
   function lobbyCard() {
     if (!m) return;
+    const host = m.role === 'host';
     const seat = i => {
       const id = m.seats[i], me = i === m.seat;
-      return id ? `<div class="t2seat${me ? ' me' : ''}">${esc(m.names[i] || tr('Spieler {n}', { n: i + 1 }))}${me ? ` <span class="muted">(${tr('du')})</span>` : ''}${i === 0 ? ' 👑' : ''}</div>` : `<div class="t2seat empty">${tr('frei')}</div>`;
+      if (id && isBotId(m, id)) {
+        const bid = id.slice(id.indexOf('~') + 1);
+        return `<div class="t2seat bot"><span>${esc(nm(i))}</span>${host ? `<button class="x" data-rm="${esc(bid)}" title="${tr('KI entfernen')}" aria-label="${tr('KI entfernen')}">✕</button>` : ''}</div>`;
+      }
+      return id ? `<div class="t2seat${me ? ' me' : ''}">${esc(nm(i) || tr('Spieler {n}', { n: i + 1 }))}${me ? ` <span class="muted">(${tr('du')})</span>` : ''}${i === 0 ? ' 👑' : ''}</div>` : `<div class="t2seat empty">${tr('frei')}</div>`;
     };
+    const freeIn = t => [0, 1, 2, 3].some(i => SEAT_TEAM[i] === t && !m.seats[i]);
     const team = t => `<div class="t2team ${t}"><h4>${TEAM_N[t]}</h4>${[0, 1, 2, 3].filter(i => SEAT_TEAM[i] === t).map(seat).join('')}
-      ${m.role !== 'host' ? `<button class="btn" data-team="${t}"${m.pref === t ? ' disabled' : ''}>${tr('In dieses Team')}</button>` : ''}</div>`;
+      ${!host ? `<button class="btn" data-team="${t}"${m.pref === t ? ' disabled' : ''}>${tr('In dieses Team')}</button>` : freeIn(t) ? `<button class="btn addbot" data-bot="${t}">🤖 + ${tr('KI')} (${tr(BOT_LEVEL_N[botLvl])})</button>` : ''}</div>`;
+    const lvlRow = host ? `<div class="t2botlvl"><span class="muted">${tr('Stärke der KI')}:</span>${BOT_LEVELS.map(l => `<button type="button" data-lvl="${l}" class="${l === botLvl ? 'on' : ''}" title="${esc(tr(BOT_LEVEL_D[l]))}">${tr(BOT_LEVEL_N[l])}</button>`).join('')}</div>` : '';
     const n = m.seats.filter(Boolean).length;
     showCard('lobby', `<h2 id="t2Title">${tr('2 gegen 2')}: <span class="cat">${esc(MODE_N[m.mode])}</span></h2>
-      <div class="row"><div class="code">${esc(m.code)}</div><div class="muted">${tr('Gib deinen drei Mitspielern diesen Code.')}<br>${esc(MODE_D[m.mode])} ${tr('{n} Punkte je Spieler.', { n: m.budget })}</div></div>
+      ${m.solo ? `<p class="muted">${tr('Nur auf diesem Gerät: Besetze die freien Plätze mit der KI.')} ${esc(MODE_D[m.mode])} ${tr('{n} Punkte je Spieler.', { n: m.budget })}</p>`
+        : `<div class="row"><div class="code">${esc(m.code)}</div><div class="muted">${tr('Gib deinen Mitspielern diesen Code oder besetze freie Plätze mit der KI.')}<br>${esc(MODE_D[m.mode])} ${tr('{n} Punkte je Spieler.', { n: m.budget })}</div></div>`}
       <div class="t2seats">${team('blau')}${team('rot')}</div>
+      ${lvlRow}
       ${nameRow()}
       <div class="btnrow">${m.role === 'host' ? `<button class="go" id="t2Start"${full(m) ? '' : ' disabled'}>${full(m) ? tr('Spiel starten') : tr('Warte auf Spieler ({n}/4) …', { n })}</button>` : `<button class="go" disabled>${tr('Warte auf den Start …')}</button>`}
         <button class="btn" id="t2Leave">${tr('Verlassen')}</button></div>`);
     wireName();
     card.querySelectorAll('[data-team]').forEach(b => { b.onclick = () => { m.pref = b.dataset.team; publish(); lobbyCard(); }; });
+    card.querySelectorAll('[data-bot]').forEach(b => { b.onclick = () => { if (addBot(m, botLvl, b.dataset.bot)) { onPeers(); lobbyCard(); } else ui.toast(tr('In diesem Team ist kein Platz mehr.')); }; });
+    card.querySelectorAll('[data-rm]').forEach(b => { b.onclick = () => { if (removeBot(m, b.dataset.rm)) { onPeers(); lobbyCard(); } }; });
+    card.querySelectorAll('[data-lvl]').forEach(b => { b.onclick = () => { botLvl = b.dataset.lvl; try { localStorage.setItem('kritzelschlacht-online-bot', botLvl); } catch (e) { /* ohne Speicher */ } lobbyCard(); }; });
     if ($('t2Start')) $('t2Start').onclick = () => act(hostStart(m));
     $('t2Leave').onclick = () => leave(tr('2v2 verlassen.'));
   }
@@ -245,8 +287,8 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   }
   function roundCard() {
     const c = m.cfg, side = SEAT_TEAM[m.seat];
-    const where = c.mode === 'feld' ? tr('Du malst {a}.', { a: AREA_N[m.seat] }) : tr(side === 'blau' ? 'Du malst links gegen {o}.' : 'Du malst rechts gegen {o}.', { o: esc(m.names[m.seat ^ 2] || tr('Spieler {n}', { n: (m.seat ^ 2) + 1 })) });
-    const cats = c.mode === 'feld' ? `<p>${[0, 1, 2, 3].map(i => `<b class="${SEAT_TEAM[i]}">${esc(m.names[i] || '?')}</b>: ${esc(tr(CAT_NAME[c.cats[i]]))}`).join(' · ')}</p>` : '';
+    const where = c.mode === 'feld' ? tr('Du malst {a}.', { a: AREA_N[m.seat] }) : tr(side === 'blau' ? 'Du malst links gegen {o}.' : 'Du malst rechts gegen {o}.', { o: esc(nm(m.seat ^ 2) || tr('Spieler {n}', { n: (m.seat ^ 2) + 1 })) });
+    const cats = c.mode === 'feld' ? `<p>${[0, 1, 2, 3].map(i => `<b class="${SEAT_TEAM[i]}">${esc(nm(i) || '?')}</b>: ${esc(tr(CAT_NAME[c.cats[i]]))}`).join(' · ')}</p>` : '';
     showCard('round', `<h2 id="t2Title">${tr('Runde {r}', { r: c.r })}: <span class="cat">${esc(tr(CAT_NAME[c.cats[m.seat]]))}</span></h2>
       <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(tr(MAP[c.map].n))}</b><br><span class="muted">${esc(MODE_N[c.mode])} · ${TEAM_N[side]}</span></div></div>
       <p>${where} ${tr('{n} Punkte', { n: seatBudget(c, m.seat) })}. ${c.mode === 'staffel' ? tr('Danach treffen sich alle Überlebenden im Finale.') : ''}</p>${cats}
@@ -268,11 +310,11 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     fx = { stage: 'duel', runs: lists.map((l, k) => createRun(l, c.map, seeds[k], world.W, world.H)), results: null, finale: null, winner: null, lists };
     const k = c.mode === 'feld' ? 0 : duelOf(m.seat);
     onlineFight(lists[k], seeds[k], c.map);
-    ui.toast(c.mode === 'feld' ? tr('Aufgedeckt!') : tr('Duell {k}: du gegen {o}', { k: k + 1, o: m.names[m.seat ^ 2] || '?' }));
+    ui.toast(c.mode === 'feld' ? tr('Aufgedeckt!') : tr('Duell {k}: du gegen {o}', { k: k + 1, o: nm(m.seat ^ 2) || '?' }));
   }
   function startFinale() {
     const c = m.cfg, fl = finaleList(fx.results, world.W);
-    if (!fl) { fx.stage = 'done'; fx.winner = staffelWinner(fx.results); act(teamResult(m, fx.winner)); showEnd(); return; }
+    if (!fl) { hideCard(); fx.stage = 'done'; fx.winner = staffelWinner(fx.results); act(teamResult(m, fx.winner)); showEnd(); return; }
     fx.stage = 'finale';
     fx.finale = createRun(fl, c.map, c.seed2, world.W, world.H);
     hideCard();
@@ -284,7 +326,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     const line = k => {
       const res = r[k], b = k, red = k + 2, n = winners(res).length;
       const w = res.winner === 'draw' ? tr('Unentschieden') : tr('{t} gewinnt', { t: TEAM_N[res.winner] });
-      return `<div><b>${tr('Duell {k}', { k: k + 1 })}</b>: ${esc(m.names[b] || '?')} – ${esc(m.names[red] || '?')}<br>${w}<br><span class="muted">${tr('{n} Überlebende laufen ins Finale', { n })}</span></div>`;
+      return `<div><b>${tr('Duell {k}', { k: k + 1 })}</b>: ${esc(nm(b) || '?')} – ${esc(nm(red) || '?')}<br>${w}<br><span class="muted">${tr('{n} Überlebende laufen ins Finale', { n })}</span></div>`;
     };
     showCard('duels', `<h2 id="t2Title">${tr('Duelle vorbei')}</h2><div class="t2duel">${line(0)}${line(1)}</div>
       <p class="muted">${tr('Die Überlebenden beider Duelle treffen sich jetzt im Finale.')}</p>
@@ -296,6 +338,40 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   function showEnd() {
     const b = game.battle;
     if (b && b.phase === 'done' && b.result) ui.showBattleResult(b.result); else decorate();
+  }
+
+  /* ---------- KI-Mitspieler (nur beim Host) ---------- */
+  // Neue Runde: je KI eine Suche (bot.js); schwer rechnet Probeschlachten in Häppchen (pumpBots, je Bild höchstens ~6 ms)
+  function startBots() {
+    botJobs = new Map(); botHumansAt = 0;
+    if (!m || m.role !== 'host' || !m.bots.length || !m.cfg) return;
+    const c = m.cfg, prev = m.prev;
+    for (const bt of m.bots) {
+      const seat = m.seats.indexOf(`${m.me}~${bt.id}`); if (seat < 0) continue;
+      const side = SEAT_TEAM[seat], opp = seat ^ 2;
+      const ctx = makeCtx({ W: world.W, H: world.H, side, zone: zoneOf(c.mode, seat), cat: c.cats[seat], budget: seatBudget(c, seat), map: c.map, cap: BOT_CAP_2V2 });
+      const octx = makeCtx({ W: world.W, H: world.H, side: SEAT_TEAM[opp], zone: { x: zoneOf(c.mode, opp).x, y: [0, 1] }, cat: c.cats[opp], budget: seatBudget(c, opp), map: c.map, cap: 220 });
+      // Was der Gegner in der letzten Runde aufgedeckt hat (gleicher Sitz)
+      const known = prev && prev.armies && prev.armies[opp] && prev.armies[opp].length ? [prev.armies[opp]] : [];
+      const search = createBotArmy(ctx, bt.lvl, Math.random, { known, octx, seed: c.seed ^ (seat * 7919), n: m.bots.length > 1 ? 6 : 8, maxT: 30 });
+      botJobs.set(bt.id, { seat, side, search, readyAt: Date.now() + thinkMs(bt.lvl), endAt: Date.now() + 45000 });
+    }
+  }
+  function pumpBots() {
+    if (!m || m.role !== 'host' || !botJobs.size || !m.cfg || (m.phase !== 'paint' && m.phase !== 'ready')) return;
+    // Sind alle Menschen fertig, rechnet die KI mehr je Bild, wartet höchstens noch kurz und nimmt nach 10 s das bisher Beste
+    const humansReady = m.phase === 'ready' && (m.readyN || 0) >= 4 - botJobs.size;
+    if (humansReady && !botHumansAt) botHumansAt = Date.now();
+    const now = Date.now(), end = performance.now() + (humansReady ? 12 : 6);
+    for (const [id, j] of botJobs) {
+      if (!j.search.done) { const left = end - performance.now(); if (left > 0) j.search.pump(left); }
+      if (!j.search.done && now >= (botHumansAt ? Math.min(j.endAt, botHumansAt + 10000) : j.endAt)) j.search.finish();
+      if (j.search.done && (now >= j.readyAt || (botHumansAt && now >= botHumansAt + 2500))) {
+        botJobs.delete(id);
+        setBotArm(m, id, packBot(j.search.result, j.side, world.W, world.H, PAINT_TYPES));
+        publish(); onPeers();
+      }
+    }
   }
 
   /* ---------- Ergebnis ---------- */
@@ -360,6 +436,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
     if (!m) return;
     const b = game.battle;
     if (!b || b !== battleRef) { leave(null); return; }
+    pumpBots();
     if (fx && m.phase === 'fight') {
       if (fx.stage === 'duel') {
         let all = true;
@@ -376,11 +453,11 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
       }
     }
     if (room && m.phase !== 'lobby') {
-      const gone = missing(m, room.peers());
+      const gone = missing(m, room.peers(), world.W, world.H);
       if (gone.length) {
         if (!goneSince) goneSince = Date.now();
         if (!goneAck && Date.now() - goneSince > GONE_MS && shown !== 'gone' && shown !== 'leave') {
-          showCard('gone', `<h2 id="t2Title">${tr('Ein Spieler ist weg')}</h2><p>${esc(gone.map(i => m.names[i] || tr('Spieler {n}', { n: i + 1 })).join(', '))}: ${tr('Die Verbindung ist abgerissen. Kommt er zurück, geht es weiter.')}</p>
+          showCard('gone', `<h2 id="t2Title">${tr('Ein Spieler ist weg')}</h2><p>${esc(gone.map(i => nm(i) || tr('Spieler {n}', { n: i + 1 })).join(', '))}: ${tr('Die Verbindung ist abgerissen. Kommt er zurück, geht es weiter.')}</p>
             <div class="btnrow"><button class="btn" id="t2Wait">${tr('Warten')}</button><button class="go" id="t2Yes">${tr('Verlassen')}</button></div>`);
           $('t2Wait').onclick = () => { goneAck = true; hideCard(); };
           $('t2Yes').onclick = () => leave(tr('2v2 verlassen.'));

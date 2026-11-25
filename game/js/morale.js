@@ -41,8 +41,9 @@ import { hazardAt, leaveBlock } from './formation.js';
 // Angstaugen (Vorgabe 1 der Abschlussprüfung)
 export const isFleeing = u => u.flee || u.fearT > 0;
 // Fliehen nie (Rückzug #27, Nachtrag 8 #50): Ghule (hirnlos), Geister (#41: heilen sich durch Schaden), Bienen, Frösche,
-// Panzer, Drache und Elefant. Schreck (fearT) wirkt trotzdem, soweit nicht furchtlos (abilities.FEARLESS).
-export const NO_RETREAT = new Set(['ghul', 'geist', 'biene', 'frosch', 'panzer', 'drache', 'elefant']);
+// Panzer, Drache und Elefant, Kampfdrohne (25.11.: Einweg-Kamikaze, fliegt ihr Ziel bis zum Einschlag an).
+// Schreck (fearT) wirkt trotzdem, soweit nicht furchtlos (abilities.FEARLESS).
+export const NO_RETREAT = new Set(['ghul', 'geist', 'biene', 'frosch', 'panzer', 'drache', 'elefant', 'kampfdrohne']);
 // Fluchtbeginn (Nachtrag 8, #50): geflohen wird nur vor Nahkämpfern (Reichweite < 20, nicht selbst fliehend, die u
 // erreichen können) in FLEE_MELEE_R px, denen man davonläuft (ihr Tempo < T.speed · SPEED). Ein Nahkämpfer, auf den nur
 // geschossen wird, flieht nicht ("Flucht nach vorn"); ein Fernkämpfer zieht sich zurück, außer ein Nahkämpfer, dem er

@@ -47,9 +47,11 @@ export const factionOf = (world, u) => (world.teamMode ? u.team : u.kin);
 export const isBat = v => v.batT > 0 && !!v.T.fly;
 // Nahkämpfer am Boden (Reichweite < 20, nicht fliegend; der Vampir zählt auch als Fledermaus dazu, er beißt nur am
 // Boden) erreichen weder den Hubschrauber noch einen Vampir in Fledermausform. Bienen und Geister schon (Festlegung 6).
-// Der Flammenwerfer zählt nicht dazu (25.11.): sein Strahl geht auch nach oben auf Hubschrauber, Jets, Adler und Fledermäuse.
-export const groundMelee = u => u.T.range < 20 && (!u.T.fly || u.type === 'vampir');
-export const outOfMelee = (u, v) => (v.T.high || isBat(v) || aloft(v)) && groundMelee(u);
+// Der Flammenwerfer zählt dazu, sein Strahl reicht aber nach oben bis zu Adler, Flugsaurier und Fledermaus (lowAir, 25.11.);
+// hohe Flieger (T.high: Hubschrauber, Jet, Bomber, Kampfdrohne) erreicht er nicht und wirft wie die Nahkämpfer Steine.
+export const groundMelee = u => (u.T.range < 20 || u.type === 'flamme') && (!u.T.fly || u.type === 'vampir');
+export const lowAir = v => isBat(v) || aloft(v);
+export const outOfMelee = (u, v) => (v.T.high || (lowAir(v) && u.type !== 'flamme')) && groundMelee(u);
 // --- Task 5: Tiere ---
 // Adler (Spez. #33): kreist auf T.flyZ (30 px); Nahkämpfer am Boden erreichen ihn nur, solange er zum Angriff unten ist
 // (z ≤ EAGLE_REACH_Z, Sturzflug und Picken, abilities.js). Oben visieren sie ihn nicht an (nearestEnemy, Neuwahl in
@@ -255,7 +257,7 @@ export function nearestEnemy(world, u) {
         for (let i = 0; i < cell.length; i++) {
           const v = cell[i];
           // Nahkämpfer am Boden: kein Hubschrauber, keine Fledermausform, kein Adler oben (Review Task 5: sonst stehen sie unter ihm)
-          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || isBat(v) || (aloft(v) && !chaseAir(v))))) continue;
+          if (!v.alive || factionOf(world, v) === f || (gm && (v.T.high || ((isBat(v) || (aloft(v) && !chaseAir(v))) && u.type !== 'flamme')))) continue;
           if (v.ashT > 0) continue;   // Task 6: Asche des Phönix ist nicht anvisierbar
           const dx = v.x - u.x, dy = v.y - u.y;
           if (v.hidden && unseen(u, v)) continue;   // Task 5: Krokodil versteckt im Wasser

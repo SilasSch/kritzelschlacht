@@ -38,7 +38,7 @@ export const UNITS = {
   // MG (Nachtrag 5, #40): Abklingzeit .13 → .11 s (18 % mehr Kugeln, sichtbar dichteres Dauerfeuer); Reiter, Scharfschütze und Panzerfaust schlagen es weiter
   mg:{n:'MG-Schütze',cat:'modern',col:'#c2a66b',r:10,hp:115,dmg:3.9,range:170,speed:36,cd:.11,cost:3.5,mass:1.3,d:'Dauerfeuer. Mäht Schwärme und Infanterie, aber langsam.'},
   // Flammenwerfer (18.11., Ideenrunde): kurzer Flammenkegel wie der Drachenatem (combat.flame), zündet alles darin an
-  // und setzt Wald in Brand. Erreicht seit 25.11. alle Flieger, auch hohe (Hubschrauber, Jet, Adler oben).
+  // und setzt Wald in Brand. Erreicht seit 25.11. auch Adler/Flugsaurier oben und Fledermäuse, aber nichts Hohes (T.high).
   flamme:{n:'Flammenwerfer',cat:'modern',col:'#d9643a',r:9,hp:75,dmg:3.5,range:72,speed:46,cd:.25,cost:5,mass:1.1,d:'Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme und dichte Blöcke. Auf Abstand hilflos.'},
   // Scharfschütze (Nachtrag 4, #36): schießt nur im Liegen; dafür Schaden und Abklingzeit ×1,5 (60 → 90, 3 → 4,5 s), Reichweite +20 % (380 → 456)
   sniper:{n:'Scharfschütze',cat:'modern',col:'#4f6b3a',r:9,hp:40,dmg:90,range:456,speed:40,cd:4.5,cost:7,mass:1,d:'Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.'},
@@ -265,7 +265,7 @@ const ABIL = {
   stinktier: [{n:'Stinkwolke', d:'Kommt ein Gegner nah, bläst es alle 8 s eine Wolke: Gegner darin erschrecken und rennen weg. Maschinen riechen nichts.'}],
   pikenier: [{n:'Pikenwall', d:'Stürmende Reiter, Büffel, Elefanten und Co. prallen an der Pike ab und sind kurz betäubt. Gegen sie doppelter Schaden.'}],
   trommler: [{n:'Takt', d:'Verbündete bis 140 px laufen und schlagen 15 % stärker und fliehen erst bei 15 % statt 25 % Leben.'}],
-  flamme: [{n:'Flammenkegel', d:'Trifft alle im kurzen Kegel vor ihm, auch Flieger wie Hubschrauber und Adler, und zündet sie an. Setzt Wald in Brand.'}],
+  flamme: [{n:'Flammenkegel', d:'Trifft alle im kurzen Kegel vor ihm, auch Bienen und Adler in der Luft, und zündet sie an. Setzt Wald in Brand.'}],
   lama: [
     {n:'Spucke', d:'Trifft am Boden und in der Luft. Getroffene sind 2 s lang 40 % langsamer.'},
     {n:'Auf Abstand', d:'Weicht Nahkämpfern aus wie ein Schütze.'},

@@ -11,9 +11,10 @@ const CSS = `
 `;
 let styled = false;
 
-export function modeCards(grid, game) {
+export function modeCards(grid, game, keep = () => true) {
   if (!styled) { styled = true; const s = document.createElement('style'); s.textContent = CSS; document.head.append(s); }
   for (const m of MODES) {
+    if (!keep(m)) continue;
     const b = document.createElement('button'); b.className = 'ch mode'; b.dataset.ch = 'mode-' + m.id;
     b.innerHTML = `<span class="no">${tr(m.tag)}</span><span class="nm">${tr(m.n)}</span><span class="ds">${tr(m.d)}</span><span class="foot">${m.foot(game)}</span>`;
     b.onclick = () => m.open(game);

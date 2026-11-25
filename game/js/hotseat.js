@@ -27,7 +27,7 @@ export const sideZone = (world, side) => (side === 'blau' ? [0, world.W / 2] : [
 export function hotMission(world, hot) {
   const side = painter(hot); if (!side) return null;
   // hot.def (Online, online.roundDef): nur die Kategorie der Runde
-  return { budget: hot.budget, spent: hot.spent[side], team: side, zone: sideZone(world, side), def: hot.def || null };
+  return { budget: hot.budget, spent: hot.spent[side], team: side, zone: sideZone(world, side), def: hot.def || null, zoneY: hot.zoneY || null };
 }
 
 // Ein Pinseltupfer in der Hotseat-Planung. first: erster Tupfer des Strichs (dann wird geprüft, ob er auf der eigenen
@@ -35,7 +35,7 @@ export function hotMission(world, hot) {
 export function hotPaint(world, hot, stroke, x, y, R, sel, first) {
   const m = hotMission(world, hot);
   if (!m) return { blocked: true, warning: null };
-  if (first && !canPaintAt(world, x, m, 'plan')) return { blocked: true, warning: MSG_OTHER_SIDE(m.team) };
+  if (first && !canPaintAt(world, x, m, 'plan', y)) return { blocked: true, warning: hot.zoneY ? tr('Du malst nur in deinem Viertel.') : MSG_OTHER_SIDE(m.team) };
   let r;
   if (TERRAIN[sel]) r = paintTerrain(world, stroke, x, y, R, sel, m, 'plan');
   else r = stamp(world, stroke, x, y, R, sel, m.team, m, 'plan');

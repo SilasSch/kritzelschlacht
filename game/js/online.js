@@ -136,11 +136,15 @@ function unb64(str) {
 
 // Eigene Armee (lebende, malbare Einheiten der Seite) → Text
 export function packArmy(world, side) {
-  const us = world.units.filter(u => u.alive && u.team === side && UNITS[u.type].paint !== false);
+  return packUnits(world.units.filter(u => u.alive && u.team === side && UNITS[u.type].paint !== false), world.W, world.H);
+}
+// Einheitenliste [{ type, x, y, shape }] → Text (auch für die KI, bot.js)
+export function packUnits(us, W, H) {
+  us = us.filter(u => PAINT_TYPES.includes(u.type));
   const bytes = new Uint8Array(us.length * 5);
   us.forEach((u, k) => {
     const ti = PAINT_TYPES.indexOf(u.type), si = Math.max(0, SHAPE_KEYS.indexOf(u.shape || null));
-    const x = qz(u.x, world.W), y = qz(u.y, world.H), o = k * 5;
+    const x = qz(u.x, W), y = qz(u.y, H), o = k * 5;
     bytes[o] = (ti & 63) | (si << 6);
     bytes[o + 1] = x >> 8; bytes[o + 2] = x & 255; bytes[o + 3] = y >> 8; bytes[o + 4] = y & 255;
   });

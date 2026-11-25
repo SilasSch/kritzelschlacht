@@ -1487,5 +1487,23 @@ const EN = {
   "Wie heißt du?": "What's your name?",
   "Dein Name in der Bestenliste, auf dem Thron und im Online-Spiel. Du kannst ihn später ändern.": "Your name on the leaderboard, on the throne and in online games. You can change it later.",
   "Später": "Later",
+  // KI-Gegner (25.11.)
+  "Ohne Live-Verbindung gibt es hier keine Räume. Gegen die KI geht es trotzdem, mit allen Einstellungen. Gegen Freunde ohne Anmeldung: das <b>Code-Duell</b>.": "Without a live connection there are no rooms here. You can still play against the AI, with all settings. Against friends without signing in: the <b>code duel</b>.",
+  "Gegen die KI": "Against the AI",
+  "Gegen KI spielen": "Play the AI",
+  "KI": "AI",
+  "Ohne Live-Verbindung spielst du hier mit der KI: ein KI-Partner gegen zwei KI-Gegner. Mit Freunden geht 2 gegen 2 in der <a href=\"{u}\" target=\"_blank\" rel=\"noopener\">Live-Version</a> oder auf itch.io.": "Without a live connection you play with the AI here: one AI partner against two AI opponents. With friends, 2v2 works in the <a href=\"{u}\" target=\"_blank\" rel=\"noopener\">live version</a> or on itch.io.",
+  "Mit KI spielen": "Play with AI",
+  "KI entfernen": "Remove AI",
+  "Stärke der KI": "AI strength",
+  "Nur auf diesem Gerät: Besetze die freien Plätze mit der KI.": "Only on this device: fill the free seats with the AI.",
+  "Gib deinen Mitspielern diesen Code oder besetze freie Plätze mit der KI.": "Give your teammates this code or fill free seats with the AI.",
+  "In diesem Team ist kein Platz mehr.": "This team is full.",
+  "Leicht": "Easy",
+  "Mittel": "Medium",
+  "Schwer": "Hard",
+  "Malt ein paar zufällige Einheiten irgendwohin.": "Paints a few random units somewhere.",
+  "Mischt Nah- und Fernkampf und nutzt Formationen.": "Mixes melee and ranged and uses formations.",
+  "Probiert Armeen in Probeschlachten aus und kontert, was du ihm gezeigt hast.": "Tests armies in trial battles and counters what you showed it.",
 };
 export default EN;

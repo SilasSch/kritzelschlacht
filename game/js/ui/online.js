@@ -9,6 +9,8 @@ import {
 } from '../online.js';
 import { RULE, MAP, applyMap, mapSVG, RULE_GROUPS, rulePool } from '../rules.js';
 import { getRoom } from '../net.js';
+import { createBotRoom } from '../botroom.js';
+import { BOT_LEVELS, BOT_LEVEL_N, BOT_LEVEL_D, isLevel } from '../bot.js';
 // Live-Version des Artefakts (mit room-Capability, nur auf Einladung); die öffentliche Version verweist darauf
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
 import { fmtPts } from '../cards.js';
@@ -83,6 +85,12 @@ const CSS = `
 .onlset .opts button.on small{color:#cfd3dc}
 .onlset .hint{grid-column:2;font-size:12px;color:var(--muted);margin-top:-4px}
 .card.onl .rooms .btn small{color:var(--muted);font-weight:600}
+.onlbot{width:100%;box-sizing:border-box;padding:8px 12px;border:1.5px dashed var(--line);border-radius:14px;background:#f6fbf4}
+.onlbot .k{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.onlbot .opts{display:flex;gap:6px}
+.onlbot .opts button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font:700 13.5px var(--f-ui);color:var(--ink);cursor:pointer}
+.onlbot .opts button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.card.onl .onlbotd{margin-top:-4px}
 .onldiff{display:flex;flex-direction:column;gap:4px;margin:4px 0 8px;font-weight:700}
 .onldiff s{color:var(--muted);font-weight:600}
 #onlRules.wait{background:#fff3b0}
@@ -103,6 +111,9 @@ const mapsN = v => (v === 'feld' ? tr('Nur offenes Feld') : tr('Alle Karten'));
 const timeN = t => (t ? (t % 60 ? tr('{n} s', { n: t }) : tr('{n} min', { n: t / 60 })) : tr('Ohne Limit'));
 const goalN = g => (g ? tr('Best of {n}', { n: g * 2 - 1 }) : tr('Endlos'));
 const SET_KEY = 'kritzelschlacht-online-set';
+const BOT_KEY = 'kritzelschlacht-online-bot';
+const loadBotLvl = () => { try { const v = localStorage.getItem(BOT_KEY); return isLevel(v) ? v : 'mittel'; } catch (e) { return 'mittel'; } };
+const saveBotLvl = v => { try { localStorage.setItem(BOT_KEY, v); } catch (e) { /* ohne Speicher */ } };
 const loadSet = () => { try { return cleanSet(JSON.parse(localStorage.getItem(SET_KEY) || 'null')); } catch (e) { return cleanSet(null); } };
 const saveSet = st => { try { localStorage.setItem(SET_KEY, JSON.stringify(st)); } catch (e) { /* ohne Speicher */ } };
 const rulesN = groups => (groups.length === RULE_GROUPS.length ? tr('alle Regeln') : groups.map(g => tr(RULE_GROUPS.find(x => x.id === g).n)).join(' + '));
@@ -293,26 +304,18 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   function clearNotes() { clearTimeout(banT); banT = 0; sticky = null; askKey = ''; ban.hidden = true; ask.hidden = true; }
 
   // Lobby (25.11.): Spielart wählen (1 gegen 1, 2 gegen 2, König des Hügels) und die Partie einstellen
+  let botLvl = loadBotLvl();
   async function openLobby() {
     let st = loadSet();
     showCard('lobby', `<h2 id="onlTitle">${tr('Online spielen')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
     net = await getRoom();
     if (shown !== 'lobby') return;
-    if (!net) {
-      showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2>
-        <p>${tr('Das Online-Spiel braucht die Live-Verbindung des Claude-Artefakts. Sie ist hier nicht verfügbar.')}</p>
-        <p class="muted">${tr('Öffne das Spiel als Claude-Artefakt und melde dich an. Dein Gegner braucht ebenfalls Zugriff auf das Artefakt (Einladung) und muss angemeldet sein; über einen öffentlichen Link geht es nicht.')}</p>
-        <p>${tr('Live spielen: in der <a href="{u}" target="_blank" rel="noopener">Live-Version</a> (nur mit Einladung).', { u: LIVE_URL })}</p>
-        <p>${tr('<b>Ohne Anmeldung:</b> Nimm das <b>Code-Duell</b> (Knopf daneben). Du verschickst deine Armee als Code, dein Gegner malt verdeckt dagegen.')}</p>
-        <div class="btnrow"><button class="btn" id="onlCancel">${tr('Schließen')}</button></div>`);
-      $('onlCancel').onclick = hideCard; return;
-    }
     const team = game.teamUI, hill = game.hillUI;
     const modes = [
       { id: '1v1', ic: '⚔️', n: tr('1 gegen 1'), d: tr('Du gegen einen Freund, Runde für Runde'), on: true },
       { id: 'tft', ic: '🤝', n: tr('2 gegen 2: Staffel'), d: tr('Zwei Duelle, die Überlebenden helfen dem Teamkollegen'), open: team && (() => team.open('tft')) },
       { id: 'feld', ic: '🗺️', n: tr('2 gegen 2: Ein Feld'), d: tr('Alle vier auf einem Feld, jeder mit eigener Kategorie'), open: team && (() => team.open('feld')) },
-      { id: 'hill', ic: '👑', n: tr('König des Hügels'), d: tr('Setz dich auf den Thron und verteidige ihn'), open: hill && (() => hill.open()) },
+      { id: 'hill', ic: '👑', n: tr('König des Hügels'), d: tr('Setz dich auf den Thron und verteidige ihn'), open: net && hill && (() => hill.open()) },
     ];
     card.classList.add('lobby');
     showCard('lobby', `<h2 id="onlTitle">${tr('Online spielen')}</h2>
@@ -320,8 +323,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       <div class="onlmodes">${modes.map(o => `<button class="btn${o.on ? ' on' : ''}" data-m="${o.id}"${!o.on && !o.open ? ` disabled title="${tr('Kommt bald')}"` : ''}><span class="ic">${o.ic}</span><b>${o.n}</b><span>${o.d}</span></button>`).join('')}</div>
       <h3>${tr('Einstellungen')}</h3>
       <div id="onlSetBox"></div>
-      <div class="row"><button class="go" id="onlCreate">${tr('Raum erstellen')}</button><span class="muted">${tr('oder')}</span><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="${tr('Raumcode')}"><button class="btn" id="onlJoin">${tr('Beitreten')}</button></div>
-      <div class="rooms" id="onlRooms"></div>
+      ${net ? `<div class="row"><button class="go" id="onlCreate">${tr('Raum erstellen')}</button><span class="muted">${tr('oder')}</span><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="${tr('Raumcode')}"><button class="btn" id="onlJoin">${tr('Beitreten')}</button></div>`
+        : `<p class="muted">${tr('Ohne Live-Verbindung gibt es hier keine Räume. Gegen die KI geht es trotzdem, mit allen Einstellungen. Gegen Freunde ohne Anmeldung: das <b>Code-Duell</b>.')}</p>`}
+      <div class="row onlbot"><span class="k">🤖 ${tr('Gegen die KI')}</span><div class="opts" id="onlBotLvl">${BOT_LEVELS.map(l => `<button type="button" data-l="${l}" class="${l === botLvl ? 'on' : ''}" title="${esc(tr(BOT_LEVEL_D[l]))}">${tr(BOT_LEVEL_N[l])}</button>`).join('')}</div><button class="${net ? 'btn' : 'go'}" id="onlBot">${tr('Gegen KI spielen')}</button></div>
+      <div class="muted onlbotd" id="onlBotD">${esc(tr(BOT_LEVEL_D[botLvl]))}</div>
+      ${net ? '<div class="rooms" id="onlRooms"></div>' : ''}
       <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
     card.querySelectorAll('.onlmodes [data-m]').forEach(b => {
       const o = modes.find(x => x.id === b.dataset.m);
@@ -329,11 +335,18 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     });
     const drawSet = () => { const box = $('onlSetBox'); box.innerHTML = setFormHTML(st); wireSetForm(box, () => st, v => { st = v; saveSet(st); drawSet(); }); };
     drawSet();
+    card.querySelectorAll('#onlBotLvl button').forEach(b => { b.onclick = () => {
+      botLvl = b.dataset.l; saveBotLvl(botLvl);
+      card.querySelectorAll('#onlBotLvl button').forEach(x => x.classList.toggle('on', x === b));
+      $('onlBotD').textContent = tr(BOT_LEVEL_D[botLvl]);
+    }; });
+    $('onlBot').onclick = () => start('host', 'BOT', st, botLvl);
+    $('onlCancel').onclick = hideCard;
+    if (!net) { $('onlBot').focus(); return; }
     $('onlCreate').onclick = () => start('host', makeCode(), st);
     const join = () => { const c = normCode($('onlCode').value); if (!c) { ui.toast(tr('Der Code hat 4 Zeichen, z. B. KX7P.')); return; } start('guest', c); };
     $('onlJoin').onclick = join;
     $('onlCode').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') join(); };
-    $('onlCancel').onclick = hideCard;
     // offene Räume aus der Lobby: 1 gegen 1 (mit Einstellungen) und 2 gegen 2
     const render = () => {
       const box = $('onlRooms'); if (!box) return;
@@ -469,9 +482,10 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   /* ---------- Verbindung ---------- */
   let joining = false;
-  async function start(role, code, set) {
+  async function start(role, code, set, bot = null) {
     if (joining || m) return;
     const b = game.battle; if (!b || b.phase !== 'plan' || b.hot) return;
+    if (bot) { startBot(code, set, bot); return; }
     joining = true;
     let canceled = false;
     showCard('joining', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>
@@ -502,12 +516,23 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       publish(); waitCard(); sync();
     } finally { joining = false; }
   }
+  // Gegen die KI (25.11.): derselbe Ablauf wie online, nur sitzt im Raum statt eines Menschen die KI (botroom.js)
+  function startBot(code, set, level) {
+    const b = game.battle;
+    room = createBotRoom({ level, W: world.W, H: world.H });
+    m = createMatch('host', set); m.code = code; m.bot = level; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
+    game.clear(); undoStack.length = 0;
+    b.hot = { online: true, budget: m.budget, step: 'online', spent: { blau: 0, rot: 0 }, def: null };
+    unsubs.push(room.onPeers(onPeers, () => {}));
+    hideCard(); publish(); sync();
+  }
   function leave(msg) {
     clearTimeout(pubRetry); pubRetry = 0;
     for (const u of unsubs) try { u(); } catch (e) { /* weg */ }
     unsubs = [];
+    const wasBot = !!(m && m.bot);
     if (room) try { room.leave(); } catch (e) { /* weg */ }
-    if (net) try { net.presence({ open: null }); } catch (e) { /* weg */ }
+    if (net && !wasBot) try { net.presence({ open: null }); } catch (e) { /* weg */ }
     room = null; m = null; goneAck = false; paintEnd = 0;
     hideCard(); clearNotes();
     const b = battleRef; battleRef = null;
@@ -540,7 +565,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       if (peerRef && peerRef !== p.peer && m.cfg) { /* neuer Tab des Gegners: läuft mit der Runde weiter */ }
       peerRef = p.peer; peerSeen = Date.now(); goneAck = false;
       if (shown === 'gone') hideCard();
-      if (m.role === 'host' && !m.cfg) { try { net.presence({ open: null }); } catch (e) { /* egal */ } act(hostStart(m)); }
+      if (m.role === 'host' && !m.cfg) { if (net && !m.bot) try { net.presence({ open: null }); } catch (e) { /* egal */ } act(hostStart(m)); }
       act(onPeer(m, p.presence, world.W, world.H));
     }
     publish();
@@ -654,7 +679,8 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     $('batClear').hidden = ph !== 'paint';
     setText(go, tr(ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …'));
     go.disabled = !(ph === 'paint' || ph === 'vote' || (ph === 'result' && m.want <= c.r));
-    const head = c && c.cat ? `Online · ${tr('Runde {r}', { r: c.r })} · ${tr(CAT_NAME[c.cat])} · ${tr(MAP[c.map].n)} · ${scoreText()}` : c ? `Online · ${tr('Runde {r}', { r: c.r })} · ${scoreText()}` : `Online · ${tr('Raum {c}', { c: m.code })}`;
+    const pre = m.bot ? `🤖 ${tr('KI')} ${tr(BOT_LEVEL_N[m.bot])}` : 'Online';
+    const head = c && c.cat ? `${pre} · ${tr('Runde {r}', { r: c.r })} · ${tr(CAT_NAME[c.cat])} · ${tr(MAP[c.map].n)} · ${scoreText()}` : c ? `${pre} · ${tr('Runde {r}', { r: c.r })} · ${scoreText()}` : `${pre} · ${tr('Raum {c}', { c: m.code })}`;
     const clock = ph === 'paint' && paintEnd ? ` · ⏰ ${Math.max(0, Math.ceil((paintEnd - Date.now()) / 1000))} s` : '';
     const tail = ph === 'paint' ? tr(m.side === 'blau' ? 'du malst links: {a} / {b} Punkte' : 'du malst rechts: {a} / {b} Punkte', { a: fmtPts(b.hot.spent[m.side]), b: budgetOf(c) })
       : tr(ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (!myPick(m) ? 'dein Gegner wählt' : m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')

@@ -35,7 +35,13 @@ import { createBoardUI } from './ui/dailyboard.js';
 import { createHotseatUI } from './ui/hotseat.js';             // Hotseat-Versus (Audit 18.11.)
 import { createOnlineUI } from './ui/online.js';               // Online 1 gegen 1 (18.11.)
 import { createDuelUI } from './ui/duel.js';                   // Code-Duell (18.11.)
-import { applyMap } from './rules.js';                          // Karten für 1 gegen 1
+import { applyMap } from './rules.js';
+import { quickPlan, placeQuick, QUICK_DEFAULT } from './quick.js';   // Schnelle Schlacht (25.11.)
+import { armyCenter, introCam, armySummary } from './intro.js';     // Gegner vorstellen (25.11.)
+import { clampCamera } from './camera.js';
+import { makeTemplate, applyTemplate, TEMPLATE_MAX } from './templates.js';   // Armee-Vorlagen (25.11.)
+import { createTemplatesUI } from './ui/templates.js';
+import { createRecorder, saveFile } from './recorder.js';   // Schlacht als Video (25.11.)                          // Karten für 1 gegen 1
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 import { makePaletteFold } from './ui/palfold.js';             // Malleiste klappt im Kampf und beim Malen weg (25.11.)
 import { tr, unitName, unitPlural, translateDom, LANG, switchLang } from './i18n.js';   // Sprache (18.11.)
@@ -155,9 +161,19 @@ const game = {
       markAll(); rebuildHash(world); ui.updateMission(); ui.updateCounts();
       return;
     }
+    if (game.watch) game.toggleWatch(false);
     clearWorld(); ui.updateCounts();
   },
   dice() { if (game.mission || game.battle || game.editor) return; audio.init(); randomBattle(); ui.closeBanner(); ui.updateCounts(); },
+  // Zuschau-Modus (25.11.): im Sandkasten folgt nach jedem Sieg (oder nach WATCH_MAX s) die nächste Zufallsschlacht.
+  // Malen, Leeren oder ein anderer Modus beenden ihn.
+  watch: false,
+  toggleWatch(on = !game.watch) {
+    if (game.mission || game.battle || game.editor) on = false;
+    game.watch = on; watchT = -1; watchAge = 0;
+    if (on) { game.paused = false; game.dice(); ui.toast(tr('Zuschauen: eine Zufallsschlacht nach der anderen. Malen beendet es.')); }
+    ui.updateControls();
+  },
 
   undo() {
     const m = game.mission, b = game.battle;
@@ -173,7 +189,7 @@ const game = {
 
   enterSandbox,
   toggleRanges() { game.showRanges = !game.showRanges; ui.updateRanges(); },
-  replay: startReplay, endReplay, replaying: () => !!game.replayState, canReplay,
+  replay: startReplay, endReplay, videoReplay: () => videoReplay(), replaying: () => !!game.replayState, canReplay,
   startTutorial, skipTutorial() { save.tutorial = true; persist(); },
   enterBattle, startBattle, retryBattle, editBattle, runBatch, cancelBatch, swapSides,
   loadMission,
@@ -218,6 +234,7 @@ function saveSandbox() {
 }
 
 function enterSandbox() {
+  stopIntro();
   endReplay(true);
   coach.stop();
   ui.hideOverlays();
@@ -252,6 +269,7 @@ function loadMission(x, custom = null) {
 }
 // Ein Level direkt (auch ohne Kapitel: Tutorial, Tageschallenge, eigene Level). opts: { chapter, idx, kind, custom }
 function loadLevelDef(def, opts = {}) {
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   if (opts.kind !== 'tutorial') coach.stop();
   if (!game.mission && !game.battle && !game.editor) saveSandbox();
@@ -269,9 +287,25 @@ function loadLevelDef(def, opts = {}) {
   if (!game.catKeys(game.cat).includes(game.sel)) game.sel = game.catKeys(game.cat)[0];
   markAll();
   ui.closeBanner(); ui.hideOverlays(); ui.resetBattle(); ui.refresh(); ui.updateRanges();
+  // Gegner vorstellen (25.11.): nur beim ersten Laden eines Levels, nicht bei „Nochmal planen“ und nicht im Tutorial
+  if (opts.kind !== 'tutorial' && introSeen !== def.id) { introSeen = def.id; startIntro(); }
+}
+let introSeen = null, intro = null;
+const reducedMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
+function startIntro() {
+  const c = armyCenter(world.units, 'rot');
+  if (!c) return;
+  const list = armySummary(world.units, 'rot');
+  if (list.length) ui.toast(tr('Gegner: {l}', { l: list.map(([k, n]) => `${n} ${n === 1 ? unitName(k) : unitPlural(k)}`).join(', ') }));
+  if (!reducedMotion()) intro = { target: c, t: 0 };
+}
+function stopIntro() {
+  if (!intro) return;
+  intro = null; cam.zoom = cam.fit; clampCamera(cam);
 }
 
 function startMission() {
+  stopIntro();
   const m = game.mission;
   rebuildHash(world);
   if (!(world.facCount.get(PLAYER) > 0)) { ui.toast(tr('Male zuerst deine Armee.')); return; }
@@ -356,6 +390,24 @@ function fightSrc() {
   return null;
 }
 function canReplay() { return !!fightSrc(); }
+// Video (25.11.): dasselbe Replay, dabei nimmt recorder.js die Leinwand auf (nur die Zeitlupe, ohne HUD). Am Ende des
+// Replays (auch „Überspringen“) wird die Datei zum Speichern angeboten.
+let recorder = null;
+function videoReplay() {
+  if (!recorder) recorder = createRecorder(renderer.canvas);
+  if (!recorder.supported()) { ui.toast(tr('Dieser Browser kann keine Videos aufnehmen.')); return; }
+  startReplay();
+  if (game.replayState) { game.replayState.rec = true; ui.replayBar(true, tr('Video: wird vorbereitet …')); }
+}
+function finishVideo() {
+  if (!recorder || !recorder.active) return;
+  ui.toast(tr('Video wird erstellt …'));
+  recorder.stop().then(v => {
+    if (!v) { ui.toast(tr('Kein Video aufgenommen.')); return null; }
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    return saveFile(v.blob, `kritzelschlacht-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.${v.ext}`);
+  }).then(st => { if (st === 'saved' || st === 'link') ui.toast(tr('Video gespeichert.')); }, () => ui.toast(tr('Das Video ließ sich nicht speichern.')));
+}
 function startReplay() {
   const src = fightSrc(); if (!src) return;
   ui.hideOverlays(); ui.closeBanner();
@@ -370,6 +422,7 @@ function startReplay() {
 function endReplay(quiet = false) {
   if (!game.replayState) return;
   game.replayState = null; ui.replayBar(false);
+  finishVideo();
   if (quiet) return;
   const m = game.mission, b = game.battle;
   if (m && m.res) ui.showResult(m.res); else if (b && b.result) ui.showBattleResult(b.result);
@@ -379,7 +432,7 @@ function replayFrame(realDt) {
   if (!r.play) {
     const end = performance.now() + REPLAY_FF_MS;
     while (r.t < r.from && performance.now() < end) { step(world, STEP); world.events.length = 0; r.t += STEP; }
-    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); ui.replayBar(true, tr("Zeitlupe · letzte {n} s", { n: Math.round(r.to - r.from) })); }
+    if (r.t >= r.from) { r.play = true; renderer.fx.clear(); if (r.rec && !recorder.start()) { r.rec = false; ui.toast(tr('Dieser Browser kann keine Videos aufnehmen.')); } ui.replayBar(true, tr(r.rec ? "● Aufnahme · letzte {n} s" : "Zeitlupe · letzte {n} s", { n: Math.round(r.to - r.from) })); }
     else ui.replayBar(true, `${tr('wird vorbereitet …')} ${Math.round(r.t / r.from * 100)} %`);
     return;
   }
@@ -418,6 +471,8 @@ function startTutorial() {
 const newBattle = () => ({ phase: 'plan', snap: null, stats: null, batch: null, t: 0, endT: -1, result: null, evFrom: 0, batchRes: null });
 
 function enterBattle() {
+  stopIntro();
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   coach.stop();
   const cur = game.battle;
@@ -566,6 +621,62 @@ function finishBattle() {
   audio.play(b.result.winner === 'draw' ? 'lose' : 'win');
 }
 
+/* ---------- Schnelle Schlacht (25.11.) ---------- */
+// „Zufallsgegner“ in der Planung: Rot bekommt eine neue Zufallsarmee (quick.js) mit so vielen Punkten wie Blau, ohne
+// Blau QUICK_DEFAULT. Aus dem Sandkasten oder einer Mission geht es dafür in den Schlacht-Modus.
+function quickEnemy() {
+  if (!game.battle) enterBattle();
+  const b = game.battle;
+  if (!b || b.hot) return;
+  if (b.phase !== 'plan') editBattle();
+  world.units = world.units.filter(u => u.team !== 'rot');
+  const pts = armyPoints(world).blau;
+  placeQuick(world, quickPlan(pts > 0 ? pts : QUICK_DEFAULT), 'rot');
+  b.snap = null; undoStack.length = 0;
+  rebuildHash(world); audio.init(); audio.play('whoosh');
+  ui.updateBattle(); ui.updateCounts();
+  ui.toast(pts > 0 ? tr('Rot hat eine Zufallsarmee. Jetzt „Los!“.') : tr('Rot hat eine Zufallsarmee. Male Blau links und drück „Los!“.'));
+}
+game.quickEnemy = quickEnemy;
+
+/* ---------- Armee-Vorlagen (25.11.) ---------- */
+// Blau in der Planung einer Mission (links der Mallinie, mit Budget und erlaubten Einheiten) oder der freien Schlacht
+// (linke Hälfte, ohne Grenze). templates.js rechnet, ui/templates.js zeigt die Liste.
+function tplZone() {
+  const m = game.mission, b = game.battle;
+  if (m && m.phase === 'plan') return { xMax: zoneX(world), mission: m };
+  if (b && b.phase === 'plan' && !b.hot) return { xMax: world.W / 2, mission: null };
+  return null;
+}
+Object.assign(game, {
+  tplList: () => save.armies,
+  tplReady: () => !!tplZone(),
+  tplSave() {
+    const z = tplZone(); if (!z) return false;
+    const name = z.mission ? tr(z.mission.def.n) : tr('Schlacht');
+    const t = makeTemplate(world.units, PLAYER, z.xMax, world.H, `${name} · ${new Date().toLocaleDateString()}`);
+    if (!t) { ui.toast(tr('Male zuerst deine Armee.')); return false; }
+    save.armies = [t, ...save.armies].slice(0, TEMPLATE_MAX); persist();
+    ui.toast(tr('Vorlage gespeichert.'));
+    return true;
+  },
+  tplLoad(i) {
+    const z = tplZone(), t = save.armies[i]; if (!z || !t) return;
+    const m = z.mission;
+    world.units = world.units.filter(u => u.team !== PLAYER);
+    if (m) m.spent = 0;
+    const r = applyTemplate(world, t, { team: PLAYER, xMax: z.xMax, budget: m ? m.budget : Infinity, spent: 0, allowed: m ? game.unitAllowed : () => true });
+    if (m) m.spent = r.spent;
+    if (game.battle) game.battle.snap = null;
+    undoStack.length = 0; rebuildHash(world);
+    ui.updateMission(); ui.updateBattle(); ui.updateCounts();
+    const sk = r.skipped, miss = sk.type + sk.budget + sk.terrain;
+    ui.toast(miss ? tr('Vorlage geladen: {a} Einheiten, {b} passten nicht (Budget, erlaubte Einheiten oder Gelände).', { a: r.placed, b: miss }) : tr('Vorlage geladen: {a} Einheiten.', { a: r.placed }));
+  },
+  tplDelete(i) { save.armies = save.armies.filter((_, k) => k !== i); persist(); },
+});
+const tplUI = createTemplatesUI(game);
+
 /* ---------- Editor und Teilen (Audit 18.11.) ---------- */
 // Level-Editor: game.editor ist edState ({ meta: { n, hint, budget, cats }, savedId, keep }), solange der Editor offen ist,
 // sonst null. Gemalt werden Gegner (paint.EDITOR: Rot, nur rechts der Mallinie) und Gelände überall; die Simulation steht.
@@ -581,6 +692,8 @@ game.editorUI = editorUI;
 
 // level: ein eigenes Level zum Bearbeiten (Liste „Eigene Level“); ohne: die zuletzt offene Aufstellung des Editors
 function enterEditor(level = null) {
+  stopIntro();
+  if (game.watch) game.toggleWatch(false);
   endReplay(true);
   coach.stop();
   ui.hideOverlays();
@@ -689,6 +802,7 @@ document.getElementById('batShare').onclick = () => shareBattle();
 const actions = {
   strokeStart() {
     audio.init();
+    if (game.watch) game.toggleWatch(false);   // Zuschau-Modus: Malen beendet ihn
     if (!game.mission) ui.closeBanner();
     stroke = createStroke(game.mission ? game.mission.spent : 0);
     stroke.first = true; stroke.blocked = false; stroke.path = [];
@@ -833,6 +947,7 @@ function simStep() {
   } else {
     const f = sandboxWinner(world);
     if (f) ui.banner(world.teamMode ? tr('Team {t} gewinnt!', { t: tr(TEAMS[f].n) }) : tr('{u} gewinnen!', { u: unitPlural(f) }));
+    if (game.watch) { watchAge += STEP; if ((f || watchAge > WATCH_MAX) && watchT < 0) watchT = WATCH_GAP; }
   }
 }
 
@@ -846,6 +961,8 @@ function finaleSlow(world) {
 }
 
 let acc = 0, last = performance.now(), uiT = 0;
+let watchT = -1, watchAge = 0;   // Zuschau-Modus: Pause bis zur nächsten Schlacht, Dauer der laufenden
+const WATCH_MAX = 120, WATCH_GAP = 3;
 const params = new URLSearchParams(location.search);
 
 
@@ -884,6 +1001,7 @@ function frame(now) {
     drainEvents();
     renderer.fx.update(realDt * .5, null);
   }
+  if (game.watch && watchT >= 0 && !game.paused) { watchT -= realDt; if (watchT < 0) { watchAge = 0; game.dice(); } }
   if (m && m.endT >= 0) { m.endT -= realDt; if (m.endT < 0) { m.endT = -1; finishMission(); } }
   if (bt && bt.endT >= 0) { bt.endT -= realDt; if (bt.endT < 0) { bt.endT = -1; finishBattle(); } }
 
@@ -895,6 +1013,8 @@ function frame(now) {
     battleMidX: bt && bt.phase === 'plan' ? world.W / 2 : null,
     ranges: m && m.phase === 'plan' && game.showRanges ? enemyRanges() : null,
   });
+  if (intro) { intro.t += realDt; if (!introCam(cam, intro.target, intro.t)) intro = null; }   // Gegner vorstellen
+  tplUI.sync();      // Armee-Vorlagen: Knöpfe nur in der Planung
   palFold?.sync(game);   // Malleiste: im Kampf und beim Malen weggeklappt (ui/palfold.js)
   hotseat.frame();   // Hotseat (Audit 18.11.): versteckte Seite, Deckkarten
   online.frame();    // Online 1 gegen 1: Kampfende melden, Modus verlassen
@@ -981,6 +1101,7 @@ if (bench.n) bench.start();
 else if (!save.tutorial && !params.has('debug')) ui.showWelcome();
 ui.refresh();
 bindInput(renderer.canvas, cam, actions);
+for (const ev of ['pointerdown', 'wheel']) renderer.canvas.addEventListener(ev, stopIntro, { capture: true, passive: true });
 const gl = guardContext(renderer.canvas, document.getElementById('glLost'), { pause() {}, restored() { renderer.fx.clear(); markAll(); } });
 { const kb = actions.keysBlocked; actions.keysBlocked = () => kb() || gl.lost; }
 requestAnimationFrame(t => { last = t; frame(t); });

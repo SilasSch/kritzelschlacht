@@ -117,7 +117,7 @@ export function createHotseatUI({ game, world, ui, renderer, audio, pointer, sta
     if (!b) return;
     if (hh && plan) {
       $('batSwap').hidden = true;
-      $('batShare').hidden = true;
+      $('batShare').hidden = true; $('batQuick').hidden = true;
       $('batClear').hidden = !side;
       setText(go, side ? tr('Fertig') : tr('Los!'));
       setText($('batHint'), side ? `${tr('Hotseat')} · ${tr(side === 'blau' ? 'Blau malt links' : 'Rot malt rechts')} · ${tr('{a} / {b} Punkte', { a: fmtPts(hh.spent[side]), b: hh.budget })}` : `${tr('Hotseat')} · ${tr('gleich geht es los')}`);

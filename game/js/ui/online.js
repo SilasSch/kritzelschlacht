@@ -467,7 +467,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     giveBtn.hidden = !on || !canGiveUp(m);
     if (!on) return;
     go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
-    $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true;
+    $('batHot').hidden = true; $('batSwap').hidden = true; $('batShare').hidden = true; $('batQuick').hidden = true;
     const c = m.cfg, ph = m.phase;
     $('batClear').hidden = ph !== 'paint';
     setText(go, tr(ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …'));

@@ -5,6 +5,7 @@
 // der Grundausbildung zusätzlich unter dem alten Index, damit ein älteres Spiel (auch kritzelschlacht.html) sie weiter sieht.
 import { LEGACY_IDS } from './campaign/grundausbildung.js';
 import { isLevel, CUSTOM_MAX } from './editor.js';
+import { cleanTemplates } from './templates.js';   // Armee-Vorlagen (25.11.)
 
 export const SAVE_KEY = 'kritzelschlacht-v1';
 
@@ -26,6 +27,7 @@ export function parseSave(text) {
   save.tutorial = !!save.tutorial;
   save.custom = parseCustom(save.custom);
   save.daily = cleanDaily(save.daily);
+  save.armies = cleanTemplates(save.armies);
   return save;
 }
 
@@ -68,6 +70,8 @@ export function serializeSave(save) {
   // daily nur, wenn es Einträge gibt
   const daily = cleanDaily(save.daily);
   if (Object.keys(daily).length) out.daily = daily;
+  const armies = cleanTemplates(save.armies);
+  if (armies.length) out.armies = armies;
   return JSON.stringify(out);
 }
 

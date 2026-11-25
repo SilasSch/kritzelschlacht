@@ -424,6 +424,7 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
       <div class="icons p">
         <button class="ib shadow txt lexb" id="bLex" title="Lexikon: alle Einheiten mit Werten, Fähigkeiten und Kontern" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 6.5C10 5 7 4.5 4 5v13c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V5c-3-.5-6 0-8 1.5zM12 6.5v13"/></svg>Lexikon</button>
         <button class="ib shadow" id="bDice" title="Zufallsschlacht" aria-label="Zufallsschlacht"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.2" fill="currentColor"/><circle cx="15" cy="15" r="1.2" fill="currentColor"/><circle cx="15" cy="9" r="1.2" fill="currentColor"/><circle cx="9" cy="15" r="1.2" fill="currentColor"/></svg></button>
+        <button class="ib shadow" id="bWatch" title="Zuschauen: Zufallsschlachten laufen von allein nacheinander" aria-label="Zuschauen" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button><!-- Zuschau-Modus (25.11.) -->
         <button class="ib shadow" id="bCode" title="Code laden: geteilte Schlacht oder eigenes Level" aria-label="Code laden" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg></button><!-- Teilen (Audit 18.11.) -->
         <button class="ib shadow txt" id="bSpeed" title="Tempo">1×</button>
         <button class="ib shadow" id="bSlow" title="Zeitlupe" aria-label="Zeitlupe"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></svg></button>
@@ -449,6 +450,7 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
       <div class="bgrp" id="batTools">
         <button class="btn" id="batClear" title="Alle Einheiten und das Gelände entfernen"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>Leeren</button>
         <button class="btn" id="batSwap" title="Spiegelt die Aufstellung samt Gelände an der Mittellinie"><svg viewBox="0 0 24 24" class="ico"><path d="M4 8h15l-4-4M20 16H5l4 4"/></svg>Seiten tauschen</button>
+        <button class="btn" id="batQuick" title="Rot bekommt eine Zufallsarmee mit so vielen Punkten wie Blau"><svg viewBox="0 0 24 24" class="ico"><rect x="4" y="4" width="16" height="16" rx="4"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="15" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="9" cy="15" r="1.3"/></svg>Zufallsgegner</button><!-- Schnelle Schlacht (25.11.) -->
         <button class="btn" id="batShare" title="Aufstellung als Code teilen"><svg viewBox="0 0 24 24" class="ico"><path d="M12 15V3M7 8l5-5 5 5M5 13v7h14v-7"/></svg>Teilen</button><!-- Teilen (Audit 18.11.) -->
       </div>
       <div class="bgrp vs" id="batVs" role="group" aria-label="Zu zweit spielen"><span class="glab">Zu zweit</span></div>
@@ -491,6 +493,7 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
       <div class="btnrow">
         <button class="go" id="resNext">Nächste Mission</button>
         <button class="btn" id="resReplay" title="Die letzten Sekunden in Zeitlupe">Replay</button>
+        <button class="btn" id="resVideo" title="Das Replay als Video speichern (WebM)">Video</button><!-- Video (25.11.) -->
         <button class="btn" id="resRetry">Nochmal planen</button>
         <button class="btn" id="resList">Übersicht</button>
       </div>
@@ -516,6 +519,7 @@ body.pal-fold-paint .palette{transition-delay:.15s,.2s,.45s}
         <button class="btn" id="batTen">10× auswerten</button>
         <button class="btn" id="batEdit">Aufstellung ändern</button>
         <button class="btn" id="batReplay" title="Die letzten Sekunden in Zeitlupe">Replay</button>
+        <button class="btn" id="batVideo" title="Das Replay als Video speichern (WebM)">Video</button><!-- Video (25.11.) -->
       </div>
     </div>
   </div>

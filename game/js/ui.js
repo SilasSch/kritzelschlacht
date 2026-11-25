@@ -280,7 +280,7 @@ export function createUI(game) {
   function updateMode() {
     const mis = game.mission, bat = game.battle;
     $('mMis').classList.toggle('on', !!mis); $('mSand').classList.toggle('on', !mis && !bat); $('mBat').classList.toggle('on', !!bat);
-    $('misBar').hidden = !mis; $('batBar').hidden = !bat; $('bDice').hidden = !!mis || !!bat; $('teamBox').hidden = !!mis || !!bat;
+    $('misBar').hidden = !mis; $('batBar').hidden = !bat; $('bDice').hidden = !!mis || !!bat; $('bWatch').hidden = !!mis || !!bat || !!game.editor; $('teamBox').hidden = !!mis || !!bat;
     $('teamToggle').checked = game.world.teamMode;
     $('chips').hidden = !game.world.teamMode || !!mis || !!bat;
     if (bat) updateBattle();
@@ -309,6 +309,7 @@ export function createUI(game) {
     $('bPause').classList.toggle('on', game.paused);
     $('bSpeed').textContent = game.speed + '×';
     $('bSlow').classList.toggle('on', game.slow);
+    $('bWatch').classList.toggle('on', !!game.watch); $('bWatch').setAttribute('aria-pressed', String(!!game.watch));
     $('muteIco').innerHTML = game.save.muted ? ICON_MUTED : ICON_SOUND;
     $('bMute').classList.toggle('on', game.save.muted);
     const vol = $('vol'); if (vol && document.activeElement !== vol) vol.value = Math.round((typeof game.save.volume === 'number' ? game.save.volume : .6) * 100);
@@ -406,6 +407,7 @@ export function createUI(game) {
     $('resMedals').hidden = !md;
     if (md) $('resMedals').innerHTML = MEDALS.map((x, k) => `<span class="${hasMedal(md.mask, k) ? 'on' : ''}${hasMedal(md.fresh, k) ? ' new' : ''}" title="${esc(tr(x.d))}">${x.icon} ${esc(tr(x.n))}</span>`).join('');
     $('resReplay').hidden = !r.canReplay;
+    $('resVideo').hidden = !r.canReplay;
     // nach dem letzten Level eines Kapitels führt „Weiter“ zur Kapitelübersicht
     $('resNext').hidden = !r.win || !!r.custom;   // eigene Level: keine nächste Mission
     $('resList').textContent = r.custom === 'editor' ? tr('Zum Editor') : r.custom ? tr('Eigene Level') : tr('Übersicht');
@@ -437,6 +439,7 @@ export function createUI(game) {
   $('bSlow').onclick = () => game.toggleSlow();
   $('bClear').onclick = () => game.clear();
   $('bDice').onclick = () => game.dice();
+  $('bWatch').onclick = () => game.toggleWatch();   // Zuschau-Modus (25.11.)
   $('bUndo').onclick = () => game.undo();
   $('brush').oninput = e => game.setBrush(+e.target.value);
   $('teamToggle').onchange = e => game.setTeamMode(e.target.checked);
@@ -454,6 +457,8 @@ export function createUI(game) {
   $('misRange').onclick = () => game.toggleRanges();
   $('resReplay').onclick = () => { $('ovRes').hidden = true; game.replay(); };
   $('batReplay').onclick = () => game.replay();
+  $('resVideo').onclick = () => { $('ovRes').hidden = true; game.videoReplay(); };   // Video (25.11.)
+  $('batVideo').onclick = () => game.videoReplay();
   $('replaySkip').onclick = () => game.endReplay();
   $('welTut').onclick = () => { $('ovWelcome').hidden = true; game.startTutorial(); };
   $('welSkip').onclick = () => { $('ovWelcome').hidden = true; game.skipTutorial(); };
@@ -468,6 +473,7 @@ export function createUI(game) {
   $('batGo').onclick = e => { e.currentTarget.blur(); const b = game.battle; if (!b) return; if (b.phase === 'plan') game.startBattle(); else if (b.phase === 'fight') game.editBattle(); };
   $('batClear').onclick = () => game.clear();
   $('batSwap').onclick = () => game.swapSides();
+  $('batQuick').onclick = () => game.quickEnemy();   // Schnelle Schlacht (25.11.)
   $('batAgain').onclick = () => game.retryBattle();
   $('batTen').onclick = () => game.runBatch(10);
   $('batEdit').onclick = () => game.editBattle();
@@ -489,7 +495,7 @@ export function createUI(game) {
     const plan = b.phase === 'plan';
     setText('batHint', plan ? tr('Blau malt links, Rot rechts · Gelände überall')
       : b.phase === 'fight' ? `${tr('Kampf läuft')} · ${clock(b.t)}${b.t > 150 ? ' · ' + tr('ab 3:00 entscheidet die Stärke') : ''}` : `${tr('Kampf vorbei')} · ${clock(b.t)}`);
-    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan;
+    $('batClear').hidden = !plan; $('batSwap').hidden = !plan; $('batShare').hidden = !plan; $('batQuick').hidden = !plan || !!b.hot;
     const g = $('batGo');
     setText('batGo', plan ? tr('Los!') : tr('Abbrechen'));
     g.disabled = b.phase === 'done';
@@ -574,6 +580,7 @@ export function createUI(game) {
     const bb = game.battle;
     if (bb && bb.batchRes) batchDone(bb.batchRes); else { $('batBatch').hidden = true; $('batTen').disabled = false; }
     $('batReplay').hidden = !game.canReplay();
+    $('batVideo').hidden = !game.canReplay();
     document.body.classList.add('bat-res');
     $('ovBat').hidden = false;
   }

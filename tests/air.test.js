@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UNITS } from '../game/js/data.js';
 import { createWorld, spawn, rebuildHash, outOfMelee, nearestEnemy } from '../game/js/world.js';
-import { step } from '../game/js/sim.js';
+import { step, placeRect } from '../game/js/sim.js';
 import { hurt, HELI } from '../game/js/combat.js';
 import { JET } from '../game/js/air.js';
 
@@ -53,6 +53,14 @@ test('Drohne: explodiert am Ziel, trifft keine Eigenen und stirbt dabei', () => 
   assert.equal(d.alive, false);
   assert.ok(p.hp < UNITS.panzer.hp - 50, `Panzer ${p.hp | 0}`);
   assert.equal(mate.hp, UNITS.kampfdrohne.hp, 'eigene Kampfdrohne unversehrt');
+});
+
+test('Drohnenschwarm zwischen zwei gleichen Zielen: Hälften fliegen zum näheren statt über Kreuz (Aufzeichnung 23.11.)', () => {
+  // vorher: ab ~500 Drohnen teilte die Zielwahl nach Reihenfolge, die Hälften blockierten sich in der Mitte, beide Spulen lebten ewig
+  const w = mkWorld(3), a = spawn(w, 'tesla', 800, 108, 'blau'), b = spawn(w, 'tesla', 800, 792, 'blau');
+  placeRect(w, 'kampfdrohne', 600, .45, .3, .55, .7, 'rot');
+  rebuildHash(w); run(w, 6);
+  assert.ok(!a.alive && !b.alive, `Spulen ${a.hp | 0} / ${b.hp | 0}`);
 });
 
 test('Bomber: wirft einen Teppich auf Bodentruppen, trifft sich selbst nicht', () => {

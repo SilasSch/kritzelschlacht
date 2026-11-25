@@ -11,7 +11,7 @@ import re, sys, zipfile
 from pathlib import Path
 
 # Adresse des Relays auf Silas' Cloudflare-Account (relay/worker.js)
-RELAY = ''
+RELAY = 'wss://kritzelschlacht-relay.kritzelschlacht.workers.dev'
 ROOT = Path(__file__).resolve().parent.parent / 'game'
 relay = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else RELAY
 out = Path(sys.argv[2] if len(sys.argv) > 2 else 'dist/kritzelschlacht-itch.zip')

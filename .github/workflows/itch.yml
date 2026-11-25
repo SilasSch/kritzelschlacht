@@ -1,12 +1,11 @@
 name: itch.io
-# Baut das HTML5-ZIP für itch.io (tools/itch-zip.py) und hängt es als Artefakt an den Lauf.
+# Prüft den Relay und baut das HTML5-ZIP für itch.io (tools/itch-zip.py) und hängt es als Artefakt an den Lauf.
 # Automatischer Upload nur, wenn das Secret BUTLER_API_KEY (itch.io → Settings → API keys) und die Variable
 # ITCH_TARGET (z. B. silassch/kritzelschlacht:html5) gesetzt sind. Ohne beides: ZIP aus dem Lauf herunterladen und
 # auf itch.io von Hand hochladen.
 on:
   push:
-    branches: [master]
-    paths: ['game/**', 'tools/itch-zip.py', '.github/workflows/itch.yml']
+    paths: ['game/**', 'relay/**', 'tools/itch-zip.py', 'tools/relay-smoke.mjs', '.github/workflows/itch.yml']
   workflow_dispatch:
 jobs:
   zip:
@@ -15,13 +14,18 @@ jobs:
       BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Relay erreichbar?
+        run: node tools/relay-smoke.mjs "$(python3 -c "import re;print(re.search(r\"^RELAY = '(.*)'\", open('tools/itch-zip.py').read(), re.M).group(1))")"
       - run: python3 tools/itch-zip.py "" dist/kritzelschlacht-itch.zip
       - uses: actions/upload-artifact@v4
         with:
           name: kritzelschlacht-itch
           path: dist/kritzelschlacht-itch.zip
       - name: Upload zu itch.io (butler)
-        if: ${{ env.BUTLER_API_KEY != '' && vars.ITCH_TARGET != '' }}
+        if: ${{ github.ref == 'refs/heads/master' && env.BUTLER_API_KEY != '' && vars.ITCH_TARGET != '' }}
         run: |
           curl -sL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
           unzip -q butler.zip -d butler && chmod +x butler/butler

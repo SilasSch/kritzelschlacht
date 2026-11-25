@@ -5,6 +5,7 @@
 //   - Auf diesem Gerät (überall, auch über den öffentlichen Link): eigene Siege und eingefügte Ergebnis-Codes von Freunden.
 // Jeder Eintrag wird hier nachgerechnet (createCheck in Häppchen); gezählt wird nur das nachgerechnete Ergebnis.
 import { getStore } from '../net.js';
+import { getName, setName, onName, needsName, askName } from './playername.js';
 import { dateKey, shortDate } from '../daily.js';
 import { tr } from '../i18n.js';
 import { createCheck, stampOf, SIM_VERSION, rankEntries, resultCode, addLocal, cleanBoard, cleanName, mergeOwn, dayEntries, BOARD_KEEP, NAME_MAX, validDate, maxBoardDate } from '../dailyboard.js';
@@ -42,6 +43,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   /* ---------- Gerät ---------- */
   let store = { name: '', days: {} };
   try { const raw = JSON.parse(localStorage.getItem(KEY) || 'null'); if (raw) store = { name: cleanName(raw.name), days: cleanBoard(raw.days) }; } catch (e) { /* kein Speicher */ }
+  store.name = getName();   // ein Name für alles (playername.js)
   const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) { /* ignore */ } };
 
   /* ---------- Nachrechnen ---------- */
@@ -168,7 +170,7 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     <p class="src" id="boardSrc"></p>
     <table><thead><tr><th></th><th>${tr('Name')}</th><th>${tr('Punkte')}</th><th>${tr('Sterne')}</th><th>${tr('Zeit')}</th><th></th></tr></thead><tbody id="boardRows"></tbody></table>
     <p class="src">${tr('Platz nach: Sieg, dann weniger Punkte, dann schnellerer Sieg.')}</p>
-    <div class="addrow"><input id="boardName" maxlength="${NAME_MAX}" placeholder="${tr('Dein Name im Code')}">
+    <div class="addrow"><input id="boardName" maxlength="${NAME_MAX}" placeholder="${tr('Dein Name')}">
       <button class="btn" id="boardMine">${tr('Mein Ergebnis als Code')}</button></div>
     <textarea id="boardCode" rows="2" placeholder="${tr('Ergebnis-Code eines Freundes (KS1.…) hier einfügen')}"></textarea>
     <div class="btnrow"><button class="btn" id="boardAdd">${tr('Code hinzufügen')}</button><button class="go" id="boardClose">${tr('Schließen')}</button></div>
@@ -184,7 +186,15 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
   $('boardPrev').onclick = () => { const ds = days(), i = ds.indexOf(day); day = ds[Math.max(0, (i < 0 ? ds.length - 1 : i) - 1)]; render(); };
   $('boardNext').onclick = () => { const ds = days(), i = ds.indexOf(day); day = ds[Math.min(ds.length - 1, (i < 0 ? ds.length - 1 : i) + 1)]; render(); };
   $('boardClose').onclick = () => { ov.hidden = true; };
-  $('boardName').oninput = e => { store.name = cleanName(e.target.value); persist(); };
+  $('boardName').oninput = e => { setName(e.target.value); };
+  $('boardName').onkeydown = e => e.stopPropagation();
+  // Name geändert: auch den eigenen Live-Eintrag umbenennen (sonst steht dort weiter der alte Name oder „Spieler“)
+  let renameT = 0;
+  onName(n => {
+    store.name = n; persist();
+    if ($('boardName') && $('boardName') !== document.activeElement) $('boardName').value = n;
+    clearTimeout(renameT); renameT = setTimeout(renameLive, 1200);
+  });
   $('boardMine').onclick = () => {
     const m = curMine, d = day;
     if (!m) return;
@@ -236,7 +246,16 @@ export function createBoardUI({ toast, decode, encode, shareDlg }) {
     $('boardMine').title = curMine ? '' : tr('Erst die Tageschallenge gewinnen');
   }
 
-  function open(date = dateKey()) { day = date; ov.hidden = false; render(); }
+  async function renameLive() {
+    const own = myDoc();
+    if (live.state !== 'on' || !live.db || !live.me || !own || !store.name || own.n === store.name || writing) return;
+    try { await live.db.collection('scores').doc(live.me).set({ ...own, n: store.name }); } catch (e) { /* nächstes Mal */ }
+  }
+  function open(date = dateKey()) {
+    day = date; ov.hidden = false; render();
+    if (needsName()) askName().then(() => { if ($('boardName')) $('boardName').value = store.name; render(); });
+    else renameLive();
+  }
 
   // Ergebnis-Code { k: 'dailyres', d, a, n } (aus „Code laden“ oder der Karte)
   function addCode(d) {

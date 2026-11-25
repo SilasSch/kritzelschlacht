@@ -8,13 +8,13 @@ import {
 } from '../team.js';
 import { makeCode, normCode, packArmy, CAT_NAME } from '../online.js';
 import { MAP, applyMap, mapSVG } from '../rules.js';
-import { cleanName, NAME_MAX } from '../dailyboard.js';
+import { NAME_MAX } from '../dailyboard.js';
 import { getRoom } from '../net.js';
+import { getName, setName, onName } from './playername.js';
 import { fmtPts } from '../cards.js';
 import { tr } from '../i18n.js';
 
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
-const NAME_KEY = 'kritzel-hill-name';   // derselbe Name wie auf dem Hügel
 const GONE_MS = 8000;
 const esc = v => String(v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const TEAM_N = { blau: tr('Team Blau'), rot: tr('Team Rot') };
@@ -46,7 +46,8 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   const $ = id => document.getElementById(id);
   let net = null, room = null, m = null, battleRef = null, unsubs = [], lastPub = '', pubRetry = 0, lobbyUnsub = null;
   let name = '';
-  try { name = cleanName(localStorage.getItem(NAME_KEY) || ''); } catch (e) { /* ohne Speicher */ }
+  name = getName();
+  onName(n => { name = n; if ($('t2Name') && $('t2Name') !== document.activeElement) $('t2Name').value = n; if (m) { m.name = n; publish(); } });
   // Kampf-Ablauf der Runde: { stage: 'duel' | 'finale' | 'done', runs, results, finale, winner }
   let fx = null, goneSince = 0, goneAck = false;
 
@@ -77,7 +78,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   const nameRow = () => `<div class="row"><label class="muted" for="t2Name">${tr('Dein Name')}</label><input class="t2n" id="t2Name" maxlength="${NAME_MAX}" placeholder="${tr('Name')}" autocomplete="off" spellcheck="false" value="${esc(name)}"></div>`;
   function wireName() {
     const inp = $('t2Name'); if (!inp) return;
-    inp.oninput = () => { name = cleanName(inp.value); try { localStorage.setItem(NAME_KEY, name); } catch (e) { /* egal */ } if (m) { m.name = name; publish(); } };
+    inp.oninput = () => { setName(inp.value); };
     inp.onkeydown = e => e.stopPropagation();
   }
 

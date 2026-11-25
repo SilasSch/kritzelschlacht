@@ -202,7 +202,7 @@ const EN = {
   "Flammenwerfer": "Flamethrower",
   "Kurzer Flammenstrahl, der alle im Kegel anzündet und Wald in Brand setzt. Stark gegen Schwärme und dichte Blöcke. Auf Abstand hilflos.": "Short jet of flame that ignites everyone in the cone and sets forests on fire. Strong against swarms and dense blocks. Helpless at range.",
   "Flammenkegel": "Flame cone",
-  "Trifft alle im kurzen Kegel vor ihm, auch Bienen und Geister, und zündet sie an. Setzt Wald in Brand.": "Hits everyone in the short cone in front of him, including bees and ghosts, and sets them on fire. Sets forests on fire.",
+  "Trifft alle im kurzen Kegel vor ihm, auch Bienen und Adler in der Luft, und zündet sie an. Setzt Wald in Brand.": "Hits everyone in the short cone ahead, bees and eagles in the air too, and sets them on fire. Sets forests ablaze.",
   "Scharfschütze": "Sniper",
   "Riesige Reichweite, ein Schuss, ein Treffer, aber nur im Liegen. Sehr verwundbar.": "Huge range, one shot, one hit, but only lying down. Very vulnerable.",
   "Nur im Liegen": "Prone only",
@@ -1473,5 +1473,8 @@ const EN = {
   "Höhlenmenschen, Speerwerfer, Raptoren und Flugsaurier. Ankylosaurier und Triceratopse halten von vorn viel aus. Aber Feuer brennt auch unter dem Panzer.": "Cavemen, spear throwers, raptors and pterosaurs. Ankylosaurs and triceratops take a lot from the front. But fire burns under armor too.",
   "Der König der Echsen": "The Lizard King",
   "Alle Urzeit-Einheiten. Zwei T-Rex-Eier, Raptoren als Wache und Schamaninnen, die heilen. Schnell zuschlagen oder lange durchhalten?": "All Stone Age units. Two T-rex eggs, raptors on guard and shamans who heal. Strike fast or hold out long?",
+  "Wie heißt du?": "What's your name?",
+  "Dein Name in der Bestenliste, auf dem Thron und im Online-Spiel. Du kannst ihn später ändern.": "Your name on the leaderboard, on the throne and in online games. You can change it later.",
+  "Später": "Later",
 };
 export default EN;

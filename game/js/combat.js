@@ -760,20 +760,23 @@ function breath(world, u, nx, ny, t) {
 }
 
 // Flammenwerfer (18.11.): Kegel wie der Drachenatem, aber am Boden. Trifft Gegner bis range + r + v.r im Kegel
-// cos ≥ FLAME.COS, keine hohen Flieger, keine Fledermausform, keinen Adler oben (wie Nahkämpfer, world.groundMelee).
-// Zündet jeden Getroffenen an (Generation 0) und am Ende des Strahls Wald (wildfire.igniteArea, Radius FLAME.WOOD_R).
+// cos ≥ FLAME.COS (Abstand am Boden gemessen, wie bei den Schützen). Seit 25.11. auch Adler und Flugsaurier oben und
+// die Fledermausform (world.lowAir): der Strahl geht dann sichtbar nach oben (tz = Höhe des Ziels). Hohe Flieger (T.high:
+// Hubschrauber, Jet, Bomber, Kampfdrohne) erreicht er nicht (Silas 25.11.: wie beim Hubschrauber).
+// Zündet jeden Getroffenen an (Generation 0) und am Ende des Strahls Wald (wildfire.igniteArea, Radius FLAME.WOOD_R),
+// aber nicht, wenn er nach oben zielt (der Strahl geht über die Bäume).
 export const FLAME = { COS: .8, WOOD_R: 12 };
 function flame(world, u, nx, ny, t, d) {
   const T = u.T, f = factionOf(world, u), R = T.range + T.r;
   query(world, u.x, u.y, R + MAX_R, v => {
-    if (factionOf(world, v) === f || v.T.high || isBat(v) || aloft(v)) return;
+    if (factionOf(world, v) === f || v.T.high) return;
     const ex = v.x - u.x, ey = v.y - u.y, e = Math.hypot(ex, ey);
     if (e > R + v.T.r || (ex * nx + ey * ny) / (e || 1) < FLAME.COS) return;
     hurt(world, v, T.dmg, 'fire', u);
     if (v.alive) ignite(world, v, 0, u);
   });
   const L = Math.min(d, R);
-  igniteArea(world, u.x + nx * L, u.y + ny * L, FLAME.WOOD_R);
+  if (!t || !(isBat(t) || aloft(t))) igniteArea(world, u.x + nx * L, u.y + ny * L, FLAME.WOOD_R);
   const mx = u.x + nx * T.r * 1.6, my = u.y + ny * T.r * 1.6;
   emit(world, { type: 'shot', kind: 'breath', x: mx, y: my, z: 4, face: u.face, nx, ny,
     tx: t ? t.x : u.x + nx * R, ty: t ? t.y : u.y + ny * R, tz: t ? t.z : 0 });

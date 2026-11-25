@@ -120,3 +120,16 @@ test('Römer: ein einzelner Römer ohne Block stößt nicht', () => {
   run(w, 6, ev => { shoves += ev.filter(e => e.k === 'shove').length; });
   assert.equal(shoves, 0);
 });
+
+test('Flammenwerfer: trifft Adler und Flugsaurier oben (Strahl nach oben), aber keine hohen Flieger', () => {
+  for (const type of ['adler', 'ptera', 'heli', 'jet', 'bomber']) {
+    const w = mkWorld(), f = spawn(w, 'flamme', 400, 400, 'blau');
+    const h = spawn(w, type, 460, 400, 'rot'); h.hp = 1e9; h.cd = 1e9; h.abCd = 1e9;
+    rebuildHash(w);
+    let up = 0;
+    run(w, .8, ev => { for (const e of ev) if (e.type === 'shot' && e.kind === 'breath' && e.tz > 20) up++; h.x = 460; h.y = 400; h.vx = 0; h.vy = 0; h.z = h.fz = h.T.flyZ; });
+    const high = !!h.T.high;
+    assert.equal(up > 0, !high, `${type}: Strahl nach oben`);
+    assert.equal(h.burnT > 0, !high, `${type}: brennt`);   // hohe Flieger höchstens von Steinen getroffen
+  }
+});

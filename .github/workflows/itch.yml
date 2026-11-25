@@ -1,8 +1,7 @@
 name: itch.io
 # Prüft den Relay und baut das HTML5-ZIP für itch.io (tools/itch-zip.py) und hängt es als Artefakt an den Lauf.
-# Automatischer Upload nur, wenn das Secret BUTLER_API_KEY (itch.io → Settings → API keys) und die Variable
-# ITCH_TARGET (z. B. silassch/kritzelschlacht:html5) gesetzt sind. Ohne beides: ZIP aus dem Lauf herunterladen und
-# auf itch.io von Hand hochladen.
+# Auf master lädt butler das ZIP nach https://slilok.itch.io/kritzelschlacht hoch (Kanal html5), sofern das Secret
+# BUTLER_API_KEY gesetzt ist (Silas, 25.11.). Ohne Secret: ZIP aus dem Lauf herunterladen und von Hand hochladen.
 on:
   push:
     paths: ['game/**', 'relay/**', 'tools/itch-zip.py', 'tools/relay-smoke.mjs', '.github/workflows/itch.yml']
@@ -25,8 +24,8 @@ jobs:
           name: kritzelschlacht-itch
           path: dist/kritzelschlacht-itch.zip
       - name: Upload zu itch.io (butler)
-        if: ${{ github.ref == 'refs/heads/master' && env.BUTLER_API_KEY != '' && vars.ITCH_TARGET != '' }}
+        if: ${{ github.ref == 'refs/heads/master' && env.BUTLER_API_KEY != '' }}
         run: |
           curl -sL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
           unzip -q butler.zip -d butler && chmod +x butler/butler
-          ./butler/butler push dist/kritzelschlacht-itch.zip "${{ vars.ITCH_TARGET }}" --userversion "${GITHUB_SHA::7}"
+          ./butler/butler push dist/kritzelschlacht-itch.zip slilok/kritzelschlacht:html5 --userversion "${GITHUB_SHA::7}"

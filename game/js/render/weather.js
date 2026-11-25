@@ -1,10 +1,15 @@
 // Wetter-Darstellung (Regen-Überarbeitung 25.11.): Regen als gekritzelte Striche statt des CSS-Streifenmusters.
 // createWeather({ app, scene }) hängt zwei Ebenen an: Spritzer am Boden (in der Szene, bleiben beim Schwenken liegen)
 // und fallende Striche plus leichte Abdunklung über dem Bild (Bildschirm-Raum, Kosten unabhängig vom Zoom).
-//   frame(weather, cam, t)  pro Bild nach dem Setzen der Kamera; weather = world.weather (null | 'regen' | 'nebel')
-//   style  'strich' (Bleistift-Striche, Standard) | 'tropfen' (gemalte Tropfen); nur Darstellung
+//   frame(world, cam, t)  pro Bild nach dem Setzen der Kamera; world.weather (null | 'regen' | 'nebel')
+//   style  'auto' (Standard) | 'strich' | 'tropfen'. Auto nach Ära der Einheiten auf dem Feld (Silas 25.11.):
+//          Modern und Schrott: Bleistift-Striche; Armee, Mythisch, Tiere, Urzeit: gemalte Tropfen. Beim Wechsel
+//          bekommen nur neu fallende Tropfen den neuen Stil, das Bild springt nicht.
 // Reine Optik: kein Einfluss auf die Simulation, eigene Zufallsfolge, Echtzeit t.
 /* global PIXI */
+import { UNITS } from '../data.js';
+
+const STRICH_CATS = new Set(['modern', 'schrott']);
 
 const TAU = Math.PI * 2;
 const ANGLE = .2;                 // Neigung des Regens (rad, nach links unten)
@@ -98,7 +103,7 @@ export function createWeather({ app, scene, layer }) {
 
   // Tropfen: x, y im Bildschirm (CSS-Pixel), Tiefe z (0 fern … 1 nah)
   const D = [], P = [];
-  let lastT = -1, mix = 0, style = 'strich', builtStyle = null, reduced = false;
+  let lastT = -1, mix = 0, style = 'auto', cur = 'strich', built = false, reduced = false, eraT = -1;
   try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { /* alte Browser */ }
   let camX = null, camY = null;
 
@@ -113,7 +118,7 @@ export function createWeather({ app, scene, layer }) {
     ensureTex();
     drops.removeChildren();
     D.length = 0;
-    builtStyle = style;
+    built = true;
     for (let i = 0; i < MAX_DROPS; i++) {
       const d = { s: new PIXI.Sprite(), x: 0, y: 0, z: 0, land: 0 };
       d.s.anchor.set(.5, 1);
@@ -131,7 +136,8 @@ export function createWeather({ app, scene, layer }) {
 
   function dress(d) {
     const s = d.s, z = d.z;
-    if (style === 'tropfen') {
+    d.st = cur;
+    if (cur === 'tropfen') {
       s.texture = texD[(rnd() * texD.length) | 0];
       s.scale.set(.5 * (.55 + .6 * z));
       s.alpha = .45 + .5 * z;
@@ -157,19 +163,42 @@ export function createWeather({ app, scene, layer }) {
     }
   }
 
-  function frame(weather, cam, t) {
+  // Ära auf dem Feld: Anteil lebender Einheiten aus Modern/Schrott; Wechsel erst bei klarer Mehrheit (Hysterese)
+  function pickEra(world, fresh) {
+    let a = 0, b = 0;
+    for (const u of world.units) {
+      if (!u.alive) continue;
+      const T = UNITS[u.type];
+      if (!T) continue;
+      if (STRICH_CATS.has(T.cat)) a++; else b++;
+    }
+    if (!a && !b) return cur;
+    const share = a / (a + b);
+    if (fresh) return share >= .5 ? 'strich' : 'tropfen';
+    if (cur === 'tropfen' && share > .6) return 'strich';
+    if (cur === 'strich' && share < .4) return 'tropfen';
+    return cur;
+  }
+
+  function frame(world, cam, t) {
+    const weather = world.weather;
     const dt = lastT < 0 || t < lastT ? 0 : Math.min(.1, t - lastT); lastT = t;
     const want = weather === 'regen' ? 1 : 0;
     mix += Math.sign(want - mix) * Math.min(Math.abs(want - mix), dt / FADE_T);
     if (dt === 0 && want) mix = Math.max(mix, .001);
     const on = mix > 0;
     screen.visible = splashes.visible = on;
-    if (!on) { camX = null; return; }
-    if (builtStyle !== style) build();
+    if (!on) { camX = null; eraT = -1; return; }
+    if (style !== 'auto') cur = style;
+    else if (eraT < 0 || t < eraT || t - eraT > 1) {
+      cur = pickEra(world, eraT < 0); eraT = t;   // beim Einschalten ohne Hysterese
+    }
+    if (!built) build();
+    else if (mix < .02) for (const d of D) if (d.st !== cur) dress(d);   // beim Einblenden gleich im richtigen Stil
     const w = app.screen.width, h = app.screen.height;
     dim.width = w; dim.height = h; dim.alpha = .075 * mix;
     // Wie viele Striche sichtbar: nach Bildschirmfläche (itch.io 1280×720 ≈ 220), beim Ein-/Ausblenden weniger
-    const n = Math.min(MAX_DROPS, Math.round(w * h * DENSITY * (style === 'tropfen' ? .55 : 1) * mix));
+    const n = Math.min(MAX_DROPS, Math.round(w * h * DENSITY * (cur === 'tropfen' ? .55 : 1) * mix));
     // Kamera-Schwenk: Regen wandert mit (sonst „steht“ er beim Ziehen über dem Feld)
     let px = 0, py = 0;
     if (camX !== null) { px = (camX - cam.x) * cam.zoom; py = (camY - cam.y) * cam.zoom; }
@@ -179,7 +208,7 @@ export function createWeather({ app, scene, layer }) {
     for (let i = 0; i < D.length; i++) {
       const d = D[i], s = d.s;
       if (i >= n) { s.visible = false; continue; }
-      const sp = (style === 'tropfen' ? 380 : 900) * (.55 + .7 * d.z);   // nahe Tropfen fallen schneller
+      const sp = (d.st === 'tropfen' ? 380 : 900) * (.55 + .7 * d.z);   // nahe Tropfen fallen schneller
       d.y += sp * step + py; d.x += -sp * tanA * step + px * .9;
       d.x = ((d.x % span) + span) % span;
       if (d.y > d.land && d.z > .35 && step > 0) {
@@ -205,7 +234,8 @@ export function createWeather({ app, scene, layer }) {
   return {
     frame,
     get style() { return style; },
-    set style(v) { style = v === 'tropfen' ? 'tropfen' : 'strich'; },
+    set style(v) { style = v === 'tropfen' || v === 'strich' ? v : 'auto'; },
+    get current() { return cur; },
     debug: () => ({ drops: D.filter(d => d.s.visible).length, splashes: P.filter(p => p.life > 0).length, mix }),
   };
 }

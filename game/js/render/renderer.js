@@ -1077,7 +1077,7 @@ void main() {
     const off = fx.frame(t, world.time);   // Partikel, Decal-Upload, Wackeln (Echtzeit); Decals altern mit der Spielzeit
     scene.scale.set(cam.zoom);
     scene.position.set((off.x - cam.x) * cam.zoom, (off.y - cam.y) * cam.zoom);
-    weather.frame(world.weather, cam, t);
+    weather.frame(world, cam, t);
     if (paperW !== world.W || paperH !== world.H) {
       paperW = world.W; paperH = world.H;
       paper.clear().beginFill(0xffffff).drawRect(0, 0, paperW, paperH).endFill();

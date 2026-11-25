@@ -314,7 +314,7 @@ export function createTeamUI({ game, world, ui, audio, onlineFight, clearWorld, 
   }
   function startFinale() {
     const c = m.cfg, fl = finaleList(fx.results, world.W);
-    if (!fl) { fx.stage = 'done'; fx.winner = staffelWinner(fx.results); act(teamResult(m, fx.winner)); showEnd(); return; }
+    if (!fl) { hideCard(); fx.stage = 'done'; fx.winner = staffelWinner(fx.results); act(teamResult(m, fx.winner)); showEnd(); return; }
     fx.stage = 'finale';
     fx.finale = createRun(fl, c.map, c.seed2, world.W, world.H);
     hideCard();

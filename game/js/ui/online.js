@@ -5,9 +5,9 @@
 import {
   createMatch, view, hostStart, markReady, finishFight, wantNext, onPeer, officialWinner, pickPeer, openRooms,
   makeCode, normCode, roomName, roundDef, packArmy, CAT_NAME, ONLINE_BUDGETS, ONLINE_DEFAULT, PROTO, castVote, budgetOf, giveUp, canGiveUp,
-  EMOTES, sendEmote,
+  EMOTES, sendEmote, cleanSet, setDiff, proposeSet, answerProp, matchWinner, myPick, PICKS, MAP_MODES, TIMES, GOALS,
 } from '../online.js';
-import { RULE, MAP, applyMap, mapSVG } from '../rules.js';
+import { RULE, MAP, applyMap, mapSVG, RULE_GROUPS, rulePool } from '../rules.js';
 import { getRoom } from '../net.js';
 // Live-Version des Artefakts (mit room-Capability, nur auf Einladung); die öffentliche Version verweist darauf
 const LIVE_URL = 'https://claude.ai/artifact/HnB3bdhDEz8psMDZ3GGP5W';
@@ -65,6 +65,28 @@ const CSS = `
 .onlemo button{width:44px;height:44px;border:0;border-radius:50%;background:none;font-size:26px;line-height:1;cursor:pointer;padding:0}
 .onlemo button:hover{background:var(--sel)}
 .onlemo button:active{transform:scale(.88)}
+.card.onl.lobby{max-width:780px}
+.onlmodes{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.onlmodes .btn{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px;min-height:92px}
+.onlmodes .btn .ic{font-size:24px;line-height:1}
+.onlmodes .btn b{font-family:var(--f-logo);font-weight:400;font-size:17px;letter-spacing:.4px;line-height:1.1}
+.onlmodes .btn span{font-size:11.5px;color:var(--muted);font-weight:600;line-height:1.25}
+.onlmodes .btn.on{background:var(--sel);border-color:var(--selb);box-shadow:0 0 0 2px var(--selb)}
+.onlmodes .btn:disabled{opacity:.55}
+#onlSetBox{width:100%}
+.onlset{box-sizing:border-box;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;align-items:center;width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:#fbfbfd}
+.onlset .k{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.onlset .opts{display:flex;flex-wrap:wrap;gap:6px}
+.onlset .opts button{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font:700 13.5px var(--f-ui);color:var(--ink);cursor:pointer}
+.onlset .opts button small{color:var(--muted);font-weight:700;margin-left:4px}
+.onlset .opts button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.onlset .opts button.on small{color:#cfd3dc}
+.onlset .hint{grid-column:2;font-size:12px;color:var(--muted);margin-top:-4px}
+.card.onl .rooms .btn small{color:var(--muted);font-weight:600}
+.onldiff{display:flex;flex-direction:column;gap:4px;margin:4px 0 8px;font-weight:700}
+.onldiff s{color:var(--muted);font-weight:600}
+#onlRules.wait{background:#fff3b0}
+.onlbox .match{font-family:var(--f-logo);font-size:20px;color:var(--go)}
 .onlfly{position:fixed;z-index:58;font-size:64px;line-height:1;pointer-events:none;animation:onlFly 2.4s ease-out forwards;filter:drop-shadow(0 3px 2px rgba(0,0,0,.25))}
 .onlfly small{display:block;font:800 13px var(--f-ui);text-align:center;color:var(--ink)}
 @keyframes onlFly{0%{transform:translate(-50%,0) scale(.3);opacity:0}12%{transform:translate(-50%,-30px) scale(1.15);opacity:1}
@@ -74,6 +96,56 @@ const CSS = `
 `;
 const esc = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const SIDE_N = { blau: tr('Blau'), rot: tr('Rot') };
+// Einstellungen der Partie (Lobby und „Regeln ändern“, 25.11.)
+const pickN = v => (v === 'random' ? tr('Zufall') : v === 'loser' ? tr('Verlierer wählt') : tr('Abstimmung'));
+const pickD = v => (v === 'random' ? tr('Regel und Karte werden ausgelost, sofort malen.') : v === 'loser' ? tr('Wer die letzte Runde verloren hat, sucht allein aus.') : tr('Ihr stimmt beide über Regel und Karte ab.'));
+const mapsN = v => (v === 'feld' ? tr('Nur offenes Feld') : tr('Alle Karten'));
+const timeN = t => (t ? (t % 60 ? tr('{n} s', { n: t }) : tr('{n} min', { n: t / 60 })) : tr('Ohne Limit'));
+const goalN = g => (g ? tr('Best of {n}', { n: g * 2 - 1 }) : tr('Endlos'));
+const SET_KEY = 'kritzelschlacht-online-set';
+const loadSet = () => { try { return cleanSet(JSON.parse(localStorage.getItem(SET_KEY) || 'null')); } catch (e) { return cleanSet(null); } };
+const saveSet = st => { try { localStorage.setItem(SET_KEY, JSON.stringify(st)); } catch (e) { /* ohne Speicher */ } };
+const rulesN = groups => (groups.length === RULE_GROUPS.length ? tr('alle Regeln') : groups.map(g => tr(RULE_GROUPS.find(x => x.id === g).n)).join(' + '));
+// Kurzfassung für Raumliste, Warten und Kopfzeile
+function setSummary(st) {
+  const a = [tr('{n} Punkte', { n: st.budget }), pickN(st.pick), rulesN(st.rules)];
+  if (st.maps !== 'alle') a.push(mapsN(st.maps));
+  if (st.time) a.push(tr('{t} malen', { t: timeN(st.time) }));
+  if (st.goal) a.push(goalN(st.goal));
+  return a.join(' · ');
+}
+// Eine Änderung in Worten: „Budget: 150 → 400“
+const setK = k => ({ budget: tr('Budget'), pick: tr('Regelwahl'), rules: tr('Regeln'), maps: tr('Karten'), time: tr('Malzeit'), goal: tr('Match') })[k];
+function setVal(k, v) {
+  return k === 'budget' ? tr('{n} Punkte', { n: v }) : k === 'pick' ? pickN(v) : k === 'rules' ? rulesN(v)
+    : k === 'maps' ? mapsN(v) : k === 'time' ? timeN(v) : goalN(v);
+}
+// Formular: Zeilen mit Knöpfen; onChange bekommt die neuen Einstellungen
+function setFormHTML(st) {
+  const row = (k, label, items, hint = '') => `<span class="k">${setK(k)}</span><div class="opts" data-k="${k}">${items}</div>${hint ? `<span></span><div class="hint">${hint}</div>` : ''}`;
+  const opt = (k, v, on, html, title = '') => `<button type="button" data-k="${k}" data-v="${esc(JSON.stringify(v))}" class="${on ? 'on' : ''}"${title ? ` title="${esc(title)}"` : ''}>${html}</button>`;
+  return `<div class="onlset">
+    ${row('budget', '', ONLINE_BUDGETS.map(v => opt('budget', v, v === st.budget, `${v}<small>${tr('Pkt')}</small>`)).join(''))}
+    ${row('pick', '', PICKS.map(v => opt('pick', v, v === st.pick, pickN(v), pickD(v))).join(''), esc(pickD(st.pick)))}
+    ${row('rules', '', RULE_GROUPS.map(g => opt('rules', g.id, st.rules.includes(g.id), `${tr(g.n)}<small>${rulePool([g.id]).length}</small>`, tr(g.d))).join(''), tr('{n} Regeln im Topf', { n: rulePool(st.rules).length }))}
+    ${row('maps', '', MAP_MODES.map(v => opt('maps', v, v === st.maps, mapsN(v))).join(''))}
+    ${row('time', '', TIMES.map(v => opt('time', v, v === st.time, timeN(v))).join(''))}
+    ${row('goal', '', GOALS.map(v => opt('goal', v, v === st.goal, goalN(v))).join(''))}
+  </div>`;
+}
+function wireSetForm(root, get, set) {
+  root.querySelectorAll('.onlset button').forEach(b => {
+    b.onclick = () => {
+      const k = b.dataset.k, v = JSON.parse(b.dataset.v), st = { ...get() };
+      if (k === 'rules') {   // Gruppen an/aus, mindestens eine bleibt
+        const has = st.rules.includes(v), next = has ? st.rules.filter(x => x !== v) : [...st.rules, v];
+        if (!next.length) return;
+        st.rules = next;
+      } else st[k] = v;
+      set(cleanSet(st));
+    };
+  });
+}
 const GONE_MS = 6000;      // so lange darf der Gegner fehlen (Neuverbindung), bevor die Karte „Gegner ist weg“ kommt
 const JOIN_MS = 8000;      // so lange sucht der Gast nach dem Host
 
@@ -83,10 +155,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   let room = null, lobby = null, net = null, m = null, battleRef = null, unsubs = [], lastPub = '', peerSeen = 0, joinT = 0;
   let lobbyUnsub = null, roundT = 0, peerRef = null, goneAck = false, pubRetry = 0;
+  let paintEnd = 0, paintWarned = false, lastSec = -1;   // Malzeit (Einstellung time)
 
   /* ---------- Knopf ---------- */
   const btn = document.createElement('button');
-  btn.className = 'btn'; btn.id = 'batOnl'; btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg><span></span>'; const lab = btn.lastChild; lab.textContent = tr('Online 1v1');
+  btn.className = 'btn'; btn.id = 'batOnl'; btn.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg><span></span>'; const lab = btn.lastChild; lab.textContent = tr('Online');
   btn.title = tr('Zwei Spieler auf zwei Geräten: jede Runde eine zufällige Kategorie, gleiches Budget, verdeckt malen');
   { const vs = $('batVs'); if (vs) vs.append(btn); else $('batGo').before(btn); }   // Gruppe „Zu zweit“ in der Leiste (UX 20.11.)
   btn.onclick = () => { if (m) confirmLeave(); else { const b = game.battle; if (b && b.phase === 'plan' && !b.hot) openLobby(); } };
@@ -97,6 +170,12 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   giveBtn.title = tr('Diese Runde aufgeben: der Punkt geht an deinen Gegner');
   $('batGo').before(giveBtn);
   giveBtn.onclick = () => { if (canGiveUp(m)) giveCard(); };
+  // Regeln im Spiel ändern (25.11.): Vorschlag an den Gegner, gilt ab der nächsten Auslosung
+  const rulesBtn = document.createElement('button');
+  rulesBtn.className = 'btn'; rulesBtn.id = 'onlRules'; rulesBtn.textContent = '⚙️ ' + tr('Regeln'); rulesBtn.hidden = true;
+  rulesBtn.title = tr('Einstellungen der Partie ansehen oder eine Änderung vorschlagen');
+  giveBtn.before(rulesBtn);
+  rulesBtn.onclick = () => { if (m && m.cfg) rulesCard(); };
 
   // „Los!“: im Online-Spiel Fertig / Nächste Runde (vor dem Hotseat-Haken, der sonst Deckkarten zeigt)
   const go = $('batGo'), goPrev = go.onclick;
@@ -135,8 +214,8 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   $('app').append(ov);
   const card = ov.firstChild;
   let shown = '';
-  const hideCard = () => { ov.hidden = true; shown = ''; card.classList.remove('vote'); ov.classList.remove('onl-round'); if (lobbyUnsub) { lobbyUnsub(); lobbyUnsub = null; } };
-  const showCard = (kind, html) => { if (kind !== 'vote') card.classList.remove('vote'); card.innerHTML = html; shown = kind; ov.hidden = false; };
+  const hideCard = () => { ov.hidden = true; shown = ''; card.classList.remove('vote', 'lobby'); ov.classList.remove('onl-round'); if (lobbyUnsub) { lobbyUnsub(); lobbyUnsub = null; } };
+  const showCard = (kind, html) => { if (kind !== 'vote') card.classList.remove('vote'); if (kind !== 'lobby') card.classList.remove('lobby'); card.innerHTML = html; shown = kind; ov.hidden = false; };
 
   /* ---------- Hinweise, die man nicht übersieht ---------- */
   // Leiste oben (kurz oder dauerhaft) und Abfrage in der Mitte (Revanche annehmen / ablehnen), mit Ton
@@ -162,17 +241,30 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   // Stand nach dem Kampf: will der Gegner Revanche / weiter, warte ich, hat er abgelehnt?
   function updateAsk() {
     let k = '';
-    if (m && m.cfg && m.phase === 'result') {
+    if (m && m.peerProp) k = 'prop' + m.peerProp.n;
+    else if (m && m.cfg && m.phase === 'result') {
       const waiting = m.want > m.cfg.r, pw = m.peerWant;
       if (pw === 'same' && !waiting) k = 'same';
       else if (pw === 'new' && waiting && m.same) k = 'declined';
       else if (pw === 'new' && !waiting) k = 'new';
       else if (waiting && !pw) k = m.same ? 'waitSame' : 'waitNew';
     }
-    if (k === askKey) return;
-    askKey = k;
+    const pk = m && m.prop ? m.prop.n : 0;
+    if (k + '|' + pk === askKey) return;
+    askKey = k + '|' + pk;
     const box = ask.firstChild;
-    if (k === 'same' || k === 'declined') {
+    if (k.startsWith('prop')) {
+      const d = setDiff(m.set, m.peerProp.s);
+      box.innerHTML = `<div class="big">⚙️</div><h2 id="onlAskT">${tr('Dein Gegner will die Regeln ändern')}</h2>
+        <div class="onldiff">${d.map(x => `<span>${setK(x.k)}: <s>${esc(setVal(x.k, x.a))}</s> → ${esc(setVal(x.k, x.b))}</span>`).join('')}</div>
+        <p class="muted">${m.phase === 'vote' ? tr('Angenommen werden Regel und Karte sofort neu ausgelost.') : tr('Angenommen gilt es ab der nächsten Runde.')}</p>
+        <div class="btnrow"><button class="go" id="onlAskYes">${tr('Annehmen')}</button><button class="btn" id="onlAskNo">${tr('Ablehnen')}</button></div>`;
+      ask.hidden = false;
+      $('onlAskYes').onclick = () => act(answerProp(m, true));
+      $('onlAskNo').onclick = () => act(answerProp(m, false));
+      $('onlAskYes').focus();
+      chime(true);
+    } else if (k === 'same' || k === 'declined') {
       box.innerHTML = k === 'same'
         ? `<div class="big">⚔️</div><h2 id="onlAskT">${tr('Dein Gegner will eine Revanche!')}</h2>
           <p>${tr('Gleiche Regel ({r}), gleiche Karte ({m}), gleiches Budget. Ihr malt beide neu.', { r: esc(tr(CAT_NAME[m.cfg.cat])), m: esc(tr(MAP[m.cfg.map].n)) })}</p>
@@ -194,13 +286,16 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       chime(false);
     } else if (k === 'waitSame') setSticky({ html: `<span>⏳ ${tr('Revanche angefragt, warte auf deinen Gegner …')}</span>` });
     else if (k === 'waitNew') setSticky({ html: `<span>⏳ ${tr('Warte auf deinen Gegner …')}</span>` });
+    else if (m && m.prop) setSticky({ html: `<span>⚙️ ${tr('Regeländerung vorgeschlagen, warte auf deinen Gegner …')}</span><button class="btn" id="onlBanW">${tr('Zurückziehen')}</button>`,
+      wire: () => { $('onlBanW').onclick = () => act(proposeSet(m, null)); } });
     else setSticky(null);
   }
   function clearNotes() { clearTimeout(banT); banT = 0; sticky = null; askKey = ''; ban.hidden = true; ask.hidden = true; }
 
+  // Lobby (25.11.): Spielart wählen (1 gegen 1, 2 gegen 2, König des Hügels) und die Partie einstellen
   async function openLobby() {
-    let pick = ONLINE_DEFAULT;
-    showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
+    let st = loadSet();
+    showCard('lobby', `<h2 id="onlTitle">${tr('Online spielen')}</h2><p class="muted">${tr('Verbinde …')}</p>`);
     net = await getRoom();
     if (shown !== 'lobby') return;
     if (!net) {
@@ -212,28 +307,47 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
         <div class="btnrow"><button class="btn" id="onlCancel">${tr('Schließen')}</button></div>`);
       $('onlCancel').onclick = hideCard; return;
     }
-    showCard('lobby', `<h2 id="onlTitle">${tr('Online 1 gegen 1')}</h2>
-      <p>${tr('Jede Runde wird eine Kategorie ausgelost. Beide malen gleichzeitig mit demselben Budget, ohne die Armee des anderen zu sehen. Aufgedeckt wird beim Kampf.')}</p>
-      <div class="hotbud">${ONLINE_BUDGETS.map(v => `<button class="btn${v === pick ? ' on' : ''}" data-v="${v}"><b>${v}</b><span>${tr('Punkte je Seite')}</span></button>`).join('')}</div>
-      <div class="row"><button class="go" id="onlCreate">${tr('Raum erstellen')}</button></div>
-      <div class="row"><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="${tr('Raumcode')}"><button class="btn" id="onlJoin">${tr('Beitreten')}</button></div>
+    const team = game.teamUI, hill = game.hillUI;
+    const modes = [
+      { id: '1v1', ic: '⚔️', n: tr('1 gegen 1'), d: tr('Du gegen einen Freund, Runde für Runde'), on: true },
+      { id: 'tft', ic: '🤝', n: tr('2 gegen 2: Staffel'), d: tr('Zwei Duelle, die Überlebenden helfen dem Teamkollegen'), open: team && (() => team.open('tft')) },
+      { id: 'feld', ic: '🗺️', n: tr('2 gegen 2: Ein Feld'), d: tr('Alle vier auf einem Feld, jeder mit eigener Kategorie'), open: team && (() => team.open('feld')) },
+      { id: 'hill', ic: '👑', n: tr('König des Hügels'), d: tr('Setz dich auf den Thron und verteidige ihn'), open: hill && (() => hill.open()) },
+    ];
+    card.classList.add('lobby');
+    showCard('lobby', `<h2 id="onlTitle">${tr('Online spielen')}</h2>
+      <h3>${tr('Spielart')}</h3>
+      <div class="onlmodes">${modes.map(o => `<button class="btn${o.on ? ' on' : ''}" data-m="${o.id}"${!o.on && !o.open ? ` disabled title="${tr('Kommt bald')}"` : ''}><span class="ic">${o.ic}</span><b>${o.n}</b><span>${o.d}</span></button>`).join('')}</div>
+      <h3>${tr('Einstellungen')}</h3>
+      <div id="onlSetBox"></div>
+      <div class="row"><button class="go" id="onlCreate">${tr('Raum erstellen')}</button><span class="muted">${tr('oder')}</span><input id="onlCode" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" aria-label="${tr('Raumcode')}"><button class="btn" id="onlJoin">${tr('Beitreten')}</button></div>
       <div class="rooms" id="onlRooms"></div>
       <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
-    card.querySelectorAll('.hotbud .btn').forEach(b => {
-      b.onclick = () => { pick = +b.dataset.v; card.querySelectorAll('.hotbud .btn').forEach(x => x.classList.toggle('on', x === b)); };
+    card.querySelectorAll('.onlmodes [data-m]').forEach(b => {
+      const o = modes.find(x => x.id === b.dataset.m);
+      if (o.open) b.onclick = () => { hideCard(); o.open(); };
     });
-    $('onlCreate').onclick = () => start('host', makeCode(), pick);
+    const drawSet = () => { const box = $('onlSetBox'); box.innerHTML = setFormHTML(st); wireSetForm(box, () => st, v => { st = v; saveSet(st); drawSet(); }); };
+    drawSet();
+    $('onlCreate').onclick = () => start('host', makeCode(), st);
     const join = () => { const c = normCode($('onlCode').value); if (!c) { ui.toast(tr('Der Code hat 4 Zeichen, z. B. KX7P.')); return; } start('guest', c); };
     $('onlJoin').onclick = join;
     $('onlCode').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') join(); };
     $('onlCancel').onclick = hideCard;
-    // offene Räume aus der Lobby
+    // offene Räume aus der Lobby: 1 gegen 1 (mit Einstellungen) und 2 gegen 2
     const render = () => {
       const box = $('onlRooms'); if (!box) return;
-      const rs = openRooms(net.peers());
-      box.innerHTML = rs.length ? `<span class="muted">${tr('Offene Räume')}</span>${rs.map(r => `<button class="btn" data-c="${esc(r.code)}"><span>${tr('Raum {c}', { c: esc(r.code) })}</span><span>${tr('{n} Punkte', { n: r.budget })} · ${tr('Beitreten')}</span></button>`).join('')}`
+      const rs = openRooms(net.peers()).map(r => ({ ...r, kind: '1v1', txt: r.set ? setSummary(r.set) : tr('{n} Punkte', { n: r.budget }) }));
+      if (team) for (const p of net.peers() || []) {
+        const o = p && !p.isMe && p.presence && p.presence.ks === 'ks2v2' ? p.presence.open : null;
+        const c = o && normCode(o.code);
+        if (c && (o.mode === 'tft' || o.mode === 'feld')) rs.push({ code: c, kind: o.mode, txt: `${tr(o.mode === 'tft' ? '2 gegen 2: Staffel' : '2 gegen 2: Ein Feld')} · ${tr('{n} von 4 Spielern', { n: Math.max(1, Math.min(4, o.n | 0)) })}` });
+      }
+      box.innerHTML = rs.length ? `<span class="muted">${tr('Offene Räume')}</span>${rs.map(r => `<button class="btn" data-c="${esc(r.code)}" data-kind="${r.kind}"><span>${r.kind === '1v1' ? '⚔️' : '🤝'} ${tr('Raum {c}', { c: esc(r.code) })} <small>${esc(r.txt)}</small></span><span>${tr('Beitreten')}</span></button>`).join('')}`
         : `<span class="muted">${tr('Gerade wartet niemand. Erstelle einen Raum und gib deinem Gegner den Code.')}</span>`;
-      box.querySelectorAll('[data-c]').forEach(b => { b.onclick = () => start('guest', b.dataset.c); });
+      box.querySelectorAll('[data-c]').forEach(b => {
+        b.onclick = () => { if (b.dataset.kind === '1v1') start('guest', b.dataset.c); else { hideCard(); team.join(b.dataset.c); } };
+      });
     };
     try { lobbyUnsub = net.onPeers(render, () => {}); } catch (e) { /* ohne Lobby-Liste */ }
     render();
@@ -242,8 +356,8 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   function waitCard() {
     if (m.role === 'host') {
-      showCard('wait', `<h2 id="onlTitle">${tr('Warte auf Gegner')}</h2><p>${tr('Gib deinem Gegner diesen Code. Er öffnet das Spiel, geht auf Schlacht → Online 1v1 und tritt bei.')}</p>
-        <div class="code">${esc(m.code)}</div><p class="muted">${tr('{n} Punkte je Seite · du bist Blau (links)', { n: m.budget })}</p>
+      showCard('wait', `<h2 id="onlTitle">${tr('Warte auf Gegner')}</h2><p>${tr('Gib deinem Gegner diesen Code. Er öffnet das Spiel, geht auf Schlacht → Online und tritt bei.')}</p>
+        <div class="code">${esc(m.code)}</div><p class="muted">${esc(setSummary(m.set))} · ${tr('du bist Blau (links)')}</p>
         <div class="btnrow"><button class="btn" id="onlCancel">${tr('Abbrechen')}</button></div>`);
     } else {
       const late = Date.now() - joinT > JOIN_MS;
@@ -255,17 +369,19 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   // Abstimmung: drei Regeln und drei Karten; gleiche Wahl gewinnt, sonst das Los
   let pickR = null, pickM = null;
   function voteCard() {
-    const c = m.cfg, done = !!m.vote;
-    if (!done) { if (!c.opts.rules.includes(pickR)) pickR = c.opts.rules[0]; if (!c.opts.maps.includes(pickM)) pickM = c.opts.maps[0]; }
-    const selR = done ? m.vote.rule : pickR, selM = done ? m.vote.map : pickM;
+    const c = m.cfg, mine = myPick(m), done = !!m.vote || !mine;
+    const chooserTxt = c.chooser ? (mine ? tr('Du hast die letzte Runde verloren: Du suchst Regel und Karte allein aus.') : tr('{s} hat die letzte Runde verloren und sucht Regel und Karte aus.', { s: SIDE_N[c.chooser] })) : '';
+    if (!m.vote && mine) { if (!c.opts.rules.includes(pickR)) pickR = c.opts.rules[0]; if (!c.opts.maps.includes(pickM)) pickM = c.opts.maps[0]; }
+    const selR = m.vote ? m.vote.rule : mine ? pickR : null, selM = m.vote ? m.vote.map : mine ? pickM : null;
     card.classList.add('vote');
     showCard('vote', `<h2 id="onlTitle">${tr('Runde {r}: Abstimmung', { r: c.r })}</h2>
-      <p class="muted">${tr('Ihr wählt beide. Gleiche Wahl gewinnt, sonst entscheidet das Los zwischen euren beiden Stimmen.')} ${scoreText()}.</p>
+      <p class="muted">${chooserTxt || tr('Ihr wählt beide. Gleiche Wahl gewinnt, sonst entscheidet das Los zwischen euren beiden Stimmen.')} ${scoreText()}.</p>
       <h3>${tr('Was darf gemalt werden?')}</h3>
       <div class="vopts" id="vRules">${c.opts.rules.map(id => `<button class="btn${id === selR ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}><b>${esc(tr(RULE[id].n))}</b><span>${esc(tr(RULE[id].d))}</span></button>`).join('')}</div>
       <h3>${tr('Karte')}</h3>
       <div class="vopts" id="vMaps">${c.opts.maps.map(id => `<button class="btn${id === selM ? ' on' : ''}" data-v="${id}"${done ? ' disabled' : ''}>${mapSVG(id)}<b>${esc(tr(MAP[id].n))}</b><span>${esc(tr(MAP[id].d))}</span></button>`).join('')}</div>
-      <div class="btnrow">${done ? `<button class="go" disabled>${tr('Warte auf die Stimme deines Gegners …')}</button>` : `<button class="go" id="onlVote">${tr('Abstimmen')}</button>`}<button class="btn" id="onlCancel">${tr('Spiel verlassen')}</button></div>`);
+      <div class="btnrow">${done ? `<button class="go" disabled>${mine ? tr('Warte auf die Stimme deines Gegners …') : tr('Dein Gegner wählt …')}</button>` : `<button class="go" id="onlVote">${c.chooser ? tr('Auswählen') : tr('Abstimmen')}</button>`}<button class="btn" id="onlVRules">⚙️ ${tr('Regeln')}</button><button class="btn" id="onlCancel">${tr('Spiel verlassen')}</button></div>`);
+    $('onlVRules').onclick = () => rulesCard();
     if (!done) {
       card.querySelectorAll('#vRules .btn').forEach(b => { b.onclick = () => { pickR = b.dataset.v; voteCard(); }; });
       card.querySelectorAll('#vMaps .btn').forEach(b => { b.onclick = () => { pickM = b.dataset.v; voteCard(); }; });
@@ -276,14 +392,37 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
   function roundCard() {
     const c = m.cfg, ag = c.agreed || {};
     const how = (ok, what) => tr(ok ? '{w}: ihr wart euch einig.' : '{w}: das Los hat entschieden.', { w: what });
+    const why = c.rematch ? tr('Gleiches Setup wie eben, ihr malt beide neu.') : c.drawn ? tr('Regel und Karte wurden ausgelost.')
+      : c.chooser ? tr('{s} hat ausgesucht.', { s: SIDE_N[c.chooser] }) : `${how(ag.rule, tr('Regel'))} ${how(ag.map, tr('Karte'))}`;
     ov.classList.add('onl-round');
     showCard('round', `<h2 id="onlTitle">${c.rematch ? tr('Revanche') : tr('Runde {r}', { r: c.r })}: <span class="cat">${esc(tr(CAT_NAME[c.cat]))}</span></h2>
       <div class="row"><div class="mapprev">${mapSVG(c.map, 220, 124)}</div><div><b>${esc(tr(MAP[c.map].n))}</b><br><span class="muted">${esc(tr(MAP[c.map].d))}</span></div></div>
       <p>${esc(tr(RULE[c.cat].d))}. ${tr('{n} Punkte', { n: budgetOf(c) })}. ${tr(m.side === 'blau' ? 'Du bist <b>{s}</b> (links). Dein Gegner sieht nichts, bis beide fertig sind.' : 'Du bist <b>{s}</b> (rechts). Dein Gegner sieht nichts, bis beide fertig sind.', { s: SIDE_N[m.side] })}</p>
-      <p class="muted">${c.rematch ? tr('Gleiches Setup wie eben, ihr malt beide neu.') : `${how(ag.rule, tr('Regel'))} ${how(ag.map, tr('Karte'))}`}</p>
+      <p class="muted">${why}${c.time ? ' ' + tr('Ihr habt {t} zum Malen.', { t: timeN(c.time) }) : ''}</p>
       <div class="btnrow"><button class="go" id="onlOk">${tr('Los geht\'s')}</button></div>`);
     $('onlOk').onclick = hideCard; $('onlOk').focus();
     clearTimeout(roundT); roundT = setTimeout(() => { if (shown === 'round') hideCard(); }, 5000);
+  }
+  // Einstellungen im Spiel: ansehen, ändern, vorschlagen (oder den eigenen Vorschlag zurückziehen)
+  function rulesCard() {
+    let st = m.prop ? m.prop.s : m.set;
+    const when = m.phase === 'vote' && !(m.vote && (m.cfg.chooser || m.peerVote)) ? tr('Angenommen gilt es sofort: Regel und Karte werden neu ausgelost.') : tr('Angenommen gilt es ab der nächsten Runde.');
+    const draw = () => {
+      const diff = setDiff(m.set, st), pending = !!m.prop;
+      card.classList.add('lobby');
+      showCard('rules', `<h2 id="onlTitle">⚙️ ${tr('Regeln der Partie')}</h2>
+        <p class="muted">${tr('Ändere, was du willst, und schick es deinem Gegner als Vorschlag. {w}', { w: when })}</p>
+        <div id="onlSetBox">${setFormHTML(st)}</div>
+        ${diff.length ? `<div class="onldiff">${diff.map(d => `<span>${setK(d.k)}: <s>${esc(setVal(d.k, d.a))}</s> → ${esc(setVal(d.k, d.b))}</span>`).join('')}</div>` : `<p class="muted">${tr('So wird gerade gespielt.')}</p>`}
+        <div class="btnrow">${pending && !diff.length ? '' : `<button class="go" id="onlPropose"${diff.length ? '' : ' disabled'}>${pending ? tr('Neuen Vorschlag schicken') : tr('Vorschlagen')}</button>`}
+          ${pending ? `<button class="btn" id="onlWithdraw">${tr('Vorschlag zurückziehen')}</button>` : ''}<button class="btn" id="onlClose">${tr('Schließen')}</button></div>`);
+      card.classList.add('lobby');
+      wireSetForm($('onlSetBox'), () => st, v => { st = v; draw(); });
+      const pb = $('onlPropose'); if (pb) pb.onclick = () => { hideCard(); act(proposeSet(m, st)); };
+      const wb = $('onlWithdraw'); if (wb) wb.onclick = () => { hideCard(); act(proposeSet(m, null)); };
+      $('onlClose').onclick = hideCard;
+    };
+    draw();
   }
   function goneCard() {
     chime(true);
@@ -330,7 +469,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
 
   /* ---------- Verbindung ---------- */
   let joining = false;
-  async function start(role, code, budget) {
+  async function start(role, code, set) {
     if (joining || m) return;
     const b = game.battle; if (!b || b.phase !== 'plan' || b.hot) return;
     joining = true;
@@ -355,11 +494,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
         return;
       }
       room = newRoom;
-      m = createMatch(role, budget); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
+      m = createMatch(role, set); m.code = code; battleRef = b; peerSeen = 0; peerRef = null; goneAck = false; joinT = Date.now(); lastPub = '';
       game.clear(); undoStack.length = 0;
       b.hot = { online: true, budget: m.budget, step: 'online', spent: { blau: 0, rot: 0 }, def: null };
       unsubs.push(room.onPeers(onPeers, () => {}));
-      if (role === 'host') try { net.presence({ ks: PROTO, open: { code, budget: m.budget } }); } catch (e) { /* ohne Lobby */ }
+      if (role === 'host') try { net.presence({ ks: PROTO, open: { code, budget: m.budget, set: m.set } }); } catch (e) { /* ohne Lobby */ }
       publish(); waitCard(); sync();
     } finally { joining = false; }
   }
@@ -369,7 +508,7 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     unsubs = [];
     if (room) try { room.leave(); } catch (e) { /* weg */ }
     if (net) try { net.presence({ open: null }); } catch (e) { /* weg */ }
-    room = null; m = null; goneAck = false;
+    room = null; m = null; goneAck = false; paintEnd = 0;
     hideCard(); clearNotes();
     const b = battleRef; battleRef = null;
     if (b && game.battle === b) {
@@ -420,6 +559,9 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
       else if (e === 'gave') { stopFight(); gaveCard(); }
       else if (e === 'peergave') { stopFight(); gaveCard(); chime(true); }
       else if (e === 'peerready') flash('✅ ' + tr('Dein Gegner ist fertig mit Malen!'));
+      else if (e === 'propok') flash('✅ ' + tr('Dein Gegner hat die neuen Regeln angenommen.'));
+      else if (e === 'propno') flash('❌ ' + tr('Dein Gegner will bei den alten Regeln bleiben.'));
+      else if (e === 'set') { if (m.cfg && !evs.includes('propok')) flash('⚙️ ' + tr('Neue Regeln: {s}', { s: setSummary(m.set) })); if (shown === 'rules') rulesCard(); decorate(); }
       else if (e === 'peervoted' && m.phase === 'vote') flash('🗳️ ' + (m.vote ? tr('Dein Gegner hat auch abgestimmt') : tr('Dein Gegner hat abgestimmt, jetzt du!')));
     }
     updateAsk(); publish(); sync();
@@ -444,13 +586,14 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const b = resetField(m.side, roundDef(m.cfg)); if (!b) return;
     applyMap(world, m.cfg.map); markAll();
     game.setCat(m.cfg.cat);
+    paintEnd = m.cfg.time ? Date.now() + m.cfg.time * 1000 + 3000 : 0; paintWarned = false;   // 3 s für die Rundenkarte
     ui.updateBattle(); ui.updateCounts(); ui.updateControls();
     audio.play('whoosh');
     roundCard();
   }
-  function ready() {
+  function ready(timeUp = false) {
     const b = game.battle; if (!b || !m || m.phase !== 'paint') return;
-    if (!world.units.some(u => u.alive && u.team === m.side)) { ui.toast(tr('Male zuerst deine Armee ({c}).', { c: tr(CAT_NAME[m.cfg.cat]) })); return; }
+    if (!timeUp && !world.units.some(u => u.alive && u.team === m.side)) { ui.toast(tr('Male zuerst deine Armee ({c}).', { c: tr(CAT_NAME[m.cfg.cat]) })); return; }
     b.hot.step = 'online';   // nicht mehr malen
     undoStack.length = 0;
     act(markReady(m, packArmy(world, m.side)));
@@ -479,11 +622,14 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const waiting = m.want > m.cfg.r, pw = m.peerWant;
     const peerTxt = pw === 'same' ? tr('Dein Gegner will eine Revanche.') : pw === 'new' ? tr('Dein Gegner will die nächste Runde.') : '';
     const myTxt = waiting ? (m.same ? (pw === 'new' ? tr('Du willst Revanche, dein Gegner eine neue Runde: drück „Nächste Runde“, um weiterzumachen.') : tr('Du willst Revanche, warte auf deinen Gegner …')) : tr('Warte auf deinen Gegner …')) : '';
-    box.innerHTML = `<div><div class="muted">${tr('Runde {r}', { r: m.cfg.r })} · ${esc(tr(CAT_NAME[m.cfg.cat]))} · ${esc(tr(MAP[m.cfg.map].n))} · ${tr('du bist {s}', { s: SIDE_N[m.side] })}</div>
+    const mw = m.phase === 'result' ? matchWinner(m) : null;
+    const matchTxt = mw ? (mw === m.side ? '🏆 ' + tr('Du gewinnst das Match!') : tr('{s} gewinnt das Match.', { s: SIDE_N[mw] })) : '';
+    box.innerHTML = `<div>${matchTxt ? `<div class="match">${esc(matchTxt)}</div>` : ''}<div class="muted">${tr('Runde {r}', { r: m.cfg.r })}${m.set.goal ? ' · ' + goalN(m.set.goal) : ''} · ${esc(tr(CAT_NAME[m.cfg.cat]))} · ${esc(tr(MAP[m.cfg.map].n))} · ${tr('du bist {s}', { s: SIDE_N[m.side] })}</div>
         <div class="sc"><span class="blau">${SIDE_N.blau} ${m.score.blau}</span> : <span class="rot">${m.score.rot} ${SIDE_N.rot}</span></div><div class="muted">${esc(note)}</div>
         ${peerTxt ? `<div class="peer">${esc(peerTxt)}</div>` : ''}${myTxt ? `<div class="muted">${esc(myTxt)}</div>` : ''}</div>
       <div class="btnrow"><button class="go" id="onlSame"${waiting && m.same ? ' disabled' : ''} title="${tr('Gleiche Regel, gleiche Karte, gleiches Budget: beide malen neu')}">${tr('Revanche')}</button>
-        <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="${tr('Neue Abstimmung über Regel und Karte')}">${tr('Nächste Runde')}</button><button class="btn" id="onlLeave">${tr('Verlassen')}</button></div>`;
+        <button class="go" id="onlNext"${waiting && !m.same ? ' disabled' : ''} title="${tr('Neue Abstimmung über Regel und Karte')}">${mw ? tr('Neues Match') : tr('Nächste Runde')}</button><button class="btn" id="onlRRules">⚙️ ${tr('Regeln')}</button><button class="btn" id="onlLeave">${tr('Verlassen')}</button></div>`;
+    $('onlRRules').onclick = () => rulesCard();
     $('onlNext').onclick = () => act(wantNext(m, false));
     $('onlSame').onclick = () => act(wantNext(m, true));
     $('onlLeave').onclick = () => confirmLeave();
@@ -495,9 +641,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     const b = game.battle, plan = !!b && b.phase === 'plan';
     const on = !!m && !!b && b === battleRef && !!b.hot;
     btn.hidden = !b || (!on && (!plan || !!b.hot));
-    lab.textContent = on ? tr('Online verlassen') : tr('Online 1v1');
+    lab.textContent = on ? tr('Online verlassen') : tr('Online');
     btn.classList.toggle('on', on);
     giveBtn.hidden = !on || !canGiveUp(m);
+    rulesBtn.hidden = !on || !m.cfg;
+    rulesBtn.classList.toggle('wait', !!(m && m.prop));
     emoBar.hidden = !on || !m.cfg;
     if (!on) return;
     go.classList.remove('stop');   // eigene Beschriftungen (Fertig, Nächste Runde …) bleiben Hauptknopf
@@ -507,10 +655,11 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     setText(go, tr(ph === 'paint' ? 'Fertig' : ph === 'vote' ? 'Abstimmung' : ph === 'result' ? (m.want > c.r ? 'Warte auf Gegner …' : 'Nächste Runde') : ph === 'fight' ? 'Kampf läuft' : 'Warte …'));
     go.disabled = !(ph === 'paint' || ph === 'vote' || (ph === 'result' && m.want <= c.r));
     const head = c && c.cat ? `Online · ${tr('Runde {r}', { r: c.r })} · ${tr(CAT_NAME[c.cat])} · ${tr(MAP[c.map].n)} · ${scoreText()}` : c ? `Online · ${tr('Runde {r}', { r: c.r })} · ${scoreText()}` : `Online · ${tr('Raum {c}', { c: m.code })}`;
+    const clock = ph === 'paint' && paintEnd ? ` · ⏰ ${Math.max(0, Math.ceil((paintEnd - Date.now()) / 1000))} s` : '';
     const tail = ph === 'paint' ? tr(m.side === 'blau' ? 'du malst links: {a} / {b} Punkte' : 'du malst rechts: {a} / {b} Punkte', { a: fmtPts(b.hot.spent[m.side]), b: budgetOf(c) })
-      : tr(ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
+      : tr(ph === 'wait' ? 'warte auf Gegner' : ph === 'vote' ? (!myPick(m) ? 'dein Gegner wählt' : m.vote ? 'warte auf die Stimme des Gegners' : 'stimmt über Regel und Karte ab')
       : ph === 'ready' ? 'fertig, der Gegner malt noch' : ph === 'xfer' ? 'decke auf …' : ph === 'fight' ? 'Kampf läuft' : 'Runde vorbei');
-    setText($('batHint'), `${head} · ${tail}`);
+    setText($('batHint'), `${head} · ${tail}${clock}`);
     // eigene Punkte zeigen, die des Gegners erst im Kampf
     if (plan) {
       const other = m.side === 'blau' ? 'rot' : 'blau';
@@ -527,6 +676,14 @@ export function createOnlineUI({ game, world, ui, audio, hotseat, onlineFight, c
     if (!b || b !== battleRef) { leave(null); return; }
     if (m.phase === 'fight' && b.phase === 'done' && b.result) act(finishFight(m, b.result.winner));
     const now = Date.now();
+    if (m.phase === 'paint' && paintEnd) {
+      const left = Math.ceil((paintEnd - now) / 1000);
+      if (left <= 0) { paintEnd = 0; flash('⏰ ' + tr('Zeit um! Deine Armee ist fertig.'), true); ready(true); }
+      else {
+        if (left <= 10 && !paintWarned) { paintWarned = true; flash('⏰ ' + tr('Noch 10 Sekunden!')); }
+        if (left !== lastSec) { lastSec = left; sync(); }
+      }
+    }
     if (m.phase === 'wait' && m.role === 'guest' && shown === 'wait' && now - joinT > JOIN_MS && !card.querySelector('.warn')) waitCard();
     if (peerSeen && !goneAck && now - peerSeen > GONE_MS && shown !== 'gone' && shown !== 'leave') {
       const p = room && pickPeer(room.peers(), oppRole(), peerRef);

@@ -13,15 +13,15 @@
 import { UNITS } from './data.js';
 import { SHAPES, SHAPE_MIN_UNITS } from './shapes.js';
 import { UNIT_CAP } from './paint.js';
-import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, ruleBudget, draw, resolveVote } from './rules.js';
+import { RULES, RULE_IDS, MAP_IDS, ruleDef, ruleAllows, ruleBudget, draw, resolveVote, rulePool, RULE_GROUP_IDS } from './rules.js';
 
-export const PROTO = 2;   // 2: Abstimmung über Regel und Karte
+export const PROTO = 3;   // 2: Abstimmung über Regel und Karte; 3: Einstellungen der Partie (set) und Regeländerung im Spiel
 export const ROOM_PREFIX = 'ks1v1-';
 // cfg.cat ist die id einer Regel (rules.js); die vier Kategorien sind Regeln mit derselben id
 export const ONLINE_CATS = RULE_IDS;
 export const CAT_NAME = Object.fromEntries(RULES.map(r => [r.id, r.n]));
 export const VOTE_N = 3;   // Auswahl je Runde: so viele Regeln und Karten
-export const ONLINE_BUDGETS = [100, 150, 250];
+export const ONLINE_BUDGETS = [100, 150, 250, 400];
 export const ONLINE_DEFAULT = 150;
 export const CHUNK = 2800;                 // Zeichen je Armee-Stück (presence hat 4 KiB je Spieler)
 export const SIDE = { host: 'blau', guest: 'rot' };
@@ -44,24 +44,62 @@ export function normCode(text) {
 }
 export const roomName = code => ROOM_PREFIX + code.toLowerCase();
 
-/* ---------- Runden ---------- */
-// Nächste Runde zur Abstimmung: drei Regeln (nie die der letzten Runde) und drei Karten; neue Saat für den Kampf
-export function nextRound(prev, budget, rand = Math.random) {
+/* ---------- Einstellungen der Partie (Lobby, 25.11.) ---------- */
+// set: { budget, pick, rules, maps, time, goal }. Der Host legt sie beim Erstellen fest; im Spiel kann jeder eine Änderung
+// vorschlagen (proposeSet), der andere nimmt an oder lehnt ab (answerProp). Neue Einstellungen gelten ab der nächsten
+// Auslosung; läuft gerade eine Abstimmung, wird sie mit den neuen Einstellungen neu ausgelost.
+//   pick: 'vote' (beide stimmen ab) | 'random' (Regel und Karte ausgelost) | 'loser' (wer die letzte Runde verlor, wählt allein)
+//   rules: Regel-Gruppen (rules.js RULE_GROUPS), maps: 'alle' | 'feld' (nur offenes Feld)
+//   time: Sekunden zum Malen (0: ohne Limit), goal: Siege für den Matchgewinn (0: endlos)
+export const PICKS = ['vote', 'random', 'loser'];
+export const MAP_MODES = ['alle', 'feld'];
+export const TIMES = [0, 60, 90, 120];
+export const GOALS = [0, 2, 3];
+export const DEFAULT_SET = Object.freeze({ budget: ONLINE_DEFAULT, pick: 'vote', rules: [...RULE_GROUP_IDS], maps: 'alle', time: 0, goal: 0 });
+// Beliebige Eingabe → gültige Einstellungen (Unbekanntes fällt auf den Standard zurück)
+export function cleanSet(s) {
+  const o = s && typeof s === 'object' && !Array.isArray(s) ? s : {};
+  const rules = Array.isArray(o.rules) ? RULE_GROUP_IDS.filter(g => o.rules.includes(g)) : [];
   return {
-    r: prev ? prev.r + 1 : 1,
-    seed: (rand() * 2 ** 31) | 0,
-    budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT,
-    opts: { rules: draw(RULE_IDS, VOTE_N, rand, prev && prev.cat), maps: draw(MAP_IDS, VOTE_N, rand) },
-    cat: null, map: null, agreed: null,
+    budget: ONLINE_BUDGETS.includes(o.budget) ? o.budget : ONLINE_DEFAULT,
+    pick: PICKS.includes(o.pick) ? o.pick : 'vote',
+    rules: rules.length ? rules : [...RULE_GROUP_IDS],
+    maps: MAP_MODES.includes(o.maps) ? o.maps : 'alle',
+    time: TIMES.includes(o.time) ? o.time : 0,
+    goal: GOALS.includes(o.goal) ? o.goal : 0,
   };
+}
+export const sameSet = (a, b) => JSON.stringify(cleanSet(a)) === JSON.stringify(cleanSet(b));
+// Was sich ändert: [{ k, a, b }] (k: budget | pick | rules | maps | time | goal)
+export function setDiff(a, b) {
+  const x = cleanSet(a), y = cleanSet(b), out = [];
+  for (const k of Object.keys(x)) if (JSON.stringify(x[k]) !== JSON.stringify(y[k])) out.push({ k, a: x[k], b: y[k] });
+  return out;
+}
+// Einstellungen aus Zahl (altes Budget) oder Objekt
+const asSet = v => cleanSet(typeof v === 'number' ? { budget: v } : v);
+
+/* ---------- Runden ---------- */
+// Nächste Runde zur Abstimmung: drei Regeln (nie die der letzten Runde) und drei Karten; neue Saat für den Kampf.
+// set darf auch nur ein Budget sein. chooser: Seite, die allein wählt (Einstellung „Verlierer wählt“).
+export function nextRound(prev, set, rand = Math.random, chooser = null) {
+  const st = asSet(set);
+  const seed = (rand() * 2 ** 31) | 0, rules = draw(rulePool(st.rules), VOTE_N, rand, prev && prev.cat);
+  const maps = st.maps === 'feld' ? ['feld'] : draw(MAP_IDS, VOTE_N, rand);
+  const c = { r: prev ? prev.r + 1 : 1, seed, budget: st.budget, opts: { rules, maps }, cat: null, map: null, agreed: null };
+  if (st.time) c.time = st.time;
+  if (st.pick === 'random') { c.cat = c.opts.rules[0]; c.map = c.opts.maps[0]; c.drawn = true; }
+  else if (st.pick === 'loser' && (chooser === 'blau' || chooser === 'rot')) c.chooser = chooser;
+  return c;
 }
 // Revanche: dieselbe Regel, Karte und dasselbe Budget, neue Saat; beide malen neu
 export function rematchRound(prev, rand = Math.random) {
-  return { ...prev, r: prev.r + 1, seed: (rand() * 2 ** 31) | 0, agreed: { rule: true, map: true }, rematch: true };
+  const { chooser, drawn, rev, ...rest } = prev;
+  return { ...rest, r: prev.r + 1, seed: (rand() * 2 ** 31) | 0, agreed: { rule: true, map: true }, rematch: true };
 }
 // Runde mit Regel und Karte gleich ausgelost (ohne Abstimmung, für Tests und Zufall)
 export function randomRound(prev, budget, rand = Math.random) {
-  const c = nextRound(prev, budget, rand);
+  const { drawn, ...c } = nextRound(prev, budget, rand);
   return { ...c, cat: c.opts.rules[0], map: c.opts.maps[0] };
 }
 // Level-artiges Objekt für die Malleiste und paint.js (campaign/index.js unitAllowed, catAllowed): die Regel der Runde
@@ -142,9 +180,11 @@ export function battleList(blau, rot) { return [...blau, ...rot]; }
 /* ---------- Ablauf ---------- */
 // phase: 'wait' (Host wartet auf Gegner / Gast auf die erste Runde) → 'vote' (Regel und Karte wählen) → 'paint' → 'ready' (fertig, Gegner malt noch) →
 // 'xfer' (Armeen werden getauscht) → 'fight' → 'result'. 'left': der Gegner ist weg.
-export function createMatch(role, budget = ONLINE_DEFAULT, rand = Math.random) {
+// set: Einstellungen (oder nur ein Budget); der Gast übernimmt sie vom Host
+export function createMatch(role, set = ONLINE_DEFAULT, rand = Math.random) {
+  const st = asSet(set);
   return {
-    role, side: SIDE[role], budget: ONLINE_BUDGETS.includes(budget) ? budget : ONLINE_DEFAULT, rand,
+    role, side: SIDE[role], set: st, budget: st.budget, rand, prop: null, propN: 0, peerProp: null, peerPropN: 0, ans: null, match: 1,
     phase: 'wait', cfg: null, score: { blau: 0, rot: 0 }, mine: null, chunks: null, recv: [], theirs: null,
     res: null, peerRes: null, want: 0, same: false, counted: 0, error: null, vote: null, peerVote: null, gave: 0, peerGave: false,
     emo: null, emoAt: -Infinity, peerEmoN: 0, peerEmo: null,
@@ -156,7 +196,9 @@ const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
 // Was ich veröffentliche (presence-Objekt)
 export function view(m) {
   const r = m.cfg ? m.cfg.r : 0, o = { ks: PROTO, role: m.role, ready: 0, arm: null, got: null, res: null, want: m.want, same: m.same };
-  if (m.role === 'host') { o.cfg = m.cfg; o.score = m.score; }
+  if (m.role === 'host') { o.cfg = m.cfg; o.score = m.score; o.set = m.set; o.match = m.match; }
+  if (m.prop) o.prop = m.prop;
+  if (m.ans) o.ans = m.ans;
   if (m.mine !== null && (m.phase === 'ready' || m.phase === 'xfer' || m.phase === 'fight' || m.phase === 'result')) o.ready = r;
   if (m.phase === 'xfer' || m.phase === 'fight' || m.phase === 'result') {
     o.got = { r, n: m.recv.length };
@@ -177,20 +219,25 @@ function newRound(m, cfg) {
 // Gegner ist da (Host): erste Runde würfeln. Liefert Ereignisse.
 export function hostStart(m) {
   if (m.role !== 'host' || m.cfg) return [];
-  newRound(m, nextRound(null, m.budget, m.rand));
-  return ['vote'];
+  newRound(m, nextRound(null, m.set, m.rand));
+  return [m.cfg.cat ? 'round' : 'vote'];
 }
 
 // Eigene Stimme: eine der angebotenen Regeln und Karten
+export const myPick = m => !!m && !!m.cfg && (!m.cfg.chooser || m.cfg.chooser === m.side);
 export function castVote(m, rule, map) {
-  if (m.phase !== 'vote' || !m.cfg.opts.rules.includes(rule) || !m.cfg.opts.maps.includes(map)) return [];
+  if (m.phase !== 'vote' || !myPick(m) || !m.cfg.opts.rules.includes(rule) || !m.cfg.opts.maps.includes(map)) return [];
   m.vote = { rule, map };
   return ['voted', ...hostResolve(m)];
 }
 // Host: beide haben abgestimmt → Regel und Karte festlegen, malen
 function hostResolve(m) {
-  if (m.role !== 'host' || m.phase !== 'vote' || !m.vote || !m.peerVote) return [];
-  const a = resolveVote(m.vote.rule, m.peerVote.rule, m.rand), b = resolveVote(m.vote.map, m.peerVote.map, m.rand);
+  if (m.role !== 'host' || m.phase !== 'vote') return [];
+  // „Verlierer wählt“: nur die Stimme des Wählenden zählt
+  const ch = m.cfg.chooser, only = ch ? (ch === m.side ? m.vote : m.peerVote) : null;
+  if (ch ? !only : !m.vote || !m.peerVote) return [];
+  const a = ch ? { pick: only.rule, agreed: null } : resolveVote(m.vote.rule, m.peerVote.rule, m.rand);
+  const b = ch ? { pick: only.map, agreed: null } : resolveVote(m.vote.map, m.peerVote.map, m.rand);
   m.cfg = { ...m.cfg, cat: a.pick, map: b.pick, agreed: { rule: a.agreed, map: b.agreed } };
   m.phase = 'paint';
   return ['round'];
@@ -236,6 +283,44 @@ export function wantNext(m, same = false) {
   return ['want'];
 }
 
+// Match (Einstellung goal): Seite, die genug Siege hat, sonst null
+export function matchWinner(m) {
+  const g = m && m.set ? m.set.goal : 0;
+  if (!g) return null;
+  return m.score.blau >= g ? 'blau' : m.score.rot >= g ? 'rot' : null;
+}
+
+/* ---------- Regeln im Spiel ändern ---------- */
+// Vorschlag (jederzeit, solange ein Gegner da ist). Ein neuer Vorschlag ersetzt den alten; null zieht ihn zurück.
+export function proposeSet(m, s) {
+  if (!m || !m.cfg) return [];
+  if (s === null) { if (!m.prop) return []; m.prop = null; return ['proposed']; }
+  const st = cleanSet(s);
+  if (sameSet(st, m.set)) return [];
+  m.prop = { n: ++m.propN, s: st };
+  return ['proposed'];
+}
+// Antwort auf den Vorschlag des Gegners. Der Host übernimmt angenommene Einstellungen sofort, der Gast bekommt sie über set.
+export function answerProp(m, ok) {
+  if (!m || !m.peerProp) return [];
+  const s = m.peerProp.s;
+  m.ans = { n: m.peerProp.n, ok: !!ok }; m.peerProp = null;
+  const ev = ['answered'];
+  if (ok && m.role === 'host') ev.push(...applySet(m, s));
+  return ev;
+}
+// Host: neue Einstellungen gelten. Läuft gerade die Abstimmung, wird sie mit den neuen Einstellungen neu ausgelost.
+function applySet(m, s) {
+  m.set = cleanSet(s); m.budget = m.set.budget;
+  const ev = ['set'];
+  if (m.phase === 'vote' && m.cfg) {
+    const c = m.cfg, n = nextRound(null, m.set, m.rand, c.chooser || null);
+    newRound(m, { ...n, r: c.r, rev: num(c.rev) + 1 });
+    ev.push(m.cfg.cat ? 'round' : 'vote');
+  }
+  return ev;
+}
+
 // Das Ergebnis, das zählt: das des Hosts (bei verschiedenen Browsern kann ein Kampf minimal anders laufen)
 export function officialWinner(m) {
   if (!m.cfg) return null;
@@ -259,9 +344,16 @@ export function onPeer(m, p, W, H) {
     const c = p.cfg;
     const fin = isObj(c) && RULE_IDS.includes(c.cat) && MAP_IDS.includes(c.map);
     const ag = isObj(c) && isObj(c.agreed) ? { rule: !!c.agreed.rule, map: !!c.agreed.map } : null;
-    if (isObj(c) && num(c.r) > (m.cfg ? m.cfg.r : 0) && validOpts(c.opts) && ONLINE_BUDGETS.includes(c.budget)) {
+    // Einstellungen des Hosts (Lobby oder angenommene Änderung)
+    if (isObj(p.set) && !sameSet(p.set, m.set)) { m.set = cleanSet(p.set); m.budget = m.set.budget; if (m.cfg) ev.push('set'); }   // vor der ersten Runde still übernehmen
+    if (Number.isInteger(p.match) && p.match > m.match) m.match = p.match;
+    // neue Runde, oder dieselbe Runde neu ausgelost (rev: Regeln während der Abstimmung geändert)
+    const cr = m.cfg ? m.cfg.r : 0, newer = isObj(c) && (num(c.r) > cr || (num(c.r) === cr && num(c.rev) > num(m.cfg && m.cfg.rev) && m.phase === 'vote'));
+    if (newer && validOpts(c.opts) && ONLINE_BUDGETS.includes(c.budget)) {
       newRound(m, { r: num(c.r), seed: num(c.seed) | 0, budget: c.budget, opts: { rules: c.opts.rules, maps: c.opts.maps },
-        cat: fin ? c.cat : null, map: fin ? c.map : null, agreed: fin ? ag : null, ...(c.rematch ? { rematch: true } : {}) });
+        cat: fin ? c.cat : null, map: fin ? c.map : null, agreed: fin ? ag : null, ...(c.rematch ? { rematch: true } : {}),
+        ...(c.chooser === 'blau' || c.chooser === 'rot' ? { chooser: c.chooser } : {}), ...(c.drawn ? { drawn: true } : {}),
+        ...(TIMES.includes(c.time) && c.time ? { time: c.time } : {}), ...(num(c.rev) ? { rev: num(c.rev) } : {}) });
       ev.push(fin ? 'round' : 'vote');
     } else if (fin && m.cfg && num(c.r) === m.cfg.r && m.phase === 'vote') {
       m.cfg = { ...m.cfg, cat: c.cat, map: c.map, agreed: ag }; m.phase = 'paint'; ev.push('round');
@@ -270,6 +362,15 @@ export function onPeer(m, p, W, H) {
       const s = { blau: num(p.score.blau), rot: num(p.score.rot) };
       if (s.blau !== m.score.blau || s.rot !== m.score.rot) { m.score = s; ev.push('score'); }
     }
+  }
+  // Regeländerung: Vorschlag des Gegners, Antwort auf meinen
+  const pp = p.prop;
+  if (isObj(pp) && Number.isInteger(pp.n) && pp.n > m.peerPropN && isObj(pp.s)) { m.peerPropN = pp.n; m.peerProp = { n: pp.n, s: cleanSet(pp.s) }; ev.push('peerprop'); }
+  else if (m.peerProp && (!isObj(pp) || pp.n !== m.peerProp.n)) { m.peerProp = null; ev.push('peerprop'); }   // zurückgezogen
+  const pa = p.ans;
+  if (m.prop && isObj(pa) && pa.n === m.prop.n) {
+    const s = m.prop.s; m.prop = null;
+    if (pa.ok === true) { if (m.role === 'host') ev.push(...applySet(m, s)); ev.push('propok'); } else ev.push('propno');
   }
   if (!m.cfg) return ev;
   const r = m.cfg.r;
@@ -292,8 +393,10 @@ export function onPeer(m, p, W, H) {
   }
   // Host: nächste Runde, wenn beide wollen und sich einig sind (Revanche vs. neue Abstimmung)
   if (m.role === 'host' && m.phase === 'result' && m.want === r + 1 && num(p.want) === r + 1 && m.same === (p.same === true)) {
-    const both = m.same;
-    newRound(m, both ? rematchRound(m.cfg, m.rand) : nextRound(m.cfg, m.budget, m.rand)); ev.push(both ? 'round' : 'vote');
+    const both = m.same, w = m.res ? m.res.w : 'draw';
+    if (matchWinner(m)) { m.score = { blau: 0, rot: 0 }; m.match++; ev.push('score'); }   // Match vorbei: neues Match
+    const ch = w === 'blau' ? 'rot' : w === 'rot' ? 'blau' : null;   // „Verlierer wählt“
+    newRound(m, both ? rematchRound(m.cfg, m.rand) : nextRound(m.cfg, m.set, m.rand, ch)); ev.push(m.cfg.cat ? 'round' : 'vote');
     return ev;
   }
   if (m.phase === 'ready' && num(p.ready) === r) { m.phase = 'xfer'; ev.push('xfer'); }
@@ -334,12 +437,13 @@ export function pickPeer(peers, wantRole = null, preferPeer = null) {
   }
   return first;
 }
-// Offene Räume aus der Lobby: [{ code, budget }]
+// Offene Räume aus der Lobby: [{ code, budget, set? }]
 export function openRooms(peers) {
   const out = [];
   for (const p of peers || []) {
     const o = p && !p.isMe && isObj(p.presence) ? p.presence.open : null;
-    if (isObj(o) && normCode(o.code) && ONLINE_BUDGETS.includes(o.budget)) out.push({ code: normCode(o.code), budget: o.budget });
+    // Räume anderer Modi (2v2: mode) gehören nicht hierher
+    if (isObj(o) && !o.mode && normCode(o.code) && ONLINE_BUDGETS.includes(o.budget)) out.push({ code: normCode(o.code), budget: o.budget, ...(isObj(o.set) ? { set: cleanSet(o.set) } : {}) });
   }
   return out;
 }

@@ -92,3 +92,28 @@ test('Wetter: Nebel kürzt Fernkampf, Regen verhindert Waldbrand, Schnappschuss 
   restoreBattle(w2, snap);
   assert.equal(w2.weather, 'nebel');
 });
+
+import { newRun, runLevel, rewards, afterFight, applyReward, cleanRun, RUN } from '../game/js/run.js';
+test('Feldzug: Start, Belohnungen, Leben, Sieg und Spielstand', () => {
+  const run = newRun(42);
+  assert.equal(run.units.length, RUN.START_UNITS);
+  assert.ok(run.units.every(t => UNITS[t].cost <= 4));
+  const l = runLevel(run);
+  assert.deepEqual(l.units, run.units);
+  assert.equal(l.budget, RUN.START_BUDGET);
+  const rw = rewards(run);
+  assert.equal(rw.length, RUN.CHOICES);
+  assert.ok(rw.filter(r => r.kind === 'unit').every(r => !run.units.includes(r.type)));
+  applyReward(run, rw[0]); assert.equal(run.units.length, RUN.START_UNITS + 1);
+  applyReward(run, rw[rw.length - 1]); assert.ok(run.budget > RUN.START_BUDGET);
+  afterFight(run, true); assert.equal(run.stage, 2);
+  afterFight(run, false); assert.equal(run.lives, RUN.LIVES - 1);
+  assert.deepEqual(cleanRun(JSON.parse(JSON.stringify(run))).units, run.units);
+  for (let k = run.stage; k <= RUN.STAGES; k++) afterFight(run, true);
+  assert.ok(run.done && run.won);
+  assert.equal(cleanRun(run), null);
+  const lost = newRun(1); afterFight(lost, false); afterFight(lost, false);
+  assert.ok(lost.done && !lost.won);
+  const boss = runLevel({ ...newRun(5), stage: RUN.STAGES });
+  assert.ok(boss.run.boss && boss.run.plan.every(p => UNITS[p.type].cost >= 6));
+});

@@ -47,7 +47,9 @@ import { wavesLevel, wavesTerrain, spawnWave, waveResult, waveGain } from './wav
 import { registerMode } from './ui/modes.js';
 import { weeklyLevel, placeWeekly, recordWeekly, weekKey } from './weekly.js';   // Wochenchallenge (25.11.)
 import { bump, atLeast, addType, addForm, unlocked, ACHIEVEMENTS } from './achievements.js';   // Erfolge (25.11.)
-import { openAchievements } from './ui/achievements.js';                          // Karten für 1 gegen 1
+import { openAchievements } from './ui/achievements.js';
+import { RUN, newRun, runLevel, placeRun, rewards, afterFight, applyReward } from './run.js';   // Feldzug (25.11.)
+import { openReward } from './ui/run.js';                          // Karten für 1 gegen 1
 import { makeDraggable } from './ui/dragbar.js';               // Malleiste verschiebbar
 import { makePaletteFold } from './ui/palfold.js';             // Malleiste klappt im Kampf und beim Malen weg (25.11.)
 import { tr, unitName, unitPlural, translateDom, LANG, switchLang } from './i18n.js';   // Sprache (18.11.)
@@ -201,6 +203,7 @@ const game = {
   loadMission,
   go() {
     const m = game.mission; if (!m) return;
+    if (m.kind === 'run' && m.phase === 'battle') { m.result = 'lose'; m.phase = 'done'; m.endT = .01; ui.updateMission(); return; }   // Feldzug: Abbrechen kostet ein Leben
     if (m.kind === 'waves' && m.phase === 'battle') { m.result = 'lose'; m.phase = 'done'; m.endT = .01; ui.updateMission(); return; }   // Wellenmodus: Aufgeben
     if (m.phase === 'plan') startMission(); else if (m.phase === 'battle') retryMission();
   },
@@ -208,6 +211,7 @@ const game = {
   // "Nächste Mission": das nächste Level im Kapitel, nach dem letzten die Kapitelübersicht
   nextMission() {
     const m = game.mission; if (!m) return;
+    if (m.kind === 'run') { runNext(); return; }   // Feldzug: Belohnung wählen
     if (!m.chapter) { ui.openChapters(); return; }   // Tutorial und andere Level ohne Kapitel: zur Kampagne
     const n = nextLevel(m.id);
     if (m.custom) game.customBack();   // eigenes Level (Audit 18.11.)
@@ -289,7 +293,8 @@ function loadLevelDef(def, opts = {}) {
   world.weather = null;   // Missionen immer bei klarem Wetter
   if (def.daily) placeDaily(world, def); else buildMission(world, def);
   if (def.waves) { wavesTerrain(world, def); spawnWave(world, def, 1); }
-  if (def.weekly) placeWeekly(world, def);   // Wochenchallenge: Karte und Gegner der Woche   // Wellenmodus: Gelände und erste Welle
+  if (def.weekly) placeWeekly(world, def);
+  if (def.run) placeRun(world, def);   // Feldzug: Karte und Gegner der Schlacht   // Wochenchallenge: Karte und Gegner der Woche   // Wellenmodus: Gelände und erste Welle
   game.mission = { id: def.id, idx: opts.idx || 0, chapter: opts.chapter || null, def,
     kind: opts.kind || (opts.chapter ? 'campaign' : opts.custom ? 'custom' : 'level'),
     budget: def.budget, par: def.par, spent: 0, phase: 'plan', t: 0, endT: -1, result: null, fight: null, res: null };
@@ -351,6 +356,7 @@ function startMission() {
 function retryMission() {
   const m = game.mission; if (!m) return;
   if (m.kind === 'waves') { playWaves(); return; }   // Wellenmodus: neuer Lauf
+  if (m.kind === 'run' && (!save.run || save.run.pick)) { playRun(); return; }   // Feldzug: vorbei (neuer) oder Belohnung offen
   // Kampagne über die id, alle anderen (eigenes Level, Tutorial, Tageschallenge) über das Level-Objekt
   const again = () => (m.chapter ? loadMission(m.id) : loadLevelDef(m.def, { kind: m.kind, custom: m.custom }));
   if (!snap || snap.id !== m.id) { again(); return; }
@@ -367,6 +373,7 @@ function retryMission() {
 function finishMission() {
   const m = game.mission; if (!m) return;
   if (m.kind === 'waves') { if (m.result === 'clear') nextWave(); else endWaves(); return; }
+  if (m.kind === 'run') { finishRun(m); return; }
   const win = m.result === 'win', timeUp = m.t > 180;
   const stars = win ? 1 + (m.spent <= m.par * 1.25 ? 1 : 0) + (m.spent <= m.par ? 1 : 0) : 0;
   const camp = m.kind === 'campaign';
@@ -437,6 +444,46 @@ registerMode({
   d: tr('Eine Mission pro Woche mit Sonderregel für deine Armee. Gewinne mit möglichst wenig Punkten.'),
   foot: g => { const b = g.save.weekly[weekKey()]; return b ? `<span class="tag best">${tr('Diese Woche: {p} Pkt', { p: b.spent })} ${'★'.repeat(b.stars)}</span>` : `<span class="tag">${tr('Diese Woche noch offen')}</span>`; },
   open: () => { ui.hideOverlays(); game.playWeekly(); },
+});
+
+/* ---------- Feldzug (25.11.) ---------- */
+// Roguelite aus RUN.STAGES Schlachten (run.js). save.run hält den Lauf, auch über das Neuladen hinweg; run.pick heißt:
+// gewonnen, Belohnung noch nicht gewählt. Läuft als Mission ohne Kapitel (kind 'run').
+game.runStages = RUN.STAGES;
+function playRun() {
+  if (!save.run) { save.run = newRun((Math.random() * 2 ** 31) | 0); persist(); }
+  if (save.run.pick) { runNext(); return; }
+  loadLevelDef(runLevel(save.run), { kind: 'run' });
+}
+function runNext() {
+  const run = save.run;
+  if (!run) { ui.openChapters(); return; }
+  if (!run.pick) { playRun(); return; }
+  ui.hideOverlays();
+  openReward(game, rewards(run), r => { applyReward(run, r); run.pick = false; persist(); playRun(); });
+}
+function finishRun(m) {
+  const run = save.run; if (!run) return;
+  const win = m.result === 'win', k = run.stage;
+  if (win) { bump(save.ach, 'wins'); if (ui.lostBlue() === 0) bump(save.ach, 'flawless'); }
+  afterFight(run, win);
+  if (win && !run.done) run.pick = true;
+  if (run.won) bump(save.ach, 'run');
+  const info = { stage: k, lives: run.lives, done: run.done, won: run.won, pts: m.def.run.pts };
+  if (run.done) save.run = null;
+  persist();
+  m.res = { win, timeUp: m.t > 180, stars: 0, spent: m.spent, budget: m.budget, par: m.par, time: m.t, custom: null, daily: null,
+    run: info, hasNext: false, nextLabel: win && !info.done ? tr('Belohnung wählen') : null, canReplay: !!m.fight };
+  ui.showResult(m.res);
+  audio.play(win ? 'win' : 'lose');
+  achCheck();
+}
+game.playRun = playRun;
+registerMode({
+  id: 'run', tag: tr('Roguelite'), n: tr('Feldzug'),
+  d: tr('Sechs Schlachten am Stück. Starte mit wenigen Einheiten, wähle nach jedem Sieg eine Belohnung. Zwei Leben.'),
+  foot: g => (g.save.run ? `<span class="tag best">${tr('Schlacht {k}/{n}', { k: g.save.run.stage, n: RUN.STAGES })} · ${'♥'.repeat(g.save.run.lives)}</span>` : `<span class="tag">${tr('Neuer Feldzug')}</span>`),
+  open: () => { ui.hideOverlays(); playRun(); },
 });
 
 /* ---------- Erfolge (25.11.) ---------- */

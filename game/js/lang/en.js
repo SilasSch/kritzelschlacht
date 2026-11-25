@@ -1254,5 +1254,23 @@ const EN = {
   "Schau 10 Zufallsschlachten bis zum Ende zu.": "Watch 10 random battles to the end.",
   "Regisseur": "Director",
   "Speichere eine Schlacht als Video.": "Save a battle as a video.",
+  // Feldzug (25.11.)
+  "Belohnung wählen": "Choose a reward",
+  "Feldzug": "Campaign run",
+  "Roguelite": "Roguelite",
+  "Sechs Schlachten am Stück. Starte mit wenigen Einheiten, wähle nach jedem Sieg eine Belohnung. Zwei Leben.": "Six battles in a row. Start with a few units and pick a reward after every win. Two lives.",
+  "Neuer Feldzug": "New run",
+  "Schlacht {k}/{n}": "Battle {k}/{n}",
+  "Boss": "Boss",
+  "Feldzug · Schlacht {k}/{n}": "Campaign run · battle {k}/{n}",
+  "Gegner: {p} Punkte. Leben: {l}. Nach jedem Sieg wächst dein Heer.": "Enemy: {p} points. Lives: {l}. Your army grows with every win.",
+  "Feldzug gewonnen!": "Run won!",
+  "Feldzug verloren": "Run lost",
+  "Schlacht {k} gewonnen!": "Battle {k} won!",
+  "Nochmal versuchen": "Try again",
+  "Schlacht {k} von {n} wartet. Dein Heer: {u}. Budget {b} Punkte.": "Battle {k} of {n} awaits. Your army: {u}. Budget {b} points.",
+  "Neue Einheit fürs Heer · {p} Pkt": "New unit for your army · {p} pts",
+  "Kriegskasse": "War chest",
+  "{n} Punkte mehr Budget für alle weiteren Schlachten": "{n} more points of budget for all remaining battles",
 };
 export default EN;

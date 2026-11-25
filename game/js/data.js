@@ -50,7 +50,7 @@ export const UNITS = {
   heli:{n:'Hubschrauber',cat:'modern',col:'#7b8a78',r:18,hp:340,dmg:4,range:200,speed:85,cd:.2,cost:18,fly:1,flyZ:46,high:1,mass:12,d:'Schwebt auf Abstand und feuert Salven. Gepanzert gegen Kugeln, Pfeile und Raketen treffen voll. Nahkämpfer kommen nicht ran und werfen nur Steine.'},
   // Lufteinheiten (18.11., air.js): Jet = Luftüberlegenheit im Überflug, Kampfdrohne = billige Kamikaze-Drohne gegen Panzerung,
   // Bomber = langsamer Teppich aus Bomben gegen Bodentruppen. Alle drei fliegen hoch (high).
-  jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:220,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast heran, jagt zuerst Flieger und stürzt sich sonst im Tiefflug auf Bodengruppen. Zu schnell für die meisten Kugeln, aber MG und Panzer holen ihn runter.'},
+  jet:{n:'Kampfjet',cat:'modern',col:'#8e9aa6',r:11,hp:170,dmg:4,range:170,speed:230,cd:.12,cost:11,fly:1,flyZ:72,high:1,mass:6,d:'Rast heran, jagt zuerst Flieger und stürzt sich sonst im Tiefflug auf Bodengruppen. Zu schnell für die meisten Kugeln, aber MG und Panzer holen ihn runter.'},
   kampfdrohne:{n:'Kampfdrohne',cat:'modern',col:'#9aa39a',r:6,hp:24,dmg:70,range:4,splash:26,speed:130,cd:4,cost:3,fly:1,flyZ:30,high:1,mass:.4,d:'Billige Kamikaze-Drohne. Sucht sich das teuerste Ziel in der Nähe und stürzt sich hinein. Zerbrechlich.'},
   bomber:{n:'Bomber',cat:'modern',col:'#6f7d63',r:20,hp:620,dmg:60,range:4,splash:50,speed:52,cd:5,cost:26,fly:1,flyZ:86,high:1,mass:25,d:'Langsamer Riese. Überfliegt die dichteste Gruppe am Boden und wirft einen Bombenteppich, der auch Eigene trifft. Knackt Panzer und Elefanten. Wehrlos gegen Flieger und Gewehre.'},
   // --- Task 6: Kreaturen (Spez. #34; Verhalten in abilities.js, Abschnitt Kreaturen) ---
@@ -206,9 +206,9 @@ const ABIL = {
     {n:'Hoch oben', d:'Hält Abstand und schwebt seitlich hin und her. Nahkämpfer am Boden kommen nicht ran.'},
   ],
   jet: [
-    {n:'Tiefflug-Angriff', d:'Stürzt sich auf die dichteste Gruppe am Boden und zieht eine Garbe als Streifen durch sie. Unten trifft ihn alles etwas härter.'},
+    {n:'Tiefflug-Angriff', d:'Stürzt sich auf die dichteste Gruppe oder ein einzelnes Ziel am Boden und zieht eine Garbe darüber. Unten trifft ihn alles etwas härter.'},
     {n:'Überschallknall', d:'Höchstens alle 7 s durchbricht er beim Anflug die Schallmauer: Bodentruppen im Streifen vor ihm fallen kurz um. Schwergewichte nicht.'},
-    {n:'Fassrolle', d:'Oben verfehlt ihn gut die Hälfte der Kugeln. Kommt eine Rakete, wirft er Täuschkörper und sie geht vorbei.'},
+    {n:'Fassrolle', d:'Oben verfehlt ihn fast die Hälfte der Kugeln. Kommt eine Rakete, wirft er Täuschkörper und sie geht vorbei.'},
     {n:'Luftüberlegenheit', d:'Jagt zuerst Flieger, macht gegen sie dreifachen Schaden und feuert alle 6 s zwei Lenkraketen auf sie.'},
   ],
   kampfdrohne: [

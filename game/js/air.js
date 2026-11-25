@@ -38,11 +38,13 @@ function pick(world, u, score) {
 }
 const jetScore = (v, d2) => (v.T.fly ? d2 : d2 * 9 + 4e5);
 // Drohne: im Umkreis SEEK das teuerste Ziel, je Drohne, die es schon anfliegt, wie DRONE.SHARE Punkte billiger (verteilt den
-// Schwarm); außerhalb das nächste
+// Schwarm); außerhalb das nächste. Ein Ziel, das schon genug Drohnen hat (Wert ≤ 0), zählt nur noch nach Entfernung
+// (25.11.): sonst teilte ein großer Schwarm zwei gleiche Ziele nach Reihenfolge statt nach Lage auf, die Hälften flogen
+// über Kreuz durcheinander und blieben als Klumpen in der Mitte hängen.
 let DRONE_CUR = null, DC_W = null, DC_T = -1, DC_TEAM = null;
 const droneScore = (v, d2) => {
   const n = (v.droneN || 0) - (DRONE_CUR && DRONE_CUR.tg === v ? 1 : 0);
-  return d2 > DRONE.SEEK * DRONE.SEEK ? 1e9 + d2 : -(v.T.cost - DRONE.SHARE * n) * 1e6 + d2;
+  return d2 > DRONE.SEEK * DRONE.SEEK ? 1e9 + d2 : -Math.max(0, v.T.cost - DRONE.SHARE * n) * 1e6 + d2;
 };
 function countDrones(world, u) {
   const f = factionOf(world, u);

@@ -177,8 +177,8 @@ export function dailyLevel(dateStr) {
   };
 }
 
-// Öffentlicher Link des Spiels (Claude-Artefakt) für den Teilen-Text
-export const PUBLIC_URL = 'https://claude.ai/artifact/QtMYbLk6di6csuGhk7YStf';
+// Öffentlicher Link des Spiels für den Teilen-Text: die itch.io-Seite (Hauptziel seit 25.11.)
+export const PUBLIC_URL = 'https://slilok.itch.io/kritzelschlacht';
 // Erste Tageschallenge: Nummer 1
 export const DAILY_EPOCH = '2026-11-18';
 export const dailyNo = dateStr => Math.round((Date.parse(dateStr + 'T00:00:00Z') - Date.parse(DAILY_EPOCH + 'T00:00:00Z')) / 864e5) + 1;
@@ -189,7 +189,7 @@ const MEDAL_ICONS = ['🛡️', '⚡', '🎯'];
 //   ⭐⭐⭐ Sieg mit 64 von 110 Punkten in 0:38
 //   🟦🟦🟦🟦🟦🟦🟦🟥🟥🟥 7 von 10 überlebt
 //   🛡️⚡ Medaillen
-//   Schaffst du's billiger? https://claude.ai/…
+//   Schaffst du's billiger? https://slilok.itch.io/kritzelschlacht
 // r: { win, spent, budget, stars, time (s), lost, deployed, medals: { mask } } (alles außer win/spent/stars optional)
 export function shareText(dateStr, r) {
   const pts = dec(Math.round(r.spent * 10) / 10);
